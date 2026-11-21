@@ -129,7 +129,13 @@ try {
   const englishEditor = page.getByRole('dialog', { name: 'Edit chapter · 章节 1' })
   assert.equal(await englishEditor.getByRole('textbox', { name: 'Chapter source', exact: true }).inputValue(), '她推开门。')
   assert.equal(await englishEditor.getByRole('textbox', { name: 'Chapter name' }).inputValue(), '章节 1')
-  await englishEditor.getByRole('button', { name: 'Back', exact: true }).click()
+  await page.route('**/script-processing/check-consistency-async', route => route.fulfill({
+    json: { success: true, data: { task_id: 'check90', status: 'queued' } },
+  }), { times: 1 })
+  await englishEditor.getByRole('button', { name: 'Source consistency check' }).click()
+  await page.getByText('Consistency check started', { exact: true }).waitFor()
+  await englishEditor.getByRole('button', { name: 'Back', exact: true }).waitFor()
+  await page.goto(base)
   await page.getByRole('button', { name: 'User and language settings' }).click()
   await page.getByRole('menuitem', { name: '简体中文', exact: true }).click()
   await page.getByRole('button', { name: '10. 章节 10 · 编辑章节', exact: true }).scrollIntoViewIfNeeded()

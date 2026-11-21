@@ -45,7 +45,7 @@ export function planDivisionAssignment(draft: ChapterDivisionDraft, raw: string,
       members.push(destination)
       const residuals = action.mode === 'append' && row.span ? [
         { start: row.span.start, end: finalSpan.start }, { start: finalSpan.end, end: row.span.end },
-      ].filter(part => part.end > part.start && !!sourceSlice(raw, part).trim()).map(part => ({ ...row, key: fragmentKey(), sequence_id: undefined, title: uiText("{{title}}（拆分）", { title: row.title }), span: part })) : []
+      ].filter(part => part.end > part.start && !!sourceSlice(raw, part).trim()).map(part => ({ ...row, key: fragmentKey(), sequence_id: undefined, title: `${row.title}（拆分）`, span: part })) : []
       members.push(...residuals)
       replacements.set(row.key, [destination.key, ...residuals.map(piece => piece.key)])
       if (!sameSpan(row.span, finalSpan) || row.title !== title) affected.push(row)
@@ -61,7 +61,7 @@ export function planDivisionAssignment(draft: ChapterDivisionDraft, raw: string,
     const keep = action.retainAfter?.includes(row.key) ? remains.length - 1 : 0
     const pieces = remains.map((part, index): DraftMember => index === keep
       ? { ...row, span: part }
-      : { ...row, key: fragmentKey(), sequence_id: undefined, title: uiText("{{title}}（拆分）", { title: row.title }), span: part })
+      : { ...row, key: fragmentKey(), sequence_id: undefined, title: `${row.title}（拆分）`, span: part })
     members.push(...pieces)
     replacements.set(row.key, [...pieces.map(piece => piece.key), destination.key])
   }

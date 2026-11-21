@@ -504,8 +504,8 @@ export function ChapterRawTextEditorDrawer({
       return
     }
     if (notifyExistingTask(simplifyTask, {
-      cancellingMessage: simplifyTaskCopy.cancellingMessage,
-      runningMessage: simplifyTaskCopy.runningMessage,
+      cancellingMessage: uiText(simplifyTaskCopy.cancellingMessage),
+      runningMessage: uiText(simplifyTaskCopy.runningMessage),
     })) {
       return
     }
@@ -529,8 +529,8 @@ export function ChapterRawTextEditorDrawer({
           void applySimplifyResult(data.task_id)
           return null
         },
-        startedMessage: simplifyTaskCopy.startedMessage,
-        reusedMessage: simplifyTaskCopy.reusedMessage,
+        startedMessage: uiText(simplifyTaskCopy.startedMessage),
+        reusedMessage: uiText(simplifyTaskCopy.reusedMessage),
         fallbackErrorMessage: uiText("智能精简失败"),
       })
     } catch {
@@ -554,8 +554,8 @@ export function ChapterRawTextEditorDrawer({
       return
     }
     if (notifyExistingTask(consistencyTask, {
-      cancellingMessage: consistencyTaskCopy.cancellingMessage,
-      runningMessage: consistencyTaskCopy.runningMessage,
+      cancellingMessage: uiText(consistencyTaskCopy.cancellingMessage),
+      runningMessage: uiText(consistencyTaskCopy.runningMessage),
     })) {
       return
     }
@@ -567,8 +567,8 @@ export function ChapterRawTextEditorDrawer({
             requestBody: { script_text: rawText, chapter_id: chapterId ?? null, source_explanations: explanations },
           }),
         trackTaskData: trackConsistencyTaskData,
-        startedMessage: consistencyTaskCopy.startedMessage,
-        reusedMessage: consistencyTaskCopy.reusedMessage,
+        startedMessage: uiText(consistencyTaskCopy.startedMessage),
+        reusedMessage: uiText(consistencyTaskCopy.reusedMessage),
         fallbackErrorMessage: uiText("一致性检查失败"),
       })
     } catch {
@@ -585,8 +585,8 @@ export function ChapterRawTextEditorDrawer({
         taskId: consistencyTask.taskId,
         reason: '用户在原文编辑抽屉取消一致性检查任务',
         applyCancelData: applyConsistencyCancelData,
-        cancelledImmediatelyMessage: consistencyTaskCopy.cancelledImmediatelyMessage,
-        cancelRequestedMessage: consistencyTaskCopy.cancelRequestedMessage,
+        cancelledImmediatelyMessage: uiText(consistencyTaskCopy.cancelledImmediatelyMessage),
+        cancelRequestedMessage: uiText(consistencyTaskCopy.cancelRequestedMessage),
         fallbackErrorMessage: uiText("取消一致性检查任务失败"),
       })
     } catch {
@@ -605,8 +605,8 @@ export function ChapterRawTextEditorDrawer({
       return
     }
     if (notifyExistingTask(optimizeTask, {
-      cancellingMessage: optimizeTaskCopy.cancellingMessage,
-      runningMessage: optimizeTaskCopy.runningMessage,
+      cancellingMessage: uiText(optimizeTaskCopy.cancellingMessage),
+      runningMessage: uiText(optimizeTaskCopy.runningMessage),
     })) {
       return
     }
@@ -631,8 +631,8 @@ export function ChapterRawTextEditorDrawer({
             },
           }),
         trackTaskData: trackOptimizeTaskData,
-        startedMessage: optimizeTaskCopy.startedMessage,
-        reusedMessage: optimizeTaskCopy.reusedMessage,
+        startedMessage: uiText(optimizeTaskCopy.startedMessage),
+        reusedMessage: uiText(optimizeTaskCopy.reusedMessage),
         fallbackErrorMessage: uiText("一键优化失败"),
       })
     } catch {
@@ -657,8 +657,8 @@ export function ChapterRawTextEditorDrawer({
           }
           return next
         },
-        cancelledImmediatelyMessage: simplifyTaskCopy.cancelledImmediatelyMessage,
-        cancelRequestedMessage: simplifyTaskCopy.cancelRequestedMessage,
+        cancelledImmediatelyMessage: uiText(simplifyTaskCopy.cancelledImmediatelyMessage),
+        cancelRequestedMessage: uiText(simplifyTaskCopy.cancelRequestedMessage),
         fallbackErrorMessage: uiText("取消智能精简任务失败"),
       })
     } catch {
@@ -673,8 +673,8 @@ export function ChapterRawTextEditorDrawer({
         taskId: optimizeTask.taskId,
         reason: '用户在原文编辑抽屉取消一键优化任务',
         applyCancelData: applyOptimizeCancelData,
-        cancelledImmediatelyMessage: optimizeTaskCopy.cancelledImmediatelyMessage,
-        cancelRequestedMessage: optimizeTaskCopy.cancelRequestedMessage,
+        cancelledImmediatelyMessage: uiText(optimizeTaskCopy.cancelledImmediatelyMessage),
+        cancelRequestedMessage: uiText(optimizeTaskCopy.cancelRequestedMessage),
         fallbackErrorMessage: uiText("取消一键优化任务失败"),
       })
     } catch {
@@ -685,42 +685,42 @@ export function ChapterRawTextEditorDrawer({
   useRelationTaskNotification({
     task: consistencyTask,
     settledTask: consistencySettledTask,
-    title: consistencyTaskCopy.title,
+    title: uiText(consistencyTaskCopy.title),
     sourceLabel: uiText("章节原文编辑"),
     placement: 'bottomRight',
-    runningDescription: consistencyTaskCopy.runningDescription,
-    cancellingDescription: consistencyTaskCopy.cancellingDescription,
-    successDescription: consistencyTaskCopy.successDescription,
-    cancelledDescription: consistencyTaskCopy.cancelledDescription,
-    failedDescription: consistencyTaskCopy.failedDescription,
+    runningDescription: uiText(consistencyTaskCopy.runningDescription),
+    cancellingDescription: uiText(consistencyTaskCopy.cancellingDescription),
+    successDescription: uiText(consistencyTaskCopy.successDescription),
+    cancelledDescription: uiText(consistencyTaskCopy.cancelledDescription),
+    failedDescription: uiText(consistencyTaskCopy.failedDescription),
     onCancel: consistencyTask ? () => void handleCancelConsistencyTask() : null,
   })
 
   useRelationTaskNotification({
     task: simplifyTask,
     settledTask: simplifySettledTask,
-    title: simplifyTaskCopy.title,
+    title: uiText(simplifyTaskCopy.title),
     sourceLabel: uiText("章节原文编辑"),
     placement: 'bottomRight',
-    runningDescription: simplifyTaskCopy.runningDescription,
-    cancellingDescription: simplifyTaskCopy.cancellingDescription,
-    successDescription: simplifyTaskCopy.successDescription,
-    cancelledDescription: simplifyTaskCopy.cancelledDescription,
-    failedDescription: simplifyTaskCopy.failedDescription,
+    runningDescription: uiText(simplifyTaskCopy.runningDescription),
+    cancellingDescription: uiText(simplifyTaskCopy.cancellingDescription),
+    successDescription: uiText(simplifyTaskCopy.successDescription),
+    cancelledDescription: uiText(simplifyTaskCopy.cancelledDescription),
+    failedDescription: uiText(simplifyTaskCopy.failedDescription),
     onCancel: simplifyTask ? () => void handleCancelSimplifyTask() : null,
   })
 
   useRelationTaskNotification({
     task: optimizeTask,
     settledTask: optimizeSettledTask,
-    title: optimizeTaskCopy.title,
+    title: uiText(optimizeTaskCopy.title),
     sourceLabel: uiText("章节原文编辑"),
     placement: 'bottomRight',
-    runningDescription: optimizeTaskCopy.runningDescription,
-    cancellingDescription: optimizeTaskCopy.cancellingDescription,
-    successDescription: optimizeTaskCopy.successDescription,
-    cancelledDescription: optimizeTaskCopy.cancelledDescription,
-    failedDescription: optimizeTaskCopy.failedDescription,
+    runningDescription: uiText(optimizeTaskCopy.runningDescription),
+    cancellingDescription: uiText(optimizeTaskCopy.cancellingDescription),
+    successDescription: uiText(optimizeTaskCopy.successDescription),
+    cancelledDescription: uiText(optimizeTaskCopy.cancelledDescription),
+    failedDescription: uiText(optimizeTaskCopy.failedDescription),
     onCancel: optimizeTask ? () => void handleCancelOptimizeTask() : null,
   })
 
@@ -875,7 +875,7 @@ export function ChapterRawTextEditorDrawer({
           <div ref={layout} className="chapter-editor-layout" data-pane={pane} data-compare={mode === 'compare'}>
             <div className="chapter-editor-pane-switch" role="group" aria-label={uiText("章节内容")}>
               <Button aria-pressed={pane === 'body'} onClick={() => switchView(mode, 'body')}>{uiText("正文")}</Button>
-              <Button aria-pressed={pane === 'explanations'} onClick={() => switchView(mode, 'explanations')}>{uiText("解释（")}{explanations.length}）</Button>
+              <Button aria-pressed={pane === 'explanations'} onClick={() => switchView(mode, 'explanations')}>{uiText("解释（{{count}}）", { count: explanations.length })}</Button>
             </div>
             <section className={creating ? 'chapter-editor-body-pane' : 'chapter-editor-body-pane chapter-source-card'}
               aria-label={uiText("正文编辑")} onBlur={event => {

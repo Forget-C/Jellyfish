@@ -2,7 +2,12 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { loadFrontendModule } from './load-frontend-module.mjs'
 
+// Exercise the same domain operations under the English preference.
+Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+  getItem: () => 'en-US', setItem() {},
+} })
 const { planDivisionAssignment } = await loadFrontendModule('pages/aiStudio/directing/divisionOperations')
+delete globalThis.localStorage
 const raw = '甲乙丙丁'
 const draft = { source_version: 'v1', baseline: [{ sequence_id: 'a', version: 1 }, { sequence_id: 'b', version: 1 }], members: [
   { key: 'a', sequence_id: 'a', title: 'A', span: { start: 0, end: 2 } },
@@ -20,6 +25,7 @@ test('interior selection appended forward keeps one original identity and create
   const one = { ...draft, baseline: draft.baseline.slice(0, 1), members: [{ ...draft.members[0], span: { start: 0, end: 4 } }], lineage: draft.lineage.slice(0, 1) }
   const plan = planDivisionAssignment(one, raw, { mode: 'append', edge: 'before', targetKey: 'a', key: 'op', span: { start: 1, end: 3 } })
   assert.deepEqual(plan.draft.members.map(row => [row.span.start, row.span.end, row.sequence_id]), [[0, 3, 'a'], [3, 4, undefined]])
+  assert.deepEqual(plan.draft.members.map(row => row.title), ['A', 'A（拆分）'])
 })
 
 test('both append directions and fully covered identities have explicit exits', () => {
@@ -35,7 +41,7 @@ test('both append directions and fully covered identities have explicit exits', 
 
 test('unselected gaps block append and range shrink releases text without changing the neighbor', () => {
   const separated = { ...draft, members: [{ ...draft.members[0], span: { start: 0, end: 1 } }, draft.members[1]] }
-  assert.throws(() => planDivisionAssignment(separated, raw, { mode: 'append', targetKey: 'a', key: 'op', span: { start: 2, end: 4 } }), /未选原文/)
+  assert.throws(() => planDivisionAssignment(separated, raw, { mode: 'append', targetKey: 'a', key: 'op', span: { start: 2, end: 4 } }), /Unselected text/)
   const result = planDivisionAssignment(draft, raw, { mode: 'range', targetKey: 'a', key: 'op', span: { start: 0, end: 1 } }).draft
   assert.deepEqual(result.members.map(row => row.span), [{ start: 0, end: 1 }, { start: 2, end: 4 }])
 })
@@ -44,11 +50,12 @@ test('interior extraction may retain the trailing fragment without duplicating i
   const one = { ...draft, members: [{ ...draft.members[0], span: { start: 0, end: 4 } }], baseline: draft.baseline.slice(0, 1), lineage: draft.lineage.slice(0, 1) }
   const result = planDivisionAssignment(one, raw, { mode: 'new', key: 'c', title: 'C', span: { start: 1, end: 3 }, retainAfter: ['a'] }).draft
   assert.deepEqual(result.members.map(row => [row.span.start, row.span.end, row.sequence_id]), [[0, 1, undefined], [1, 3, undefined], [3, 4, 'a']])
+  assert.deepEqual(result.members.map(row => row.title), ['A（拆分）', 'C', 'A'])
 })
 
 test('whitespace can append, never forms a scene, and whitespace residuals become unassigned', () => {
   const one = { ...draft, members: [{ ...draft.members[0], span: { start: 0, end: 3 } }], baseline: draft.baseline.slice(0, 1), lineage: draft.lineage.slice(0, 1) }
-  assert.throws(() => planDivisionAssignment(one, '甲\n\n', { mode: 'new', key: 'c', title: 'C', span: { start: 1, end: 3 } }), /纯空白/)
+  assert.throws(() => planDivisionAssignment(one, '甲\n\n', { mode: 'new', key: 'c', title: 'C', span: { start: 1, end: 3 } }), /Whitespace alone/)
   const value = planDivisionAssignment(one, '甲\n\n', { mode: 'new', key: 'c', title: 'C', span: { start: 0, end: 1 } }).draft
   assert.equal(value.members.length, 1)
   assert.deepEqual(value.exited_sequence_ids, ['a'])
