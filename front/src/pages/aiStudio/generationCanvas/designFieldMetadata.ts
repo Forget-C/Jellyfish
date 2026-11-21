@@ -1,3 +1,4 @@
+import { uiText } from '../../../uiText'
 import type { DesignField, ReferenceDesignField } from '../../../services/generated'
 
 export const states = { empty: '未填写', not_applicable: '不适用', absent: '明确没有', undecided: '待确定', proposal: '提议', fact: '事实' }
@@ -16,10 +17,10 @@ export function designFieldMetadataParts(value?: ReferenceDesignField & { size?:
   if (!value) return []
   if (value.extraction_context === 'storyboard') {
     return [
-      { label: '状态', text: states[value.state || 'empty'] },
-      { label: '用途', text: purposes[value.purpose || 'design'] },
-      ...(value.source_locator ? [{ label: '来源', text: value.source_locator }] : []),
-      ...(value.extraction_reason ? [{ label: '理由', text: value.extraction_reason }] : []),
+      { label: uiText("状态"), text: uiText(states[value.state || 'empty']) },
+      { label: uiText("用途"), text: uiText(purposes[value.purpose || 'design']) },
+      ...(value.source_locator ? [{ label: uiText("来源"), text: value.source_locator }] : []),
+      ...(value.extraction_reason ? [{ label: uiText("理由"), text: value.extraction_reason }] : []),
     ]
   }
   if (value.authorship === 'user') return []
@@ -27,14 +28,14 @@ export function designFieldMetadataParts(value?: ReferenceDesignField & { size?:
   const supplied = (key: 'state' | 'purpose' | 'source_locator') => value.metadata_fields?.includes(key) || false
   const inactive = value.state === 'not_applicable' || value.state === 'empty' && hasContent(value)
   return [
-    value.state && (extracted ? supplied('state') : value.state !== (defaults?.state || 'empty') || inactive) ? { label: '状态', text: states[value.state] } : null,
-    inactive ? { label: '', text: '不参与生成' } : null,
-    value.purpose && (extracted ? supplied('purpose') : value.purpose !== (defaults?.purpose || 'design')) ? { label: '用途', text: purposes[value.purpose] } : null,
-    value.source_locator?.trim() && (!extracted || supplied('source_locator')) ? { label: '来源', text: value.source_locator } : null,
+    value.state && (extracted ? supplied('state') : value.state !== (defaults?.state || 'empty') || inactive) ? { label: uiText("状态"), text: uiText(states[value.state]) } : null,
+    inactive ? { label: '', text: uiText("不参与生成") } : null,
+    value.purpose && (extracted ? supplied('purpose') : value.purpose !== (defaults?.purpose || 'design')) ? { label: uiText("用途"), text: uiText(purposes[value.purpose]) } : null,
+    value.source_locator?.trim() && (!extracted || supplied('source_locator')) ? { label: uiText("来源"), text: value.source_locator } : null,
   ].filter((item): item is { label: string; text: string } => item !== null)
 }
 
 /** 预设变更摘要保留原有文案，单行说明仅在专用展示组件中格式化。 */
 export function designFieldMetadata(value?: ReferenceDesignField & { size?: string | null }, defaults?: DesignField): string {
-  return designFieldMetadataParts(value, defaults).map(item => item.label === '来源' ? `来源：${item.text}` : item.text).join(' · ')
+  return designFieldMetadataParts(value, defaults).map(item => item.label === uiText("来源") ? uiText("来源：{{name}}", { name: item.text }) : item.text).join(' · ')
 }

@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { EditorAttribute } from './EditorAttribute'
 import { useEffect, useId, useRef, useState } from 'react'
 import { Select } from 'antd'
@@ -22,6 +23,7 @@ function ImageOption({ fileId, name }: { fileId: string; name: string }) {
 
 /** 四类共用名称与单图选择；新图片只从图片内容卡采用，旧的固定图片继续展示。 */
 export function NamedImageReferenceEditor({ card: raw, document, projectId, savedRevision, modelOutputs, onChange, disabled }: CardRendererProps) {
+  const uiText = useUiText()
   const fieldId = useId()
   const card = raw as NamedImageReferenceCard
   const resolved = useCardCandidates(projectId, document.id, card.id, savedRevision, modelOutputs, false)
@@ -56,7 +58,7 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
     if (disabled) return
     // 改绑会替换输出对象身份，仍在使用的弱关联也需要先解除。
     const protection = referenceProtection(document, undefined, card.id)
-    if (protection) { setSelectionError('请先取消下游采用，再切换或取消名称关联'); return }
+    if (protection) { setSelectionError(uiText("请先取消下游采用，再切换或取消名称关联")); return }
     pendingName.current = undefined
     setSelectionError('')
     onChange({ ...card, name: candidate?.payload && 'name' in candidate.payload ? candidate.payload.name || '' : name, name_binding: candidate?.source || null })
@@ -85,11 +87,11 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
   const selectedName = selectedImage ? caption(selectedImage) : '已保留图片'
   const boundNameKey = card.name_binding && sourceKey(card.name_binding)
   const nameOptions = nameCandidates.filter(item => sourceKey(item.source) !== boundNameKey).map(item => ({ value: sourceKey(item.source), label: item.payload && 'name' in item.payload ? item.payload.name || '' : '' }))
-  if (boundNameKey) nameOptions.unshift({ value: boundNameKey, label: name || '未命名描述' })
+  if (boundNameKey) nameOptions.unshift({ value: boundNameKey, label: name || uiText("未命名描述") })
   const parameters = <>
-    <EditorAttribute id={`${fieldId}-name`} label="参考名称" required readOnly={disabled} value={card.name_binding ? `来源：${name}` : name} locked={!!card.name_binding} help="可输入名称，也可选择已有描述" error={selectionError || nameError}>
+    <EditorAttribute id={`${fieldId}-name`} label={uiText("参考名称")} required readOnly={disabled} value={card.name_binding ? `来源：${name}` : name} locked={!!card.name_binding} help={uiText("可输入名称，也可选择已有描述")} error={selectionError || nameError}>
     <span className="generation-reference-name">
-      <CustomValueSelect id={`${fieldId}-name`} describedBy={`${fieldId}-name-hint`} placeholder="输入参考名称" label="参考名称" value={boundNameKey || name} options={nameOptions} disabled={disabled || !!card.name_binding} required allowClear={!card.name_binding} maxLength={255} status={nameError ? 'error' : undefined}
+      <CustomValueSelect id={`${fieldId}-name`} describedBy={`${fieldId}-name-hint`} placeholder={uiText("输入参考名称")} label={uiText("参考名称")} value={boundNameKey || name} options={nameOptions} disabled={disabled || !!card.name_binding} required allowClear={!card.name_binding} maxLength={255} status={nameError ? 'error' : undefined}
         onChange={(value, custom) => {
           if (disabled || card.name_binding) return
           if (!custom) {
@@ -100,13 +102,13 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
           setSelectionError('')
           onChange({ ...card, name: value })
         }} />
-      {card.name_binding && <span className="generation-reference-linked">已关联</span>}
-      {card.name_binding && <WorkbenchIconButton label="取消名称关联" icon={<DisconnectOutlined />} variant="quiet" disabled={disabled} onClick={() => changeNameBinding()} />}
+      {card.name_binding && <span className="generation-reference-linked">{uiText("已关联")}</span>}
+      {card.name_binding && <WorkbenchIconButton label={uiText("取消名称关联")} icon={<DisconnectOutlined />} variant="quiet" disabled={disabled} onClick={() => changeNameBinding()} />}
     </span></EditorAttribute>
-    <EditorAttribute id={`${fieldId}-angle`} label="角度"><CustomValueSelect id={`${fieldId}-angle`} label="参考角度" value={card.angle || '正面'} options={[...new Set([...angles, card.angle || '正面'])].map(value => ({ value, label: value }))} disabled={disabled} onChange={angle => onChange({ ...card, angle })} /></EditorAttribute>
-    <EditorAttribute id={`${fieldId}-image`} label="关联图片" value={selected ? fileInfo?.id === selected.file_id ? fileInfo.name : selectedName : undefined} error={resolved.error}>
-    <Select popupClassName="generation-attribute-image-options" id={`${fieldId}-image`} aria-describedby={`${fieldId}-image-hint`} labelInValue showSearch={false} aria-label="关联图片" placeholder="选择已连线图片" disabled={disabled} value={selected ? { value: referenceImageKey(selected), label: <ImageOption fileId={selected.file_id} name={selectedName || '已保留图片'} /> } : undefined}
-      notFoundContent="暂无已连线图片内容卡，可从当前画布选择" options={connected.map(image => ({ value: referenceImageKey(image), label: <ImageOption fileId={image.file_id!} name={caption(image)} /> }))}
+    <EditorAttribute id={`${fieldId}-angle`} label={uiText("角度")}><CustomValueSelect id={`${fieldId}-angle`} label={uiText("参考角度")} value={card.angle || '正面'} options={[...new Set([...angles, card.angle || '正面'])].map(value => ({ value, label: value }))} disabled={disabled} onChange={angle => onChange({ ...card, angle })} /></EditorAttribute>
+    <EditorAttribute id={`${fieldId}-image`} label={uiText("关联图片")} value={selected ? fileInfo?.id === selected.file_id ? fileInfo.name : selectedName : undefined} error={resolved.error}>
+    <Select popupClassName="generation-attribute-image-options" id={`${fieldId}-image`} aria-describedby={`${fieldId}-image-hint`} labelInValue showSearch={false} aria-label={uiText("关联图片")} placeholder={uiText("选择已连线图片")} disabled={disabled} value={selected ? { value: referenceImageKey(selected), label: <ImageOption fileId={selected.file_id} name={selectedName || '已保留图片'} /> } : undefined}
+      notFoundContent={uiText("暂无已连线图片内容卡，可从当前画布选择")} options={connected.map(image => ({ value: referenceImageKey(image), label: <ImageOption fileId={image.file_id!} name={caption(image)} /> }))}
       onSelect={value => { const image = connected.find(item => referenceImageKey(item) === value.value); if (image) chooseCandidate(image) }} />
     </EditorAttribute>
   </>
@@ -114,25 +116,25 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
   const status = [disabled && '只读', missed && '补漏对象', selected ? '1 张参考图' : '未选择图片'].filter(Boolean).join(' · ')
   if (card.scene_object_source) {
     const current = resolved.outputs.find(output => output.modality === 'image' && output.source.position === 0 && output.available !== false)
-    return <ReferenceCardEditor parameters={<span>场次对象参考 · 使用当前资源主图</span>} status={<span>{resolved.error || (current?.file_id ? '主图随对象选用更新' : '未选用资源或暂无主图')}</span>}>
-      <div className="generation-reference-image">{current?.file_id && <img alt="当前资源主图" src={buildFileDownloadUrl(current.file_id)} />}</div>
-      <WorkbenchButton variant="quiet" disabled={disabled} onClick={() => setCanvasPicker(true)}>改用固定图片</WorkbenchButton>
-      <WorkbenchModal title="从当前画布选择参考图" open={canvasPicker} onCancel={() => setCanvasPicker(false)} footer={null}>
-        <div className="generation-reference-picker">{unconnected.map(image => <WorkbenchButton key={referenceImageKey(image)} disabled={disabled} onClick={() => { chooseCandidate(image); setCanvasPicker(false) }}><img alt="参考候选" src={buildFileDownloadUrl(image.file_id!)} />选择参考图 {caption(image)}</WorkbenchButton>)}</div>
-        {!unconnected.length && <p>当前画布没有可关联的未连线图片内容卡。</p>}
+    return <ReferenceCardEditor parameters={<span>{uiText("场次对象参考 · 使用当前资源主图")}</span>} status={<span>{resolved.error || (current?.file_id ? uiText("主图随对象选用更新") : uiText("未选用资源或暂无主图"))}</span>}>
+      <div className="generation-reference-image">{current?.file_id && <img alt={uiText("当前资源主图")} src={buildFileDownloadUrl(current.file_id)} />}</div>
+      <WorkbenchButton variant="quiet" disabled={disabled} onClick={() => setCanvasPicker(true)}>{uiText("改用固定图片")}</WorkbenchButton>
+      <WorkbenchModal title={uiText("从当前画布选择参考图")} open={canvasPicker} onCancel={() => setCanvasPicker(false)} footer={null}>
+        <div className="generation-reference-picker">{unconnected.map(image => <WorkbenchButton key={referenceImageKey(image)} disabled={disabled} onClick={() => { chooseCandidate(image); setCanvasPicker(false) }}><img alt={uiText("参考候选")} src={buildFileDownloadUrl(image.file_id!)} />{uiText("选择参考图")} {caption(image)}</WorkbenchButton>)}</div>
+        {!unconnected.length && <p>{uiText("当前画布没有可关联的未连线图片内容卡。")}</p>}
       </WorkbenchModal>
     </ReferenceCardEditor>
   }
   return <ReferenceCardEditor parameters={parameters} status={<span>{status}</span>}>
     <div className="generation-reference-image" data-empty={!selected}>
-      {selected ? <><img alt="当前参考图" src={buildFileDownloadUrl(selected.file_id)} /><div className="generation-reference-image-actions">
-        <WorkbenchIconButton label="更换参考图" icon={<SwapOutlined />} variant="quiet" disabled={disabled} onClick={() => setCanvasPicker(true)} />
-        <WorkbenchIconButton label="移除参考图" icon={<DeleteOutlined />} variant="quiet" disabled={disabled} onClick={() => { pendingName.current = undefined; onChange({ ...card, image_binding: null }) }} />
+      {selected ? <><img alt={uiText("当前参考图")} src={buildFileDownloadUrl(selected.file_id)} /><div className="generation-reference-image-actions">
+        <WorkbenchIconButton label={uiText("更换参考图")} icon={<SwapOutlined />} variant="quiet" disabled={disabled} onClick={() => setCanvasPicker(true)} />
+        <WorkbenchIconButton label={uiText("移除参考图")} icon={<DeleteOutlined />} variant="quiet" disabled={disabled} onClick={() => { pendingName.current = undefined; onChange({ ...card, image_binding: null }) }} />
       </div></> : <ReferenceImagePlaceholder onChoose={() => setCanvasPicker(true)} disabled={disabled} />}
     </div>
-    <WorkbenchModal title="从当前画布选择参考图" open={canvasPicker} onCancel={() => setCanvasPicker(false)} footer={null}>
-      <div className="generation-reference-picker">{unconnected.map(image => <WorkbenchButton key={referenceImageKey(image)} data-reference-source-card={image.source.card_id} disabled={disabled} onClick={() => { chooseCandidate(image); setCanvasPicker(false) }}><img alt="参考候选" src={buildFileDownloadUrl(image.file_id!)} />选择参考图 {caption(image)}</WorkbenchButton>)}</div>
-      {!unconnected.length && <p>当前画布没有可关联的未连线图片内容卡。</p>}
+    <WorkbenchModal title={uiText("从当前画布选择参考图")} open={canvasPicker} onCancel={() => setCanvasPicker(false)} footer={null}>
+      <div className="generation-reference-picker">{unconnected.map(image => <WorkbenchButton key={referenceImageKey(image)} data-reference-source-card={image.source.card_id} disabled={disabled} onClick={() => { chooseCandidate(image); setCanvasPicker(false) }}><img alt={uiText("参考候选")} src={buildFileDownloadUrl(image.file_id!)} />{uiText("选择参考图")} {caption(image)}</WorkbenchButton>)}</div>
+      {!unconnected.length && <p>{uiText("当前画布没有可关联的未连线图片内容卡。")}</p>}
     </WorkbenchModal>
   </ReferenceCardEditor>
 }

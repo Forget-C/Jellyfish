@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { DesignPresetEditor } from './DesignPresetEditor'
 import { DesignScopePopover } from './DesignScopePopover'
 import { narrativePresets } from './narrativePresets'
@@ -18,6 +19,7 @@ export type NarrativeCard = NarrativeOverviewCard | NarrativeBeatCard | Narrativ
 
 /** 四种叙事卡保留自己的字段；关系只选择直接候选身份。 */
 export function NarrativeDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled, editorOpen, onUndoDesign }: CardRendererProps) {
+  const uiText = useUiText()
   const { cardDefinitions } = useGraphRules()
   const card = raw as NarrativeCard
   const resolved = useCardCandidates((document.project_id || ''), document.id, card.id, savedRevision, modelOutputs, false)
@@ -34,20 +36,20 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
   const fields = Object.fromEntries(designFieldEntries(card))
   const relations = <>
     <DesignNameField label={{ 'direction.narrative': '叙事名称', 'direction.beat': '节拍名称', 'direction.event': '事件名称', 'direction.shot': '镜头名称' }[card.type!]} placeholder={{ 'direction.narrative': '例如：车站告别', 'direction.beat': '例如：发现钥匙', 'direction.event': '例如：门外响起脚步声', 'direction.shot': '例如：手部取钥匙特写' }[card.type!]} value={card.name} disabled={disabled} onChange={name => onChange({ ...card, name })} />
-    {!['direction.narrative', 'direction.event'].includes(card.type!) && beats.length > 0 && <details><summary>叙事关系 · 已选 {bindings.length} 项</summary>
-    {card.type === 'direction.shot' && beats.length > 0 && <section aria-label="已选覆盖节拍顺序" onPointerDown={beatSort.onPointerDown} onClickCapture={beatSort.onClickCapture} onKeyDown={beatSort.onKeyDown}><h3>已选覆盖节拍顺序</h3>{beats.map((binding, index) => {
+    {!['direction.narrative', 'direction.event'].includes(card.type!) && beats.length > 0 && <details><summary>{uiText("叙事关系 · 已选")} {bindings.length} {uiText("项")}</summary>
+    {card.type === 'direction.shot' && beats.length > 0 && <section aria-label={uiText("已选覆盖节拍顺序")} onPointerDown={beatSort.onPointerDown} onClickCapture={beatSort.onClickCapture} onKeyDown={beatSort.onKeyDown}><h3>{uiText("已选覆盖节拍顺序")}</h3>{beats.map((binding, index) => {
       const item = resolved.candidates.find(candidate => sourceKey(candidate.source) === sourceKey(binding.source))
       const name = item?.payload && 'name' in item.payload ? item.payload.name : binding.source.object_id || '失效节拍'
-      return <div key={binding.id} className="design-sort-item" data-sort-id={binding.id} data-drop-target={beatSort.drag && beats[beatSort.drag.to]?.id === binding.id} data-drop-side={beatSort.drag && beats.findIndex(beat => beat.id === beatSort.drag!.id) < beatSort.drag.to ? 'after' : 'before'} tabIndex={disabled ? -1 : 0} aria-label={`覆盖节拍 ${name}`}><span>{index + 1}. {name}</span><WorkbenchButton data-sort-ignore aria-label={`上移覆盖节拍 ${name}`} disabled={disabled || index === 0} onClick={() => moveBeat(binding.id, -1)}>上移</WorkbenchButton><WorkbenchButton data-sort-ignore aria-label={`下移覆盖节拍 ${name}`} disabled={disabled || index === beats.length - 1} onClick={() => moveBeat(binding.id, 1)}>下移</WorkbenchButton></div>
+      return <div key={binding.id} className="design-sort-item" data-sort-id={binding.id} data-drop-target={beatSort.drag && beats[beatSort.drag.to]?.id === binding.id} data-drop-side={beatSort.drag && beats.findIndex(beat => beat.id === beatSort.drag!.id) < beatSort.drag.to ? 'after' : 'before'} tabIndex={disabled ? -1 : 0} aria-label={uiText("覆盖节拍 {{name}}", { name })}><span>{index + 1}. {name}</span><WorkbenchButton data-sort-ignore aria-label={uiText("上移覆盖节拍 {{name}}", { name })} disabled={disabled || index === 0} onClick={() => moveBeat(binding.id, -1)}>{uiText("上移")}</WorkbenchButton><WorkbenchButton data-sort-ignore aria-label={uiText("下移覆盖节拍 {{name}}", { name })} disabled={disabled || index === beats.length - 1} onClick={() => moveBeat(binding.id, 1)}>{uiText("下移")}</WorkbenchButton></div>
     })}</section>}
     </details>}
   </>
   return <DesignPresetEditor scopeTools={<DesignScopePopover card={card} disabled={disabled} onChange={onChange} editorOpen={editorOpen} />} fields={fields} labels={Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.label]))} presets={narrativePresets[card.type!] || []} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} relations={relations} onApply={preset => onChange({ ...card, ...applyPreset(fields, preset) } as NarrativeCard)}>
     <div className={card.type === 'direction.event' ? undefined : 'design-preset-fields design-preset-fields-compact'}>
-    {card.type === 'direction.narrative' && <>{field('viewpoint', '观察视点')}{field('information_change', '信息变化')}{field('relationship_change', '人物关系变化')}{field('turning_point', '关键转折')}{field('open_questions', '待确定问题')}</>}
-    {card.type === 'direction.beat' && <>{field('objective', '行动目标')}{field('obstacle', '阻碍')}{field('expected_change', '预期变化')}{field('audience_must_see', '必须让观众看到')}</>}
-    {card.type === 'direction.event' && field('action_change', '动作或变化说明')}
-    {card.type === 'direction.shot' && <>{field('narrative_role', '叙事作用')}{field('visible_result', '可见结果')}{field('estimated_duration', '预计时长')}</>}
+    {card.type === 'direction.narrative' && <>{field('viewpoint', uiText("观察视点"))}{field('information_change', uiText("信息变化"))}{field('relationship_change', uiText("人物关系变化"))}{field('turning_point', uiText("关键转折"))}{field('open_questions', uiText("待确定问题"))}</>}
+    {card.type === 'direction.beat' && <>{field('objective', uiText("行动目标"))}{field('obstacle', uiText("阻碍"))}{field('expected_change', uiText("预期变化"))}{field('audience_must_see', uiText("必须让观众看到"))}</>}
+    {card.type === 'direction.event' && field('action_change', uiText("动作或变化说明"))}
+    {card.type === 'direction.shot' && <>{field('narrative_role', uiText("叙事作用"))}{field('visible_result', uiText("可见结果"))}{field('estimated_duration', uiText("预计时长"))}</>}
     </div>
   </DesignPresetEditor>
 }

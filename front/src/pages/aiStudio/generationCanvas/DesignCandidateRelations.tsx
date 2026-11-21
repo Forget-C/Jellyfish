@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import type { CanvasResolvedOutput, CanvasDocument } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
 import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
@@ -7,6 +8,7 @@ import { candidateRelationPorts, withDesignRelation } from './designRelationRule
 
 /** Candidate host owns the popover; this area updates only explicit business roles. */
 export function DesignCandidateRelations({ card, document, item, disabled, onChange }: { card: GenerationCard; document: CanvasDocument; item: CanvasResolvedOutput; disabled?: boolean; onChange: (card: GenerationCard) => void }) {
+  const uiText = useUiText()
   const { portLabels, cardDefinitions, connectionPolicy } = useGraphRules()
   const bindings = 'input_bindings' in card ? card.input_bindings || [] : []
   return <div className="design-candidate-relations">{candidateRelationPorts(card, document, item).map(port => {
@@ -17,6 +19,6 @@ export function DesignCandidateRelations({ card, document, item, disabled, onCha
     const name = previousCard && 'name' in previousCard ? previousCard.name : '原来源'
     const label = portLabels[port] || port
     const connected = document.edges?.some(edge => edge.target_card === card.id && edge.target_port === port && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id && connectionPolicy(document, edge)?.adoption_allowed)
-    return <WorkbenchButton key={port} variant="quiet" disabled={disabled || !bound && (!connected || item.available === false)} onClick={() => onChange(withDesignRelation(card, item, port, single))}>{bound ? `解除${label}` : previous ? `替换${label}：${name} → ${item.payload && 'name' in item.payload ? item.payload.name : item.token || '当前来源'}` : `用作${label}`}</WorkbenchButton>
+    return <WorkbenchButton key={port} variant="quiet" disabled={disabled || !bound && (!connected || item.available === false)} onClick={() => onChange(withDesignRelation(card, item, port, single))}>{bound ? uiText("解除{{label}}", { label }) : previous ? uiText("替换{{label}}：{{name}} → {{value3}}", { label, name, value3: item.payload && 'name' in item.payload ? item.payload.name : item.token || '当前来源' }) : uiText("用作{{label}}", { label })}</WorkbenchButton>
   })}</div>
 }

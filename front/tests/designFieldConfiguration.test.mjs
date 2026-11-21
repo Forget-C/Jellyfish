@@ -1,20 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { readFile } from 'node:fs/promises'
-import ts from 'typescript'
+import { loadFrontendModule } from './load-frontend-module.mjs'
 
-const load = async name => {
-  const source = await readFile(new URL('../src/pages/aiStudio/generationCanvas/' + name + '.ts', import.meta.url), 'utf8')
-  let { outputText } = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } })
-  if (outputText.includes("'./designFieldMetadata'")) {
-    const dependency = await readFile(new URL('../src/pages/aiStudio/generationCanvas/designFieldMetadata.ts', import.meta.url), 'utf8')
-    const compiled = ts.transpileModule(dependency, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText
-    outputText = outputText.replaceAll("'./designFieldMetadata'", JSON.stringify(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`))
-  }
-  return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`)
-}
-const { isDesignFieldConfigured } = await load('designFieldConfiguration')
-const { designMediaSourcePorts } = await load('designSources')
+const { isDesignFieldConfigured } = await loadFrontendModule('pages/aiStudio/generationCanvas/designFieldConfiguration')
+const { designMediaSourcePorts } = await loadFrontendModule('pages/aiStudio/generationCanvas/designSources')
 test('schema defaults do not masquerade as authored configuration, including empty retained documents', () => {
   for (const defaults of [{ state: 'empty', purpose: 'background' }, { state: 'empty', purpose: 'constraint' }, { state: 'undecided', purpose: 'design' }]) {
     assert.equal(isDesignFieldConfigured({ ...defaults, text: '' }, defaults), false)
@@ -32,7 +21,7 @@ test('local audio/video ports remain addable without duplicate ordinary media ch
   assert.deepEqual(designMediaSourcePorts(['audio_example', 'image_example', 'image', 'video_example', 'video', 'text']), ['audio_example', 'image', 'video'])
 })
 
-const { soundConstraintPresets } = await load('soundConstraintPresets')
+const { soundConstraintPresets } = await loadFrontendModule('pages/aiStudio/generationCanvas/soundConstraintPresets')
 test('continuity categories offer distinct instructions while leaving factual states to the user', () => {
   const cases = [['space', '空间位置'], ['appearance', '服装'], ['hands_props', '持握'], ['environment', '环境变化'], ['photography', '光线'], ['dialogue_sound', '对白与声音']]
   const ids = new Set(), instructions = new Set()

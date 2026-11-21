@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { DesignMediaReferenceSettings } from './DesignMediaReferenceSettings'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, InputNumber, Select, Space } from 'antd'
@@ -10,6 +11,7 @@ import { useGraphRules } from './CanvasCatalogContext'
 
 /** Local reference edits retain the fixed file; pointer gestures commit one history update. */
 export function AnchorReferenceCandidate({ card, item, disabled, onChange, expanded, onExpand }: { card: SpatialAnchorCard; item: CanvasResolvedOutput; disabled?: boolean; onChange: (card: SpatialAnchorCard) => void; expanded: boolean; onExpand: (expanded: boolean) => void }) {
+  const uiText = useUiText()
   const { cardDefinitions } = useGraphRules()
   const matches = (card.examples || []).filter(value => sourceKey(value.source) === sourceKey(item.source))
   const [selectedId, setSelectedId] = useState<string>()
@@ -35,7 +37,7 @@ export function AnchorReferenceCandidate({ card, item, disabled, onChange, expan
   }
   const shown = draft || marker
   return <div className="anchor-reference-candidate" onErrorCapture={() => { setFailed(true); setEditing(false) }}>
-    {matches.length > 0 && <Select aria-label="本地参考版本" value={example?.id || ''} options={[...matches.map((value, index) => ({ value: value.id, label: `本地参考 ${index + 1}` })), ...(item.file_id && !matches.some(value => value.file_id === item.file_id) ? [{ value: '', label: '当前候选素材' }] : [])]} onChange={id => { setSelectedId(id); setEditing(false); setDraft(undefined) }} />}
+    {matches.length > 0 && <Select aria-label={uiText("本地参考版本")} value={example?.id || ''} options={[...matches.map((value, index) => ({ value: value.id, label: uiText("本地参考 {{value1}}", { value1: index + 1 }) })), ...(item.file_id && !matches.some(value => value.file_id === item.file_id) ? [{ value: '', label: uiText("当前候选素材") }] : [])]} onChange={id => { setSelectedId(id); setEditing(false); setDraft(undefined) }} />}
     {video && fileId ? <MediaPreview fileId={fileId} type="video" /> : fileId && <div className="anchor-marker-image" data-editing={editing && !disabled} onPointerDown={event => {
       if (!editing || disabled || failed || event.button !== 0 || !image.current || !(event.target === image.current || (event.target as HTMLElement).closest('[data-anchor-marker]'))) return
       const point = pointAt(event.clientX, event.clientY)
@@ -46,20 +48,20 @@ export function AnchorReferenceCandidate({ card, item, disabled, onChange, expan
       const point = pointAt(event.clientX, event.clientY)
       gesture.current = undefined; setDraft(undefined); saveMarker(point)
     }} onPointerCancel={() => { gesture.current = undefined; setDraft(undefined) }}>
-      <img ref={image} src={buildFileDownloadUrl(fileId)} alt="锚点参考图片" draggable={false} onLoad={() => setFailed(false)} onError={() => { setFailed(true); setEditing(false) }} />
-      {shown && !failed && <span data-anchor-marker aria-label="锚点图片标记" style={{ left: `${shown.x * 100}%`, top: `${shown.y * 100}%` }}>⊕</span>}
+      <img ref={image} src={buildFileDownloadUrl(fileId)} alt={uiText("锚点参考图片")} draggable={false} onLoad={() => setFailed(false)} onError={() => { setFailed(true); setEditing(false) }} />
+      {shown && !failed && <span data-anchor-marker aria-label={uiText("锚点图片标记")} style={{ left: `${shown.x * 100}%`, top: `${shown.y * 100}%` }}>⊕</span>}
     </div>}
-    {failed && <Alert type="warning" message="原参考文件不可用，可取消本地参考。" />}
-    <Space wrap><WorkbenchButton variant="quiet" onClick={() => { onExpand(!expanded) }}>{expanded ? '收起预览' : '展开预览'}</WorkbenchButton>
-      {!example && <WorkbenchButton disabled={disabled || item.available === false || !fileId} onClick={() => { if (fileId) { const id = crypto.randomUUID(); setSelectedId(id); onChange({ ...card, examples: [...(card.examples || []), { id, source: item.source, file_id: fileId }] }) } }}>设为本地参考</WorkbenchButton>}
+    {failed && <Alert type="warning" message={uiText("原参考文件不可用，可取消本地参考。")} />}
+    <Space wrap><WorkbenchButton variant="quiet" onClick={() => { onExpand(!expanded) }}>{expanded ? uiText("收起预览") : uiText("展开预览")}</WorkbenchButton>
+      {!example && <WorkbenchButton disabled={disabled || item.available === false || !fileId} onClick={() => { if (fileId) { const id = crypto.randomUUID(); setSelectedId(id); onChange({ ...card, examples: [...(card.examples || []), { id, source: item.source, file_id: fileId }] }) } }}>{uiText("设为本地参考")}</WorkbenchButton>}
     </Space>
     {example && <>
       <DesignMediaReferenceSettings key={example.id} example={example} fields={cardDefinitions['direction.anchor'].fields} disabled={disabled} onChange={update} />
-      {!video ? <><Space wrap><WorkbenchButton disabled={disabled || failed} variant="quiet" aria-pressed={editing} onClick={() => setEditing(!editing)}>{editing ? '完成标记' : marker ? '调整标记' : '标记位置'}</WorkbenchButton>
-        <WorkbenchButton disabled={disabled || !marker} variant="quiet" onClick={() => saveMarker()}>清除标记</WorkbenchButton></Space>
-        <details><summary>精确坐标</summary><Space wrap>{(['x', 'y'] as const).map(axis => <label key={axis}>{axis === 'x' ? '横向' : '纵向'} % <InputNumber aria-label={axis === 'x' ? '标记横坐标百分比' : '标记纵坐标百分比'} disabled={disabled || failed} min={0} max={100} step={1} value={marker ? marker[axis] * 100 : undefined} onChange={value => { if (value !== null) saveMarker({ x: marker?.x ?? 0.5, y: marker?.y ?? 0.5, [axis]: value / 100 }) }} /></label>)}</Space></details>
+      {!video ? <><Space wrap><WorkbenchButton disabled={disabled || failed} variant="quiet" aria-pressed={editing} onClick={() => setEditing(!editing)}>{editing ? uiText("完成标记") : marker ? uiText("调整标记") : uiText("标记位置")}</WorkbenchButton>
+        <WorkbenchButton disabled={disabled || !marker} variant="quiet" onClick={() => saveMarker()}>{uiText("清除标记")}</WorkbenchButton></Space>
+        <details><summary>{uiText("精确坐标")}</summary><Space wrap>{(['x', 'y'] as const).map(axis => <label key={axis}>{axis === 'x' ? uiText("横向") : uiText("纵向")} % <InputNumber aria-label={axis === 'x' ? uiText("标记横坐标百分比") : uiText("标记纵坐标百分比")} disabled={disabled || failed} min={0} max={100} step={1} value={marker ? marker[axis] * 100 : undefined} onChange={value => { if (value !== null) saveMarker({ x: marker?.x ?? 0.5, y: marker?.y ?? 0.5, [axis]: value / 100 }) }} /></label>)}</Space></details>
       </> : null}
-      <WorkbenchButton variant="quiet" disabled={disabled} onClick={() => onChange({ ...card, examples: card.examples?.filter(value => value.id !== example.id), markers: card.markers?.filter(value => value.example_id !== example.id) })}>取消本地参考</WorkbenchButton>
+      <WorkbenchButton variant="quiet" disabled={disabled} onClick={() => onChange({ ...card, examples: card.examples?.filter(value => value.id !== example.id), markers: card.markers?.filter(value => value.example_id !== example.id) })}>{uiText("取消本地参考")}</WorkbenchButton>
     </>}
   </div>
 }

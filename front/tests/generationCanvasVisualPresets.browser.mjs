@@ -45,6 +45,8 @@ try {
     { id: 'fact', type: 'direction.fact' },
     { id: 'dialogue', type: 'direction.dialogue', dialogue_id: 'dialogue' },
     { id: 'anchor', type: 'direction.anchor' },
+    { id: 'english-style', type: 'direction.style' },
+    { id: 'english-named', type: 'direction.creative_control', name: '手绘水彩' },
   ], edges: [{id:'e', source_card:'style',source_port:'text',target_card:'consumer',target_port:'text'}], input_order:{consumer:{text:['e']}} }
   const seed = await fetch(storyboardCanvasApi(base, canvas.id), {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document: withFixedSource(canvas, document)})})
   assert.ok(seed.ok, await seed.text())
@@ -54,6 +56,28 @@ try {
   const detail=page.locator('.wb-details:not([hidden])')
   const open=async id=>{if(await detail.count()) await detail.getByRole('button',{name:'关闭详情',exact:true}).click();const card=page.locator(`[data-card-id="${id}"]`);await card.press('Enter');await detail.waitFor();await openModelInspection(page)}
   const close=()=>detail.getByRole('button',{name:'关闭详情',exact:true}).click()
+  const languagePage = await context.newPage()
+  await languagePage.goto('http://127.0.0.1:4297/canvases')
+  await languagePage.getByRole('button', { name: '用户与语言设置' }).click()
+  await languagePage.getByRole('menuitem', { name: 'English', exact: true }).click()
+  await page.reload()
+  await page.locator('[data-card-id="english-style"]').press('Enter')
+  const englishWatercolor = detail.getByRole('button', { name: 'Preview Watercolor', exact: true })
+  await englishWatercolor.click()
+  await detail.getByText('Translucent layers, soft washes and visible paper grain.', { exact: true }).first().waitFor()
+  await detail.getByRole('button', { name: 'Apply', exact: true }).click()
+  await poll(s => s.document.cards.find(c => c.id === 'english-style').fields.direction.text === '手绘水彩')
+  await detail.getByRole('button', { name: 'Advanced settings' }).click()
+  await detail.getByRole('textbox', { name: 'Custom notes content' }).fill('门边的光 · Blue')
+  await poll(s => s.document.cards.find(c => c.id === 'english-style').fields.notes.text === '门边的光 · Blue')
+  await languagePage.getByRole('button', { name: 'User and language settings' }).click()
+  await languagePage.getByRole('menuitem', { name: '简体中文', exact: true }).click()
+  await languagePage.close()
+  await page.reload()
+  const savedStyle = (await read()).document.cards.find(c => c.id === 'english-style')
+  assert.equal((await read()).document.cards.find(c => c.id === 'english-named').name, '手绘水彩')
+  assert.equal(savedStyle.fields.direction.text, '手绘水彩')
+  assert.equal(savedStyle.fields.notes.text, '门边的光 · Blue')
   await open('style')
   assert.equal(await detail.getByRole('button',{name:'预览 手绘水彩',exact:true}).isVisible(),true,'style opens directly in presets')
   assert.equal(await detail.getByRole('tab').count(),0,'style has no parameter/reference tabs')

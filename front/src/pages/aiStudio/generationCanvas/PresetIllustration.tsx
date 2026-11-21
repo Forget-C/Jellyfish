@@ -1,9 +1,11 @@
+import { useUiText } from '../../../uiText'
 import { useId } from 'react'
 import type { VisualPreset } from './visualPresets'
 
 /** Process and path diagrams explain performance templates without implying generated footage. */
 function PerformancePresetIllustration({ preset }: { preset: VisualPreset }) {
-  return <svg viewBox="0 0 480 300" role="img" aria-label={preset.name + '过程示意'} className="performance-preset-illustration">
+  const uiText = useUiText()
+  return <svg viewBox="0 0 480 300" role="img" aria-label={uiText("{{name}}过程示意", { name: uiText(preset.name) })} className="performance-preset-illustration">
     <rect width="480" height="300" rx="12" fill="var(--wb-inset)" />
     <g fill="none" stroke="currentColor" opacity=".5" strokeWidth="2">
       <path d={preset.diagram === 'blocking' ? 'M65 180Q180 70 245 150T410 120' : preset.diagram === 'activity' ? 'M80 150H400M400 150L387 138M400 150L387 162M400 190H80M80 190L93 178M80 190L93 202' : 'M80 150H400M400 150L387 138M400 150L387 162'} />
@@ -12,7 +14,7 @@ function PerformancePresetIllustration({ preset }: { preset: VisualPreset }) {
     {(preset.steps || []).map((step, index) => <g key={step} transform={`translate(${80 + index * 160}, 150)`}>
       <circle cy="-38" r="13" fill="currentColor" opacity=".6" />
       <path d="M-19 0V-15Q0-32 19-15V0" fill="currentColor" opacity=".4" />
-      <text y="60" textAnchor="middle" fill="currentColor" fontSize="15">{step}</text>
+      <text y="60" textAnchor="middle" fill="currentColor" fontSize="15">{uiText(step)}</text>
       <text y="85" textAnchor="middle" fill="currentColor" opacity=".5" fontSize="12">{index + 1}</text>
     </g>)}
   </svg>
@@ -20,6 +22,7 @@ function PerformancePresetIllustration({ preset }: { preset: VisualPreset }) {
 
 /** 原创几何示意展示设计差异，不是可采用的项目素材或模型效果承诺。 */
 export function PresetIllustration({ preset }: {preset: VisualPreset}) {
+  const uiText = useUiText()
   const look=preset.look, mono=look==='noir', painted=look==='watercolor', animated=look==='animation', side=look==='side'
   const id='scene-'+useId().replace(/:/g,'')
   const sky=mono?'#8e9295':painted?'#d9e3d6':animated?'#adcddd':'#aabdc7'
@@ -27,7 +30,7 @@ export function PresetIllustration({ preset }: {preset: VisualPreset}) {
   const coat=mono?'#282b2d':painted?'#a66e53':animated?'#da7950':'#86553e'
   const x=look==='thirds'?320:240
   if (preset.steps) return <PerformancePresetIllustration preset={preset} />
-  return <svg viewBox="0 0 480 300" role="img" aria-label={preset.name+'效果示意'}>
+  return <svg viewBox="0 0 480 300" role="img" aria-label={uiText("{{name}}效果示意", { name: uiText(preset.name) })}>
     <defs>
       <linearGradient id={id+'-sky'} x2="0" y2="1"><stop stopColor={sky}/><stop offset="1" stopColor={mono?'#d8d8d8':'#eadcc4'}/></linearGradient>
       <linearGradient id={id+'-road'} x2="0" y2="1"><stop stopColor={mono?'#929494':'#999e98'}/><stop offset="1" stopColor={mono?'#313639':'#515e62'}/></linearGradient>

@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useId } from 'react'
 import { EditorAttribute } from './EditorAttribute'
 import { Input } from 'antd'
@@ -9,13 +10,14 @@ import './descriptionCard.css'
 export function ObjectDescriptionEditor({ card, disabled, onChange }: {
   card: DescriptionCardData; disabled?: boolean; onChange: (card: DescriptionCardData) => void
 }) {
+  const uiText = useUiText()
   const id = useId()
   const kind = ({ character: '人物', place: '场所', costume: '服装', prop: '道具' } as Record<string,string>)[(card.type || '').split('.')[1]] || '对象'
-  const parameters = <EditorAttribute id={id} label="名称" required readOnly={disabled} value={card.name || ''} help="同类型内唯一"><Input data-diagnostic-name id={id} aria-describedby={`${id}-hint`} aria-label="对象名称" aria-required="true" placeholder={`输入${kind}名称`} maxLength={255} value={card.name || ''} disabled={disabled}
+  const parameters = <EditorAttribute id={id} label={uiText("名称")} required readOnly={disabled} value={card.name || ''} help={uiText("同类型内唯一")}><Input data-diagnostic-name id={id} aria-describedby={`${id}-hint`} aria-label={uiText("对象名称")} aria-required="true" placeholder={uiText("输入{{kind}}名称", { kind })} maxLength={255} value={card.name || ''} disabled={disabled}
       onChange={event => onChange({ ...card, name: event.target.value, object_id: card.object_id || (event.target.value.trim() ? crypto.randomUUID() : null) })} /></EditorAttribute>
   return <div className="generation-description-editor"><CardComposer parametersPosition="top" parameters={parameters}
-    status={<span>{disabled && '只读 · '}{card.text?.length || 0} 字</span>}>
-    <textarea className="generation-description-input" aria-label="对象描述正文" placeholder="描述正文" value={card.text || ''} readOnly={disabled}
+    status={<span>{disabled && uiText("只读 · ")}{card.text?.length || 0} {uiText("字")}</span>}>
+    <textarea className="generation-description-input" aria-label={uiText("对象描述正文")} placeholder={uiText("描述正文")} value={card.text || ''} readOnly={disabled}
       onChange={event => onChange({ ...card, text: event.target.value })} />
   </CardComposer></div>
 }

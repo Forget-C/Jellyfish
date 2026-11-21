@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { CanvasAssociations, type AssociationEntry, type AssociationDetailContext } from './CanvasAssociations'
 import { associationSources, includeConnectedSources, associationIssues } from './associationSources'
 import { VisualDesignRelations } from './VisualDesignRelations'
@@ -36,6 +37,7 @@ export const DesignReferenceContext = createContext<ReferenceContext | undefined
 
 /** Reference session belongs to one retained design card, not a model prompt binding set. */
 export function DesignReferenceEditor({ card, document, savedRevision, modelOutputs, sourceActions, disabled, editorOpen, children, targetField, onDisconnect, onLocateDesign, onChange }: { onChange?: (card: GenerationCard) => void; onDisconnect?: (edgeId: string) => void; onLocateDesign?: (cardId: string, fieldId: string) => void; targetField?: TargetField; card: GenerationCard; document: CanvasDocument; savedRevision?: number; modelOutputs?: Record<string, CanvasResolvedOutput[]>; sourceActions?: ReactNode; disabled?: boolean; editorOpen?: boolean; children: ReactNode }) {
+  const uiText = useUiText()
   const { cardDefinitions } = useGraphRules()
   const resolved = useCardCandidates((document.project_id || ''), document.id, card.id, savedRevision, modelOutputs, false)
   const focused = useRef<React.RefObject<PromptEditorHandle>>()
@@ -84,7 +86,7 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
     const empty = source && !inUse && entry.outputs.every(output => output.available === false)
     const issue = empty ? source.type?.startsWith('model.') ? '尚无生成结果' : '暂无可用内容' : [...new Set(entry.outputs.flatMap(output => associationIssues(output).map(issue => issue.message)))].join('；') || undefined
     return { ...entry, label: source && 'name' in source && source.name || (entry.kind === 'design' ? cardDefinitions[source?.type || '']?.title : undefined) || labelFor(entry.outputs[0]),
-      description: `候选 ${entry.kind === 'design' ? `${cardDefinitions[source?.type || '']?.title || ''} ${name}`.trim() : name} · ${usages.length ? usages.join('；') : inUse ? '使用中' : '候选'}`,
+      description: uiText("候选 {{value1}} · {{value2}}", { value1: entry.kind === 'design' ? `${cardDefinitions[source?.type || '']?.title || ''} ${name}`.trim() : name, value2: usages.length ? usages.join('；') : inUse ? '使用中' : '候选' }),
       used: inUse, issue,
     }
   })
@@ -109,29 +111,29 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
       const reference = <WorkbenchButton disabled={disabled || !advanced || !focused.current?.current || !candidate.available} onClick={() => {
         close(false)
         focused.current?.current?.insertReference(item.source)
-      }}>引用当前字段{focusedLabel.current ? `「${focusedLabel.current}」` : '（请先选择字段）'}</WorkbenchButton>
+      }}>{uiText("引用当前字段")}{focusedLabel.current ? `「${focusedLabel.current}」` : uiText("（请先选择字段）")}</WorkbenchButton>
       return <div className="canvas-association-output" key={key}>
         <strong>{candidate.name}</strong><p>{state}</p>
         {candidate.disabledReason && <p>{candidate.disabledReason}</p>}
-        {!soundMedia && item.modality === 'video' && localExample && <p>生成引用完整视频，参考区间不裁剪素材</p>}
+        {!soundMedia && item.modality === 'video' && localExample && <p>{uiText("生成引用完整视频，参考区间不裁剪素材")}</p>}
         {soundMedia && onChange ? <SoundReferenceCandidate key={key} card={card as DialogueCard | SoundArrangementCard} item={item} disabled={disabled} connected={connected} onChange={onChange} />
           : anchorMedia && onChange ? <AnchorReferenceCandidate key={key} card={card as SpatialAnchorCard} item={item} disabled={disabled} onChange={onChange} expanded={expandedSource === key} onExpand={next => setExpandedSource(next ? key : undefined)} />
           : item.file_id && item.modality !== 'text' ? <MediaPreview fileId={item.file_id} type={item.modality} />
-          : <CanvasTextPreview text={item.text || candidate.disabledReason || '来源尚未提供可用内容'} label="来源内容" lines={6} />}
+          : <CanvasTextPreview text={item.text || candidate.disabledReason || '来源尚未提供可用内容'} label={uiText("来源内容")} lines={6} />}
         {onChange && <>
           {!anchorMedia && !soundMedia && 'examples' in card && (exampleConnected || localExample) && <WorkbenchButton
             disabled={disabled || !localExample && (!item.available || !item.file_id)}
             onClick={() => {
               if (localExample) onChange({ ...card, examples: card.examples?.filter(example => example.id !== localExample.id) } as GenerationCard)
               else if (item.file_id) onChange({ ...card, examples: [...(card.examples || []), { id: crypto.randomUUID(), source: item.source, file_id: item.file_id }] } as GenerationCard)
-            }}>{localExample ? '取消本地参考' : '设为本地参考'}</WorkbenchButton>}
+            }}>{localExample ? uiText("取消本地参考") : uiText("设为本地参考")}</WorkbenchButton>}
           <DesignCandidateRelations card={card} document={document} item={item} disabled={disabled} onChange={onChange} />
           {['direction.camera', 'direction.lighting', 'direction.focus', 'direction.movement', 'direction.composition'].includes(card.type || '') && <VisualDesignRelations card={card as CameraCard | LightingCard | FocusCard | MovementCard | CompositionCard} document={document} item={item} disabled={disabled} onChange={onChange} />}
           {frameCandidate ? <CompositionFrameCandidate card={composition!} movement={movement} sourceId={item.source.card_id} disabled={disabled} onChange={onChange} onLocate={(id, field) => { close(false); onLocateDesign?.(id, field) }} reference={reference} /> : reference}
         </>}
       </div>
     })}
-      {onDisconnect && document.edges?.filter(edge => edge.source_card === entry.outputs[0].source.card_id && edge.target_card === card.id).slice(0, 1).map(edge => <WorkbenchButton key={edge.id} variant="quiet" disabled={disabled} onClick={() => { onDisconnect(edge.id); close() }}>断开候选连接</WorkbenchButton>)}
+      {onDisconnect && document.edges?.filter(edge => edge.source_card === entry.outputs[0].source.card_id && edge.target_card === card.id).slice(0, 1).map(edge => <WorkbenchButton key={edge.id} variant="quiet" disabled={disabled} onClick={() => { onDisconnect(edge.id); close() }}>{uiText("断开候选连接")}</WorkbenchButton>)}
     </>
   }
   const renderCandidates = (advanced: boolean) => <CanvasAssociations entries={entries} sourceActions={sourceActions} loading={resolved.loading} error={resolved.error} sessionKey={`${card.id}:${editorOpen}:${advanced}`} expanded={!!expandedSource} onLocateSource={onLocateDesign} onInspect={() => setExpandedSource(undefined)} renderDetails={(entry, context) => renderDetails(entry, advanced, context)} />
@@ -140,6 +142,7 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
 
 /** Reuse the model's editing surface; field source identities are persisted directly. */
 export function ReferencedDesignFieldEditor(props: ComponentProps<typeof DesignFieldEditor>) {
+  const uiText = useUiText()
   const { cardDefinitions } = useGraphRules()
   const context = useContext(DesignReferenceContext), handle = useRef<PromptEditorHandle>(null)
   const metadataId = useId()
@@ -156,8 +159,8 @@ export function ReferencedDesignFieldEditor(props: ComponentProps<typeof DesignF
     props.onChange(userDesignField({ ...value, document: { segments }, text }))
   }
   const phase = 'phases' in context.card ? context.card.phases?.find(item => item.frame === props.value) : undefined
-  const fieldId = designFieldEntries(context.card).find(([, value]) => value === props.value)?.[0] || (phase ? 'phase:' + phase.id : cardDefinitions[context.card.type!]?.fields.find(field => field.label === props.label)?.id)
+  const fieldId = designFieldEntries(context.card).find(([, value]) => value === props.value)?.[0] || (phase ? 'phase:' + phase.id : cardDefinitions[context.card.type!]?.fields.find(field => (field.label === props.label || uiText(field.label) === props.label))?.id)
   const defaults = cardDefinitions[context.card.type!]?.fields.find(field => field.id === fieldId)?.default_value
   const hasMetadata = !!designFieldMetadata(value, defaults || { purpose: props.purpose || 'design' })
-  return <div data-design-field={fieldId} onFocusCapture={event => { if ((event.target as HTMLElement).isContentEditable) context.focus(handle, props.label) }}><DesignFieldEditor {...props} metadataId={metadataId} defaults={defaults} editor={<PromptEditor referenceActionsRef={handle} compact allReferences fieldDescriptionId={hasMetadata ? metadataId : undefined} fieldLabel={`${props.label}内容`} fieldPlaceholder="输入设计参数，使用 @ 引用候选内容" document={context.document} card={context.card} value={prompt} candidates={context.candidates} disabled={context.disabled} onChange={onChange} />} />{context.issues.filter(issue => issue.field_id === fieldId).map(issue => <Typography.Text type="danger" role="alert" key={issue.reference_id} className="design-reference-issue">{issue.message}</Typography.Text>)}</div>
+  return <div data-design-field={fieldId} onFocusCapture={event => { if ((event.target as HTMLElement).isContentEditable) context.focus(handle, props.label) }}><DesignFieldEditor {...props} metadataId={metadataId} defaults={defaults} editor={<PromptEditor referenceActionsRef={handle} compact allReferences fieldDescriptionId={hasMetadata ? metadataId : undefined} fieldLabel={uiText("{{label}}内容", { label: uiText(props.label) })} fieldPlaceholder={uiText("输入设计参数，使用 @ 引用候选内容")} document={context.document} card={context.card} value={prompt} candidates={context.candidates} disabled={context.disabled} onChange={onChange} />} />{context.issues.filter(issue => issue.field_id === fieldId).map(issue => <Typography.Text type="danger" role="alert" key={issue.reference_id} className="design-reference-issue">{issue.message}</Typography.Text>)}</div>
 }

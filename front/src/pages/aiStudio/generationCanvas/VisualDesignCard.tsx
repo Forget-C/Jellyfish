@@ -1,3 +1,4 @@
+import { uiText, useUiText } from '../../../uiText'
 import { designPhaseLabel } from './designScope'
 import { isDesignFieldConfigured } from './designFieldConfiguration'
 import { useGraphRules } from './CanvasCatalogContext'
@@ -28,7 +29,7 @@ function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<s
     const size = field.size ? shotSizeLabels[field.size as keyof typeof shotSizeLabels] : ''
     const configured = isDesignFieldConfigured(field, key ? defaults[key] : undefined)
     if (!configured) return ''
-    const status = states[field.state || 'empty']
+    const status = uiText(states[field.state || 'empty'])
     const detail = [size, text].filter(Boolean).join(' · ')
     if (field.authorship === 'user') return detail
     if (field.state === 'empty' || !field.state) return detail ? `未填写（保留内容）` : '未填写（已配置元信息）'
@@ -39,7 +40,7 @@ function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<s
     : Object.keys(labels)
   const rows = fieldOrder.flatMap(key => {
     const text = describe((card.fields as Record<string, ReferenceDesignField> | undefined)?.[key], key)
-    return text ? [{ key, label: labels[key], text }] : []
+    return text ? [{ key, label: uiText(labels[key]), text }] : []
   })
   const summary: DesignSummaryRow[] = rows.map(({ label, text }) => ({ label, text }))
   if ('frame_target' in card && card.frame_target) {
@@ -49,15 +50,15 @@ function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<s
     let text = state_id ? '定位画面已失效' : '目标待选择'
     if (target) text = target.value.startsWith('phase:') ? `运镜阶段 · ${target.label}` : `运镜${target.label}`
     const primaryCount = rows.filter(row => row.key === 'shot_size' || row.key === 'composition').length
-    summary.splice(primaryCount, 0, { label: '画面目标', text })
+    summary.splice(primaryCount, 0, { label: uiText("画面目标"), text })
   }
-  if ('phases' in card) for (const phase of card.phases || []) summary.push({ label: phase.name?.trim() || '运镜阶段', text: describe(phase.frame) || '阶段待填写' })
-  if (card.scope?.description?.trim()) summary.push({ label: '内容适用范围', text: card.scope.description.trim() })
-  if (card.scope?.phase) summary.push({ label: '制作阶段', text: designPhaseLabel(card.scope.phase) })
-  if (card.scope?.condition?.trim()) summary.push({ label: '适用条件', text: card.scope.condition.trim() })
-  if (card.source_locator?.trim()) summary.push({ label: '卡片原始来源', text: card.source_locator.trim() })
-  for (const binding of card.input_bindings || []) summary.push({ label: relationLabels[binding.input_port] || '关联关系', text: sourceName(binding.source) })
-  if (!rows.length && summary.length) summary.unshift({ label: '核心内容', text: `尚未填写${titleOf(kind)}` })
+  if ('phases' in card) for (const phase of card.phases || []) summary.push({ label: phase.name?.trim() || uiText("运镜阶段"), text: describe(phase.frame) || '阶段待填写' })
+  if (card.scope?.description?.trim()) summary.push({ label: uiText("内容适用范围"), text: card.scope.description.trim() })
+  if (card.scope?.phase) summary.push({ label: uiText("制作阶段"), text: designPhaseLabel(card.scope.phase) })
+  if (card.scope?.condition?.trim()) summary.push({ label: uiText("适用条件"), text: card.scope.condition.trim() })
+  if (card.source_locator?.trim()) summary.push({ label: uiText("卡片原始来源"), text: card.source_locator.trim() })
+  for (const binding of card.input_bindings || []) summary.push({ label: relationLabels[binding.input_port] || uiText("关联关系"), text: sourceName(binding.source) })
+  if (!rows.length && summary.length) summary.unshift({ label: uiText("核心内容"), text: `尚未填写${titleOf(kind)}` })
   const visible = summary.slice(0, 3)
   // Give longer values two lines where possible, within four lines for the whole card.
   return visible.map((row, index) => ({ ...row, lines: index < 4 - visible.length ? 2 : 1 }))
@@ -67,7 +68,7 @@ function cardRows(card: DesignCard, document: CanvasDocument, defaults: Record<s
 export function VisualDesignCard({ card, document, outputs, sizing }: { card: DesignCard; document: CanvasDocument; outputs?: Record<string, CanvasResolvedOutput[]>; sizing?: DesignCardSizing }) {
   const { cardDefinitions } = useGraphRules()
   const defaults = Object.fromEntries(cardDefinitions[card.type!].fields.map(field => [field.id, field.default_value]))
-  const kind = kindOf(card), title = titleOf(kind), rows = cardRows(card, document, defaults, designSummarySourceLabel(document, card.id, cardDefinitions, outputs))
+  const kind = kindOf(card), title = uiText(titleOf(kind)), rows = cardRows(card, document, defaults, designSummarySourceLabel(document, card.id, cardDefinitions, outputs))
   return <DesignCardBody kind={kind} title={title} rows={rows} sizing={sizing} />
 }
 
@@ -78,10 +79,11 @@ type SummaryProps = { kind: string; title: string; rows: DesignSummaryRow[]; sum
 function DesignSummary({ kind, title, rows, summaryOnly, emptyHint, measuring, summaryRef, empty }: SummaryProps & {
   measuring?: boolean; summaryRef?: Ref<HTMLElement>; empty?: boolean
 }) {
+  useUiText()
   const hasLineBudget = rows.some(row => row.lines)
   const visibleRows = hasLineBudget ? rows : rows.slice(0, 2)
   return <section ref={summaryRef} className="visual-design-card" data-measuring={measuring || undefined} data-multiline={hasLineBudget}
-    aria-hidden={measuring || undefined} aria-label={measuring ? undefined : `${title}摘要`}>
+    aria-hidden={measuring || undefined} aria-label={measuring ? undefined : uiText("{{title}}摘要", { title })}>
     {!summaryOnly && <DesignPurposeIllustration kind={kind} />}
     {visibleRows.length ? <dl>{visibleRows.map((row, index) => {
       const definition = <dd tabIndex={measuring ? undefined : 0} aria-label={measuring ? undefined : `${row.label}：${row.text}`}
@@ -92,7 +94,7 @@ function DesignSummary({ kind, title, rows, summaryOnly, emptyHint, measuring, s
         <dt title={row.label}>{row.label}</dt>
         {measuring ? definition : <Tooltip title={row.text} trigger={['hover', 'focus']} overlayStyle={{ pointerEvents: 'none' }}>{definition}</Tooltip>}
       </div>
-    })}</dl> : empty && <div className="visual-design-empty"><strong>尚未填写{title}</strong>{emptyHint && <p>{emptyHint}</p>}</div>}
+    })}</dl> : empty && <div className="visual-design-empty"><strong>{uiText("尚未填写")}{title}</strong>{emptyHint && <p>{emptyHint}</p>}</div>}
   </section>
 }
 

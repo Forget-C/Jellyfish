@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { PictureOutlined } from '@ant-design/icons'
 import type { ReactNode } from 'react'
 import type { CanvasResolvedOutput, NamedImageReferenceCard } from '../../../services/generated'
@@ -12,9 +13,10 @@ import './referenceCard.css'
 export function ReferenceCard({ card, readonly, error, outputs }: {
   card: NamedImageReferenceCard; readonly: boolean; error?: string; outputs?: CanvasResolvedOutput[]
 }) {
+  const uiText = useUiText()
   const fileId = card.scene_object_source ? outputs?.find(output => output.modality === 'image' && output.source.position === 0 && output.available !== false)?.file_id : card.image_binding?.file_id
-  return <GenerationCardFrame label="参考图片预览" status={<>{readonly && <span>只读</span>}<ReferenceCardSummary card={card} /><span>{error || (fileId ? '1 张参考图' : '缺少主图')}</span></>}>
-    <div className="generation-reference-preview">{fileId ? <img alt="参考图片" src={buildFileDownloadUrl(fileId)} /> : <div><PictureOutlined aria-hidden /><span>未选择参考图</span></div>}</div>
+  return <GenerationCardFrame label={uiText("参考图片预览")} status={<>{readonly && <span>{uiText("只读")}</span>}<ReferenceCardSummary card={card} /><span>{error || (fileId ? uiText("1 张参考图") : uiText("缺少主图"))}</span></>}>
+    <div className="generation-reference-preview">{fileId ? <img alt={uiText("参考图片")} src={buildFileDownloadUrl(fileId)} /> : <div><PictureOutlined aria-hidden /><span>{uiText("未选择参考图")}</span></div>}</div>
   </GenerationCardFrame>
 }
 
@@ -25,9 +27,10 @@ export function ReferenceCardEditor({ parameters, children, status }: { paramete
 
 /** 四类参考共用画布选择空态，不导入文件或承担素材库操作。 */
 export function ReferenceImagePlaceholder({ onChoose, disabled }: { onChoose: () => void; disabled?: boolean }) {
-  return <WorkbenchButton variant="quiet" className="generation-reference-empty" disabled={disabled} onClick={onChoose} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'none' }} onDrop={event => event.preventDefault()} aria-label="从当前画布选择">
+  const uiText = useUiText()
+  return <WorkbenchButton variant="quiet" className="generation-reference-empty" disabled={disabled} onClick={onChoose} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'none' }} onDrop={event => event.preventDefault()} aria-label={uiText("从当前画布选择")}>
     <span className="generation-reference-empty-icon"><PictureOutlined aria-hidden /></span>
-    <strong>从当前画布选择</strong>
-    <small>选择图片内容卡作为参考图</small>
+    <strong>{uiText("从当前画布选择")}</strong>
+    <small>{uiText("选择图片内容卡作为参考图")}</small>
   </WorkbenchButton>
 }

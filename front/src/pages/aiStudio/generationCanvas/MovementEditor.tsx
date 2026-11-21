@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useContext, useEffect, useRef, useState } from 'react'
 import { Divider } from 'antd'
 import type { MovementCard } from '../../../services/generated'
@@ -13,6 +14,7 @@ import { isDesignFieldConfigured } from './designFieldConfiguration'
 
 /** 阶段身份不随名称和顺序改变；删除只移除本卡画面，外部定位保留失效状态。 */
 export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUndoDesign, document }: CardRendererProps) {
+  const uiText = useUiText()
   const card = raw as MovementCard, fields = card.fields || {}, phases = card.phases || []
   const latest = useRef(card); latest.current = card
   const change = (next: MovementCard) => { latest.current = next; onChange(next) }
@@ -21,7 +23,7 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
   const activeId = selectedId === 'field:end_frame' || phases.some(phase => phase.id === selectedId) ? selectedId : 'field:movement_start'
   const selected = phases.find(phase => phase.id === activeId)
   const frameField = activeId === 'field:end_frame' ? 'end_frame' : 'movement_start'
-  const frameLabel = frameField === 'end_frame' ? '结束画面' : '起始画面'
+  const frameLabel = frameField === 'end_frame' ? uiText("结束画面") : uiText("起始画面")
   const targetField = references?.targetField?.fieldId
   const targetSerial = references?.targetField?.serial
   useEffect(() => { if (!editorOpen) setSelectedId('field:movement_start') }, [editorOpen])
@@ -47,7 +49,7 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
   const labels = photographyRegions.movement.fields
   const additionalDesign = phases.some(phase => phase.name?.trim() || isDesignFieldConfigured({ ...phase.frame, source_locator: '' }))
   return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} additionalDesign={additionalDesign} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} scopeTools={<DesignScopePopover card={card} onChange={onChange} disabled={disabled} editorOpen={editorOpen} labelPrefix="运镜" />} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
-    <section ref={keyframes} className="movement-keyframes design-stable-region" aria-label="运镜关键画面">
+    <section ref={keyframes} className="movement-keyframes design-stable-region" aria-label={uiText("运镜关键画面")}>
       <MovementPhaseTabs phases={phases} activeId={activeId} onSelect={setSelectedId} editorOpen={editorOpen} disabled={disabled} uses={uses} issues={(references?.issues || []).filter(issue => issue.field_id.startsWith('phase:')).map(issue => issue.field_id.slice(6))}
         onRename={(id, name) => change({ ...latest.current, phases: latest.current.phases?.map(phase => phase.id === id ? { ...phase, name } : phase) })}
         onOrder={ids => change({ ...latest.current, phases: ids.map(id => latest.current.phases!.find(phase => phase.id === id)!) })}
@@ -57,12 +59,12 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
           if (activeId === id) setSelectedId(current.phases![index + 1]?.id || 'field:end_frame')
           change({ ...current, phases: current.phases!.filter(phase => phase.id !== id) })
         }} />
-      <div className="movement-keyframe-edit" role="tabpanel" aria-label={selected ? selected.name || '未命名画面' : frameLabel}>
-        {!selected ? <DesignFieldEditor compact key={frameField} label={frameLabel} value={fields[frameField]} onChange={value => change({ ...latest.current, fields: { ...latest.current.fields, [frameField]: value } })} /> : <DesignFieldEditor compact key={selected.id} label="此时的画面" value={selected.frame} onChange={frame => change({ ...latest.current, phases: latest.current.phases?.map(phase => phase.id === selected.id ? { ...phase, frame } : phase) })} />}
+      <div className="movement-keyframe-edit" role="tabpanel" aria-label={selected ? selected.name || uiText("未命名画面") : frameLabel}>
+        {!selected ? <DesignFieldEditor compact key={frameField} label={frameLabel} value={fields[frameField]} onChange={value => change({ ...latest.current, fields: { ...latest.current.fields, [frameField]: value } })} /> : <DesignFieldEditor compact key={selected.id} label={uiText("此时的画面")} value={selected.frame} onChange={frame => change({ ...latest.current, phases: latest.current.phases?.map(phase => phase.id === selected.id ? { ...phase, frame } : phase) })} />}
       </div>
     </section>
     <Divider className="movement-section-divider" />
-    <section className="movement-motion design-preset-fields design-preset-fields-compact design-stable-region" aria-label="运镜功能参数">
+    <section className="movement-motion design-preset-fields design-preset-fields-compact design-stable-region" aria-label={uiText("运镜功能参数")}>
       {(['movement_type', 'movement_path', 'movement_speed', 'movement_trigger'] as const).map(key => <DesignFieldEditor compact key={key} label={labels[key]} value={fields[key]} onChange={value => change({ ...latest.current, fields: { ...latest.current.fields, [key]: value } })} />)}
     </section>
   </DesignPresetEditor>

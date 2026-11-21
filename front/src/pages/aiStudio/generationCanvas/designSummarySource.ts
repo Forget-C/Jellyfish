@@ -1,3 +1,4 @@
+import { uiText } from '../../../uiText'
 import type { CanvasDocument, CanvasResolvedOutput, NamedImageReferenceCard, OutputIdentity } from '../../../services/generated'
 import type { useGraphRules } from './CanvasCatalogContext'
 import { sourceKey } from './promptRules'
@@ -16,7 +17,7 @@ export function designSummarySourceLabel(
     const source = identity.canvas_id === document.id && cards.find(card => card.id === identity.card_id)
     if (!source) return '失效来源'
     const definition = definitions[source.type || '']
-    const label = ('name' in source && source.name?.trim()) || definition?.title || '已关联来源'
+    const label = ('name' in source && source.name?.trim()) || definition?.title || uiText("已关联来源")
     const connected = document.edges?.some(edge => edge.target_card === receiverId && edge.source_card === identity.card_id
       && edge.source_port === identity.port_id && resultScopeIncludes(edge.result_scope, identity.position))
     const output = outputs?.[source.id]?.find(item => sourceKey(item.source) === sourceKey(identity))

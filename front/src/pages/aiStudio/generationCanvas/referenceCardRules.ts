@@ -1,3 +1,4 @@
+import { uiText } from '../../../uiText'
 import type { CanvasResolvedOutput, NamedImageReferenceCard } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
 
@@ -5,7 +6,7 @@ import type { GenerationCard } from './graphRules'
 export function referenceNameError(card: NamedImageReferenceCard, cards: GenerationCard[]) {
   const source = card.name_binding && cards.find(item => item.id === card.name_binding?.card_id)
   const name = ((source && 'name' in source ? source.name : card.name) || '').trim()
-  if (!name) return '请填写参考名称'
+  if (!name) return uiText("请填写参考名称")
   const angle = (card.angle || '').trim() || '正面'
   return cards.filter(item => {
     if (item.type !== card.type) return false
@@ -13,7 +14,7 @@ export function referenceNameError(card: NamedImageReferenceCard, cards: Generat
     const owner = reference.name_binding && cards.find(source => source.id === reference.name_binding?.card_id)
     const otherName = ((owner && 'name' in owner ? owner.name : reference.name) || '').trim()
     return otherName === name && ((reference.angle || '').trim() || '正面') === angle
-  }).length > 1 ? '同类型、同名称、同角度的参考已存在' : ''
+  }).length > 1 ? uiText("同类型、同名称、同角度的参考已存在") : ''
 
 }
 
