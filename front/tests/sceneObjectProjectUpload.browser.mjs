@@ -110,7 +110,14 @@ try {
     await detail.getByRole('button', { name: '添加详情', exact: true }).click()
     await page.getByRole('button', { name: '继续编辑', exact: true }).click()
     await detail.getByRole('textbox', { name: kind === 'character' ? '角色设定' : '补充信息', exact: true }).fill('上传后的独立详情')
-    await detail.getByRole('button', { name: '保存设定', exact: true }).click()
+    const save = detail.getByRole('button', { name: '保存设定', exact: true })
+    await Promise.all([
+      page.waitForResponse(response => response.request().method() === 'PATCH'
+        && new URL(response.url()).pathname.endsWith(`/entities/${kind}/${selected.asset_id}`)
+        && response.ok()),
+      save.click(),
+    ])
+    await save.and(page.locator(':enabled')).waitFor()
     await detail.getByRole('button', { name: '返回', exact: true }).click()
     await detail.waitFor({ state: 'hidden' })
     await region.getByRole('button', { name: `编辑${storyName}资源`, exact: true }).and(page.locator(':focus')).waitFor()
