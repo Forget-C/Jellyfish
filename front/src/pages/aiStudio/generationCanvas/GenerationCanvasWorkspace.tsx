@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { PromptEditingContext, PromptEditingActiveContext } from './PromptEditingContext'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -30,12 +31,13 @@ import type { CanvasInspectTarget } from './canvasDiagnosticNavigation'
 
 /** 浏览仅限同一画布的真实位置，不使用业务内容撤销记录。 */
 function CanvasHistoryControls({ storageKey, requestLeave }: { storageKey: string; requestLeave: () => Promise<boolean> }) {
+  const uiText = useUiText()
   const { canBrowse } = useGraphBrowse(storageKey)
   const navigate = useNavigate()
   const browse = async (offset: -1 | 1) => { if (canBrowse(offset) && await requestLeave()) navigate(offset) }
-  return <nav className="canvas-browse-history" aria-label="画布浏览历史">
-    <WorkbenchIconButton label="后退" variant="quiet" icon={<ArrowLeftOutlined />} disabled={!canBrowse(-1)} onClick={() => void browse(-1)} />
-    <WorkbenchIconButton label="前进" variant="quiet" icon={<ArrowRightOutlined />} disabled={!canBrowse(1)} onClick={() => void browse(1)} />
+  return <nav className="canvas-browse-history" aria-label={uiText("画布浏览历史")}>
+    <WorkbenchIconButton label={uiText("后退")} variant="quiet" icon={<ArrowLeftOutlined />} disabled={!canBrowse(-1)} onClick={() => void browse(-1)} />
+    <WorkbenchIconButton label={uiText("前进")} variant="quiet" icon={<ArrowRightOutlined />} disabled={!canBrowse(1)} onClick={() => void browse(1)} />
   </nav>
 }
 
@@ -95,6 +97,7 @@ export function GenerationCanvasWorkspace({
   freeDraft, sceneSave, renderFeedback, projectId, canvasId, back, renderCanvasManagement, renderSceneActions, renderModelCardAction, renderModelCardMenu, modelCardSources, onCanvasRead, hostError, hostErrorAction,
   targetRun, targetNode, targetCheck: checkCardId, targetReport: checkReportId, onCloseRunHistory, layoutPolicy,
 }: GenerationCanvasWorkspaceProps) {
+  const uiText = useUiText()
   const toolbar = useRef<HTMLElement>(null)
   useEffect(() => {
     const element = toolbar.current
@@ -194,13 +197,13 @@ export function GenerationCanvasWorkspace({
     settingsError: editor.error,
     saveSettings: changes => promptEditors.size ? Promise.resolve(false) : editor.commitSettings(changes),
   }
-  return <WorkbenchTheme adaptive><WorkbenchDetailsProvider><section className="canvas-workbench generation-workbench" aria-label="生成画布工作台" onContextMenu={event => event.preventDefault()}>
+  return <WorkbenchTheme adaptive><WorkbenchDetailsProvider><section className="canvas-workbench generation-workbench" aria-label={uiText("生成画布工作台")} onContextMenu={event => event.preventDefault()}>
     <header ref={toolbar} className="canvas-workbench-toolbar generation-workbench-header">
       <div className="canvas-toolbar-identity">
         <WorkbenchIconButton label={back.label} variant="quiet" icon={<ArrowLeftOutlined />} onClick={async () => { if (await requestLeave()) back.onClick() }} />
-        <strong className="canvas-sequence-name">{document?.name || '画布生成'}</strong>
-        <span role="status" aria-label="画布保存状态">{saving ? '保存中' : editor.conflict ? '修订冲突' : !ownership.editable && canvasId ? '只读' : dirty ? '待保存' : uncreated ? '尚未创建' : current ? '已保存' : '尚无画布'}</span>
-        {current && <WorkbenchIconButton label="保存画布" variant={dirty ? 'primary' : 'quiet'} icon={<SaveOutlined />} onClick={() => void save()} loading={saving} disabled={!ownership.editable || !!editor.recovery || editor.conflict} />}
+        <strong className="canvas-sequence-name">{document?.name || uiText("画布生成")}</strong>
+        <span role="status" aria-label={uiText("画布保存状态")}>{saving ? uiText("保存中") : editor.conflict ? uiText("修订冲突") : !ownership.editable && canvasId ? uiText("只读") : dirty ? uiText("待保存") : uncreated ? uiText("尚未创建") : current ? uiText("已保存") : uiText("尚无画布")}</span>
+        {current && <WorkbenchIconButton label={uiText("保存画布")} variant={dirty ? 'primary' : 'quiet'} icon={<SaveOutlined />} onClick={() => void save()} loading={saving} disabled={!ownership.editable || !!editor.recovery || editor.conflict} />}
         <div className="generation-browse-history-host">{canvasId && <CanvasHistoryControls key={scope} storageKey={`generation-canvas:${scope}`} requestLeave={requestLeave} />}</div>
       </div>
       <div className="generation-toolbar-center" />
@@ -213,10 +216,10 @@ export function GenerationCanvasWorkspace({
           disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onSelectVideoFrame={selectVideoFrame} onCancel={runtime.cancel} cancelling={runtime.cancelling} />}
         <CanvasAppearancePicker compact />
         <TaskCenter workbench />
-        <CanvasToolbarMenu label="更多操作" icon={<MoreOutlined />} compact={!!renderCanvasManagement}>
+        <CanvasToolbarMenu label={uiText("更多操作")} icon={<MoreOutlined />} compact={!!renderCanvasManagement}>
           {focusMenu => <>
             {renderCanvasManagement?.(management, focusMenu)}
-            {!uncreated && <span role="status" aria-label="运行连接">{runtime.connection === 'connected' ? '运行事件已连接' : runtime.connection === 'connecting' ? '正在连接运行事件' : '运行连接恢复中，保留已接收内容'}</span>}
+            {!uncreated && <span role="status" aria-label={uiText("运行连接")}>{runtime.connection === 'connected' ? uiText("运行事件已连接") : runtime.connection === 'connecting' ? uiText("正在连接运行事件") : uiText("运行连接恢复中，保留已接收内容")}</span>}
           </>}
         </CanvasToolbarMenu>
       </div>
@@ -225,16 +228,16 @@ export function GenerationCanvasWorkspace({
     {(hostError || editor.error) && <Alert type="error" showIcon message={hostError || editor.error} action={hostErrorAction} />}
     {renderFeedback?.(current)}
     {editor.storageError && <Alert type="warning" message={editor.storageError} />}
-    {canvasId && !ownership.editable && <Alert type="warning" message={ownership.message || (ownership.state === 'unsupported' ? '浏览器不支持编辑所有权保护，当前只读' : '此画布当前只读')} action={<Space><Button onClick={ownership.takeEditing}>取得编辑权</Button>{ownership.state === 'choice' && <><Button onClick={() => ownership.chooseHandoff('save')}>保存后交接</Button><Button onClick={() => ownership.chooseHandoff('discard')}>放弃后交接</Button></>}</Space>} />}
+    {canvasId && !ownership.editable && <Alert type="warning" message={ownership.message || (ownership.state === 'unsupported' ? uiText("浏览器不支持编辑所有权保护，当前只读") : uiText("此画布当前只读"))} action={<Space><Button onClick={ownership.takeEditing}>{uiText("取得编辑权")}</Button>{ownership.state === 'choice' && <><Button onClick={() => ownership.chooseHandoff('save')}>{uiText("保存后交接")}</Button><Button onClick={() => ownership.chooseHandoff('discard')}>{uiText("放弃后交接")}</Button></>}</Space>} />}
 
       {runtime.error && <Alert type="error" message={runtime.error} />}
-      {runtime.pending && <Alert type="warning" message="运行请求结果待核实；将使用原请求身份取得回执" action={<Button loading={runtime.submitting} disabled={!ownership.editable} onClick={() => void runtime.submit()}>核实运行请求</Button>} />}
+      {runtime.pending && <Alert type="warning" message={uiText("运行请求结果待核实；将使用原请求身份取得回执")} action={<Button loading={runtime.submitting} disabled={!ownership.editable} onClick={() => void runtime.submit()}>{uiText("核实运行请求")}</Button>} />}
     </div>
-      <WorkbenchModal title="核对画布内容" open={!!editor.recovery || editor.conflict} closable={false} footer={null}>
-    {editor.recovery && <Alert type="warning" message="发现本地未保存内容；恢复前将核实服务器及未明请求" action={<Space><Button onClick={editor.restore} disabled={!ownership.editable || saving}>恢复本地内容</Button><Button onClick={() => editor.reload()} disabled={!ownership.editable || saving}>使用服务器内容</Button></Space>} />}
-    {editor.conflict && <Alert type="warning" message="修订冲突，本地内容已保留。核对后选择处理方式" action={<Space><Button onClick={() => editor.reload(true)}>保留本地并以最新修订保存</Button><Button onClick={() => editor.reload()}>使用服务器内容</Button></Space>} />}
+      <WorkbenchModal title={uiText("核对画布内容")} open={!!editor.recovery || editor.conflict} closable={false} footer={null}>
+    {editor.recovery && <Alert type="warning" message={uiText("发现本地未保存内容；恢复前将核实服务器及未明请求")} action={<Space><Button onClick={editor.restore} disabled={!ownership.editable || saving}>{uiText("恢复本地内容")}</Button><Button onClick={() => editor.reload()} disabled={!ownership.editable || saving}>{uiText("使用服务器内容")}</Button></Space>} />}
+    {editor.conflict && <Alert type="warning" message={uiText("修订冲突，本地内容已保留。核对后选择处理方式")} action={<Space><Button onClick={() => editor.reload(true)}>{uiText("保留本地并以最新修订保存")}</Button><Button onClick={() => editor.reload()}>{uiText("使用服务器内容")}</Button></Space>} />}
       </WorkbenchModal>
-      <WorkbenchModal title="运行预检" afterClose={() => {
+      <WorkbenchModal title={uiText("运行预检")} afterClose={() => {
         // 预检操作容器解除底层 inert 后，再由详情定位真实编辑片段。
         if (pendingInspect.current) { setInspectTarget(pendingInspect.current); pendingInspect.current = undefined }
       }} open={previewOpen && !!runtime.preview && !editor.recovery && !editor.conflict} onCancel={() => setPreviewOpen(false)} footer={null}>
@@ -242,11 +245,11 @@ export function GenerationCanvasWorkspace({
       </WorkbenchModal>
     {canvasId && frameSelection?.scope === scope && <SaveVideoFrameDialog key={scope} projectId={projectId} canvasId={canvasId}
       source={frameSelection.source} disabled={frameDisabled} onSave={saveSelectedFrame} onClose={() => setFrameSelection(undefined)} />}
-    {!!promptEditors.size && <Alert type="info" message="提示词正在编辑，请保存修改或取消编辑后再离开、预检或生成。" />}
-    {!document || !current ? <Empty className="generation-empty" description="创建或选择一张画布" /> : <div className="generation-stage">
-      <PromptEditingContext.Provider value={reportPromptEditing}><PromptEditingActiveContext.Provider value={!!promptEditors.size}><GenerationCanvasGraph layoutPolicy={layoutPolicy?.(document, beforeApplication)} onCatalogReady={configureCatalog} history={{ canUndo: editor.canUndo, canUndoArrangement: editor.canUndoArrangement, record: editor.recordAction, undo: () => { if (!promptEditors.size && editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (!promptEditors.size && editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label="画布操作历史">
-        <WorkbenchIconButton label="撤销操作" variant="quiet" icon={<UndoOutlined />} disabled={!!promptEditors.size || !ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { if (!promptEditors.size && editor.undo() === 'document') runtime.invalidate() }} />
-        <WorkbenchIconButton label="重做操作" variant="quiet" icon={<RedoOutlined />} disabled={!!promptEditors.size || !ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { if (!promptEditors.size && editor.redo() === 'document') runtime.invalidate() }} />
+    {!!promptEditors.size && <Alert type="info" message={uiText("提示词正在编辑，请保存修改或取消编辑后再离开、预检或生成。")} />}
+    {!document || !current ? <Empty className="generation-empty" description={uiText("创建或选择一张画布")} /> : <div className="generation-stage">
+      <PromptEditingContext.Provider value={reportPromptEditing}><PromptEditingActiveContext.Provider value={!!promptEditors.size}><GenerationCanvasGraph layoutPolicy={layoutPolicy?.(document, beforeApplication)} onCatalogReady={configureCatalog} history={{ canUndo: editor.canUndo, canUndoArrangement: editor.canUndoArrangement, record: editor.recordAction, undo: () => { if (!promptEditors.size && editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (!promptEditors.size && editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label={uiText("画布操作历史")}>
+        <WorkbenchIconButton label={uiText("撤销操作")} variant="quiet" icon={<UndoOutlined />} disabled={!!promptEditors.size || !ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { if (!promptEditors.size && editor.undo() === 'document') runtime.invalidate() }} />
+        <WorkbenchIconButton label={uiText("重做操作")} variant="quiet" icon={<RedoOutlined />} disabled={!!promptEditors.size || !ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { if (!promptEditors.size && editor.redo() === 'document') runtime.invalidate() }} />
       </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={change} inspectTarget={inspectTarget} diagnostics={[...(runtime.preview?.diagnostics || []), ...(editor.saveDiagnostic ? [editor.saveDiagnostic] : [])]} editingStatus={editor.error || (editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : undefined)} readonly={!ownership.editable || !!editor.recovery || editor.initialApplying}
         renderModelCardAction={renderModelCardAction} modelCardSources={modelCardSources} onSelectVideoFrame={frameDisabled ? undefined : selectVideoFrame}
         renderModelCardMenu={renderModelCardMenu && (context => renderModelCardMenu({ ...context, disabled: context.disabled || frameDisabled,

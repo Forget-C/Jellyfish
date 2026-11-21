@@ -1,3 +1,4 @@
+import { uiText } from '../../../uiText'
 import type { CanvasDocument, OutputIdentity, InputBinding, PromptReference } from '../../../services/generated'
 import { sourceKey } from './promptRules'
 import { visibleSourceEdges } from './graphRules'
@@ -61,7 +62,7 @@ export function cleanConnectionDocument(original: CanvasDocument, rules: Pick<Re
       if ((removed.size || remapped.size) && 'prompt' in card) {
         const fallback = (ref: PromptReference) => {
           const source = removed.get(ref.binding_id || '')!.source
-          const label = ({ image: '图片', video: '视频', audio: '音频' } as Record<string, string>)[source.port_id] || '文本'
+          const label = ({ image: '图片', video: '视频', audio: '音频' } as Record<string, string>)[source.port_id] || uiText("文本")
           return { id: ref.id, kind: 'text' as const, text: `@${label}〔引用失效：${source.card_id}〕` }
         }
         const redirect = (ref: PromptReference) => ({ ...ref, binding_id: remapped.get(ref.binding_id || '') || ref.binding_id })

@@ -1,3 +1,5 @@
+import { currentLanguage } from '../../../i18n'
+import { useUiText } from '../../../uiText'
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, Button, Dropdown, Empty, Input, Modal, Spin } from 'antd'
 import { ArrowRightOutlined, ClockCircleOutlined, DeleteOutlined, EditOutlined, MoreOutlined, PictureOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
@@ -21,6 +23,7 @@ function CanvasCover({ fileId }: { fileId: CanvasSummary['cover_file_id'] }) {
 
 /** 仅消费摘要；详情正文在进入编辑器时加载。 */
 export function CanvasListPage() {
+  const uiText = useUiText()
   const navigate = useNavigate()
   const location = useLocation()
   const [search, setSearch] = useSearchParams()
@@ -67,7 +70,7 @@ export function CanvasListPage() {
     const request = Canvases.canvasList({ q, page, pageSize })
     void request.then(({ data }) => {
       if (!active) return
-      if (!data) throw new Error('无法读取画布列表')
+      if (!data) throw new Error(uiText("无法读取画布列表"))
       const lastPage = Math.max(1, Math.ceil(data.pagination.total / pageSize))
       if (page > lastPage) {
         setPage(lastPage)
@@ -83,7 +86,7 @@ export function CanvasListPage() {
       }
     })
     return () => { active = false; request.cancel() }
-  }, [q, page, pageSize, retry, setPage])
+  }, [uiText, q, page, pageSize, retry, setPage])
 
   // Resize preserves the old first position, then records the new page's start.
   useEffect(() => {
@@ -105,7 +108,7 @@ export function CanvasListPage() {
   }
 
   const searchControl = <div key="search" className="canvas-list-search">
-    <Input aria-label="搜索画布" placeholder="搜索画布名称" prefix={<SearchOutlined />} allowClear value={searchText}
+    <Input aria-label={uiText("搜索画布")} placeholder={uiText("搜索画布名称")} prefix={<SearchOutlined />} allowClear value={searchText}
       onChange={event => {
         const value = event.target.value
         panel.current?.scrollTo(0, 0)
@@ -113,14 +116,14 @@ export function CanvasListPage() {
       }} />
   </div>
   const createControl = <Button key="create" className="canvas-list-create" type="primary" icon={<PlusOutlined />}
-    onClick={() => navigate(`/canvases/${crypto.randomUUID()}`, { state: { ...returnState, canvasDraft: true } })}>新建画布</Button>
+    onClick={() => navigate(`/canvases/${crypto.randomUUID()}`, { state: { ...returnState, canvasDraft: true } })}>{uiText("新建画布")}</Button>
 
-  return <WorkspaceLayout className="canvas-list-page" aria-label="画布列表">
+  return <WorkspaceLayout className="canvas-list-page" aria-label={uiText("画布列表")}>
     <PageToolbar>
       <div className="canvas-list-heading">
-        <h1 className="app-page-title">画布</h1>
+        <h1 className="app-page-title">{uiText("画布")}</h1>
         <span className="canvas-list-count" role="status">
-          {!loading && !loadError && (q ? `匹配 ${total} 张画布` : `共 ${total} 张画布`)}
+          {!loading && !loadError && (q ? uiText("匹配 {{total}} 张画布", { total }) : uiText("共 {{total}} 张画布", { total }))}
         </span>
       </div>
       {wide ? [searchControl, createControl] : [createControl, searchControl]}
@@ -136,12 +139,12 @@ export function CanvasListPage() {
       </div>
       <WorkspaceScrollPanel ref={panel} className="canvas-list-scroll">
         {loadError ? <Alert type="error" showIcon message={loadError}
-          action={<Button onClick={() => setRetry(value => value + 1)}>重试</Button>} />
-          : loading ? <Spin aria-label="正在加载画布" />
-            : !items.length ? <Empty description={q ? '没有匹配的画布' : '暂无画布'} />
+          action={<Button onClick={() => setRetry(value => value + 1)}>{uiText("重试")}</Button>} />
+          : loading ? <Spin aria-label={uiText("正在加载画布")} />
+            : !items.length ? <Empty description={q ? uiText("没有匹配的画布") : uiText("暂无画布")} />
               : <div className="app-card-list-grid canvas-list-grid">
                 {items.map(canvas => {
-                  const updated = new Date(canvas.updated_at).toLocaleString()
+                  const updated = new Date(canvas.updated_at).toLocaleString(currentLanguage())
                   return <article key={canvas.id} className="canvas-list-card">
                     <CanvasCover key={canvas.cover_file_id} fileId={canvas.cover_file_id} />
                     <div className="canvas-list-card-body">
@@ -152,33 +155,33 @@ export function CanvasListPage() {
                       </h2>
                       <div className="canvas-list-date">
                         <ClockCircleOutlined aria-hidden />
-                        <time dateTime={canvas.updated_at}>更新于 {updated}</time>
+                        <time dateTime={canvas.updated_at}>{uiText("更新于")} {updated}</time>
                       </div>
                     </div>
                     <Dropdown trigger={['click']} autoFocus menu={{ items: [
-                      { key: 'rename', label: '重命名', icon: <EditOutlined />, onClick: () => {
+                      { key: 'rename', label: uiText("重命名"), icon: <EditOutlined />, onClick: () => {
                         setTarget(canvas); setName(canvas.name); setRenameError('')
                       } },
-                      { key: 'delete', label: '删除', icon: <DeleteOutlined />, danger: true, onClick: () => {
+                      { key: 'delete', label: uiText("删除"), icon: <DeleteOutlined />, danger: true, onClick: () => {
                         setActionError(''); setDeleting(canvas)
                       } },
                     ] }}>
-                      <Button className="canvas-list-more" aria-label={`${canvas.name}的更多操作`} icon={<MoreOutlined />} />
+                      <Button className="canvas-list-more" aria-label={uiText("{{name}}的更多操作", { name: canvas.name })} icon={<MoreOutlined />} />
                     </Dropdown>
                   </article>
                 })}
               </div>}
       </WorkspaceScrollPanel>
     </div>
-    <CardListPagination label="画布列表分页" page={page} pageSize={pageSize} total={loadError ? 0 : total}
+    <CardListPagination label={uiText("画布列表分页")} page={page} pageSize={pageSize} total={loadError ? 0 : total}
       compact={!wide} disabled={loading || busy || !!deleting} onChange={nextPage => {
         panel.current?.scrollTo(0, 0)
         setPage(nextPage)
       }} />
-    <Modal title="重命名画布" open={!!target} onCancel={() => { if (!busy) setTarget(undefined) }} onOk={() => void rename()}
+    <Modal title={uiText("重命名画布")} open={!!target} onCancel={() => { if (!busy) setTarget(undefined) }} onOk={() => void rename()}
       confirmLoading={busy} okButtonProps={{ disabled: !name.trim() }}>
       {renameError && <Alert type="error" message={renameError} />}
-      <Input aria-label="画布名称" value={name} maxLength={255} onChange={event => setName(event.target.value)} onPressEnter={() => void rename()} />
+      <Input aria-label={uiText("画布名称")} value={name} maxLength={255} onChange={event => setName(event.target.value)} onPressEnter={() => void rename()} />
     </Modal>
     {deleting && <CanvasDeletionDialog key={deleting.id} projectId="" canvasId={deleting.id} canDelete={() => true}
       onClose={() => setDeleting(undefined)} onFailure={setActionError}

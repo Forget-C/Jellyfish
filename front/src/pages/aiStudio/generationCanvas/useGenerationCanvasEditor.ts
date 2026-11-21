@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { createGraphRules } from './graphRules'
 import { createCanvasOperations } from './canvasOperations'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -60,6 +61,7 @@ const describe = (reason: unknown) => reason instanceof ApiError
 
 /** 文档快照串行保存；原回执只推进基线，绝不替换仍在编辑的正文。 */
 export function useGenerationCanvasEditor(projectId: string, canvasId: string | null, refreshOnOwnership = true, sceneSave?: (projectId: string, canvas: CanvasRead, command: PendingSave) => Promise<CanvasRead>, freeDraft = false) {
+  const uiText = useUiText()
   const key = canvasRecoveryKey(projectId, canvasId)
   const ownership = useCanvasEditOwnership(generationCanvasEditScope(projectId, canvasId))
   const [current, setCurrent] = useState<CanvasRead>()
@@ -79,10 +81,10 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     const clean = createCanvasOperations(createGraphRules(catalog)).clean
     const allowed = new Set(catalog.cards.map(card => card.type))
     cleaner.current = value => {
-      if (value.cards?.some(card => !allowed.has(card.type || ''))) throw new Error('本地文档包含当前画布不支持的卡片')
+      if (value.cards?.some(card => !allowed.has(card.type || ''))) throw new Error(uiText("本地文档包含当前画布不支持的卡片"))
       return clean(value)
     }
-  }, [])
+  }, [uiText])
   const inFlight = useRef<Promise<boolean>>()
   const handoffHistory = useRef(false)
   const history = useRef<{ scope: string; past: HistoryEntry[]; future: HistoryEntry[] }>({ scope: key, past: [], future: [] })
@@ -94,7 +96,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       if (same(s.document, s.current.document) && !s.pending) localStorage.removeItem(key)
       else localStorage.setItem(key, JSON.stringify({ schema: 1, baseline: s.current, document: s.document, pending: s.pending }))
       setStorageError('')
-    } catch { setStorageError('浏览器存储不可用，本地恢复保护失败；请保存后再离开') }
+    } catch { setStorageError(uiText("浏览器存储不可用，本地恢复保护失败；请保存后再离开")) }
   }
   const readCanvas = useCallback((id: string, allowDraft: boolean) => freeDraft && allowDraft
     ? Canvases.canvasDraftRead({ canvasId: id })
@@ -125,10 +127,10 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
           if (saved.schema !== 1 || !saved.baseline || !Number.isInteger(saved.baseline.revision) || !validDocument(saved.baseline.document, projectId, canvasId) || !validDocument(saved.document, projectId, canvasId) || (saved.pending && (typeof saved.pending.request_id !== 'string' || !Number.isInteger(saved.pending.expected_revision) || !validDocument(saved.pending.document as CanvasDocument, projectId, canvasId)))) throw new Error('invalid recovery')
           state.current.recovery = saved; setRecovery(saved)
         }
-      } catch { setStorageError('本地恢复记录无法读取；未覆盖服务器内容') }
-    }).catch(reason => { if (active) setError(reason instanceof ApiError && reason.status === 404 ? '此画布已不可用' : describe(reason)) })
+      } catch { setStorageError(uiText("本地恢复记录无法读取；未覆盖服务器内容")) }
+    }).catch(reason => { if (active) setError(reason instanceof ApiError && reason.status === 404 ? uiText("此画布已不可用") : describe(reason)) })
     return () => { active = false }
-  }, [key, projectId, canvasId, readCanvas])
+  }, [uiText, key, projectId, canvasId, readCanvas])
   const edit = (next: CanvasDocument | ((previous: CanvasDocument) => CanvasDocument), arrangement?: CanvasArrangementChange) => {
     const s = state.current
     if (!ownership.canEdit() || !s.document || s.recovery || s.initialBefore || s.scope !== key) return
@@ -192,7 +194,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const send = async (canvas: CanvasRead, command: PendingSave): Promise<CanvasRead> => {
     const scene = command.scene
     if (scene) {
-      if (!sceneSave) throw new Error('当前画布不支持场次操作')
+      if (!sceneSave) throw new Error(uiText("当前画布不支持场次操作"))
       return sceneSave(projectId, canvas, command)
     }
     const result = canvas.revision === -1
@@ -275,7 +277,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       const response = await readCanvas(baseline.id, baseline.revision === -1)
       if (!response.data || s !== state.current) return
       if (!staged && !preservesFixedSource(response.data.document, recovered)) {
-        setError('本地内容的固定原文与服务器不同，请先核对后使用服务器内容')
+        setError(uiText("本地内容的固定原文与服务器不同，请先核对后使用服务器内容"))
         return
       }
       if (!cleaner.current) {
@@ -293,7 +295,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       const settingsOnly = recoveredSettings && same(cleaner.current!(saved.document), cleaner.current!(saved.baseline.document))
       if (changed && (staged || settingsOnly)) recovered = response.data.document
       if (changed && !staged && !settingsOnly) {
-        s.conflict = true; setConflict(true); setError('REVISION_CONFLICT: 服务器已有更新，本地恢复内容保留，请核对后选择')
+        s.conflict = true; setConflict(true); setError(uiText("REVISION_CONFLICT: 服务器已有更新，本地恢复内容保留，请核对后选择"))
       }
       s.current = response.data; s.document = cleaner.current!(recovered); s.pending = undefined; s.recovery = undefined
       history.current = { scope: key, past: [], future: [] }
@@ -308,7 +310,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
         if (settingsSave(saved.pending?.request_id) && reason instanceof ApiError && reason.status === 404) {
           s.recovery = undefined; setRecovery(undefined); persist()
           s.current = undefined; s.document = undefined
-          setCurrent(undefined); setDocument(undefined); setError('此画布已不可用')
+          setCurrent(undefined); setDocument(undefined); setError(uiText("此画布已不可用"))
           return false
         }
         if (reason instanceof ApiError && [400, 409, 422].includes(reason.status)) {
@@ -316,17 +318,17 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
             s.recovery = undefined; setRecovery(undefined); persist()
           } else {
             saved.pending = undefined
-            try { localStorage.setItem(key, JSON.stringify(saved)) } catch { setStorageError('本地恢复保护失败') }
+            try { localStorage.setItem(key, JSON.stringify(saved)) } catch { setStorageError(uiText("本地恢复保护失败")) }
           }
         }
-        setError(`恢复失败：${describe(reason)}`)
+        setError(uiText("恢复失败：{{value1}}", { value1: describe(reason) }))
       }
     }
     finally { if (s === state.current) setSaving(false) }
   }
   const reload = async (keepLocal = false, preserveHandoff = false) => {
     const s = state.current
-    if (s.pending || s.recovery?.pending) { setError('请先核实未明保存请求，再处理冲突或放弃内容'); return false }
+    if (s.pending || s.recovery?.pending) { setError(uiText("请先核实未明保存请求，再处理冲突或放弃内容")); return false }
     try {
       const snapshot = s.document
       const response = await readCanvas(canvasId!, s.current?.revision === -1)
@@ -335,7 +337,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       if (s.document !== snapshot || s.pending) return false
       keepLocal = keepLocal && !same(s.document, s.current?.document)
       if (keepLocal && s.document && !preservesFixedSource(response.data.document, s.document)) {
-        setError('本地内容的固定原文与服务器不同，请先核对后使用服务器内容')
+        setError(uiText("本地内容的固定原文与服务器不同，请先核对后使用服务器内容"))
         return false
       }
       const unchanged = s.current?.revision === response.data.revision
@@ -377,8 +379,8 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     }
     try {
       // 另一页可能在本弹窗打开后才留下恢复内容，取得锁后再核对一次。
-      if (localStorage.getItem(key)) { setError('请在画布中处理未保存的内容，再更名。'); return undefined }
-    } catch { setError('无法核对本地恢复内容，请检查浏览器存储后重试。'); return undefined }
+      if (localStorage.getItem(key)) { setError(uiText("请在画布中处理未保存的内容，再更名。")); return undefined }
+    } catch { setError(uiText("无法核对本地恢复内容，请检查浏览器存储后重试。")); return undefined }
     if (!await reload() || s !== state.current || !s.current || !s.document || !belongsToScene() || !ownership.canEdit()) return undefined
     if (s.current.document.name === name) return name
     s.initialBefore = s.document

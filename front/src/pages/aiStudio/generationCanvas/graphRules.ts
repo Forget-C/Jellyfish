@@ -1,3 +1,5 @@
+import i18n, { currentLanguage } from '../../../i18n'
+import { uiText } from '../../../uiText'
 import { resultScopeIncludes } from './resultConnections'
 import type { CanvasCatalog, CanvasDocument, CanvasModelCapability, OutputIdentity } from '../../../services/generated'
 
@@ -8,32 +10,33 @@ export function findConnection(document: CanvasDocument, edge: GenerationEdge) {
   return document.edges?.find(item => item.source_card === edge.source_card && item.source_port === edge.source_port && item.target_card === edge.target_card && item.target_port === edge.target_port)
 }
 /** 静态端点来自后端公开目录；这里只组织显示与即时无环提示。 */
-export function createGraphRules(catalog: CanvasCatalog) {
+export function createGraphRules(catalog: CanvasCatalog, locale = currentLanguage()) {
+  const label = i18n.getFixedT(locale, 'ui')
   const cardDefinitions = Object.fromEntries(catalog.cards.map(card => [card.type, card]))
-  const cardTitles = Object.fromEntries(catalog.cards.map(card => [card.type, card.title]))
-  const portLabels = Object.fromEntries(catalog.cards.flatMap(card => [...card.outputs, ...card.inputs].map(port => [port.id, port.label])))
+  const cardTitles = Object.fromEntries(catalog.cards.map(card => [card.type, label(card.title, { defaultValue: card.title })]))
+  const portLabels = Object.fromEntries(catalog.cards.flatMap(card => [...card.outputs, ...card.inputs].map(port => [port.id, label(port.label, { defaultValue: port.label })])))
   const outputPorts = (card: GenerationCard) => cardDefinitions[card.type || '']?.outputs.map(port => port.id) || []
   const inputPorts = (card: GenerationCard) => cardDefinitions[card.type || '']?.inputs.map(port => port.id) || []
 /** 保存后的既有候选不随模型切换删除；这个判断只用于创建新连接。 */
 function connectionReason(document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability, expanding = false): string | undefined {
   const source = document.cards?.find(card => card.id === edge.source_card), target = document.cards?.find(card => card.id === edge.target_card)
-  if (!source || !target || !outputPorts(source).includes(edge.source_port) || !inputPorts(target).includes(edge.target_port)) return '连接端点不存在'
-  if (source.id === target.id) return '卡片不能连接自身'
+  if (!source || !target || !outputPorts(source).includes(edge.source_port) || !inputPorts(target).includes(edge.target_port)) return uiText("连接端点不存在")
+  if (source.id === target.id) return uiText("卡片不能连接自身")
   if (!connectionPolicy(document, edge)) {
-    if (target.type?.startsWith('reference.') && edge.target_port === 'image_source') return '参考图仅支持图片内容卡，请先另存为图片内容卡'
-    if (target.type?.startsWith('reference.') && edge.target_port === 'name') return '名称候选必须来自同类型描述卡'
-    if (source.type === 'direction.criterion' && target.type?.startsWith('direction.') && edge.source_port === 'text') return '验收要求仅支持验收关联'
-    return '端口值种类不匹配，不提供隐式转换'
+    if (target.type?.startsWith('reference.') && edge.target_port === 'image_source') return uiText("参考图仅支持图片内容卡，请先另存为图片内容卡")
+    if (target.type?.startsWith('reference.') && edge.target_port === 'name') return uiText("名称候选必须来自同类型描述卡")
+    if (source.type === 'direction.criterion' && target.type?.startsWith('direction.') && edge.source_port === 'text') return uiText("验收要求仅支持验收关联")
+    return uiText("端口值种类不匹配，不提供隐式转换")
   }
-  if (source.type === 'direction.criterion' && edge.source_port === 'criterion' && edge.target_port === 'acceptance_basis' && (!('name' in source) || !source.name?.trim())) return '请先填写验收要求名称'
-  if (capability && (!capability.input_ports.includes(edge.target_port) || target.type !== `model.${capability.modality}`)) return '所选模型未接入该输入用途'
+  if (source.type === 'direction.criterion' && edge.source_port === 'criterion' && edge.target_port === 'acceptance_basis' && (!('name' in source) || !source.name?.trim())) return uiText("请先填写验收要求名称")
+  if (capability && (!capability.input_ports.includes(edge.target_port) || target.type !== `model.${capability.modality}`)) return uiText("所选模型未接入该输入用途")
   const edges = document.edges || []
-  if (!expanding && findConnection(document, edge)) return '同一端口连接已存在'
-  if (edge.target_port === 'check_basis' && edges.some(item => item.target_card === edge.target_card && item.target_port === 'check_basis')) return '每张检查卡只连接一张模型生成卡'
+  if (!expanding && findConnection(document, edge)) return uiText("同一端口连接已存在")
+  if (edge.target_port === 'check_basis' && edges.some(item => item.target_card === edge.target_card && item.target_port === 'check_basis')) return uiText("每张检查卡只连接一张模型生成卡")
   const pending = [edge.target_card], seen = new Set<string>()
   while (pending.length) {
     const id = pending.pop()!
-    if (id === edge.source_card) return '候选连接不能形成循环'
+    if (id === edge.source_card) return uiText("候选连接不能形成循环")
     if (!seen.has(id)) { seen.add(id); edges.filter(item => item.source_card === id).forEach(item => pending.push(item.target_card)) }
   }
 }

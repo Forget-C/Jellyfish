@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useEffect, useRef, useState } from 'react'
 
 export const generationCanvasEditScope = (projectId: string, canvasId: string | null) => `jellyfish:generation-editor:${projectId}:${canvasId}`
@@ -8,6 +9,7 @@ type Message = { kind: 'ask' | 'choose' | 'reply' | 'queued' | 'cancel' | 'locat
 
 /** 浏览器锁决定唯一编辑能力；消息只协调保存与交接，不用心跳或超时抢占。 */
 export function useCanvasEditOwnership(scope: string) {
+  const uiText = useUiText()
   const [state, setState] = useState<OwnershipState>('checking')
   const [message, setMessage] = useState('')
   const [ownerUrl, setOwnerUrl] = useState('')
@@ -40,7 +42,7 @@ export function useCanvasEditOwnership(scope: string) {
     }
     const startTimeout = () => window.setTimeout(() => {
       cancelOutgoing('unresponsive')
-      setMessage('原编辑页未响应。可以重试或返回原页；尚未交接编辑权。')
+      setMessage(uiText("原编辑页未响应。可以重试或返回原页；尚未交接编辑权。"))
     }, 10000)
     const hold = async (lock: Lock | null, requestId?: string) => {
       if (!active || !lock || (requestId && outgoing?.id !== requestId)) return
@@ -106,14 +108,14 @@ export function useCanvasEditOwnership(scope: string) {
         if (data.result === 'choice') { setState('choice'); return }
         if (data.result !== 'ready') {
           cancelOutgoing()
-          setMessage('交接未完成，请在原页处理保存或恢复问题后重试。')
+          setMessage(uiText("交接未完成，请在原页处理保存或恢复问题后重试。"))
           return
         }
         const requestId = outgoing.id
         outgoing.abort = new AbortController()
         outgoing.timer = startTimeout()
         void navigator.locks.request(scope, { signal: outgoing.abort.signal }, lock => hold(lock, requestId))
-          .catch(error => { if (active && error.name !== 'AbortError') { cancelOutgoing(); setMessage('无法确认编辑权，请重试。') } })
+          .catch(error => { if (active && error.name !== 'AbortError') { cancelOutgoing(); setMessage(uiText("无法确认编辑权，请重试。")) } })
         post({ kind: 'queued', id: requestId, to: data.from })
       }
     }
@@ -145,7 +147,7 @@ export function useCanvasEditOwnership(scope: string) {
       channel.close()
       release?.()
     }
-  }, [scope])
+  }, [uiText, scope])
   return { state, message, ownerUrl, handoff, editable: state === 'editing', canEdit: () => owned.current,
     takeEditing: () => actions.current.take(), chooseHandoff: (action: 'save' | 'discard') => actions.current.choose(action),
     cancelHandoff: () => actions.current.cancel(), locateOwner: () => actions.current.locate() }

@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { PromptEditingActiveContext } from './PromptEditingContext'
 import type { CanvasArrangementChange } from './useGenerationCanvasEditor'
 import { fixedCanvasSource } from './fixedCanvasSource'
@@ -114,6 +115,7 @@ export interface CanvasModelCardActionContext {
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
 function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument, layoutPolicy, renderModelCardAction, renderModelCardMenu, modelCardSources, onSelectVideoFrame }: { onSelectVideoFrame?: (source: VideoFrameSource) => void; renderModelCardMenu?: (context: CanvasModelCardMenuContext) => ReactNode; modelCardSources?: (card: GenerationCard, document: CanvasDocument) => CanvasSourceItem[]; layoutPolicy?: GenerationCanvasLayoutPolicy; history?: { canUndo?: boolean; canUndoArrangement?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument, arrangement?: CanvasArrangementChange) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; renderModelCardAction?: (context: CanvasModelCardActionContext) => ReactNode; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; outputsVerified?: boolean; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
+  const uiText = useUiText()
   const promptEditing = useContext(PromptEditingActiveContext)
   const [outputAction,setOutputAction] = useState<{mode:'cover'|'download';outputs:DownloadOutput[]}>()
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; ids: string[] }>()
@@ -154,7 +156,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         const fieldId = source.source_field_id || source.field_id
         const field = cardDefinitions[fieldCard?.type || '']?.fields.find(item => item.id === fieldId)?.label
           || (fieldCard && 'phases' in fieldCard ? fieldCard.phases?.find(item => 'phase:' + item.id === fieldId)?.name : undefined)
-        return { source, label: target ? ('name' in target && target.name || cardTitles[target.type || ''] || '来源卡片') : '失效来源',
+        return { source, label: target ? ('name' in target && target.name || cardTitles[target.type || ''] || uiText("来源卡片")) : uiText("失效来源"),
           position: field || (typeof source.start === 'number' && typeof source.end === 'number' ? `正文 ${source.start + 1}–${source.end}` : undefined), issue, missing: !target }
       }),
     ]))
@@ -165,7 +167,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       const available = target && (origin.result || 'file_id' in target && target.file_id === origin.source_file_id)
       items[card.id] = [...(items[card.id] || []), {
         source: { card_id: origin.source_card_id },
-        label: '来源视频',
+        label: uiText("来源视频"),
         fileId: origin.source_file_id,
         position: `${(origin.at_ms / 1000).toFixed(3)} 秒`,
         missing: !available,
@@ -173,7 +175,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       }]
     }
     return items
-  }, [document, cardDefinitions, cardTitles])
+  }, [uiText, document, cardDefinitions, cardTitles])
   const inputLabel = (card: GenerationCard, port: string) => cardDefinitions[card.type || '']?.inputs.find(item => item.id === port)?.label || portLabels[port]
   const [displayFilter, setDisplayFilter] = useState<CanvasDisplayFilter>({ group: '', modality: '', problems: false })
   const [multiSelectMode, setMultiSelectMode] = useState(false)
@@ -316,10 +318,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const cleaned = clean(document)
     if (cleaned !== document) {
       const removed = document.edges?.filter(edge => !cleaned.edges?.some(item => item.id === edge.id)) || []
-      if (removed.length) setReason(`已清理 ${removed.length} 条旧的未采用设计关联线，已采用关系保留`)
+      if (removed.length) setReason(uiText("已清理 {{length}} 条旧的未采用设计关联线，已采用关系保留", { length: removed.length }))
       onChange(cleaned)
     }
-  }, [document, readonly, onChange, clean])
+  }, [uiText, document, readonly, onChange, clean])
   const container = useRef<HTMLDivElement>(null)
   const hidden = useMemo(() => new Set(viewGroups.filter(group => group.kind === 'stack' || group.collapsed).flatMap(group => group.card_ids || [])), [viewGroups])
   const knownPositions = useMemo(() => knownResultPositions(runtime?.runs || []), [runtime?.runs])
@@ -415,7 +417,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       redo: () => layout.applyArrangement(after),
     })
   }
-  const layoutAction = <WorkbenchIconButton label="整理布局" variant="quiet" icon={<AppstoreOutlined />} disabled={arrangeDisabled} onClick={arrangeLayout} />
+  const layoutAction = <WorkbenchIconButton label={uiText("整理布局")} variant="quiet" icon={<AppstoreOutlined />} disabled={arrangeDisabled} onClick={arrangeLayout} />
   const movementHost = useRef({ layout, history })
   movementHost.current = { layout, history }
   const [movement] = useState(() => createMoveTransaction({
@@ -455,21 +457,21 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const edgeId = target?.diagnostic && diagnosticEdgeId(target.diagnostic)
     if (edgeId) {
       const edge = edges.find(item => item.id === edgeId)
-      if (!edge) { setReason('问题所指的连线已不可用'); return }
+      if (!edge) { setReason(uiText("问题所指的连线已不可用")); return }
       const representative = sourceConnectionEdges(document, edge)[0]
       const connection = projectedConnections.find(item => item.edge.id === representative?.id)
       if (!connection) {
         if (stackFor(edge.source_card)?.id && stackFor(edge.source_card)?.id === stackFor(edge.target_card)?.id) navigateInspection.current(edge.source_card)
-        else setReason('问题所指的连线当前不可见')
+        else setReason(uiText("问题所指的连线当前不可见"))
         return
       }
       const outputs = [...connection.results.map(item => item.output), ...connection.direct].filter(output => output.source.port_id === edge.source_port && resultScopeIncludes(edge.result_scope, output.source.position))
-      if (connection.projected && outputs.length !== 1) { setReason('问题所指的连线当前没有唯一可定位的输出'); return }
+      if (connection.projected && outputs.length !== 1) { setReason(uiText("问题所指的连线当前没有唯一可定位的输出")); return }
       const source = connection.projected ? outputs[0].source : undefined
       const selector = `[data-generation-edge-id="${CSS.escape(connection.edge.id)}"]` + (source ? `[data-generation-result-port="${CSS.escape(source.port_id)}"][data-generation-result-position="${source.position}"]` : '')
       const path = container.current?.querySelector<SVGPathElement>(selector + ' .canvas-edge-hit')
       const matrix = path?.getScreenCTM(), bounds = container.current?.getBoundingClientRect()
-      if (!path || !matrix || !bounds) { setReason('问题所指的连线当前不可见'); return }
+      if (!path || !matrix || !bounds) { setReason(uiText("问题所指的连线当前不可见")); return }
       const center = path.getPointAtLength(path.getTotalLength() / 2).matrixTransform(matrix)
       layout.setView(previous => ({ ...previous, transform: { ...previous.transform,
         x: previous.transform.x + bounds.x + bounds.width / 2 - center.x,
@@ -479,11 +481,11 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       requestAnimationFrame(() => path.focus({ preventScroll: true }))
       return
     }
-    if (target && !cards.some(card => card.id === cardId)) { setReason('问题所指的卡片已不可用'); return }
+    if (target && !cards.some(card => card.id === cardId)) { setReason(uiText("问题所指的卡片已不可用")); return }
     const stack = stackFor(cardId)
     if (stack) {
       clearSelection()
-      setReason('请先解除堆叠后编辑')
+      setReason(uiText("请先解除堆叠后编辑"))
       centerInspectionElement(`[data-stack-id="${CSS.escape(stack.id)}"]`)
       return
     }
@@ -491,7 +493,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     if (target && collapsedGroup) {
       clearSelection()
       setSelectedGroupId(collapsedGroup.id)
-      setReason('问题所指的卡片位于已折叠的编组内')
+      setReason(uiText("问题所指的卡片位于已折叠的编组内"))
       centerInspectionElement(`[data-group-id="${CSS.escape(collapsedGroup.id)}"]`)
       return
     }
@@ -503,7 +505,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       return
     }
     if (target?.diagnostic && diagnosticAssociation(cards.find(card => card.id === cardId), target.diagnostic)?.unavailable) {
-      setReason('问题所指的关系已不可用'); return
+      setReason(uiText("问题所指的关系已不可用")); return
     }
     { setSelected([cardId]); setSelectedEdgeId(undefined); setDetailId(cardId) }
   }
@@ -608,15 +610,15 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       const value = response.data || undefined
       if (active) setModelDefaults(value)
       return value
-    }).catch(() => { if (active) setReason('默认模型读取失败，请手动选择模型'); return undefined })
+    }).catch(() => { if (active) setReason(uiText("默认模型读取失败，请手动选择模型")); return undefined })
     const listed = LlmService.listModelsApiV1LlmModelsGet({ pageSize: 100 }).then(response => {
       const value = response.data?.items || []
       if (active) setModels(value)
       return value
-    }).catch(() => { if (active) setReason('模型列表读取失败，请刷新后重试'); return undefined })
+    }).catch(() => { if (active) setReason(uiText("模型列表读取失败，请刷新后重试")); return undefined })
     modelOptions.current = Promise.all([settings, listed]).then(([settings, models]) => ({ settings, models }))
     return () => { active = false }
-  }, [document.id])
+  }, [uiText, document.id])
   const uncreated = savedRevision === -1
   useEffect(() => {
     if (uncreated) return
@@ -665,7 +667,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       if (!firstStoryboardModelAssignment(document, selected)) return
       if (!response.data) throw new Error('missing capability')
       apply(assignStoryboardModel(document, selected, operations, response.data))
-    }).catch(() => { if (choices.get(next.id) === token) setReason('模型能力读取失败，请重新选择模型') })
+    }).catch(() => { if (choices.get(next.id) === token) setReason(uiText("模型能力读取失败，请重新选择模型")) })
       .finally(() => { if (choices.get(next.id) === token) choices.delete(next.id) })
     return true
   }
@@ -724,7 +726,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     if (ids.some(id => {
       const owner = resultsById.get(id)?.output.source.card_id
       return owner && !selectedIds.has(owner)
-    })) { setReason('请先断开与生成卡的连线，再删除此结果卡'); return }
+    })) { setReason(uiText("请先断开与生成卡的连线，再删除此结果卡")); return }
     // 关联结果只随所属模型移除，文档删除始终按真实卡片及最终保留的消费者检查。
     const cardIds = (latest.current.cards || []).filter(card => selectedIds.has(card.id)).map(card => card.id)
     if (!cardIds.length) return
@@ -844,14 +846,14 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     if('text' in card && card.text)return [{key:id,name:cardLabel(id),text:card.text,modality:'text'}]
     return []
   })
-  const setCover=(fileId:string)=>{if(!readonly){edit({...latest.current,cover_file_id:fileId});setReason('画布封面已设置')}}
+  const setCover=(fileId:string)=>{if(!readonly){edit({...latest.current,cover_file_id:fileId});setReason(uiText("画布封面已设置"))}}
   const openOutputAction=(mode:'cover'|'download',ids:string[])=>{
     if(mode==='cover' && (readonly || ids.length!==1))return
     const outputs=cardOutputs(ids).filter(output=>mode==='download'||output.modality==='image')
-    if(!outputs.length){setReason('没有可用输出');return}
+    if(!outputs.length){setReason(uiText("没有可用输出"));return}
     if(outputs.length>1)setOutputAction({mode,outputs:structuredClone(outputs)})
     else if(mode==='cover')setCover(outputs[0].fileId!)
-    else void downloadOutputs(outputs).catch(()=>{setOutputAction({mode,outputs});setReason('下载失败，请重试')})
+    else void downloadOutputs(outputs).catch(()=>{setOutputAction({mode,outputs});setReason(uiText("下载失败，请重试"))})
   }
   const pasteCount=useRef(0)
   const pastePending=useRef(false)
@@ -862,7 +864,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const pasteCards = async (clipboard: CardClipboard | undefined, position?: { x:number; y:number }) => {
     if (readonly || !clipboard || clipboard.projectId !== (document.project_id || '') || clipboard.cards.some(card => copyRestriction(card))) return
     if (clipboard.cards.some(card => !catalog.cards.some(definition => definition.type === card.type))) {
-      setReason('无法粘贴：包含当前画布不支持的分镜专属卡片')
+      setReason(uiText("无法粘贴：包含当前画布不支持的分镜专属卡片"))
       return
     }
     if(pastePending.current)return
@@ -871,9 +873,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       const fileIds=clipboard.cards.flatMap(card=>'file_id' in card && card.file_id ? [card.file_id] : 'image_binding' in card && card.image_binding?.file_id ? [card.image_binding.file_id] : [])
       await Promise.all([...new Set(fileIds)].map(async fileId=>{
         const {data}=await StudioFilesService.getFileDetailApiV1StudioFilesFileIdGet({fileId})
-        if(!data || data.deleted || (document.project_id || '') && !data.usages?.some(usage=>(usage.project_id || '')===(document.project_id || '')))throw new Error('文件不可用或不属于当前项目')
+        if(!data || data.deleted || (document.project_id || '') && !data.usages?.some(usage=>(usage.project_id || '')===(document.project_id || '')))throw new Error(uiText("文件不可用或不属于当前项目"))
       }))
-    } catch {setReason('无法粘贴：媒体不可用或项目归属不匹配');pastePending.current=false;return}
+    } catch {setReason(uiText("无法粘贴：媒体不可用或项目归属不匹配"));pastePending.current=false;return}
     pastePending.current=false
     if(!mounted.current || currentReadonly.current)return
     // 校验期间允许浏览；提交落点及可见性必须使用此刻视口，而非调用时闭包。
@@ -906,10 +908,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const entries = ids.map(copyTarget)
     const targets = entries.flatMap(({ card }) => card ? [card] : [])
     const reason = entries.find(entry => entry.reason)?.reason
-    if (!targets.length || reason) {setReason(reason || '请选择卡片');return}
+    if (!targets.length || reason) {setReason(reason || uiText("请选择卡片"));return}
     const value:CardClipboard={schema:1,projectId:(document.project_id || ''),cards:structuredClone(targets),positions:targets.map(card=>point(card.id))}
     if(duplicate) pasteCards(value,{x:Math.min(...value.positions.map(point=>point.x))+32,y:Math.min(...value.positions.map(point=>point.y))+32})
-    else try {writeCardClipboard(value);setReason('已复制，可在画布粘贴')} catch {setReason('卡片剪贴板保存失败，请重试')}
+    else try {writeCardClipboard(value);setReason(uiText("已复制，可在画布粘贴"))} catch {setReason(uiText("卡片剪贴板保存失败，请重试"))}
   }
   const openCardContext = (id: string, trigger: HTMLElement) => {
     const box = trigger.getBoundingClientRect()
@@ -983,15 +985,15 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const startAccessibleConnection = (card: string, side: ConnectionSide, trigger: HTMLElement) => {
     if (readonly) return
     setActiveCategory(undefined); connectionTrigger.current = trigger
-    connection.start({ card, side }); setReason('选择接收卡以建立来源连接')
+    connection.start({ card, side }); setReason(uiText("选择接收卡以建立来源连接"))
   }
   const submitConnection = (option: GenerationEdge, targetSide: ConnectionSide, sourceSide: ConnectionSide, sourceId?: string) => {
-    if (readonly) { setReason('当前只读，不能新建连接'); return }
+    if (readonly) { setReason(uiText("当前只读，不能新建连接")); return }
     const result = sourceId ? resultsById.get(sourceId)?.output : undefined
-    if (result?.available === false) { setReason('当前输出缺失，不能建立连接'); return }
+    if (result?.available === false) { setReason(uiText("当前输出缺失，不能建立连接")); return }
     const position = result?.source.position
     const existing = existingSource(sourceId || option.source_card, option.target_card)
-    if (existing) { selectEdge(existing.id, undefined, result?.source); setReason('该来源已连接'); return }
+    if (existing) { selectEdge(existing.id, undefined, result?.source); setReason(uiText("该来源已连接")); return }
     const issue = check(option, position)
     if (issue) { showConnectionIssue(issue, option.source_card); return }
     const edge = { ...option, id: crypto.randomUUID() }
@@ -999,16 +1001,16 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     if (position !== undefined) {
       const added = operations.connectResult(latest.current, edge, position, target && capability(target))
       if (!added.document) { setReason(added.reason); return }
-      edit(added.document); setReason(connectionPolicy(latest.current, option)?.message || '来源已连接')
+      edit(added.document); setReason(uiText(connectionPolicy(latest.current, option)?.message || "来源已连接"))
       return
     }
     if (sourceSide) connectionLayout.setSides(previous => ({ ...previous, [edge.id]: { source: sourceSide, target: targetSide } }))
-    if (connectDocument(latest.current, edge, target && capability(target))) setReason(connectionPolicy(latest.current, option)?.message || '来源已连接')
+    if (connectDocument(latest.current, edge, target && capability(target))) setReason(uiText(connectionPolicy(latest.current, option)?.message || "来源已连接"))
   }
   const finishDrag = (event: PointerEvent) => {
     if (!drag) return
     const target = connectionPointAt(event.clientX, event.clientY)
-    if (!target) { setReason('连接已取消，请拖到目标连接点'); cancelConnection(); return }
+    if (!target) { setReason(uiText("连接已取消，请拖到目标连接点")); cancelConnection(); return }
     connection.choose(target.dataset.card!, target.dataset.connectionSide as ConnectionSide)
   }
   const chooseAccessibleTarget = (targetId: string, side: ConnectionSide = 'left') => {
@@ -1055,7 +1057,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         return edge.source_card === card.id && sides.source === side || edge.target_card === card.id && sides.target === side
       })
       return <Tooltip key={side} title={summary} trigger={['hover', 'focus']} open={drag ? !!hoveredPoint && hoveredPoint.dataset.card === id && hoveredPoint.dataset.connectionSide === side : undefined}>
-        <button type="button" disabled={readonly || result?.output.available === false} className="generation-connection-point" data-card={id} data-connection-side={side} data-connected={connected} data-connecting={!!drag || !!accessibleConnection} data-compatible={sourceConnection ? options.length > 0 : undefined} aria-label={`${sideLabels[side]}侧连接点`} onKeyDown={event => {
+        <button type="button" disabled={readonly || result?.output.available === false} className="generation-connection-point" data-card={id} data-connection-side={side} data-connected={connected} data-connecting={!!drag || !!accessibleConnection} data-compatible={sourceConnection ? options.length > 0 : undefined} aria-label={uiText("{{value1}}侧连接点", { value1: uiText(sideLabels[side]) })} onKeyDown={event => {
           if (event.defaultPrevented || event.nativeEvent.isComposing || event.key !== 'Enter' && event.key !== ' ') return
           event.preventDefault(); event.stopPropagation()
           if (accessibleConnection) chooseAccessibleTarget(id, side)
@@ -1065,7 +1067,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           if (accessibleConnection) { event.preventDefault(); event.stopPropagation(); chooseAccessibleTarget(id, side); return }
           event.stopPropagation(); event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId)
           setActiveCategory(undefined); connectionTrigger.current = event.currentTarget
-          connection.start({ card: id, side }, { x: event.clientX, y: event.clientY }); setReason('拖到接收卡建立来源连接')
+          connection.start({ card: id, side }, { x: event.clientX, y: event.clientY }); setReason(uiText("拖到接收卡建立来源连接"))
         }} onPointerMove={event => {
           if (drag) connection.move({ x: event.clientX, y: event.clientY }, connectionPointAt(event.clientX, event.clientY)?.dataset.card)
         }} onPointerUp={finishDrag} onPointerCancel={cancelConnection} onLostPointerCapture={() => { if (connection.pointerActive) cancelConnection() }}><i aria-hidden>+</i></button>
@@ -1107,7 +1109,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const detachResult = async (result: LinkedResult) => {
     if (readonly || detachPending.current) return
     const captured = capturedResult(result.output, runtime?.runs || [])
-    if (!captured) { setReason('当前正式结果不可固定'); return }
+    if (!captured) { setReason(uiText("当前正式结果不可固定")); return }
     detachPending.current = true
     setDetaching(true)
     const { id: canvasId } = latest.current
@@ -1116,17 +1118,17 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       const response = await Canvases.canvasOutputContent({ projectId, canvasId, ...captured })
       if (!container.current || currentReadonly.current || latest.current.id !== canvasId) return
       const fixed = response.data
-      if (!fixed?.origin || fixed.origin.incomplete) { setReason('当前正式结果不可固定'); return }
+      if (!fixed?.origin || fixed.origin.incomplete) { setReason(uiText("当前正式结果不可固定")); return }
       const changed = operations.detachResult(latest.current, result.output, fixed)
       if (!changed.document) { setReason(changed.reason); return }
       const position = retainedPositions.current[result.id] || historicalPositions.current[result.id]
       if (position) layout.move(fixed.id, position)
       edit(changed.document)
       setSelectedEdgeId(previous => typeof previous === 'object' && previous.resultId === result.id ? undefined : previous)
-      setReason('已固定此结果，原下游连接及引用已保留')
+      setReason(uiText("已固定此结果，原下游连接及引用已保留"))
       requestAnimationFrame(() => container.current?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(fixed.id)}"]`)?.focus({ preventScroll: true }))
     } catch {
-      if (container.current) setReason('无法读取此正式结果，固定未完成')
+      if (container.current) setReason(uiText("无法读取此正式结果，固定未完成"))
     } finally {
       detachPending.current = false
       if (container.current) setDetaching(false)
@@ -1138,17 +1140,17 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       const source = { id: crypto.randomUUID(), type: 'content.text' as const, type_version: 1 as const, text: '' }
       const next = { ...latest.current, cards: [...(latest.current.cards || []), source] }
       connectDocument(next, { id: crypto.randomUUID(), source_card: source.id, source_port: 'text', target_card: card.id, target_port: 'text' })
-    }}>添加文本参考</Button>
-    <Select<string> aria-label="添加媒体参考" placeholder="添加媒体参考" value={undefined} disabled={readonly} style={{ width: 150 }}
-      options={inputPorts(card).filter(port => port !== 'text').map(port => ({ value: port, label: `新建${inputLabel(card, port)}内容卡` }))}
+    }}>{uiText("添加文本参考")}</Button>
+    <Select<string> aria-label={uiText("添加媒体参考")} placeholder={uiText("添加媒体参考")} value={undefined} disabled={readonly} style={{ width: 150 }}
+      options={inputPorts(card).filter(port => port !== 'text').map(port => ({ value: port, label: uiText("新建{{value1}}内容卡", { value1: inputLabel(card, port) }) }))}
       onChange={targetPort => {
         if (!targetPort) return
         const sourcePort = ['first_frame', 'last_frame', 'key_frame', 'subject_image'].includes(targetPort) ? 'image' : targetPort === 'subject_video' ? 'video' : targetPort
         const source = { id: crypto.randomUUID(), type: `content.${sourcePort}`, type_version: 1, file_id: null, uploading: false }
         connectDocument({ ...latest.current, cards: [...(latest.current.cards || []), source] }, { id: crypto.randomUUID(), source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort })
       }} />
-    </>}<Select<string> aria-label="连接已有卡" placeholder="选择已有卡" value={null} disabled={readonly} style={{ width: 160 }}
-      options={cards.filter(source => compatibleOptions(source.id, card.id).length).map(source => ({ value: source.id, label: cardLabel(source.id) + (existingSource(source.id, card.id) ? ' · 已连接' : '') }))}
+    </>}<Select<string> aria-label={uiText("连接已有卡")} placeholder={uiText("选择已有卡")} value={null} disabled={readonly} style={{ width: 160 }}
+      options={cards.filter(source => compatibleOptions(source.id, card.id).length).map(source => ({ value: source.id, label: cardLabel(source.id) + (existingSource(source.id, card.id) ? uiText(" · 已连接") : '') }))}
       onChange={sourceId => {
         const option = compatibleOptions(sourceId, card.id)[0]
         if (!option) return
@@ -1164,15 +1166,15 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       if (!edge) return null
       const unsupported = capability(card) && !capability(card)?.input_ports.includes(name)
       return <li key={id} data-edge-id={id}>
-        <span title={edge.source_card}>{cardLabel(edge.source_card)}</span> {unsupported && <span>当前模型不支持，候选保留</span>}
-        <Button size="small" disabled={readonly || index === 0} aria-label={`前移输入 ${id}`} onClick={() => {
+        <span title={edge.source_card}>{cardLabel(edge.source_card)}</span> {unsupported && <span>{uiText("当前模型不支持，候选保留")}</span>}
+        <Button size="small" disabled={readonly || index === 0} aria-label={uiText("前移输入 {{id}}", { id })} onClick={() => {
           const next = [...order]; [next[index - 1], next[index]] = [next[index], next[index - 1]]
           const reorderedEdges = edges.map(edge => edge.target_card === card.id && edge.target_port === name && edge.order_anchor
             ? { ...edge, order_anchor: undefined } : edge)
           edit({ ...document, edges: reorderedEdges, input_order: { ...document.input_order, [card.id]: { ...document.input_order?.[card.id], [name]: next } } })
-        }}>↑</Button><Button size="small" disabled={readonly} aria-label={`断开连接 ${id}`} onClick={() => {
+        }}>↑</Button><Button size="small" disabled={readonly} aria-label={uiText("断开连接 {{id}}", { id })} onClick={() => {
           removeEdge(edge)
-        }}>断开</Button>
+        }}>{uiText("断开")}</Button>
       </li>
     })}</ol></div>
   })}</>
@@ -1283,12 +1285,12 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const [uploadLibrary, setUploadLibrary] = useState(false)
   const sourcePorts = (card: GenerationCard) => isReferenceDesign(card) ? inputPorts(card).filter(port => ['text', 'image', 'video', 'audio', ...(isFlatDesign(card) ? ['anchor', 'participant', 'effect_object', 'space', 'position_anchor', 'area_anchor', 'beat', 'received_event', 'change_event', 'trigger_event', 'dialogue_basis', 'acceptance_basis', 'covered_beat', 'related_event', 'blocking_basis', 'speaker', 'audio_example', 'video_example', 'image_example'] : [])].includes(port)) : capability(card)?.input_ports || []
   const modelSources = (card: GenerationCard) => <Dropdown trigger={['click']} placement="topRight" overlayStyle={{ minWidth: 200 }} disabled={readonly} menu={{ items: [
-    { key: 'upload', label: '上传参考素材', children: [
-      { key: 'upload:text', label: '上传文本参考', disabled: !sourcePorts(card).includes('text') },
-      ...designMediaSourcePorts(sourcePorts(card)).map(port => ({ key: `upload:${port}`, label: `上传${inputLabel(card, port).replace(/素材$/, '')}素材` })),
+    { key: 'upload', label: uiText("上传参考素材"), children: [
+      { key: 'upload:text', label: uiText("上传文本参考"), disabled: !sourcePorts(card).includes('text') },
+      ...designMediaSourcePorts(sourcePorts(card)).map(port => ({ key: `upload:${port}`, label: uiText("上传{{value1}}素材", { value1: inputLabel(card, port).replace(/素材$/, '') }) })),
     ] },
-    { key: 'library', label: '从素材库添加', disabled: !designMediaSourcePorts(sourcePorts(card)).length, children: designMediaSourcePorts(sourcePorts(card)).map(port => ({ key: `library:${port}`, label: `选择${inputLabel(card, port).replace(/素材$/, '')}素材` })) },
-    { key: 'canvas', label: '从当前画布选择' },
+    { key: 'library', label: uiText("从素材库添加"), disabled: !designMediaSourcePorts(sourcePorts(card)).length, children: designMediaSourcePorts(sourcePorts(card)).map(port => ({ key: `library:${port}`, label: uiText("选择{{value1}}素材", { value1: inputLabel(card, port).replace(/素材$/, '') }) })) },
+    { key: 'canvas', label: uiText("从当前画布选择") },
   ], onClick: ({ key: action }) => {
     if (readonly) return
     if (action === 'canvas') { setSourceTarget(card.id); return }
@@ -1304,7 +1306,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const next = { ...latest.current, cards: [...(latest.current.cards || []), source] }
     const edge = { id: crypto.randomUUID(), source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: key }
     if (connectDocument(next, edge, capability(card))) setUploadSource(source.id)
-  } }}><WorkbenchIconButton label={isReferenceDesign(card) ? '添加设计来源' : '添加模型来源'} icon={<PlusOutlined />} disabled={readonly} /></Dropdown>
+  } }}><WorkbenchIconButton label={isReferenceDesign(card) ? uiText("添加设计来源") : uiText("添加模型来源")} icon={<PlusOutlined />} disabled={readonly} /></Dropdown>
   const resultSource = openedResult && cards.find(card => card.id === openedResult.output.source.card_id)
   const resultDetail = openedResult && openedResult.id === detailId && resultSource && 'show_result_cards' in resultSource
     && resultSource.show_result_cards && !hidden.has(resultSource.id)
@@ -1339,11 +1341,11 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       return <AssociationInspectionContext.Provider key={detailCard.id} value={{
         request: associationRequest,
         onLocateFrameRelation: cardId => navigateInspection.current(cardId, { cardId, serial: Date.now(), diagnostic: { card_id: cardId, path: ['frame_target'] } }),
-      }}><EditorContainer sourceFocus={source} diagnosticFocus={control?.selector && diagnosticTarget ? { selector: control.selector, serial: diagnosticTarget.serial } : undefined} editableTitle={isReferenceDesign(detailCard) && 'name' in detailCard} typeLabel={cardTitles[detailCard.type || 'content.text']} onReveal={revealEditor} suppressed={detailsSuppressed || creationView.current?.cardId === detailCard.id} cardType={detailCard.type} focusLayout={isDescriptionCard(detailCard) || detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={isDescriptionCard(detailCard) || detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={sourceStack || isCheck || detailCard.type?.startsWith('direction.')} layoutAction={sourceStack ? undefined : layoutAction} longForm={longForm} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={detailReadonly ? '只读' : showEditorStatus ? editingStatus : undefined} open={detailCard.id === detailId && (sourceStack || !stackFor(detailCard.id))} onClose={() => { if (promptEditing) return; setSourceFocus(current => current?.cardId === detailCard.id ? undefined : current); setDesignFieldTarget(undefined); setDetailId(current => current === detailCard.id ? undefined : current) }} trigger={detailTrigger}>
-        {!sourceStack && !desktop && !isReferenceDesign(detailCard) && !isDescriptionCard(detailCard) && !detailCard.type?.startsWith('model.') && !detailCard.type?.startsWith('reference.') && !focusCardTypes.includes(detailCard.type || '') && detailCard.type !== 'review.check' && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
-        {!sourceStack && detailCard?.type?.startsWith('direction.') && !isReferenceDesign(detailCard) && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
-        {control?.action === '查看卡片' && <div role="status">无法定位原位置。问题所指的正文片段已不可用。</div>}
-        {designDestination?.action === '查看卡片' && <div role="status">无法定位原位置。问题所指的设计字段、运镜阶段或引用已不可用。</div>}
+      }}><EditorContainer sourceFocus={source} diagnosticFocus={control?.selector && diagnosticTarget ? { selector: control.selector, serial: diagnosticTarget.serial } : undefined} editableTitle={isReferenceDesign(detailCard) && 'name' in detailCard} typeLabel={cardTitles[detailCard.type || 'content.text']} onReveal={revealEditor} suppressed={detailsSuppressed || creationView.current?.cardId === detailCard.id} cardType={detailCard.type} focusLayout={isDescriptionCard(detailCard) || detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={isDescriptionCard(detailCard) || detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={sourceStack || isCheck || detailCard.type?.startsWith('direction.')} layoutAction={sourceStack ? undefined : layoutAction} longForm={longForm} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || uiText("卡片详情")} status={detailReadonly ? '只读' : showEditorStatus ? editingStatus : undefined} open={detailCard.id === detailId && (sourceStack || !stackFor(detailCard.id))} onClose={() => { if (promptEditing) return; setSourceFocus(current => current?.cardId === detailCard.id ? undefined : current); setDesignFieldTarget(undefined); setDetailId(current => current === detailCard.id ? undefined : current) }} trigger={detailTrigger}>
+        {!sourceStack && !desktop && !isReferenceDesign(detailCard) && !isDescriptionCard(detailCard) && !detailCard.type?.startsWith('model.') && !detailCard.type?.startsWith('reference.') && !focusCardTypes.includes(detailCard.type || '') && detailCard.type !== 'review.check' && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>{uiText("卡片")}</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>{uiText("连接到…")}</Button></Space>}
+        {!sourceStack && detailCard?.type?.startsWith('direction.') && !isReferenceDesign(detailCard) && <details className="generation-candidate-management"><summary>{uiText("候选连接管理")}</summary>{references(detailCard)}</details>}
+        {control?.action === '查看卡片' && <div role="status">{uiText("无法定位原位置。问题所指的正文片段已不可用。")}</div>}
+        {designDestination?.action === '查看卡片' && <div role="status">{uiText("无法定位原位置。问题所指的设计字段、运镜阶段或引用已不可用。")}</div>}
         {/* 只读文本仍可聚焦选取；写入由正文readOnly和导入禁用保护。 */}
         {DetailRenderer && <ConfigProvider componentDisabled={detailReadonly}><fieldset disabled={detailReadonly && !(detailCard.type === 'review.check' || detailCard.type === 'content.text' || !!source && detailCard.type === 'content.basis' || detailCard.type?.startsWith('model.') || isReferenceDesign(detailCard))} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DesignReferenceBoundary onChange={updateCard} onDisconnect={id => { const edge = latest.current.edges?.find(item => item.id === id); if (edge) removeEdge(edge) }} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} targetField={targetField} card={detailCard} document={document} savedRevision={savedRevision} modelOutputs={runtime?.outputs} sourceActions={sourceStack ? undefined : modelSources(detailCard)} disabled={detailReadonly} editorOpen={detailId === detailCard.id}><DetailRenderer suppressAutomaticDefaults={!!diagnostic || !!source || detailCard.id !== detailId} requirementNameValidationRequested={invalidRequirementNames.has(detailCard.id)} onLocateDesign={(cardId, fieldId) => { setDesignFieldTarget({ cardId, fieldId, serial: Date.now() }); navigateInspection.current(cardId) }} onUndoDesign={history?.canUndo && !detailReadonly ? history.undo : undefined} editorOpen={detailId === detailCard.id} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} documentPending={!!editingStatus} key={detailCard.id} card={detailCard} document={document} projectId={(document.project_id || '')} onChange={updateCard} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
           automaticCheckRunId={automaticCheckRunId} capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={sourceStack ? undefined : references(detailCard)} disabled={detailReadonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={sourceStack || runtime?.disabled} onPrecheck={sourceStack ? undefined : () => runtime?.precheck(detailCard.id)} sourceActions={sourceStack ? undefined : modelSources(detailCard)} /></DesignReferenceBoundary></fieldset></ConfigProvider>}
@@ -1378,75 +1380,75 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }}>
     {outputAction && <CanvasOutputActions {...outputAction} onCover={setCover} onClose={()=>setOutputAction(undefined)} />}
     {contextMenu && <CanvasContextMenu {...contextMenu} card={!!contextMenu.ids.length} catalog={catalog} onClose={() => { const target=contextMenu.ids[0] ? container.current?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(contextMenu.ids[0])}"]`) : viewport.surface.current;setContextMenu(undefined);target?.focus({preventScroll:true}) }} actions={contextMenu.ids.length ? [
-      {label:`复制${contextMenu.ids.length>1 ? ` ${contextMenu.ids.length} 张卡片` : ''}`,shortcut:`${navigator.platform.includes('Mac')?'⌘':'Ctrl'} C`,reason:copyReason(contextMenu.ids),run:()=>copyCards(contextMenu.ids)},
-      {label:'复制副本',shortcut:`${navigator.platform.includes('Mac')?'⌘':'Ctrl'} D`,reason:readonly ? '当前只读' : copyReason(contextMenu.ids),run:()=>copyCards(contextMenu.ids,true)},
-      {label:'设置为封面',reason:readonly ? '当前只读' : contextMenu.ids.length!==1 ? '请选择一张卡片' : !cardOutputs(contextMenu.ids).some(output=>output.modality==='image') ? '没有可用图片' : undefined,run:()=>openOutputAction('cover',contextMenu.ids)},
-      {label:'下载',reason:!cardOutputs(contextMenu.ids).length ? '没有可下载输出' : undefined,run:()=>openOutputAction('download',contextMenu.ids)},
-      {label:'删除',danger:true,reason:readonly ? '当前只读' : contextMenu.ids.some(id => fixedCanvasSource(document, id)) ? '固定原文不可删除' : undefined,run:()=>removeCards(contextMenu.ids)},
+      {label:uiText("复制{{value1}}", { value1: contextMenu.ids.length>1 ? ` ${contextMenu.ids.length} 张卡片` : '' }),shortcut:`${navigator.platform.includes('Mac')?'⌘':'Ctrl'} C`,reason:copyReason(contextMenu.ids),run:()=>copyCards(contextMenu.ids)},
+      {label:uiText("复制副本"),shortcut:`${navigator.platform.includes('Mac')?'⌘':'Ctrl'} D`,reason:readonly ? '当前只读' : copyReason(contextMenu.ids),run:()=>copyCards(contextMenu.ids,true)},
+      {label:uiText("设置为封面"),reason:readonly ? '当前只读' : contextMenu.ids.length!==1 ? '请选择一张卡片' : !cardOutputs(contextMenu.ids).some(output=>output.modality==='image') ? '没有可用图片' : undefined,run:()=>openOutputAction('cover',contextMenu.ids)},
+      {label:uiText("下载"),reason:!cardOutputs(contextMenu.ids).length ? '没有可下载输出' : undefined,run:()=>openOutputAction('download',contextMenu.ids)},
+      {label:uiText("删除"),danger:true,reason:readonly ? '当前只读' : contextMenu.ids.some(id => fixedCanvasSource(document, id)) ? '固定原文不可删除' : undefined,run:()=>removeCards(contextMenu.ids)},
     ] : [
-      {label:'新建节点', reason:readonly ? '当前只读' : undefined, run:()=>{}},
-      {label:'粘贴', reason:readonly ? '当前只读' : !readCardClipboard((document.project_id || '')) ? '剪贴板没有卡片' : undefined, run:()=>{const box=viewport.surface.current!.getBoundingClientRect();pasteCards(readCardClipboard((document.project_id || '')),{x:(contextMenu.x-box.left-transform.x)/transform.scale,y:(contextMenu.y-box.top-transform.y)/transform.scale})}},
-      {label:'撤销',reason:readonly ? '当前只读' : !history?.canUndo ? '没有可撤销操作' : undefined, run:()=>history?.undo()},
+      {submenu:'cards', label:uiText("新建节点"), reason:readonly ? '当前只读' : undefined, run:()=>{}},
+      {label:uiText("粘贴"), reason:readonly ? '当前只读' : !readCardClipboard((document.project_id || '')) ? '剪贴板没有卡片' : undefined, run:()=>{const box=viewport.surface.current!.getBoundingClientRect();pasteCards(readCardClipboard((document.project_id || '')),{x:(contextMenu.x-box.left-transform.x)/transform.scale,y:(contextMenu.y-box.top-transform.y)/transform.scale})}},
+      {label:uiText("撤销"),reason:readonly ? '当前只读' : !history?.canUndo ? '没有可撤销操作' : undefined, run:()=>history?.undo()},
     ]} onAdd={(type, entry) => {
       const box=viewport.surface.current!.getBoundingClientRect()
       add(type,{x:(contextMenu.x-box.left-transform.x)/transform.scale,y:(contextMenu.y-box.top-transform.y)/transform.scale},entry,true)
       setContextMenu(undefined)
     }} />}
-    <WorkbenchModal title="解除定位并断开？" open={!!pendingFrameDisconnect} onCancel={() => setPendingFrameDisconnect(undefined)} footer={<WorkbenchDialogActions secondary={<Button onClick={() => setPendingFrameDisconnect(undefined)}>取消</Button>}><Button variant="danger" onClick={() => { const edge = pendingFrameDisconnect; setPendingFrameDisconnect(undefined); if (edge) removeEdge(edge, true) }}>解除定位并断开</Button></WorkbenchDialogActions>}><p>当前构图使用此运镜画面定位，可通过撤销恢复。</p></WorkbenchModal>
-    <WorkbenchModal title={`删除 ${pendingDeletion?.length || 0} 张卡片？`} open={!!pendingDeletion} width={480} onCancel={() => setPendingDeletion(undefined)} footer={<WorkbenchDialogActions secondary={<Button onClick={() => setPendingDeletion(undefined)}>取消</Button>}><Button variant="danger" onClick={() => { const ids = pendingDeletion; setPendingDeletion(undefined); if (ids) removeCards(ids, true) }}>确认删除</Button></WorkbenchDialogActions>}>
-      相关连线将一并移除，可撤销恢复；已生成的媒体文件保留。
-      {cards.some(card => card.type?.startsWith('model.') && pendingDeletion?.includes(card.id)) && <p>关联结果卡会随生成卡一并移除，已独立的内容卡按本次选择处理。</p>}
-      {cards.filter(card => 'input_bindings' in card && card.input_bindings?.some(binding => binding.input_port === 'acceptance_basis' && pendingDeletion?.includes(binding.source.card_id)) && !pendingDeletion?.includes(card.id)).map(card => <p key={card.id}>将解除 {cardLabel(card.id)} 的验收关联，后续生成不再自动带入该要求。</p>)}
+    <WorkbenchModal title={uiText("解除定位并断开？")} open={!!pendingFrameDisconnect} onCancel={() => setPendingFrameDisconnect(undefined)} footer={<WorkbenchDialogActions secondary={<Button onClick={() => setPendingFrameDisconnect(undefined)}>{uiText("取消")}</Button>}><Button variant="danger" onClick={() => { const edge = pendingFrameDisconnect; setPendingFrameDisconnect(undefined); if (edge) removeEdge(edge, true) }}>{uiText("解除定位并断开")}</Button></WorkbenchDialogActions>}><p>{uiText("当前构图使用此运镜画面定位，可通过撤销恢复。")}</p></WorkbenchModal>
+    <WorkbenchModal title={uiText("删除 {{value1}} 张卡片？", { value1: pendingDeletion?.length || 0 })} open={!!pendingDeletion} width={480} onCancel={() => setPendingDeletion(undefined)} footer={<WorkbenchDialogActions secondary={<Button onClick={() => setPendingDeletion(undefined)}>{uiText("取消")}</Button>}><Button variant="danger" onClick={() => { const ids = pendingDeletion; setPendingDeletion(undefined); if (ids) removeCards(ids, true) }}>{uiText("确认删除")}</Button></WorkbenchDialogActions>}>
+      {uiText("相关连线将一并移除，可撤销恢复；已生成的媒体文件保留。")}
+      {cards.some(card => card.type?.startsWith('model.') && pendingDeletion?.includes(card.id)) && <p>{uiText("关联结果卡会随生成卡一并移除，已独立的内容卡按本次选择处理。")}</p>}
+      {cards.filter(card => 'input_bindings' in card && card.input_bindings?.some(binding => binding.input_port === 'acceptance_basis' && pendingDeletion?.includes(binding.source.card_id)) && !pendingDeletion?.includes(card.id)).map(card => <p key={card.id}>{uiText("将解除")} {cardLabel(card.id)} {uiText("的验收关联，后续生成不再自动带入该要求。")}</p>)}
     </WorkbenchModal>
-    <Modal title="堆叠内容（只读）" open={!!stacks.find(group => group.id === viewStackId)} onCancel={() => setViewStackId(undefined)} footer={null} width={1100} maskClosable destroyOnClose>
+    <Modal title={uiText("堆叠内容（只读）")} open={!!stacks.find(group => group.id === viewStackId)} onCancel={() => setViewStackId(undefined)} footer={null} width={1100} maskClosable destroyOnClose>
       <div className="generation-stack-reading" onClick={event => { if (event.target === event.currentTarget) setViewStackId(undefined) }}>
         {(stacks.find(group => group.id === viewStackId)?.card_ids || []).map(id => {
           const card = cards.find(item => item.id === id)!
           const file = 'file_id' in card ? card.file_id : 'image_binding' in card ? card.image_binding?.file_id : undefined
           const fields = 'fields' in card ? Object.values((card as CompositionCard).fields || {}) : []
-          return <article key={id} data-filter-match={matched.has(id)} aria-description={matched.has(id) ? '符合筛选' : undefined} aria-label={`只读成员 ${cardLabel(id)}`}><h3>{cardLabel(id)}</h3>
-            {'text' in card && <p>{card.text || '未填写正文'}</p>}
-            {card.type?.startsWith('reference.') && <p>{(card as NamedImageReferenceCard).name} · {(card as NamedImageReferenceCard).angle || '正面'}</p>}
+          return <article key={id} data-filter-match={matched.has(id)} aria-description={matched.has(id) ? uiText("符合筛选") : undefined} aria-label={uiText("只读成员 {{value1}}", { value1: cardLabel(id) })}><h3>{cardLabel(id)}</h3>
+            {'text' in card && <p>{card.text || uiText("未填写正文")}</p>}
+            {card.type?.startsWith('reference.') && <p>{(card as NamedImageReferenceCard).name} · {(card as NamedImageReferenceCard).angle || uiText("正面")}</p>}
             {fields.map((field, index) => <p key={index}>{designSummary([field], [])}</p>)}
-            {file && (card.type?.startsWith('reference.') || card.type === 'content.image' ? <Image alt="图片预览" src={buildFileDownloadUrl(file)} /> : <MediaPreview fileId={file} type={card.type?.split('.')[1] || 'image'} />)}
+            {file && (card.type?.startsWith('reference.') || card.type === 'content.image' ? <Image alt={uiText("图片预览")} src={buildFileDownloadUrl(file)} /> : <MediaPreview fileId={file} type={card.type?.split('.')[1] || 'image'} />)}
             {runtime?.outputs[id]?.filter(output => output.text).map(output => <p key={output.source.position}>{output.text}</p>)}
-            {runtime?.outputs[id]?.filter(output => output.file_id).map(output => output.modality === 'image' ? <Image key={output.source.position} alt={`输出图片 ${output.source.position + 1}`} src={buildFileDownloadUrl(output.file_id!)} /> : <MediaPreview key={output.source.position} fileId={output.file_id!} type={output.modality} />)}
+            {runtime?.outputs[id]?.filter(output => output.file_id).map(output => output.modality === 'image' ? <Image key={output.source.position} alt={uiText("输出图片 {{value1}}", { value1: output.source.position + 1 })} src={buildFileDownloadUrl(output.file_id!)} /> : <MediaPreview key={output.source.position} fileId={output.file_id!} type={output.modality} />)}
             {runtime?.nodes[id]?.text && runtime.nodes[id].status !== 'succeeded' && <p>{runtime.nodes[id].text}</p>}
           </article>
         })}
       </div>
     </Modal>
-    <Modal title="选择画布来源" open={!!sourceTargetCard} onCancel={() => setSourceTarget(undefined)} footer={null}>
-      <p>选择来源建立连接。候选用途在接收卡的关联区选择。</p>
+    <Modal title={uiText("选择画布来源")} open={!!sourceTargetCard} onCancel={() => setSourceTarget(undefined)} footer={null}>
+      <p>{uiText("选择来源建立连接。候选用途在接收卡的关联区选择。")}</p>
       {sourceTargetCard && cards.filter(source => !stackFor(source.id)).flatMap(source => compatibleOptions(source.id, sourceTargetCard.id).slice(0, 1).map(option => <Button key={source.id} disabled={readonly} onClick={() => {
         const sides = defaultSides(point(option.source_card), point(option.target_card))
         submitConnection(option, sides.target, sides.source); setSourceTarget(undefined)
-      }}>{cardLabel(source.id)} · {existingSource(source.id, sourceTargetCard.id) ? '已连接' : connectionPolicy(document, option)?.message}</Button>))}
+      }}>{cardLabel(source.id)} · {existingSource(source.id, sourceTargetCard.id) ? uiText("已连接") : connectionPolicy(document, option)?.message}</Button>))}
     </Modal>
-    <Modal title="上传文本参考" open={!!uploadTextCard} onCancel={() => setUploadText(undefined)} footer={null}>
+    <Modal title={uiText("上传文本参考")} open={!!uploadTextCard} onCancel={() => setUploadText(undefined)} footer={null}>
       {uploadTextCard && <TextContentEditor card={uploadTextCard} disabled={readonly} onChange={next => edit({ ...latest.current, cards: (latest.current.cards || []).map(card => card.id === next.id ? next : card) })} />}
     </Modal>
-    <Modal title={cards.some(card => card.id === detailId && isReferenceDesign(card)) ? "添加参考素材" : "上传模型来源"} open={!!uploadSourceCard} onCancel={() => setUploadSource(undefined)} footer={null}>
+    <Modal title={cards.some(card => card.id === detailId && isReferenceDesign(card)) ? uiText("添加参考素材") : uiText("上传模型来源")} open={!!uploadSourceCard} onCancel={() => setUploadSource(undefined)} footer={null}>
       {uploadSourceCard && <MediaContentEditor key={uploadSourceCard.id} initialLibrary={uploadLibrary} card={uploadSourceCard} projectId={(document.project_id || '')} disabled={readonly} onChange={next => {
         if ((latest.current.cards || []).some(card => card.id === next.id)) edit({ ...latest.current, cards: (latest.current.cards || []).map(card => card.id === next.id ? next : card) })
       }} />}
     </Modal>
     {connectionLayout.error && <span role="status">{connectionLayout.error}</span>}
-    {accessibleConnection && <div ref={connectionMenu} role="dialog" aria-label="选择连接目标" className="generation-connection-menu generation-target-menu">
-      <strong>选择连接目标</strong>
-      <p>选择接收卡建立连接。候选用途在接收卡的关联区选择。</p>
-      {cards.filter(card => card.id !== accessibleConnection.card && !hidden.has(card.id)).map(card => <Button key={card.id} data-connection-target={card.id} disabled={readonly} onClick={() => chooseAccessibleTarget(card.id)}>连接到{'name' in card && card.name || cardTitles[card.type || '']} · 卡片 {cards.indexOf(card) + 1}</Button>)}
-      <Button onClick={cancelConnection}>取消连接</Button>
+    {accessibleConnection && <div ref={connectionMenu} role="dialog" aria-label={uiText("选择连接目标")} className="generation-connection-menu generation-target-menu">
+      <strong>{uiText("选择连接目标")}</strong>
+      <p>{uiText("选择接收卡建立连接。候选用途在接收卡的关联区选择。")}</p>
+      {cards.filter(card => card.id !== accessibleConnection.card && !hidden.has(card.id)).map(card => <Button key={card.id} data-connection-target={card.id} disabled={readonly} onClick={() => chooseAccessibleTarget(card.id)}>{uiText("连接到{{name}} · 卡片 {{index}}", { name: 'name' in card && card.name || cardTitles[card.type || ''], index: cards.indexOf(card) + 1 })}</Button>)}
+      <Button onClick={cancelConnection}>{uiText("取消连接")}</Button>
     </div>}
 
     <GenerationCanvasBrowse value={displayFilter} onChange={setDisplayFilter} />
     <CardList catalog={catalog} readonly={readonly} active={activeCategory} onActiveChange={category => { cancelConnection(); setActiveCategory(category) }} onAdd={(type, entry) => add(type, undefined, entry)} />
-    <nav className="director-canvas-bottom generation-view-tools" aria-label="画布视图工具">
-      <WorkbenchIconButton label="定位所选" variant="quiet" icon={<AimOutlined />} disabled={!selected.length} onClick={() => { const p = point(selected[0]); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: (container.current?.clientWidth || 1200) / 2 - p.x * previous.transform.scale, y: (container.current?.clientHeight || 800) / 2 - p.y * previous.transform.scale } })) }} />
-      <WorkbenchIconButton label="缩小" variant="quiet" icon={<MinusOutlined />} onClick={() => zoomAt(transform.scale - .1, (viewport.surface.current?.clientWidth || 0) / 2, (viewport.surface.current?.clientHeight || 0) / 2)} />
-      <span aria-label="画布缩放比例">{Math.round(transform.scale * 100)}%</span>
-      <WorkbenchIconButton label="放大" variant="quiet" icon={<PlusOutlined />} onClick={() => zoomAt(transform.scale + .1, (viewport.surface.current?.clientWidth || 0) / 2, (viewport.surface.current?.clientHeight || 0) / 2)} />
-      <Button variant="quiet" onClick={fitVisibleCards}>适应全部</Button>
+    <nav className="director-canvas-bottom generation-view-tools" aria-label={uiText("画布视图工具")}>
+      <WorkbenchIconButton label={uiText("定位所选")} variant="quiet" icon={<AimOutlined />} disabled={!selected.length} onClick={() => { const p = point(selected[0]); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: (container.current?.clientWidth || 1200) / 2 - p.x * previous.transform.scale, y: (container.current?.clientHeight || 800) / 2 - p.y * previous.transform.scale } })) }} />
+      <WorkbenchIconButton label={uiText("缩小")} variant="quiet" icon={<MinusOutlined />} onClick={() => zoomAt(transform.scale - .1, (viewport.surface.current?.clientWidth || 0) / 2, (viewport.surface.current?.clientHeight || 0) / 2)} />
+      <span aria-label={uiText("画布缩放比例")}>{Math.round(transform.scale * 100)}%</span>
+      <WorkbenchIconButton label={uiText("放大")} variant="quiet" icon={<PlusOutlined />} onClick={() => zoomAt(transform.scale + .1, (viewport.surface.current?.clientWidth || 0) / 2, (viewport.surface.current?.clientHeight || 0) / 2)} />
+      <Button variant="quiet" onClick={fitVisibleCards}>{uiText("适应全部")}</Button>
       {document.storyboard && <StoryboardReferences document={document} readonly={readonly}
         setDefault={(reference, image) => {
           const current = latest.current
@@ -1461,22 +1463,22 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           if (result.document) edit(result.document)
           return result.reason
         }} />}
-      <CanvasToolbarMenu label="布局" caption="布局">
-        <Button disabled={arrangeDisabled} onClick={arrangeLayout}>整理布局</Button>
+      <CanvasToolbarMenu label={uiText("布局")} caption="布局">
+        <Button disabled={arrangeDisabled} onClick={arrangeLayout}>{uiText("整理布局")}</Button>
         <Button disabled={!layout.canUndo && (readonly || !history?.canUndoArrangement)}
-          onClick={() => { if (layout.canUndo) layout.undo(); else history?.undo() }}>撤销布局整理</Button>
-        <Button aria-label={minimapOpen ? '收起小地图' : '展开小地图'} aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)}>{minimapOpen ? '收起小地图' : '展开小地图'}</Button>
-        <Button aria-label="框选" variant="quiet" aria-pressed={selecting} onClick={() => setSelecting(value => !value)}>框选</Button>
-        <Select aria-label="选择连线" placeholder="选择连线" value={inspectedEdge?.id} allowClear showSearch optionFilterProp="label" style={{ width: '100%' }}
+          onClick={() => { if (layout.canUndo) layout.undo(); else history?.undo() }}>{uiText("撤销布局整理")}</Button>
+        <Button aria-label={minimapOpen ? uiText("收起小地图") : uiText("展开小地图")} aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)}>{minimapOpen ? uiText("收起小地图") : uiText("展开小地图")}</Button>
+        <Button aria-label={uiText("框选")} variant="quiet" aria-pressed={selecting} onClick={() => setSelecting(value => !value)}>{uiText("框选")}</Button>
+        <Select aria-label={uiText("选择连线")} placeholder={uiText("选择连线")} value={inspectedEdge?.id} allowClear showSearch optionFilterProp="label" style={{ width: '100%' }}
           options={visibleSourceEdges(document).map(edge => ({ value: edge.id, label: edgeLabel(edge) }))} onChange={id => selectEdge(id)} />
       </CanvasToolbarMenu>
     </nav>
-    {(inspectedEdge || inspectedResult) && <section className="generation-edge-inspector" aria-label="所选连接" style={{ left: Math.max(20, Math.min(edgeActionPoint?.x ?? 40, (container.current?.clientWidth || window.innerWidth) - 20)), top: Math.max(20, Math.min(edgeActionPoint?.y ?? 40, (container.current?.clientHeight || window.innerHeight) - 20)) }} onPointerDown={event => event.stopPropagation()}>
+    {(inspectedEdge || inspectedResult) && <section className="generation-edge-inspector" aria-label={uiText("所选连接")} style={{ left: Math.max(20, Math.min(edgeActionPoint?.x ?? 40, (container.current?.clientWidth || window.innerWidth) - 20)), top: Math.max(20, Math.min(edgeActionPoint?.y ?? 40, (container.current?.clientHeight || window.innerHeight) - 20)) }} onPointerDown={event => event.stopPropagation()}>
       <Tooltip trigger={['hover', 'focus']} title={<span className="generation-edge-hint">
-        {inspectedResult ? <><strong>断开后保留当前结果为独立内容卡</strong><span>{inspectedResult.output.available === false ? '当前输出缺失' : '保留下游连接及引用'}</span></>
-          : inspectedEdge && <><strong>{edgePurpose(inspectedEdge, selectedResultSource)}</strong><span>{cardLabel(inspectedEdge.source_card)} → {cardLabel(inspectedEdge.target_card)}{readonly ? ' · 只读，无法删除' : ''}</span></>}
+        {inspectedResult ? <><strong>{uiText("断开后保留当前结果为独立内容卡")}</strong><span>{inspectedResult.output.available === false ? uiText("当前输出缺失") : uiText("保留下游连接及引用")}</span></>
+          : inspectedEdge && <><strong>{edgePurpose(inspectedEdge, selectedResultSource)}</strong><span>{cardLabel(inspectedEdge.source_card)} → {cardLabel(inspectedEdge.target_card)}{readonly ? uiText(" · 只读，无法删除") : ''}</span></>}
       </span>}>
-        <span><Button aria-label="断开此连接" disabled={readonly || detaching || inspectedResult?.output.available === false || (!!selectedResultSource && !inspectedResultEdge)}
+        <span><Button aria-label={uiText("断开此连接")} disabled={readonly || detaching || inspectedResult?.output.available === false || (!!selectedResultSource && !inspectedResultEdge)}
           icon={<ScissorOutlined style={{ fontSize: 'calc(var(--wb-icon) * 1.5)' }} />} variant="quiet"
           onClick={() => {
             if (inspectedResult) void detachResult(inspectedResult)
@@ -1485,28 +1487,28 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           }} /></span>
       </Tooltip>
     </section>}
-    {(selected.length > 1 || multiSelectMode) && <div className="generation-selection-actions" role="toolbar" aria-label="所选卡片操作" style={(() => {
+    {(selected.length > 1 || multiSelectMode) && <div className="generation-selection-actions" role="toolbar" aria-label={uiText("所选卡片操作")} style={(() => {
       const chosen = selected.map(point)
       const left = (chosen.length ? Math.min(...chosen.map(item => item.x)) : 0) * transform.scale + transform.x
       const top = (chosen.length ? Math.min(...chosen.map(item => item.y)) : 0) * transform.scale + transform.y - 16
       return { left: Math.max(12, Math.min(left, width - 300)), top: Math.max(160, top), transform: 'translateY(-100%)' }
     })()}>
-      <span>{selected.length} 张卡片</span>
+      <span>{selected.length} {uiText("张卡片")}</span>
       <Button disabled={readonly || selected.length < 2 || selected.some(id => resultsById.has(id))} onClick={() => {
-        if (selected.some(id => groups.some(group => group.card_ids?.includes(id)))) { setReason('请先解除已有编组或堆叠，再重新选择'); return }
+        if (selected.some(id => groups.some(group => group.card_ids?.includes(id)))) { setReason(uiText("请先解除已有编组或堆叠，再重新选择")); return }
         edit({ ...document, groups: [...groups, { id: crypto.randomUUID(), name: '新堆叠', kind: 'stack', card_ids: selected, collapsed: false }] }); clearSelection()
-      }}>堆叠</Button>
+      }}>{uiText("堆叠")}</Button>
       <Button disabled={readonly || selected.length < 2 || selected.some(id => resultsById.has(id))} onClick={() => {
-        if (selected.some(id => groups.some(group => group.card_ids?.includes(id)))) { setReason('请先解除已有编组，再重新选择'); return }
+        if (selected.some(id => groups.some(group => group.card_ids?.includes(id)))) { setReason(uiText("请先解除已有编组，再重新选择")); return }
         edit({ ...document, groups: [...groups, { id: crypto.randomUUID(), name: '新编组', card_ids: selected, collapsed: false }] }); clearSelection()
-      }}>编组</Button>
-      {multiSelectMode && <><Button onClick={() => setMultiSelectMode(false)}>完成选择</Button><Button onClick={clearSelection}>退出多选</Button></>}
+      }}>{uiText("编组")}</Button>
+      {multiSelectMode && <><Button onClick={() => setMultiSelectMode(false)}>{uiText("完成选择")}</Button><Button onClick={clearSelection}>{uiText("退出多选")}</Button></>}
     </div>}
     <div className="canvas-bottom-right generation-bottom-right">
-      {(reason || storageError) && <div role="status" className="canvas-status-host">{storageError ? `布局本地保存失败：${storageError}` : reason}</div>}
+      {(reason || storageError) && <div role="status" className="canvas-status-host">{storageError ? uiText("布局本地保存失败：{{storageError}}", { storageError }) : reason}</div>}
       {contentHistory}
     </div>
-    <div ref={viewport.surface} {...viewport.surfaceProps} className={`generation-surface${spaceHeld ? ' generation-surface-pan-ready' : ''}`} aria-label="生成画布视口"
+    <div ref={viewport.surface} {...viewport.surfaceProps} className={`generation-surface${spaceHeld ? ' generation-surface-pan-ready' : ''}`} aria-label={uiText("生成画布视口")}
       onDragOver={event => { if (!readonly && event.dataTransfer.types.includes(cardDragType)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }}
       onDrop={event => {
         if (readonly || !event.dataTransfer.types.includes(cardDragType)) return
@@ -1565,7 +1567,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
               const adopted = sourceConnectionEdges(document, edge).some(member =>
                 member.source_port === result.output.source.port_id && resultScopeIncludes(member.result_scope, result.output.source.position) && edgeAdoptions(member, result.output.source.position) > 0)
               const modelPath = index >= results.length
-              const label = modelPath ? '模型输出候选' : '结果候选连接'
+              const label = modelPath ? uiText("模型输出候选") : uiText("结果候选连接")
               const lane = modelPath ? (index - results.length - (direct.length - 1) / 2) * 36 : 0
               return resultPath(result.id, edge.target_card, `${label} · ${linkedResultTitle(result.output)} → ${cardLabel(edge.target_card)}`, result, adopted, edge, lane)
             })
@@ -1592,7 +1594,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const cover = cards.find(card => card.id === members[0])!
           const coverImage = 'image_binding' in cover ? cover.image_binding?.file_id : cover.type === 'content.image' && 'file_id' in cover ? cover.file_id : runtime?.outputs[cover.id]?.find(output => output.modality === 'image')?.file_id
           const coverText = 'text' in cover ? cover.text : runtime?.outputs[cover.id]?.find(output => output.text)?.text
-          return <section key={group.id} data-stack-id={group.id} data-filter-match={members.some(id => matched.has(id))} className="generation-stack" tabIndex={0} role="button" aria-label={`查看堆叠 ${group.name}`} style={{ left: frame.x, top: frame.y, width: frame.width, height: frame.height }}
+          return <section key={group.id} data-stack-id={group.id} data-filter-match={members.some(id => matched.has(id))} className="generation-stack" tabIndex={0} role="button" aria-label={uiText("查看堆叠 {{name}}", { name: group.name })} style={{ left: frame.x, top: frame.y, width: frame.width, height: frame.height }}
             onClick={event => { if ((event.target as Element).closest('button')) return; event.stopPropagation(); if (!stackMoved.current) { clearSelection(); setViewStackId(group.id) } stackMoved.current = false }}
             onKeyDown={event => { if (!event.defaultPrevented && !event.nativeEvent.isComposing && event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); clearSelection(); setViewStackId(group.id) } }}
             onPointerDown={event => {
@@ -1611,10 +1613,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
               stackMoved.current = !!current && Math.hypot(event.clientX-current.x,event.clientY-current.y)>=6
               finishMove()
             }} onPointerCancel={() => { groupDrag.current = undefined; finishMove() }} onLostPointerCapture={() => { if (groupDrag.current) { groupDrag.current = undefined; finishMove() } }}>
-            <div className="generation-stack-actions"><span>{members.length} 张卡片{filterActive && ` · 匹配 ${members.filter(id => matched.has(id)).length}`}</span><Button disabled={readonly} onClick={event => {
+            <div className="generation-stack-actions"><span>{members.length} {uiText("张卡片")}{filterActive && uiText(" · 匹配 {{length}}", { length: members.filter(id => matched.has(id)).length })}</span><Button disabled={readonly} onClick={event => {
               event.stopPropagation(); edit({...document,groups:groups.filter(item=>item.id!==group.id)});setViewStackId(undefined);setSelected(members);setSelectedEdgeId(undefined);setDetailId(undefined)
-            }}>解除堆叠</Button></div>
-            <div className="generation-stack-face"><strong>{group.name}</strong><p>{cardLabel(members[0])}</p>{coverImage && <img alt="堆叠封面" src={buildFileDownloadUrl(coverImage)} />}{coverText && <p className="canvas-card-summary">{coverText}</p>}<span>{filterActive ? `匹配 ${members.filter(id => matched.has(id)).length}／${members.length}` : members.length}</span></div>
+            }}>{uiText("解除堆叠")}</Button></div>
+            <div className="generation-stack-face"><strong>{group.name}</strong><p>{cardLabel(members[0])}</p>{coverImage && <img alt={uiText("堆叠封面")} src={buildFileDownloadUrl(coverImage)} />}{coverText && <p className="canvas-card-summary">{coverText}</p>}<span>{filterActive ? uiText("匹配 {{value1}}／{{value2}}", { value1: members.filter(id => matched.has(id)).length, value2: members.length }) : members.length}</span></div>
           </section>
         })}
         {viewGroups.filter(group => group.kind !== 'stack').map(group => {
@@ -1642,31 +1644,31 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             }
           }} onPointerCancel={() => { groupDrag.current = undefined; finishMove() }} onLostPointerCapture={() => { if (groupDrag.current) { groupDrag.current = undefined; finishMove() } }} style={{ left: origin.x, top: origin.y, width, height, '--generation-group-controls-scale': 1 / Math.min(transform.scale, 1) } as CSSProperties}>
             <div className="generation-group-header">
-              <button type="button" className="generation-group-title" aria-label={`选择编组 ${group.name}`} aria-pressed={selectedGroupId === group.id} onClick={() => selectGroup(group.id)}><GroupOutlined aria-hidden /><span>{group.name}</span></button>
-              {selectedGroupId === group.id && <div className="generation-group-actions" onLostPointerCaptureCapture={() => finishMove()} onPointerCancelCapture={() => finishMove()} onPointerDownCapture={event => { if ((event.target as Element).closest('.generation-group-move')) { setCardMenuId(undefined); movement.begin(members, true) } }} onPointerUpCapture={() => finishMove()} role="toolbar" aria-label={`编组操作 ${group.name}`}>
-                <CanvasDragHandle onCancel={() => finishMove(true)} className="generation-group-move" contextKey={document.id} label={`分组 ${group.name}`} offset={origin} scale={transform.scale} onMove={next => {
+              <button type="button" className="generation-group-title" aria-label={uiText("选择编组 {{name}}", { name: group.name })} aria-pressed={selectedGroupId === group.id} onClick={() => selectGroup(group.id)}><GroupOutlined aria-hidden /><span>{group.name}</span></button>
+              {selectedGroupId === group.id && <div className="generation-group-actions" onLostPointerCaptureCapture={() => finishMove()} onPointerCancelCapture={() => finishMove()} onPointerDownCapture={event => { if ((event.target as Element).closest('.generation-group-move')) { setCardMenuId(undefined); movement.begin(members, true) } }} onPointerUpCapture={() => finishMove()} role="toolbar" aria-label={uiText("编组操作 {{name}}", { name: group.name })}>
+                <CanvasDragHandle onCancel={() => finishMove(true)} className="generation-group-move" contextKey={document.id} label={uiText("分组 {{name}}", { name: group.name })} offset={origin} scale={transform.scale} onMove={next => {
                   movement.moveHandle(members, next, origin)
                 }} />
                 <Dropdown trigger={['click']} placement="topLeft" dropdownRender={menu => <div onPointerDown={event => event.stopPropagation()} onPointerUp={event => event.stopPropagation()}>{menu}</div>} menu={{ items: [
-                  { key: 'name', label: '重命名', disabled: readonly },
-                  { key: 'members', label: '管理成员', disabled: readonly },
-                  ...(group.collapsed ? [{ key: 'expand', label: '展开组', disabled: readonly }] : []),
-                  { key: 'remove', label: '解散组', disabled: readonly },
+                  { key: 'name', label: uiText("重命名"), disabled: readonly },
+                  { key: 'members', label: uiText("管理成员"), disabled: readonly },
+                  ...(group.collapsed ? [{ key: 'expand', label: uiText("展开组"), disabled: readonly }] : []),
+                  { key: 'remove', label: uiText("解散组"), disabled: readonly },
                 ], onClick: ({ key }) => {
                   if (key === 'remove') { edit({ ...document, groups: groups.filter(item => item.id !== group.id) }); clearSelection() }
                   else if (key === 'expand') edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, collapsed: false } : item) })
                   else setGroupPanel(key as 'name' | 'members')
-                } }}><Button aria-label="管理编组" title="管理编组" className="wb-icon-action" icon={<MoreOutlined />} /></Dropdown>
+                } }}><Button aria-label={uiText("管理编组")} title={uiText("管理编组")} className="wb-icon-action" icon={<MoreOutlined />} /></Dropdown>
                 {groupPanel && <div className="generation-group-management">
-                  {groupPanel === 'name' ? <Input autoFocus aria-label="分组名称" value={group.name} disabled={readonly} onChange={event => edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, name: event.target.value } : item) })} />
-                    : <Select aria-label={`分组成员 ${group.name}`} mode="multiple" value={members} disabled={readonly}
+                  {groupPanel === 'name' ? <Input autoFocus aria-label={uiText("分组名称")} value={group.name} disabled={readonly} onChange={event => edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, name: event.target.value } : item) })} />
+                    : <Select aria-label={uiText("分组成员 {{name}}", { name: group.name })} mode="multiple" value={members} disabled={readonly}
                       options={cards.filter(card => members.includes(card.id) || !groups.some(item => item.card_ids?.includes(card.id))).map(card => ({ value: card.id, label: `${cardTitles[card.type || '']} ${card.id.slice(0, 4)}` }))}
                       onChange={ids => edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, card_ids: ids } : item) })} />}
-                  <WorkbenchIconButton label="完成编组管理" icon={<CloseOutlined />} onClick={event => { setGroupPanel(undefined); event.currentTarget.closest('.generation-group-actions')?.querySelector<HTMLButtonElement>('button[aria-label="管理编组"]')?.focus() }} />
+                  <WorkbenchIconButton label={uiText("完成编组管理")} icon={<CloseOutlined />} onClick={event => { setGroupPanel(undefined); event.currentTarget.closest('.generation-group-actions')?.querySelector<HTMLButtonElement>('button[aria-label="管理编组"]')?.focus() }} />
                 </div>}
               </div>}
             </div>
-            {group.collapsed && <span>{members.length} 张独立卡片 · 无集合输出</span>}
+            {group.collapsed && <span>{members.length} {uiText("张独立卡片 · 无集合输出")}</span>}
           </section>
         })}
         {linkedResults.map(result => {
@@ -1679,9 +1681,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             setDetailTrigger(trigger); setDetailId(id)
           }
           const issue: CanvasDiagnostic | undefined = output.available === false
-            ? { code: 'RESULT_UNAVAILABLE', message: '当前输出缺失', severity: 'error', target: output.source, blocks: [] }
+            ? { code: 'RESULT_UNAVAILABLE', message: uiText("当前输出缺失"), severity: 'error', target: output.source, blocks: [] }
             : output.basis_current === false
-              ? { code: 'RESULT_BASIS_CHANGED', message: '此产物的生成依据已变', severity: 'warning', target: output.source, blocks: [] }
+              ? { code: 'RESULT_BASIS_CHANGED', message: uiText("此产物的生成依据已变"), severity: 'warning', target: output.source, blocks: [] }
               : undefined
           return <CardShell key={id} id={id} type={`result.${output.modality}`} title={title} label={title} contextKey={document.id}
             menu={cardMenuId === id} onMenuChange={open => setCardMenuId(open ? id : undefined)}
@@ -1720,15 +1722,15 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const hasNameIssue = issues.some(issue => Array.isArray(issue.target.path) && issue.target.path.length === 1 && issue.target.path[0] === 'name')
           const requiresName = invalidRequirementNames.has(card.id) && card.type === 'direction.criterion' && (!('name' in card) || !card.name?.trim())
           if (!hasNameIssue && (requiresName || duplicateDesignName(card, cards))) {
-            issues.push({ code: 'DESIGN_NAME', message: requiresName ? '请先填写验收要求名称' : '该名称已被同类型卡片使用，请使用其他名称', target: { card_id: card.id, path: ['name'] }, blocks: [] })
+            issues.push({ code: 'DESIGN_NAME', message: requiresName ? uiText("请先填写验收要求名称") : uiText("该名称已被同类型卡片使用，请使用其他名称"), target: { card_id: card.id, path: ['name'] }, blocks: [] })
           }
           const openCheck = (trigger: HTMLElement) => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) }
           const cardNode = !showCard ? null : <CardShell menu={cardMenuId === card.id} onMenuChange={open => setCardMenuId(open ? card.id : undefined)} onContextActions={trigger => openCardContext(card.id, trigger)} key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
             issueIndicator={card.type === 'review.check' ? <CheckCardIssues diagnostics={issues} onOpen={openCheck} /> : issues.length > 0 && <CardIssueIndicator issues={issues} actionFor={issue => diagnosticCardAction(card, issue.target, cardDefinitions[card.type || '']?.fields || [])}
               relatedActionsFor={issue => diagnosticRelatedCards(issue.target).map((id, index) => {
                 const related = cards.find(item => item.id === id)
-                return related ? { id, label: `定位 ${('name' in related && related.name?.trim()) || cardTitles[related.type || ''] || '相关卡片'}`, target: { card_id: id, path: [] } }
-                  : { id, label: `相关卡片 ${index + 1} 已不可用` }
+                return related ? { id, label: uiText("定位 {{value1}}", { value1: ('name' in related && related.name?.trim()) || cardTitles[related.type || ''] || '相关卡片' }), target: { card_id: id, path: [] } }
+                  : { id, label: uiText("相关卡片 {{value1}} 已不可用", { value1: index + 1 }) }
               })} onLocate={(issue, trigger, diagnostic = issue.target) => {
                 const cardId = typeof diagnostic.card_id === 'string' ? diagnostic.card_id : card.id
                 setDetailTrigger(trigger); navigateInspection.current(cardId, { cardId, serial: Date.now(), diagnostic })
@@ -1740,7 +1742,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             menuAction={frameSource && <Button onClick={() => {
               setCardMenuId(undefined)
               onSelectVideoFrame?.({ source_card_id: card.id, source_file_id: playbackFile! })
-            }}>选帧为图片</Button> || (cardMenuId === card.id && isModel && renderModelCardMenu?.({
+            }}>{uiText("选帧为图片")}</Button> || (cardMenuId === card.id && isModel && renderModelCardMenu?.({
               card, document, runs: runtime?.runs || [], disabled: readonly || !!runtime?.busyCards.has(card.id),
               closeMenu: () => {
                 setCardMenuId(undefined)
@@ -1752,11 +1754,11 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             footer={card.type === 'review.check' || isModel || isReference || isDescription || visualDesign && (!readonly || designSizing) || card.type === 'content.image' || isTextContent || playbackType ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
 
             {card.type === 'review.check' && <CheckCardFace onOpen={openCheck} />}
-            {isTextContent && <TextCardPreview label="正文预览" text={'text' in card && card.text || '未填写正文'}
+            {isTextContent && <TextCardPreview label={uiText("正文预览")} text={'text' in card && card.text || '未填写正文'}
               status={<CardStatusSummary card={card} outputs={[]} readonly={readonly} missingImage={false} />} />}
-            {playbackType && <PlaybackCardPreview key={playbackFile} type={playbackType} fileId={playbackFile} label="媒体预览"
-              status={<>{playbackFile && <span>固定媒体</span>}<CardStatusSummary card={card} outputs={[]} readonly={readonly} missingImage={false} /></>} />}
-            {!isModel && !isReference && !isDescription && !isTextContent && !playbackType && card.type !== 'review.check' && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : isVisualDesign(card) ? <VisualDesignCard card={card} document={document} outputs={summaryOutputs} sizing={designSizing} /> : isFlatDesign(card) ? <FlatDesignCardBody card={card} document={document} outputs={summaryOutputs} sizing={designSizing} /> : <p className="canvas-card-summary">{['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
+            {playbackType && <PlaybackCardPreview key={playbackFile} type={playbackType} fileId={playbackFile} label={uiText("媒体预览")}
+              status={<>{playbackFile && <span>{uiText("固定媒体")}</span>}<CardStatusSummary card={card} outputs={[]} readonly={readonly} missingImage={false} /></>} />}
+            {!isModel && !isReference && !isDescription && !isTextContent && !playbackType && card.type !== 'review.check' && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : isVisualDesign(card) ? <VisualDesignCard card={card} document={document} outputs={summaryOutputs} sizing={designSizing} /> : isFlatDesign(card) ? <FlatDesignCardBody card={card} document={document} outputs={summaryOutputs} sizing={designSizing} /> : <p className="canvas-card-summary">{['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || uiText("未填写正文") : 'model_id' in card ? uiText("尚未生成") : 'file_id' in card && card.file_id ? uiText("固定媒体") : uiText("未选择媒体")}</p>}
               {card.type !== 'content.image' && 'file_id' in card && card.file_id && <MediaPreview fileId={card.file_id} type={card.type?.split('.')[1] || 'image'} />}
             </>}
             {isDescription && <DescriptionCard card={card} readonly={readonly} />}
@@ -1778,7 +1780,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           </CheckCardSession>
         })}
       </div>
-      {drag && <svg className="generation-temporary-connection" aria-label="正在连接候选" width="100%" height="100%"><path d={(() => {
+      {drag && <svg className="generation-temporary-connection" aria-label={uiText("正在连接候选")} width="100%" height="100%"><path d={(() => {
         const origin = anchor(drag.card, drag.side), rect = viewport.surface.current?.getBoundingClientRect()
         const from = { x: origin.x * transform.scale + transform.x, y: origin.y * transform.scale + transform.y }
         const target = connectionPointAt(drag.x, drag.y)
@@ -1789,13 +1791,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       })()} fill="none" stroke="var(--wb-focus)" strokeWidth="2" markerEnd="url(#generation-preview-arrow)" /><defs><marker id="generation-preview-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="var(--wb-focus)" /></marker></defs></svg>}
 
     </div>
-    {minimapOpen && <WorkbenchIconButton className="director-minimap-toggle director-minimap-toggle-open" label="关闭小地图" variant="quiet" icon={<CloseOutlined />} onClick={() => setMinimapOpen(false)} />}
-    {minimapOpen && sizesReady && <svg className="director-minimap generation-minimap" width="200" height="132" role="img" tabIndex={0} aria-label="小地图导航" viewBox={`${mapLeft} ${mapTop} ${mapWidth} ${mapHeight}`} preserveAspectRatio="none"
+    {minimapOpen && <WorkbenchIconButton className="director-minimap-toggle director-minimap-toggle-open" label={uiText("关闭小地图")} variant="quiet" icon={<CloseOutlined />} onClick={() => setMinimapOpen(false)} />}
+    {minimapOpen && sizesReady && <svg className="director-minimap generation-minimap" width="200" height="132" role="img" tabIndex={0} aria-label={uiText("小地图导航")} viewBox={`${mapLeft} ${mapTop} ${mapWidth} ${mapHeight}`} preserveAspectRatio="none"
       onPointerDown={event => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); panMap(event) }}
       onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) panMap(event) }}
       onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
       onKeyDown={event => { if (!event.defaultPrevented && !event.nativeEvent.isComposing && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) { event.preventDefault(); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: previous.transform.x + (event.key === 'ArrowLeft' ? 40 : event.key === 'ArrowRight' ? -40 : 0), y: previous.transform.y + (event.key === 'ArrowUp' ? 40 : event.key === 'ArrowDown' ? -40 : 0) } })) } }}>
-      <title>小地图导航；方向键平移画布</title>
+      <title>{uiText("小地图导航；方向键平移画布")}</title>
       {[...groupFrames].map(([id, frame]) => <rect key={id} data-minimap-group={id} {...frame} />)}
       {cardFrames.map(({ id, ...frame }) => <rect key={id} data-minimap-node={id} {...frame} />)}
       <rect className="director-minimap-viewport generation-minimap-viewport" x={visibleWorld.x} y={visibleWorld.y} width={visibleWorld.width} height={visibleWorld.height} />

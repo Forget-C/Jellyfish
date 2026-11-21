@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Input } from 'antd'
 import { FolderOpenOutlined, PictureOutlined, UploadOutlined } from '@ant-design/icons'
@@ -20,6 +21,7 @@ export function CanvasSettingsDialog({ document, recoveredDraft, blocked, pendin
   onSave: (changes: CanvasSettingsChanges) => Promise<boolean>
   onClose: () => void
 }) {
+  const uiText = useUiText()
   const [initial] = useState({ name: document.name, cover: document.cover_file_id ?? null })
   const [name, setName] = useState(recoveredDraft?.name ?? initial.name)
   const [cover, setCover] = useState<File | string | null | undefined>(recoveredDraft?.cover_file_id)
@@ -81,7 +83,7 @@ export function CanvasSettingsDialog({ document, recoveredDraft, blocked, pendin
               formData: { file: localFile as unknown as string },
             })
             if (!mounted.current) return
-            if (data?.type !== 'image' || !data.id) throw new Error('未能确认封面图片上传')
+            if (data?.type !== 'image' || !data.id) throw new Error(uiText("未能确认封面图片上传"))
             uploaded.current = { file: localFile, id: data.id }
           }
           changes.cover_file_id = uploaded.current.id
@@ -97,14 +99,14 @@ export function CanvasSettingsDialog({ document, recoveredDraft, blocked, pendin
     }
   }
 
-  return <WorkbenchModal title={library ? '从文件管理选择图片' : '画布设置'} open={!blocked} width={480}
+  return <WorkbenchModal title={library ? uiText("从文件管理选择图片") : uiText("画布设置")} open={!blocked} width={480}
     centered rootClassName="canvas-settings-dialog"
     onCancel={close} closable={!busy && !pending} keyboard={!busy && !pending} maskClosable={false}
     footer={library
-      ? <WorkbenchDialogActions secondary={<Button variant="quiet" onClick={returnFromLibrary}>返回设置</Button>}>{null}</WorkbenchDialogActions>
-      : <WorkbenchDialogActions secondary={<Button variant="quiet" disabled={busy || pending} onClick={close}>取消</Button>}>
+      ? <WorkbenchDialogActions secondary={<Button variant="quiet" onClick={returnFromLibrary}>{uiText("返回设置")}</Button>}>{null}</WorkbenchDialogActions>
+      : <WorkbenchDialogActions secondary={<Button variant="quiet" disabled={busy || pending} onClick={close}>{uiText("取消")}</Button>}>
         <Button form="canvas-settings-form" htmlType="submit" variant="primary" loading={busy}
-          disabled={disabled || (!pending && (!dirty || !name.trim()))}>{pending ? '核实保存结果' : '保存设置'}</Button>
+          disabled={disabled || (!pending && (!dirty || !name.trim()))}>{pending ? uiText("核实保存结果") : uiText("保存设置")}</Button>
       </WorkbenchDialogActions>}>
     {library ? <FileLibraryImagePicker autoFocus disabled={inputsDisabled} onSelect={id => {
       chooseCover(id)
@@ -112,33 +114,33 @@ export function CanvasSettingsDialog({ document, recoveredDraft, blocked, pendin
     }} /> : <form id="canvas-settings-form" className="canvas-settings-form"
       onSubmit={event => { event.preventDefault(); void save() }}>
       {(error || saveFailed) && <Alert type="error" showIcon
-        message={error || editorError || '当前无法保存设置，请核对画布编辑状态后重试。'} />}
-      {pending && <Alert type="warning" showIcon message="保存结果待核实，请重试以确认原请求。" />}
+        message={error || editorError || uiText("当前无法保存设置，请核对画布编辑状态后重试。")} />}
+      {pending && <Alert type="warning" showIcon message={uiText("保存结果待核实，请重试以确认原请求。")} />}
       <label className="canvas-settings-field">
-        <span>画布名称</span>
+        <span>{uiText("画布名称")}</span>
         <Input value={name} maxLength={255} disabled={inputsDisabled} required onChange={event => setName(event.target.value)} />
       </label>
-      <section className="canvas-settings-field" aria-label="画布封面">
-        <span>画布封面</span>
+      <section className="canvas-settings-field" aria-label={uiText("画布封面")}>
+        <span>{uiText("画布封面")}</span>
         <div className="canvas-settings-cover">
           <div className="canvas-settings-preview">
-            {source && source !== failedSource ? <img src={source} alt="画布封面预览" onError={() => setFailedSource(source)} />
-              : <span><PictureOutlined aria-hidden />默认封面</span>}
+            {source && source !== failedSource ? <img src={source} alt={uiText("画布封面预览")} onError={() => setFailedSource(source)} />
+              : <span><PictureOutlined aria-hidden />{uiText("默认封面")}</span>}
           </div>
           <div className="canvas-settings-cover-actions">
-            <Button icon={<UploadOutlined />} disabled={inputsDisabled} onClick={() => upload.current?.click()}>上传图片</Button>
-            <Button ref={libraryTrigger} icon={<FolderOpenOutlined />} disabled={inputsDisabled} onClick={() => setLibrary(true)}>从文件管理选择</Button>
+            <Button icon={<UploadOutlined />} disabled={inputsDisabled} onClick={() => upload.current?.click()}>{uiText("上传图片")}</Button>
+            <Button ref={libraryTrigger} icon={<FolderOpenOutlined />} disabled={inputsDisabled} onClick={() => setLibrary(true)}>{uiText("从文件管理选择")}</Button>
             {(localFile || fileId) && <Button variant="quiet" disabled={inputsDisabled}
-              onClick={() => chooseCover(document.cover_file_id ? null : undefined)}>恢复默认</Button>}
+              onClick={() => chooseCover(document.cover_file_id ? null : undefined)}>{uiText("恢复默认")}</Button>}
           </div>
         </div>
-        <input ref={upload} type="file" hidden accept=".jpg,.jpeg,.png,.webp,.gif" aria-label="上传画布封面" disabled={inputsDisabled}
+        <input ref={upload} type="file" hidden accept=".jpg,.jpeg,.png,.webp,.gif" aria-label={uiText("上传画布封面")} disabled={inputsDisabled}
           onChange={event => {
             const file = event.target.files?.[0]
             event.target.value = ''
             if (!file) return
             if (!/\.(jpe?g|png|webp|gif)$/i.test(file.name) || (file.type && !file.type.startsWith('image/'))) {
-              setError('请选择 JPG、PNG、WebP 或 GIF 图片')
+              setError(uiText("请选择 JPG、PNG、WebP 或 GIF 图片"))
               return
             }
             chooseCover(file)

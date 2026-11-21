@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useEffect, useState } from 'react'
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 
@@ -23,6 +24,7 @@ export function connectionPath(from: CanvasPoint, to: CanvasPoint, source: Conne
 }
 /** 几何侧别仅存本浏览器布局，不进入业务文档、修订或生成依据；宿主按项目与画布身份重挂载。 */
 export function useConnectionSides(key: string, edgeIds: string[], defaults: Record<string, EdgeSides>) {
+  const uiText = useUiText()
   const read = () => {
     try {
       const parsed = JSON.parse(localStorage.getItem(key) || '{}') as Record<string, EdgeSides>
@@ -37,7 +39,7 @@ export function useConnectionSides(key: string, edgeIds: string[], defaults: Rec
   const identity = edgeIds.join('|')
   useEffect(() => {
     try { localStorage.setItem(key, JSON.stringify(Object.fromEntries(Object.entries(sides).filter(([id]) => identity.split('|').includes(id))))) }
-    catch { setError('浏览器存储不可用，连接侧边仅在本次会话保留') }
-  }, [key, sides, identity])
+    catch { setError(uiText("浏览器存储不可用，连接侧边仅在本次会话保留")) }
+  }, [uiText, key, sides, identity])
   return { sides, setSides, error }
 }

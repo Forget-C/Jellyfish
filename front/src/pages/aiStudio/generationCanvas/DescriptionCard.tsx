@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import type { CharacterDescriptionCard, PropDescriptionCard, CostumeDescriptionCard, PlaceDescriptionCard } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
 import { CardStatusSummary } from './CardStatusSummary'
@@ -13,6 +14,7 @@ export function isDescriptionCard(card: GenerationCard): card is DescriptionCard
 
 /** 四类描述共享摘要和底部状态。 */
 export function DescriptionCard({ card, readonly }: { card: DescriptionCardData; readonly: boolean }) {
-  return <TextCardPreview label="描述正文预览" text={card.text || '未填写描述'}
+  const uiText = useUiText()
+  return <TextCardPreview label={uiText("描述正文预览")} text={card.text || '未填写描述'}
     status={<CardStatusSummary card={card} outputs={[]} readonly={readonly} missingImage={false} />} />
 }

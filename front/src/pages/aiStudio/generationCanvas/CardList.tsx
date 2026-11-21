@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useRef, useState } from 'react'
 import { Input } from 'antd'
 import { AppstoreOutlined, CloseOutlined, IdcardOutlined, ThunderboltOutlined, CameraOutlined, NodeIndexOutlined, VideoCameraOutlined, SoundOutlined, SafetyCertificateOutlined, FileTextOutlined, PictureOutlined, PlaySquareOutlined, FileSearchOutlined } from '@ant-design/icons'
@@ -25,27 +26,29 @@ export const cardEntryIcon = (modality: string) => modality === 'image' ? <Pictu
 
 /** 分组只组织添加导航；摄影的五入口创建独立设计而非五种内容类型。 */
 export function CardList({ catalog, readonly, onAdd, active, onActiveChange: setActive }: { catalog: CanvasCatalog; readonly: boolean; onAdd: (type: string, entry?: string) => void; active?: string; onActiveChange: (category?: string) => void }) {
+  const uiText = useUiText()
   const [query, setQuery] = useState('')
   const triggers = useRef<Record<string, HTMLElement | null>>({})
   const close = () => { setActive(undefined); if (active) triggers.current[active]?.focus() }
   const entries = cardCategoryEntries(catalog, active)
-  const visible = entries.filter(entry => entry.title.includes(query.trim()))
+  const search = query.trim().toLocaleLowerCase()
+  const visible = entries.filter(entry => uiText(entry.title.replace('内容', '')).toLocaleLowerCase().includes(search) || entry.title.includes(query.trim()))
   const add = (type: string, entry?: string) => { onAdd(type, entry); setActive(undefined) }
   const renderEntry = (entry: CardEntry) => <WorkbenchButton key={`${entry.type}:${entry.entry || ''}`} variant="quiet" icon={<span aria-hidden>{cardEntryIcon(entry.modality)}</span>} disabled={readonly} draggable={!readonly} onDragStart={event => {
     event.dataTransfer.setData(cardDragType, entry.type)
     if (entry.entry) event.dataTransfer.setData(cardDragEntry, entry.entry)
     event.dataTransfer.effectAllowed = 'copy'
-  }} onDragEnd={event => { if (event.dataTransfer.dropEffect !== 'none') setActive(undefined) }} onClick={() => add(entry.type, entry.entry)}>{entry.title.replace('内容', '')}</WorkbenchButton>
+  }} onDragEnd={event => { if (event.dataTransfer.dropEffect !== 'none') setActive(undefined) }} onClick={() => add(entry.type, entry.entry)}>{uiText(entry.title.replace('内容', ''))}</WorkbenchButton>
   return <div className="generation-card-list-host" onKeyDown={event => { if (event.key === 'Escape' && active) { event.stopPropagation(); close() } }}>
-    <div className="generation-card-categories" role="toolbar" aria-label="卡片分类">
-      {cardCategories.filter(category => cardCategoryEntries(catalog, category.title).length > 0).map((category, index) => <WorkbenchIconButton key={category.title} ref={element => { triggers.current[category.title] = element }} variant="quiet" label={category.title} icon={category.icon} className={index === 3 ? 'generation-director-category' : undefined} aria-pressed={active === category.title} aria-expanded={active === category.title} onClick={() => { if (active === category.title) close(); else { setActive(category.title); setQuery('') } }} />)}
+    <div className="generation-card-categories" role="toolbar" aria-label={uiText("卡片分类")}>
+      {cardCategories.filter(category => cardCategoryEntries(catalog, category.title).length > 0).map((category, index) => <WorkbenchIconButton key={category.title} ref={element => { triggers.current[category.title] = element }} variant="quiet" label={uiText(category.title)} icon={category.icon} className={index === 3 ? 'generation-director-category' : undefined} aria-pressed={active === category.title} aria-expanded={active === category.title} onClick={() => { if (active === category.title) close(); else { setActive(category.title); setQuery('') } }} />)}
     </div>
-    {active && <nav className="generation-card-list" aria-label="添加卡片">
-      <header><h2>{active}</h2><WorkbenchIconButton label="关闭卡片列表" icon={<CloseOutlined />} onClick={close} /></header>
-      <Input autoFocus type="search" aria-label="搜索卡片" placeholder="搜索卡片" value={query} allowClear onChange={event => setQuery(event.target.value)} />
-      {active === '基础卡' ? <>{(['text', 'media'] as const).map(section => <section key={section}><h3>{section === 'text' ? '文本描述' : '媒体内容'}</h3>{visible.filter(entry => section === 'text' ? entry.modality === 'text' : entry.modality !== 'text').map(renderEntry)}</section>)}</> : <section>{visible.map(renderEntry)}</section>}
-      {!visible.length && <p>没有匹配的卡片</p>}
-      {readonly && <p role="status">当前只读，不能添加卡片</p>}
+    {active && <nav className="generation-card-list" aria-label={uiText("添加卡片")}>
+      <header><h2>{uiText(active)}</h2><WorkbenchIconButton label={uiText("关闭卡片列表")} icon={<CloseOutlined />} onClick={close} /></header>
+      <Input autoFocus type="search" aria-label={uiText("搜索卡片")} placeholder={uiText("搜索卡片")} value={query} allowClear onChange={event => setQuery(event.target.value)} />
+      {active === '基础卡' ? <>{(['text', 'media'] as const).map(section => <section key={section}><h3>{section === 'text' ? uiText("文本描述") : uiText("媒体内容")}</h3>{visible.filter(entry => section === 'text' ? entry.modality === 'text' : entry.modality !== 'text').map(renderEntry)}</section>)}</> : <section>{visible.map(renderEntry)}</section>}
+      {!visible.length && <p>{uiText("没有匹配的卡片")}</p>}
+      {readonly && <p role="status">{uiText("当前只读，不能添加卡片")}</p>}
     </nav>}
   </div>
 }

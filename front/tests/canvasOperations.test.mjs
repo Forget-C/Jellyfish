@@ -1,16 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { readFile } from 'node:fs/promises'
-import ts from 'typescript'
+import { loadFrontendModule } from './load-frontend-module.mjs'
 
-async function moduleUrl(name) {
-  const source = await readFile(new URL(`../src/pages/aiStudio/generationCanvas/${name}.ts`, import.meta.url), 'utf8')
-  let { outputText } = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } })
-  for (const match of [...outputText.matchAll(/from ['"]\.\/([^'"]+)['"]/g)]) outputText = outputText.replace(match[0], `from '${await moduleUrl(match[1])}'`)
-  return `data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`
-}
-const { createCanvasOperations } = await import(await moduleUrl('canvasOperations'))
-const { createGraphRules } = await import(await moduleUrl('graphRules'))
+const { createCanvasOperations } = await loadFrontendModule('pages/aiStudio/generationCanvas/canvasOperations')
+const { createGraphRules } = await loadFrontendModule('pages/aiStudio/generationCanvas/graphRules')
 const port = (id, value_kind) => ({ id, value_kind, label: id })
 const input = (id, value_kind) => ({ id, accepts: [value_kind], label: id })
 const definition = (type, outputs = [], inputs = []) => ({ type, title: type, outputs, inputs })
@@ -210,7 +203,7 @@ test('a newly created model draft adopts independent design before its first sav
 
 test('clearing a prompt reference keeps the independent design association until explicitly disconnected', async () => {
   const { connect } = rules
-  const { withEditorPrompt } = await import(await moduleUrl('inputBindings'))
+  const { withEditorPrompt } = await loadFrontendModule('pages/aiStudio/generationCanvas/inputBindings')
   const receiver = { id: 'model', type: 'model.video', prompt: { segments: [] }, input_bindings: [] }
   const connected = connect(document({ cards: [{ id: 'design', type: 'direction.guidance' }, receiver], edges: [], input_order: {} }), { ...edge, source_card: 'design', source_port: 'text', target_port: 'text' })
   const source = connected.cards[1].input_bindings[0].source

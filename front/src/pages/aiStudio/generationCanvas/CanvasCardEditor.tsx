@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { visualDesignTypes, performanceDesignTypes, narrativeDesignTypes, soundConstraintTypes } from './designFieldReferences'
 import { createContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -28,6 +29,7 @@ export function CanvasCardEditor({ title, editableTitle = false, typeLabel = tit
   anchor?: HTMLElement | null; layoutKey: string; suppressed?: boolean; onReveal: (offset: { x: number; y: number }) => (() => void);
   expandRequest?: number; forceModal?: boolean; longForm?: boolean; material?: boolean; focusLayout?: boolean; modality?: string; cardType?: string; diagnosticFocus?: { selector: string; serial: number }; sourceFocus?: CanvasSourceFocus; children: ReactNode;
 }) {
+  const uiText = useUiText()
   const desktop = useWorkbenchDesktop()
   const visualDesign = [...visualDesignTypes, ...performanceDesignTypes, ...narrativeDesignTypes, ...soundConstraintTypes].includes(cardType || '')
   const formLayout = visualDesign || longForm
@@ -164,12 +166,12 @@ export function CanvasCardEditor({ title, editableTitle = false, typeLabel = tit
       const result = panel.current ? focusSourcePosition(panel.current, sourceFocus) : 'waiting'
       if (result === 'located') return
       if (result === 'waiting' && ++attempts < 60) frame = requestAnimationFrame(position)
-      else setSourceNotice({ serial: sourceFocus.serial, message: '无法定位原位置，已打开来源卡片。' })
+      else setSourceNotice({ serial: sourceFocus.serial, message: uiText("无法定位原位置，已打开来源卡片。") })
     }
     // 详情页签、遮罩和焦点先完成切换，再定位实际文本。
     frame = requestAnimationFrame(() => { frame = requestAnimationFrame(position) })
     return () => cancelAnimationFrame(frame)
-  }, [visible, sourceFocus])
+  }, [uiText, visible, sourceFocus])
   useLayoutEffect(() => {
     const node = panel.current
     const body = node?.querySelector<HTMLElement>('.wb-details-body')
@@ -240,10 +242,10 @@ export function CanvasCardEditor({ title, editableTitle = false, typeLabel = tit
       <header className={`wb-details-header${material ? ' generation-model-editor-chrome' : ''}`}>{!material && <div className="generation-editor-heading" data-name-editor={editableTitle}>{focusLayout && <span className="generation-editor-modality" aria-hidden="true">{modality === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>}{editableTitle ? <div ref={setTitleHost} className="design-title-host" /> : <h2 title={title}>{title}</h2>}{status && <small role="status">{status}</small>}</div>}
         <div ref={setHeader} className="generation-editor-tools" />
         {modal && layoutAction}
-        {desktop && !forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />}
-        {(!desktop || !material) && <WorkbenchIconButton style={!desktop && formLayout ? { minWidth: 44, minHeight: 44 } : undefined} variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => desktop && expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
+        {desktop && !forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? uiText("收起详情") : uiText("展开详情")} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />}
+        {(!desktop || !material) && <WorkbenchIconButton style={!desktop && formLayout ? { minWidth: 44, minHeight: 44 } : undefined} variant="quiet" label={uiText("关闭详情")} icon={<CloseOutlined />} onClick={() => desktop && expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
       </header>
-      <div className="wb-details-body">{diagnosticSerial !== undefined && unavailableDiagnostic === diagnosticSerial && <p role="status">原问题位置当前不可用，已打开相关卡片。</p>}{/* 隐藏时保留页脚宿主，避免 portal 重建导致媒体选择状态丢失。 */}<CanvasEditorTitle.Provider value={{ host: titleHost, open: visible, typeLabel }}><CanvasEditorHeader.Provider value={header}><CanvasEditorFooter.Provider value={footer}><WorkbenchReadingContext.Provider value>{sourceFocus && sourceNotice?.serial === sourceFocus.serial && <div role="status">{sourceNotice.message}</div>}{children}</WorkbenchReadingContext.Provider></CanvasEditorFooter.Provider></CanvasEditorHeader.Provider></CanvasEditorTitle.Provider></div>
+      <div className="wb-details-body">{diagnosticSerial !== undefined && unavailableDiagnostic === diagnosticSerial && <p role="status">{uiText("原问题位置当前不可用，已打开相关卡片。")}</p>}{/* 隐藏时保留页脚宿主，避免 portal 重建导致媒体选择状态丢失。 */}<CanvasEditorTitle.Provider value={{ host: titleHost, open: visible, typeLabel }}><CanvasEditorHeader.Provider value={header}><CanvasEditorFooter.Provider value={footer}><WorkbenchReadingContext.Provider value>{sourceFocus && sourceNotice?.serial === sourceFocus.serial && <div role="status">{sourceNotice.message}</div>}{children}</WorkbenchReadingContext.Provider></CanvasEditorFooter.Provider></CanvasEditorHeader.Provider></CanvasEditorTitle.Provider></div>
       <div ref={setFooter} className="generation-editor-actions" />
     </section>
   </>, document.body)

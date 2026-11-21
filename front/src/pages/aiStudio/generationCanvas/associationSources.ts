@@ -1,3 +1,4 @@
+import { uiText } from '../../../uiText'
 import type { CanvasDocument, CanvasResolvedOutput } from '../../../services/generated'
 import { sourceKey } from './promptRules'
 
@@ -11,13 +12,13 @@ export type AssociationSource = {
 /** 来源可读与其内部引用有效分别判断，错误同时供方块和溢出入口展示。 */
 export function associationIssues(output: CanvasResolvedOutput): { message: string; fieldId?: string }[] {
   const issues: { message: string; fieldId?: string }[] = []
-  if (output.available === false) issues.push({ message: '来源输出缺失' })
-  if (output.basis_current === false) issues.push({ message: '依据已变' })
+  if (output.available === false) issues.push({ message: uiText("来源输出缺失") })
+  if (output.basis_current === false) issues.push({ message: uiText("依据已变") })
   const payload = output.payload
   if (payload && 'reference_issues' in payload) {
     for (const issue of payload.reference_issues || []) issues.push({ message: issue.message, fieldId: issue.field_id })
   }
-  if (payload && 'frame_target_state' in payload && payload.frame_target_state?.available === false) issues.push({ message: '画面定位失效', fieldId: 'frame_target' })
+  if (payload && 'frame_target_state' in payload && payload.frame_target_state?.available === false) issues.push({ message: uiText("画面定位失效"), fieldId: 'frame_target' })
   return issues
 }
 

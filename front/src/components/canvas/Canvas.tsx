@@ -1,3 +1,4 @@
+import { useUiText } from '../../uiText'
 import { forwardRef, useEffect, useId, useRef, useState } from 'react'
 import type { ButtonHTMLAttributes, HTMLAttributes } from 'react'
 import { canvasConnection, fitCanvas } from './geometry'
@@ -102,6 +103,7 @@ export function CanvasNodeButton({ nodeId, nodeType, tone = 'neutral', selected,
 
 /** 布局移动有键盘替代；位移以内容坐标回传。onCancel 由调用方恢复整次手势，未提供时沿用原有取消行为。 */
 export function CanvasDragHandle({ contextKey, label, offset, scale, onMove, className, onCancel }: { contextKey: string; label: string; offset: CanvasPoint; scale: number; onMove: (point: CanvasPoint) => void; className?: string; onCancel?: () => void }) {
+  const uiText = useUiText()
   const drag = useRef<{ x: number; y: number; left: number; top: number }>()
   useEffect(() => {
     drag.current = undefined
@@ -119,7 +121,7 @@ export function CanvasDragHandle({ contextKey, label, offset, scale, onMove, cla
     window.addEventListener('keydown', escape, true)
     return () => window.removeEventListener('keydown', escape, true)
   }, [])
-  return <button type="button" className={className} aria-label={`移动布局：${label}`} title="拖动调整布局，或用方向键移动" onPointerDown={event => {
+  return <button type="button" className={className} aria-label={uiText("移动布局：{{label}}", { label })} title={uiText("拖动调整布局，或用方向键移动")} onPointerDown={event => {
     if (event.button !== 0) return
     event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId)
     drag.current = { x: event.clientX, y: event.clientY, left: offset.x, top: offset.y }
@@ -135,11 +137,12 @@ export function CanvasDragHandle({ contextKey, label, offset, scale, onMove, cla
 
 /** 实线为直接关系，虚线仅为经真实路径的间接关系；问题与候选使用独立样式。 */
 export function CanvasEdge({ d, label, indirect = false, selected = false, muted = false, onInspect, className, caption, tone = 'neutral' }: { d: string; label: string; indirect?: boolean; selected?: boolean; muted?: boolean; onInspect?: () => void; className?: string; tone?: CanvasTone; caption?: CanvasPoint & { text: string } }) {
+  const uiText = useUiText()
   const markerId = useId().replace(/:/g, '')
   return <g className={`canvas-edge ${className || ''}`} data-canvas-tone={tone} data-selected={selected} opacity={muted ? .35 : 1} data-canvas-relation={indirect ? 'indirect' : 'direct'}>
     <path className="canvas-edge-line" d={d} fill="none" stroke="var(--canvas-edge-color)" strokeWidth={selected ? 2.5 : 1.5} strokeDasharray={indirect ? '5 4' : undefined} markerEnd={`url(#${markerId})`} />
     {onInspect && <path d={d} fill="none" stroke="transparent" strokeWidth={12} className="canvas-edge-hit" role="button" tabIndex={0} aria-label={label} onClick={onInspect} onKeyDown={event => { if (!event.defaultPrevented && !event.nativeEvent.isComposing && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onInspect() } }} />}
     <defs><marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" style={{ fill: 'var(--canvas-edge-color)', stroke: 'none' }} /></marker></defs>
-    {caption && <text x={caption.x} y={caption.y} textAnchor="middle" fill="#667085" fontSize={12}>{caption.text}{indirect ? ' · 间接' : ''}</text>}
+    {caption && <text x={caption.x} y={caption.y} textAnchor="middle" fill="#667085" fontSize={12}>{caption.text}{indirect ? uiText(" · 间接") : ''}</text>}
   </g>
 }

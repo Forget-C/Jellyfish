@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import type { TooltipRef } from 'antd/es/tooltip'
 import { cardCategories } from './CardList'
 import { useGraphRules } from './CanvasCatalogContext'
@@ -36,6 +37,7 @@ export function CanvasAssociations({ entries, sourceActions, loading, error, ses
   onLocateSource?: (cardId: string, fieldId: string) => void
   onInspect?: () => void
 }) {
+  const uiText = useUiText()
   const inspection = useContext(AssociationInspectionContext)
   const request = inspection?.request
   const handled = useRef<number>()
@@ -48,7 +50,7 @@ export function CanvasAssociations({ entries, sourceActions, loading, error, ses
   const activePopover = useRef<TooltipRef>(null)
   const { token } = theme.useToken()
   const { cardDefinitions } = useGraphRules()
-  const groups = (['material', 'design'] as const).map(kind => ({ kind, label: kind === 'material' ? '素材' : '设计', entries: entries.filter(entry => entry.kind === kind) })).filter(group => group.entries.length)
+  const groups = (['material', 'design'] as const).map(kind => ({ kind, label: kind === 'material' ? uiText("素材") : uiText("设计"), entries: entries.filter(entry => entry.kind === kind) })).filter(group => group.entries.length)
   const gap = width < 470 ? 4 : 8
   const slots = groups.map(() => 1)
   const required = () => (sourceActions ? 64 : 0) + groups.length * (8 - gap) + (groups.length > 1 ? 13 : 0) + groups.reduce((size, group, index) => size + slots[index] * (64 + gap) + (slots[index] < group.entries.length ? 32 + gap : 0), 0)
@@ -149,13 +151,13 @@ export function CanvasAssociations({ entries, sourceActions, loading, error, ses
     {current.outputs.flatMap(output => associationIssues(output).filter(issue => issue.fieldId).map((issue, index) => <div role="alert" key={`${output.source.card_id}:${issue.fieldId}:${index}`}>
       <p>{issue.message}</p>
       {issue.fieldId === 'frame_target'
-        ? <WorkbenchButton variant="quiet" disabled={!inspection?.onLocateFrameRelation} onClick={() => { close(false); inspection?.onLocateFrameRelation?.(output.source.card_id) }}>查看画面关系</WorkbenchButton>
-        : <WorkbenchButton variant="quiet" disabled={!onLocateSource} onClick={() => { close(false); onLocateSource?.(output.source.card_id, issue.fieldId!) }}>查看问题字段</WorkbenchButton>}
+        ? <WorkbenchButton variant="quiet" disabled={!inspection?.onLocateFrameRelation} onClick={() => { close(false); inspection?.onLocateFrameRelation?.(output.source.card_id) }}>{uiText("查看画面关系")}</WorkbenchButton>
+        : <WorkbenchButton variant="quiet" disabled={!onLocateSource} onClick={() => { close(false); onLocateSource?.(output.source.card_id, issue.fieldId!) }}>{uiText("查看问题字段")}</WorkbenchButton>}
     </div>))}
     {renderDetails(current, { close })}
   </>
 
-  return <div className="canvas-associations" aria-label="关联来源" role="region" tabIndex={-1} ref={owner} onClickCapture={event => {
+  return <div className="canvas-associations" aria-label={uiText("关联来源")} role="region" tabIndex={-1} ref={owner} onClickCapture={event => {
       const button = (event.target as HTMLElement).closest<HTMLElement>('button')
       if (button && owner.current?.contains(button)) trigger.current = button
     }} data-tight={gap === 4}>
@@ -170,15 +172,15 @@ export function CanvasAssociations({ entries, sourceActions, loading, error, ses
               aria-label={entry.description} aria-expanded={surface === entry.id} aria-controls={surface === entry.id ? popupId : undefined} title={entry.description} onMouseDown={event => event.preventDefault()} />,
             details)}</ConfigProvider>)}
           {!!hidden.length && <ConfigProvider componentDisabled={false}>{popover('more:' + group.kind,
-            <WorkbenchButton variant="quiet" className="canvas-association-more" data-association-more={group.kind} data-summary={summary} title={`${group.label}更多 ${hidden.length} 项`}
-              aria-label={`${group.label}更多 ${hidden.length}${hiddenIssue ? '，含异常' : ''}`} aria-expanded={surface === 'more:' + group.kind} aria-controls={surface === 'more:' + group.kind ? popupId : undefined}
+            <WorkbenchButton variant="quiet" className="canvas-association-more" data-association-more={group.kind} data-summary={summary} title={uiText("{{label}}更多 {{length}} 项", { label: group.label, length: hidden.length })}
+              aria-label={uiText("{{label}}更多 {{length}}{{value3}}", { label: group.label, length: hidden.length, value3: hiddenIssue ? '，含异常' : '' })} aria-expanded={surface === 'more:' + group.kind} aria-controls={surface === 'more:' + group.kind ? popupId : undefined}
               icon={hiddenIssue ? <ExclamationCircleOutlined style={{ color: token.colorWarning }} /> : summary ? group.kind === 'material' ? <PictureOutlined /> : <FileTextOutlined /> : undefined}>{summary ? `${group.label} ${hidden.length}` : `+${hidden.length}`}</WorkbenchButton>,
-            current ? <><WorkbenchButton variant="quiet" size="small" icon={<ArrowLeftOutlined />} onClick={() => setDetail(undefined)}>返回{group.label}列表</WorkbenchButton>{details}</> : <div className="canvas-association-list"><strong>{group.label} · {group.entries.length}</strong>{group.entries.map(entry => <WorkbenchButton key={entry.id} variant="quiet" className="canvas-association-list-item" aria-label={entry.description} icon={entry.issue ? <ExclamationCircleOutlined style={{ color: token.colorWarning }} /> : sourceIcon(entry)} onClick={() => setDetail(entry.id)}>{entry.label}<small>{entry.issue || (entry.used ? '使用中' : '候选')}</small></WorkbenchButton>)}</div>)}</ConfigProvider>}
+            current ? <><WorkbenchButton variant="quiet" size="small" icon={<ArrowLeftOutlined />} onClick={() => setDetail(undefined)}>{uiText("返回")}{group.label}{uiText("列表")}</WorkbenchButton>{details}</> : <div className="canvas-association-list"><strong>{group.label} · {group.entries.length}</strong>{group.entries.map(entry => <WorkbenchButton key={entry.id} variant="quiet" className="canvas-association-list-item" aria-label={entry.description} icon={entry.issue ? <ExclamationCircleOutlined style={{ color: token.colorWarning }} /> : sourceIcon(entry)} onClick={() => setDetail(entry.id)}>{entry.label}<small>{entry.issue || (entry.used ? uiText("使用中") : uiText("候选"))}</small></WorkbenchButton>)}</div>)}</ConfigProvider>}
         </div>
       })}
       {sourceActions && <div className="generation-material-add">{sourceActions}</div>}
     </div>
-    {requestedSource && !loading && !requestedEntry && <small role="status">问题所指的关系当前不可用</small>}
-    {(loading || error) && <small className="canvas-association-status" role={error ? 'alert' : 'status'}>{error || '正在读取候选来源…'}</small>}
+    {requestedSource && !loading && !requestedEntry && <small role="status">{uiText("问题所指的关系当前不可用")}</small>}
+    {(loading || error) && <small className="canvas-association-status" role={error ? 'alert' : 'status'}>{error || uiText("正在读取候选来源…")}</small>}
   </div>
 }

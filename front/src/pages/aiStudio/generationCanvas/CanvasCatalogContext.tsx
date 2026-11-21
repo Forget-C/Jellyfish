@@ -1,3 +1,5 @@
+import { currentLanguage } from '../../../i18n'
+import { useUiText } from '../../../uiText'
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Alert } from 'antd'
@@ -10,6 +12,7 @@ const CatalogContext = createContext<ReturnType<typeof createGraphRules> | undef
 
 /** 目录核实成功后才开放卡片编辑，不以另一份前端端点表静默降级。 */
 export function CanvasCatalogProvider({ projectId, canvasId, freeDraft, children, onReady }: { freeDraft?: boolean; projectId: string; canvasId: string; children: ReactNode; onReady?: (catalog: CanvasCatalog) => void }) {
+  const uiText = useUiText()
   const [catalog, setCatalog] = useState<CanvasCatalog>()
   const [error, setError] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -23,14 +26,16 @@ export function CanvasCatalogProvider({ projectId, canvasId, freeDraft, children
     }).catch(() => { if (active) setError(true) })
     return () => { active = false }
   }, [projectId, canvasId, freeDraft, attempt, onReady])
-  const rules = useMemo(() => catalog && createGraphRules(catalog), [catalog])
-  if (error) return <div className="generation-catalog-state"><Alert type="error" message="卡片目录读取失败" description="尚未核实卡片端点，请重试后继续编辑。" action={<WorkbenchButton onClick={() => setAttempt(value => value + 1)}>重试卡片目录</WorkbenchButton>} /></div>
-  if (!rules) return <p className="generation-catalog-state" role="status">正在核实卡片目录…</p>
+  const locale = currentLanguage()
+  const rules = useMemo(() => catalog && createGraphRules(catalog, locale), [catalog, locale])
+  if (error) return <div className="generation-catalog-state"><Alert type="error" message={uiText("卡片目录读取失败")} description={uiText("尚未核实卡片端点，请重试后继续编辑。")} action={<WorkbenchButton onClick={() => setAttempt(value => value + 1)}>{uiText("重试卡片目录")}</WorkbenchButton>} /></div>
+  if (!rules) return <p className="generation-catalog-state" role="status">{uiText("正在核实卡片目录…")}</p>
   return <CatalogContext.Provider value={rules}>{children}</CatalogContext.Provider>
 }
 
 export function useGraphRules() {
+  const uiText = useUiText()
   const rules = useContext(CatalogContext)
-  if (!rules) throw new Error('画布编辑器需要已核实的卡片目录')
+  if (!rules) throw new Error(uiText("画布编辑器需要已核实的卡片目录"))
   return rules
 }

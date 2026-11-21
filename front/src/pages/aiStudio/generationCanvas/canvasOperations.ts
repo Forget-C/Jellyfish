@@ -1,3 +1,4 @@
+import { uiText } from '../../../uiText'
 import { fixedCanvasSource } from './fixedCanvasSource'
 import { cleanConnectionDocument } from './connectionCleanup'
 import type { CanvasDocument, CanvasModelCapability, CanvasResolvedOutput, NamedImageReferenceCard } from '../../../services/generated'
@@ -170,7 +171,7 @@ export function createCanvasOperations({ connectionReason, sourceOptions, connec
         const protection = referenceProtection(document, connectionPolicy, id, undefined, ids)
         if (protection) {
           const model = document.cards?.some(card => card.id === id && card.type?.startsWith('model.'))
-          const message = model ? `${protection.message}。如需保留生成结果，请显示结果卡并断开它与生成卡的连线` : protection.message
+          const message = model ? uiText("{{message}}。如需保留生成结果，请显示结果卡并断开它与生成卡的连线", { message: protection.message }) : protection.message
           return { reason: message, protection: { ...protection, message } }
         }
       }

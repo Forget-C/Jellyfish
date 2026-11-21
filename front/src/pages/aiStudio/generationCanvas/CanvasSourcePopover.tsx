@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useEffect, useId, useRef, useState } from 'react'
 import { Popover, theme } from 'antd'
 import type { CanvasSourceIndex } from '../../../services/generated'
@@ -10,6 +11,7 @@ export function CanvasSourcePopover({ items, onLocate }: {
   items: CanvasSourceItem[]
   onLocate: (source: CanvasSourceIndex, trigger: HTMLButtonElement) => void
 }) {
+  const uiText = useUiText()
   const id = useId()
   const [open, setOpen] = useState(false)
   const button = useRef<HTMLButtonElement>(null), panel = useRef<HTMLElement>(null)
@@ -20,7 +22,7 @@ export function CanvasSourcePopover({ items, onLocate }: {
   }, [open])
   return <Popover open={open} onOpenChange={setOpen} trigger="click" placement="bottom"
     getPopupContainer={node => node.ownerDocument.body} overlayClassName="canvas-workbench-dialog"
-    content={<section ref={panel} id={id} tabIndex={-1} role="dialog" aria-label="卡片引用" className="generation-source-list"
+    content={<section ref={panel} id={id} tabIndex={-1} role="dialog" aria-label={uiText("卡片引用")} className="generation-source-list"
       onPointerDown={event => event.stopPropagation()}
       onKeyDown={event => {
         if (event.key !== 'Escape' || event.nativeEvent.isComposing) return
@@ -34,11 +36,12 @@ export function CanvasSourcePopover({ items, onLocate }: {
     <button ref={button} type="button" className="generation-source-trigger" aria-expanded={open} aria-controls={open ? id : undefined}
       aria-haspopup="dialog" onPointerDown={event => event.stopPropagation()} onKeyDown={event => {
         if (event.key === 'Escape' && open && !event.nativeEvent.isComposing) { event.preventDefault(); event.stopPropagation(); setOpen(false) }
-      }}>引用</button>
+      }}>{uiText("引用")}</button>
   </Popover>
 }
 
 function SourceRow({ item, onLocate }: { item: CanvasSourceItem; onLocate: (source: CanvasSourceIndex) => void }) {
+  const uiText = useUiText()
   const { source, label, position, issue, missing, fileId } = item
   const { token } = theme.useToken()
   const check = useVideoSourceStatus(missing ? undefined : fileId)
@@ -49,7 +52,7 @@ function SourceRow({ item, onLocate }: { item: CanvasSourceItem; onLocate: (sour
   const detail = <>{label}{position && <small>{position}</small>}</>
   return <li>
     {available ? <button type="button" title={title} onClick={() => onLocate(source)}>{detail}</button>
-      : <span title={title}>{detail}{fileId && status && <small>视频文件 {fileId.slice(0, 8)}</small>}</span>}
+      : <span title={title}>{detail}{fileId && status && <small>{uiText("视频文件")} {fileId.slice(0, 8)}</small>}</span>}
     {status && <small style={{ color: token.colorWarning }}>{status}</small>}
   </li>
 }

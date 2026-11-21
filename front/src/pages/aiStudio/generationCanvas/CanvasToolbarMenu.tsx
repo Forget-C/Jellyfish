@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
@@ -10,6 +11,7 @@ export function CanvasToolbarMenu({ label, children, icon, caption, compact = fa
   caption?: ReactNode
   compact?: boolean
 }) {
+  const uiText = useUiText()
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -33,7 +35,7 @@ export function CanvasToolbarMenu({ label, children, icon, caption, compact = fa
   }}>
     <WorkbenchButton ref={trigger} variant="quiet" icon={icon} aria-label={label} title={label} aria-expanded={open} aria-controls={id}
       onClick={() => setOpen(value => !value)}>{caption}</WorkbenchButton>
-    <div id={id} className="canvas-toolbar-popover canvas-workbench-dialog" role="group" aria-label={`${label}选项`} hidden={!open}
+    <div id={id} className="canvas-toolbar-popover canvas-workbench-dialog" role="group" aria-label={uiText("{{label}}选项", { label })} hidden={!open}
       onClick={event => {
         if (event.target instanceof Element && event.target.closest('[data-menu-close]') && root.current?.contains(event.target)) {
           setOpen(false); trigger.current?.focus({ preventScroll: true })
