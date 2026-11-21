@@ -1,11 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { readFile } from 'node:fs/promises'
-import ts from 'typescript'
+import { loadFrontendModule } from './load-frontend-module.mjs'
 
-const source = await readFile(new URL('../src/pages/aiStudio/generationCanvas/inputBindings.ts', import.meta.url), 'utf8')
-const { outputText } = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } })
-const { editorPrompt, withEditorPrompt, withoutInputBinding } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`)
+const { editorPrompt, withEditorPrompt, withoutInputBinding } = await loadFrontendModule('pages/aiStudio/generationCanvas/inputBindings')
 const image = { canvas_id: 'canvas', card_id: 'picture', port_id: 'image', position: 0 }
 const reference = id => ({ id, kind: 'reference', source: image })
 const card = () => ({ id: 'model', type: 'model.image', config: { count: 1 }, prompt: { segments: [] }, input_bindings: [] })

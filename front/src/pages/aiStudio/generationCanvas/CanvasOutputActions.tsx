@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useState } from 'react'
 import { Checkbox, Radio } from 'antd'
 import { StudioFilesService } from '../../../services/generated'
@@ -27,12 +28,13 @@ export async function downloadOutputs(outputs: DownloadOutput[]) {
 }
 /** 打开时固定结果集合；后台发布不会替换用户的选择。 */
 export function CanvasOutputActions({mode,outputs,onCover,onClose}:{mode:'cover'|'download';outputs:DownloadOutput[];onCover:(fileId:string)=>void;onClose:()=>void}) {
+  const uiText = useUiText()
   const [selected,setSelected]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState('')
   const Selection = mode === 'cover' ? Radio : Checkbox
-  const apply=async()=>{setBusy(true);setError('');try{const chosen=outputs.filter(output=>selected.includes(output.key));if(mode==='cover')onCover(chosen[0].fileId!);else await downloadOutputs(chosen);onClose()}catch{setError('下载失败，选择已保留，请重试')}finally{setBusy(false)}}
-  return <WorkbenchModal title={mode==='cover'?'选择画布封面':'选择下载内容'} open onCancel={()=>{if(!busy)onClose()}} footer={<WorkbenchDialogActions secondary={<Button disabled={busy} onClick={onClose}>取消</Button>}><Button disabled={!selected.length} loading={busy} onClick={()=>void apply()}>{mode==='cover'?'设置为封面':`下载所选 ${selected.length} 项`}</Button></WorkbenchDialogActions>}>
-    {mode==='download'&&<Checkbox checked={selected.length===outputs.length} indeterminate={!!selected.length&&selected.length<outputs.length} disabled={busy} onChange={event=>setSelected(event.target.checked?outputs.map(output=>output.key):[])}>全选</Checkbox>}
-    {outputs.map((output,index)=><Selection key={output.key} className="generation-output-choice" name="canvas-output-choice" disabled={busy} checked={selected.includes(output.key)} onChange={event=>setSelected(mode==='cover'?[output.key]:event.target.checked?[...selected,output.key]:selected.filter(key=>key!==output.key))}><span className="generation-output-choice-content">{output.modality==='image'&&<img alt={`输出 ${index+1}`} src={buildFileDownloadUrl(output.fileId)}/>}<span>{output.name} · 输出 {index+1} · {output.modality}{output.stale?' · 旧正式成果':''}</span></span></Selection>)}
+  const apply=async()=>{setBusy(true);setError('');try{const chosen=outputs.filter(output=>selected.includes(output.key));if(mode==='cover')onCover(chosen[0].fileId!);else await downloadOutputs(chosen);onClose()}catch{setError(uiText("下载失败，选择已保留，请重试"))}finally{setBusy(false)}}
+  return <WorkbenchModal title={mode==='cover'?uiText("选择画布封面"):uiText("选择下载内容")} open onCancel={()=>{if(!busy)onClose()}} footer={<WorkbenchDialogActions secondary={<Button disabled={busy} onClick={onClose}>{uiText("取消")}</Button>}><Button disabled={!selected.length} loading={busy} onClick={()=>void apply()}>{mode==='cover'?uiText("设置为封面"):uiText("下载所选 {{length}} 项", { length: selected.length })}</Button></WorkbenchDialogActions>}>
+    {mode==='download'&&<Checkbox checked={selected.length===outputs.length} indeterminate={!!selected.length&&selected.length<outputs.length} disabled={busy} onChange={event=>setSelected(event.target.checked?outputs.map(output=>output.key):[])}>{uiText("全选")}</Checkbox>}
+    {outputs.map((output,index)=><Selection key={output.key} className="generation-output-choice" name="canvas-output-choice" disabled={busy} checked={selected.includes(output.key)} onChange={event=>setSelected(mode==='cover'?[output.key]:event.target.checked?[...selected,output.key]:selected.filter(key=>key!==output.key))}><span className="generation-output-choice-content">{output.modality==='image'&&<img alt={uiText("输出 {{value1}}", { value1: index+1 })} src={buildFileDownloadUrl(output.fileId)}/>}<span>{output.name} {uiText("· 输出")} {index+1} · {output.modality}{output.stale?uiText(" · 旧正式成果"):''}</span></span></Selection>)}
     {error&&<p role="alert">{error}</p>}
   </WorkbenchModal>
 }

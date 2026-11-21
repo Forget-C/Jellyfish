@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import type { CanvasResolvedOutput } from '../../../services/generated'
 import { GenerationCardFrame } from './GenerationCardFrame'
 import { MediaResultsPreview } from './MediaResultsPreview'
@@ -11,17 +12,18 @@ export const linkedResultTitle = (output: CanvasResolvedOutput) =>
 
 /** 预览读取正式结果，不提供内容编辑或素材替换。 */
 export function LinkedResultPreview({ output }: { output: CanvasResolvedOutput }) {
+  const uiText = useUiText()
   const missing = output.available === false
-  const status = <><span>随生成更新</span>{output.basis_current === false && <span>依据已变</span>}</>
-  if (output.modality === 'text') return <TextCardPreview label="生成结果预览"
+  const status = <><span>{uiText("随生成更新")}</span>{output.basis_current === false && <span>{uiText("依据已变")}</span>}</>
+  if (output.modality === 'text') return <TextCardPreview label={uiText("生成结果预览")}
     text={missing ? '当前输出缺失' : output.text || ''}
-    status={<>{!missing && <span>{output.text?.length || 0} 字</span>}{status}</>} />
+    status={<>{!missing && <span>{output.text?.length || 0} {uiText("字")}</span>}{status}</>} />
   if (output.modality === 'audio' || output.modality === 'video') {
     const fileId = missing ? undefined : output.file_id ?? undefined
-    return <PlaybackCardPreview key={fileId} type={output.modality} fileId={fileId} label="生成结果预览"
+    return <PlaybackCardPreview key={fileId} type={output.modality} fileId={fileId} label={uiText("生成结果预览")}
       status={status} empty="当前输出缺失" />
   }
-  return <GenerationCardFrame label="生成结果预览" status={status}>
-    {missing ? <p className="generation-output-text">当前输出缺失</p> : <MediaResultsPreview outputs={[output]} cardPreview />}
+  return <GenerationCardFrame label={uiText("生成结果预览")} status={status}>
+    {missing ? <p className="generation-output-text">{uiText("当前输出缺失")}</p> : <MediaResultsPreview outputs={[output]} cardPreview />}
   </GenerationCardFrame>
 }

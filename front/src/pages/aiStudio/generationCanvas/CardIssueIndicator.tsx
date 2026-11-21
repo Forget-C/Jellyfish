@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useEffect, useId, useRef, useState } from 'react'
 import { Popover, theme } from 'antd'
 import { ExclamationCircleOutlined } from '@ant-design/icons'
@@ -11,6 +12,7 @@ export function CardIssueIndicator({ issues, onLocate, actionFor, relatedActions
   actionFor: (issue: CanvasDiagnostic) => string | undefined
   relatedActionsFor?: (issue: CanvasDiagnostic) => { id: string; label: string; target?: CanvasDiagnostic['target'] }[]
 }) {
+  const uiText = useUiText()
   const [open, setOpen] = useState(false)
   const { token } = theme.useToken()
   const id = useId()
@@ -32,7 +34,7 @@ export function CardIssueIndicator({ issues, onLocate, actionFor, relatedActions
   }
   const messages = issues.map(issue => `${severity(issue)}：${issue.message}`)
   return <Popover open={open} onOpenChange={setOpen} trigger="click" placement="bottomRight"
-    content={<section id={id} ref={panel} tabIndex={-1} aria-label="卡片问题" className="generation-card-issues" onKeyDown={event => {
+    content={<section id={id} ref={panel} tabIndex={-1} aria-label={uiText("卡片问题")} className="generation-card-issues" onKeyDown={event => {
       if (event.key !== 'Escape') return
       event.stopPropagation(); setOpen(false)
       trigger.current?.focus({ preventScroll: true })
@@ -48,7 +50,7 @@ export function CardIssueIndicator({ issues, onLocate, actionFor, relatedActions
       })}</ul>
     </section>}>
     <span>
-      <WorkbenchIconButton ref={trigger} variant="quiet" label="查看卡片问题" tooltip={messages.join('；')}
+      <WorkbenchIconButton ref={trigger} variant="quiet" label={uiText("查看卡片问题")} tooltip={messages.join('；')}
         tooltipTrigger={['hover', 'focus']} tooltipOpen={open ? false : undefined}
         aria-expanded={open} aria-controls={open ? id : undefined}
         icon={<ExclamationCircleOutlined style={{ color: error ? token.colorError : token.colorWarning }} />}

@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCheckItem, CanvasCheckPreview, CanvasCheckReportRead, CheckCard } from '../../../services/generated'
@@ -24,6 +25,7 @@ export function checkApplicability(previous: CanvasCheckItem | undefined, curren
 type CheckSessionProps = CardRendererProps & { reportTarget?: CanvasInspectTarget }
 
 function useCheckSession(props: CheckSessionProps) {
+  const uiText = useUiText()
   const { card: raw, document, savedRevision, documentPending, disabled, modelOutputs, automaticCheckRunId, reportTarget, editorOpen } = props
   const card = raw as CheckCard
   const { cardTitles, cardDefinitions } = useGraphRules()
@@ -78,10 +80,10 @@ function useCheckSession(props: CheckSessionProps) {
           mergeReports(history.data || [])
         }
       })
-      .catch(() => { if (active) { setPreview(undefined); setError('读取检查依据或报告失败，请重试') } })
+      .catch(() => { if (active) { setPreview(undefined); setError(uiText("读取检查依据或报告失败，请重试")) } })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [projectId, canvasId, cardId, savedRevision, saved, refresh, editorOpen])
+  }, [uiText, projectId, canvasId, cardId, savedRevision, saved, refresh, editorOpen])
 
   const checking = reports.some(reportPending)
   const targetId = document.edges?.find(edge => edge.target_card === card.id && edge.target_port === 'check_basis')?.source_card
@@ -134,7 +136,7 @@ function useCheckSession(props: CheckSessionProps) {
       } })
       if (response.data) showReport(response.data)
     } catch (issue) {
-      setError(issue instanceof ApiError && issue.status === 409 ? '检查依据已变，请核对更新后的内容再重查' : '本次检查未完成，历史报告保留')
+      setError(issue instanceof ApiError && issue.status === 409 ? uiText("检查依据已变，请核对更新后的内容再重查") : uiText("本次检查未完成，历史报告保留"))
       setRefresh(value => value + 1)
     } finally { submitting.current = false; setRunning(false) }
   }
@@ -144,7 +146,7 @@ function useCheckSession(props: CheckSessionProps) {
     try {
       const response = await Canvases.canvasCheckCancel({ projectId, canvasId, cardId, reportId })
       if (response.data) mergeReports([response.data])
-    } catch { setError('取消请求结果待核实，请查看刷新后的检查状态'); setRefresh(value => value + 1) }
+    } catch { setError(uiText("取消请求结果待核实，请查看刷新后的检查状态")); setRefresh(value => value + 1) }
     finally { setCancelling(false) }
   }
   // 批量报告里的关闭记录不覆盖该项已执行的报告。
@@ -204,7 +206,8 @@ export function CheckCardSession({ children, ...props }: CheckSessionProps & { c
   return <CheckContext.Provider value={session}>{children}</CheckContext.Provider>
 }
 export function useCheckCard() {
+  const uiText = useUiText()
   const state = useContext(CheckContext)
-  if (!state) throw new Error('检查卡必须位于自己的保留会话中')
+  if (!state) throw new Error(uiText("检查卡必须位于自己的保留会话中"))
   return state
 }

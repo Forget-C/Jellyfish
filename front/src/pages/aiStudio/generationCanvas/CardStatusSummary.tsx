@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useEffect, useState } from 'react'
 import { Popover } from 'antd'
 import { InfoCircleOutlined, LinkOutlined } from '@ant-design/icons'
@@ -11,6 +12,7 @@ import './cardStatusSummary.css'
 export function CardStatusSummary({ card, node, outputs, readonly, missingImage, imageDimensions }: {
   card: GenerationCard; node?: CanvasNodeRead; outputs: CanvasResolvedOutput[]; readonly: boolean; missingImage: boolean; imageDimensions?: string
 }) {
+  const uiText = useUiText()
   const [explaining, setExplaining] = useState(false)
   useEffect(() => {
     if (!explaining) return
@@ -25,21 +27,21 @@ export function CardStatusSummary({ card, node, outputs, readonly, missingImage,
   const reasons = [node?.error_message, stale && '依据已变，旧正式输出仍保留', changed && '配置已变，本次结果未替换正式输出'].filter(Boolean)
   const config = 'config' in card ? card.config : undefined
   const specification = [config && 'target_ratio' in config && config.target_ratio, config && 'resolution_profile' in config && config.resolution_profile].filter(value => typeof value === 'string' && value).join(' · ')
-  return <section className="generation-card-status" aria-label={model ? '模型状态摘要' : '卡片状态摘要'}>
-    {model && <span data-problem={node?.status === 'failed' || stale || changed || undefined}>{canvasNodeStatusLabels[node?.status || ''] || '尚未运行'}</span>}
-    {card.type === 'content.image' && <><span>图片</span>{imageDimensions && <span>{imageDimensions}</span>}</>}
-    {readonly && <span>只读</span>}
-    {model && <span className="generation-card-adopted"><LinkOutlined aria-hidden /> 已采用 {card.input_bindings?.length || 0}</span>}
-    {retained && <span>保留上次成果</span>}
-    {stale && <span data-problem>依据已变</span>}
-    {changed && <span data-problem>本次结果仅入历史</span>}
-    {missingImage && <span data-problem>缺少主图</span>}
-    {'uploading' in card && card.uploading && <span>上传尚未完成</span>}
-    {'text' in card && <span>{card.text?.length || 0} 字</span>}
+  return <section className="generation-card-status" aria-label={model ? uiText("模型状态摘要") : uiText("卡片状态摘要")}>
+    {model && <span data-problem={node?.status === 'failed' || stale || changed || undefined}>{uiText(canvasNodeStatusLabels[node?.status || ''] || "尚未运行")}</span>}
+    {card.type === 'content.image' && <><span>{uiText("图片")}</span>{imageDimensions && <span>{imageDimensions}</span>}</>}
+    {readonly && <span>{uiText("只读")}</span>}
+    {model && <span className="generation-card-adopted"><LinkOutlined aria-hidden /> {uiText("已采用")} {card.input_bindings?.length || 0}</span>}
+    {retained && <span>{uiText("保留上次成果")}</span>}
+    {stale && <span data-problem>{uiText("依据已变")}</span>}
+    {changed && <span data-problem>{uiText("本次结果仅入历史")}</span>}
+    {missingImage && <span data-problem>{uiText("缺少主图")}</span>}
+    {'uploading' in card && card.uploading && <span>{uiText("上传尚未完成")}</span>}
+    {'text' in card && <span>{card.text?.length || 0} {uiText("字")}</span>}
     {'source_locator' in card && card.type === 'content.basis' && card.source_locator && <span className="generation-card-specification" title={card.source_locator}>{card.source_locator}</span>}
     {specification && <span className="generation-card-specification" title={specification}>{specification}</span>}
-    {reasons.length > 0 && <Popover trigger="click" open={explaining} onOpenChange={setExplaining} title="状态说明" content={<div className="generation-card-status-reasons">{reasons.map((reason, index) => <p key={index}>{reason}</p>)}</div>}>
-      <WorkbenchIconButton label="查看状态说明" icon={<InfoCircleOutlined />} variant="quiet" />
+    {reasons.length > 0 && <Popover trigger="click" open={explaining} onOpenChange={setExplaining} title={uiText("状态说明")} content={<div className="generation-card-status-reasons">{reasons.map((reason, index) => <p key={index}>{reason}</p>)}</div>}>
+      <WorkbenchIconButton label={uiText("查看状态说明")} icon={<InfoCircleOutlined />} variant="quiet" />
     </Popover>}
   </section>
 }

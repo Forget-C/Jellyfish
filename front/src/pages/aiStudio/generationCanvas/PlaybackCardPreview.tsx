@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { StudioFilesService } from '../../../services/generated'
@@ -8,6 +9,7 @@ import { PlaybackContent } from './MediaContentEditor'
 export function PlaybackCardPreview({ type, fileId, label, status, empty = '未选择媒体' }: {
   type: 'audio' | 'video'; fileId?: string; label: string; status: ReactNode; empty?: string
 }) {
+  const uiText = useUiText()
   const [name, setName] = useState<string>()
   const [duration, setDuration] = useState<number>()
   useEffect(() => {
@@ -20,7 +22,7 @@ export function PlaybackCardPreview({ type, fileId, label, status, empty = '未�
   }, [fileId, type])
 
   return <GenerationCardFrame label={label} status={<>
-    {type === 'audio' && duration !== undefined && <span>{Number(duration.toFixed(1))} 秒</span>}
+    {type === 'audio' && duration !== undefined && <span>{Number(duration.toFixed(1))} {uiText("秒")}</span>}
     {status}
   </>}>
     <div className="generation-playback-card-preview">

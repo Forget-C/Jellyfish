@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasNodeRead, CanvasPrecheck, CanvasRunSubmit, CanvasRuntimeEvent, CanvasSnapshot } from '../../../services/generated'
@@ -17,6 +18,7 @@ type Pending = { cardId: string; command: CanvasRunSubmit }
 /** Runtime is an observation projection, never an editable CanvasDocument. Unknown
  * submission outcomes keep the exact durable command until its receipt is known. */
 export function useGenerationCanvasRuntime(projectId: string, canvasId: string | null, save: () => Promise<boolean>, canEdit: () => boolean, savedRevision?: number) {
+  const uiText = useUiText()
   const scope = `${projectId}:${canvasId}`, key = `jellyfish:generation-run:${scope}`
   const [snapshot, setSnapshot] = useState<RuntimeSnapshot>(empty)
   const [connection, setConnection] = useState<StreamConnection>('connecting')
@@ -40,9 +42,9 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
       const next = response.data
       setSnapshot(previous => next.cursor >= previous.cursor ? { ...next, outputScope: scope } : previous)
     }).catch(() => {
-      if (state.current === current && request === current.snapshotRequest && generation === current.generation) setError('输出状态读取失败，请重开后重试')
+      if (state.current === current && request === current.snapshotRequest && generation === current.generation) setError(uiText("输出状态读取失败，请重开后重试"))
     })
-  }, [projectId, canvasId, scope])
+  }, [uiText, projectId, canvasId, scope])
   useEffect(() => {
     const s = { scope, generation: 0, snapshotRequest: 0, previewGeneration: -1, checking: false, submitting: false, pending: undefined as Pending | undefined }
     state.current = s
@@ -56,7 +58,7 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
         if (typeof saved.cardId !== 'string' || typeof saved.command?.request_id !== 'string' || typeof saved.command?.preview_token !== 'string') throw new Error('invalid pending run')
         s.pending = saved; setPending(saved)
       }
-    } catch { setStorageBlocked(true); setError('运行回执保护记录无法读取；请恢复浏览器存储并刷新后再执行') }
+    } catch { setStorageBlocked(true); setError(uiText("运行回执保护记录无法读取；请恢复浏览器存储并刷新后再执行")) }
     const stream = connectEventStream<CanvasRuntimeEvent>({
       url: async () => {
         const response = await Canvases.canvasStreamConnection({ projectId, canvasId })
@@ -91,7 +93,7 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
       },
     })
     return () => { stream.close(); if (s === state.current) state.current = { ...s, scope: '' } }
-  }, [scope, canvasId, key, projectId, refreshSnapshot])
+  }, [uiText, scope, canvasId, key, projectId, refreshSnapshot])
   // Ordinary saves can invalidate outputs without producing task events.
   useEffect(() => { if (savedRevision !== undefined) refreshSnapshot() }, [savedRevision, refreshSnapshot])
   const invalidate = () => { state.current.generation++; setPreview(undefined) }
@@ -126,7 +128,7 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
         s.pending = undefined; setPending(undefined); setPreview(undefined)
         try { localStorage.removeItem(key) } catch { /* Original command remains safe to replay. */ }
       }
-      setError(s.pending ? describe(reason) : reason instanceof ApiError ? describe(reason) : '运行回执保护无法保存，未提交运行；请恢复浏览器存储后重试')
+      setError(s.pending ? describe(reason) : reason instanceof ApiError ? describe(reason) : uiText("运行回执保护无法保存，未提交运行；请恢复浏览器存储后重试"))
     } finally { if (s === state.current) { s.submitting = false; setSubmitting(false) } }
   }
   const cancel = async (runId: string, nodeId?: string) => {
@@ -139,7 +141,7 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
       // The command acknowledges intent only. The persistent stream remains the
       // authority for status, retained text and releasing an occupied card.
     } catch (reason) {
-      if (s === state.current) setError(reason instanceof ApiError ? describe(reason) : '取消请求结果未知，继续观察真实任务状态；可核实后再次请求取消')
+      if (s === state.current) setError(reason instanceof ApiError ? describe(reason) : uiText("取消请求结果未知，继续观察真实任务状态；可核实后再次请求取消"))
     } finally {
       requests.delete(id)
       if (s === state.current) setCancelling(new Set(requests))

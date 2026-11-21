@@ -1,3 +1,4 @@
+import { uiText } from '../../../uiText'
 import type { InputBinding, OutputIdentity, PromptDocument, PromptInstruction, PromptReference, PromptText } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
 
@@ -59,8 +60,8 @@ export function withEditorPrompt(card: GenerationCard, prompt: EditorPromptDocum
 export function bindingReferences(card: GenerationCard, id: string) {
   if (!('prompt' in card)) return []
   return (card.prompt?.segments || []).flatMap(segment => segment.kind === 'reference'
-    ? segment.binding_id === id ? [{ segmentId: segment.id, referenceId: segment.id, label: '正文引用' }] : []
-    : segment.kind === 'instruction' ? (segment.references || []).filter(ref => ref.binding_id === id).map(ref => ({ segmentId: segment.id, referenceId: ref.id, label: `${segment.command}指令引用` })) : [])
+    ? segment.binding_id === id ? [{ segmentId: segment.id, referenceId: segment.id, label: uiText("正文引用") }] : []
+    : segment.kind === 'instruction' ? (segment.references || []).filter(ref => ref.binding_id === id).map(ref => ({ segmentId: segment.id, referenceId: ref.id, label: uiText("{{command}}指令引用", { command: segment.command }) })) : [])
 }
 
 /** 解除没有显式引用的采用，仅移除绑定拥有的配置，保留候选来源。 */

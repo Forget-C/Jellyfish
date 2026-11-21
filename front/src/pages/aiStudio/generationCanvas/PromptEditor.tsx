@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { promptInputPort } from './inputBindings'
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import type { Ref } from 'react'
@@ -37,6 +38,7 @@ export type PromptEditorHandle = { insertReference: (source: OutputIdentity) => 
 
 /** DOM 仅作为输入表面；持久值是有稳定身份的片段，组合输入期间不重建 DOM。 */
 export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsHost, document, card, value, onChange, disabled, candidates: incomingCandidates = [], referenceActionsRef, fieldLabel = '模型正文', fieldDescriptionId, fieldPlaceholder, allReferences = false }: { fieldLabel?: string; fieldDescriptionId?: string; fieldPlaceholder?: string; allReferences?: boolean; referenceActionsRef?: Ref<PromptEditorHandle>; compact?: boolean; onSubmit?: () => void; submitDisabled?: boolean; toolsHost?: HTMLElement | null; document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; candidates?: Candidate[] }) {
+  const uiText = useUiText()
   const root = useRef<HTMLDivElement>(null), composing = useRef(false), local = useRef(value), renderedContent = useRef('')
   const [category, setCategory] = useState('text'), [query, setQuery] = useState(''), [activeKey, setActiveKey] = useState<string | null>()
   const stableCandidates = useRef(incomingCandidates)
@@ -94,7 +96,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
   }
   const label = (reference: PromptReference) => {
     const candidate = candidates.find(item => sourceKey(item.source) === sourceKey(reference.source))
-    return candidate?.displayLabel || candidate?.token || `@缺失(${reference.source.card_id}:${reference.source.position + 1})`
+    return candidate?.displayLabel || candidate?.token || uiText("@缺失({{card_id}}:{{value2}})", { card_id: reference.source.card_id, value2: reference.source.position + 1 })
   }
   const draw = (next: PromptDocument) => {
     if (!root.current) return
@@ -270,28 +272,28 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
     if (candidate?.available && !candidate.disabledReason) insert({ id: crypto.randomUUID(), kind: 'reference', source: candidate.source })
   } }))
   const tools = <Space wrap>
-      {card.type === 'model.video' && <Select<string> disabled={disabled} aria-label="系统指令" placeholder="添加系统指令" value={undefined} options={['首帧参考', '尾帧参考', '关键帧参考', '主体参考'].map(command => ({ value: command, label: `/${command}` }))}
+      {card.type === 'model.video' && <Select<string> disabled={disabled} aria-label={uiText("系统指令")} placeholder={uiText("添加系统指令")} value={undefined} options={['首帧参考', '尾帧参考', '关键帧参考', '主体参考'].map(command => ({ value: command, label: `/${uiText(command)}` }))}
         onChange={command => { if (command) publish({ segments: [...(read().segments || []), { id: crypto.randomUUID(), kind: 'instruction', command, parameters: {}, references: [] }] }, true) }} />}
-      <Select aria-label="引用分类" value={category} onChange={setCategory} options={Object.entries({ text: '文本', image: '图片', video: '视频', audio: '音频' }).map(([value, label]) => ({ value, label }))} />
-      {candidates.filter(item => item.source.port_id === category).map(item => <Button key={sourceKey(item.source)} size="small" disabled={disabled || !item.available || !!item.disabledReason} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>{item.displayLabel || item.token}{!item.available && ' 缺失'}</Button>)}
-      {query && <small role="status">匹配 {query}；完整代号确认后绑定</small>}
+      <Select aria-label={uiText("引用分类")} value={category} onChange={setCategory} options={Object.entries({ text: '文本', image: '图片', video: '视频', audio: '音频' }).map(([value, label]) => ({ value, label: uiText(label) }))} />
+      {candidates.filter(item => item.source.port_id === category).map(item => <Button key={sourceKey(item.source)} size="small" disabled={disabled || !item.available || !!item.disabledReason} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>{item.displayLabel || item.token}{!item.available && uiText(" 缺失")}</Button>)}
+      {query && <small role="status">{uiText("匹配")} {query}{uiText("；完整代号确认后绑定")}</small>}
     </Space>
-  const candidateList = query && <div ref={list} id={listId} role="listbox" aria-label="引用候选" className={imageMentions ? 'generation-prompt-candidates' : undefined} onMouseDown={event => event.preventDefault()}>
-      {matches.map((item, index) => <button type="button" id={`${listId}-${index}`} key={sourceKey(item.source)} className="generation-prompt-option" role="option" aria-label={item.displayLabel || item.token} aria-description={imageMentions ? [item.name, item.disabledReason || (!item.available ? '来源输出缺失' : item.adopted ? '已采用' : '候选')].filter(Boolean).join(' · ') : undefined} aria-selected={item === active} disabled={disabled || !item.available || !!item.disabledReason} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>
-        {imageMentions ? <><span className="generation-prompt-candidate-preview">{item.fileId ? <img alt="" src={buildFileDownloadUrl(item.fileId)} /> : item.source.port_id === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span><span className="generation-prompt-candidate-text"><strong title={item.displayLabel || item.token}>{item.displayLabel || item.token}</strong><small>{item.name}</small></span><small>{item.disabledReason || (!item.available ? '来源输出缺失' : item.adopted ? '已采用' : '候选')}</small></> : item.displayLabel || item.token}
+  const candidateList = query && <div ref={list} id={listId} role="listbox" aria-label={uiText("引用候选")} className={imageMentions ? 'generation-prompt-candidates' : undefined} onMouseDown={event => event.preventDefault()}>
+      {matches.map((item, index) => <button type="button" id={`${listId}-${index}`} key={sourceKey(item.source)} className="generation-prompt-option" role="option" aria-label={item.displayLabel || item.token} aria-description={imageMentions ? [item.name, item.disabledReason || (!item.available ? uiText("来源输出缺失") : item.adopted ? uiText("已采用") : uiText("候选"))].filter(Boolean).join(' · ') : undefined} aria-selected={item === active} disabled={disabled || !item.available || !!item.disabledReason} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>
+        {imageMentions ? <><span className="generation-prompt-candidate-preview">{item.fileId ? <img alt="" src={buildFileDownloadUrl(item.fileId)} /> : item.source.port_id === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span><span className="generation-prompt-candidate-text"><strong title={item.displayLabel || item.token}>{item.displayLabel || item.token}</strong><small>{item.name}</small></span><small>{item.disabledReason || (!item.available ? uiText("来源输出缺失") : item.adopted ? uiText("已采用") : uiText("候选"))}</small></> : item.displayLabel || item.token}
       </button>)}
-      {!matches.length && <small>{imageMentions ? '没有匹配候选，将保留为普通文本' : '没有匹配的实际输出；可切换引用分类'}</small>}
+      {!matches.length && <small>{imageMentions ? uiText("没有匹配候选，将保留为普通文本") : uiText("没有匹配的实际输出；可切换引用分类")}</small>}
     </div>
   return <>
-    {compact ? toolsHost && createPortal(<details className="generation-material-reference-tools"><summary>＠ 引用与指令</summary>{tools}</details>, toolsHost) : tools}
-    {(value.segments || []).filter((segment): segment is PromptInstruction => segment.kind === 'instruction').map(instruction => <section key={instruction.id} aria-label={`指令 ${instruction.command}`} data-instruction-id={instruction.id} data-segment-id={instruction.id}>
+    {compact ? toolsHost && createPortal(<details className="generation-material-reference-tools"><summary>{uiText("＠ 引用与指令")}</summary>{tools}</details>, toolsHost) : tools}
+    {(value.segments || []).filter((segment): segment is PromptInstruction => segment.kind === 'instruction').map(instruction => <section key={instruction.id} aria-label={uiText("指令 {{command}}", { command: instruction.command })} data-instruction-id={instruction.id} data-segment-id={instruction.id}>
       <strong>/{instruction.command}</strong>
-      {instruction.command === '主体参考' && <Input disabled={disabled} aria-label="主体名称" value={instruction.parameters?.name || ''} onChange={event => publish({ segments: (value.segments || []).map(segment => segment.id === instruction.id ? { ...instruction, parameters: { ...instruction.parameters, name: event.target.value } } : segment) }, true)} />}
-      <Select<string[]> disabled={disabled} aria-label={`指令引用 ${instruction.command}`} mode="multiple" value={(instruction.references || []).map(reference => sourceKey(reference.source))}
+      {instruction.command === '主体参考' && <Input disabled={disabled} aria-label={uiText("主体名称")} value={instruction.parameters?.name || ''} onChange={event => publish({ segments: (value.segments || []).map(segment => segment.id === instruction.id ? { ...instruction, parameters: { ...instruction.parameters, name: event.target.value } } : segment) }, true)} />}
+      <Select<string[]> disabled={disabled} aria-label={uiText("指令引用 {{command}}", { command: instruction.command })} mode="multiple" value={(instruction.references || []).map(reference => sourceKey(reference.source))}
         options={candidates.filter(candidate => candidate.available && (!candidate.inputPorts || candidate.inputPorts.includes(promptInputPort(card, candidate.source, instruction.command)))).map(candidate => ({ value: sourceKey(candidate.source), label: candidate.displayLabel || candidate.token }))}
         onChange={keys => publish({ segments: (value.segments || []).map(segment => segment.id === instruction.id ? { ...instruction, references: keys.map(key => instruction.references?.find(reference => sourceKey(reference.source) === key) || { id: crypto.randomUUID(), kind: 'reference', source: candidates.find(candidate => sourceKey(candidate.source) === key)!.source }) } : segment) }, true)} />
-      <Button disabled={disabled} size="small" onClick={() => publish({ segments: (value.segments || []).filter(segment => segment.id !== instruction.id) }, true)}>删除指令</Button>
-      {!instruction.references?.length && <small role="alert">指令缺少引用，可继续编辑保存</small>}
+      <Button disabled={disabled} size="small" onClick={() => publish({ segments: (value.segments || []).filter(segment => segment.id !== instruction.id) }, true)}>{uiText("删除指令")}</Button>
+      {!instruction.references?.length && <small role="alert">{uiText("指令缺少引用，可继续编辑保存")}</small>}
     </section>)}
     {!imageMentions && candidateList}
     {imageMentions && query && createPortal(<Popover open placement="topLeft" arrow={false} trigger={[]} overlayClassName="canvas-workbench-dialog generation-prompt-popup" content={candidateList} overlayStyle={{ width: popupAnchor.width }}>
@@ -364,7 +366,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
           range.insertNode(fragment); publish(read()); if (!segments) confirm()
         }
       }} />
-    {(value.segments || []).filter(segment => segment.kind === 'text' && (!imageMentions || allReferences || segment.text?.includes('〔引用失效：')) && /(?<!\\)@(?:文本|图片|视频|音频)\d*/.test(segment.text || '')).map(segment => <small role="alert" key={segment.id}>代号尚未确认或不存在；按完整代号选择实际输出</small>)}
+    {(value.segments || []).filter(segment => segment.kind === 'text' && (!imageMentions || allReferences || segment.text?.includes('〔引用失效：')) && /(?<!\\)@(?:文本|图片|视频|音频)\d*/.test(segment.text || '')).map(segment => <small role="alert" key={segment.id}>{uiText("代号尚未确认或不存在；按完整代号选择实际输出")}</small>)}
     {referencesIn(value).map(segment => referenceIssue(document, card, segment.source, candidates) && <small role="alert" key={segment.id} data-diagnostic-segment={segment.id}>{label(segment)}：{referenceIssue(document, card, segment.source, candidates)}</small>)}
   </>
 }

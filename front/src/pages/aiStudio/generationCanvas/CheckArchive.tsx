@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useEffect, useState } from 'react'
 import { Alert, Empty } from 'antd'
 import { StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
@@ -8,6 +9,7 @@ import { CheckReportDetails } from './CheckReportDetails'
 
 /** A deleted check card's reports are reachable from the canvas that owns them. */
 export function CheckArchive({ projectId, canvasId, revision, targetReportId }: { projectId: string; canvasId: string; revision: number; targetReportId?: string }) {
+  const uiText = useUiText()
   const [open, setOpen] = useState(false)
   const [reports, setReports] = useState<CanvasCheckReportRead[]>([])
   const [newReportId, setNewReportId] = useState<string>()
@@ -67,19 +69,19 @@ export function CheckArchive({ projectId, canvasId, revision, targetReportId }: 
   }
 
   return <>
-    <Button aria-expanded={open} onClick={() => setOpen(!open)}>检查归档</Button>
-    <WorkbenchDetails title="检查归档" open={open} onClose={() => setOpen(false)}>
-      <section aria-label="已删检查卡报告" className="generation-check-report">
-        <Button size="small" variant="quiet" loading={loading} onClick={() => setRefresh(value => value + 1)}>刷新检查归档</Button>
-        {error && <Alert type="warning" message="读取检查归档失败，请刷新" />}
+    <Button aria-expanded={open} onClick={() => setOpen(!open)}>{uiText("检查归档")}</Button>
+    <WorkbenchDetails title={uiText("检查归档")} open={open} onClose={() => setOpen(false)}>
+      <section aria-label={uiText("已删检查卡报告")} className="generation-check-report">
+        <Button size="small" variant="quiet" loading={loading} onClick={() => setRefresh(value => value + 1)}>{uiText("刷新检查归档")}</Button>
+        {error && <Alert type="warning" message={uiText("读取检查归档失败，请刷新")} />}
         {!loading && !error && (newReportId && !reports.some(report => report.id === newReportId)
-          ? <p role="status">指定报告暂不可用</p> : !reports.length && <Empty description="暂无已删检查卡的报告" />)}
+          ? <p role="status">{uiText("指定报告暂不可用")}</p> : !reports.length && <Empty description={uiText("暂无已删检查卡的报告")} />)}
         {reports.map(report => <details key={report.id} open={report.id === newReportId || undefined} className="generation-check-basis">
-          <summary>检查卡 {report.check_card_id} · 原目标 {report.basis.target_card_id} · 修订 {report.basis.revision}</summary>
+          <summary>{uiText("检查卡")} {report.check_card_id} {uiText("· 原目标")} {report.basis.target_card_id} {uiText("· 修订")} {report.basis.revision}</summary>
           <div className="generation-check-report">
             {report.executions?.some(execution => (execution.status === 'queued' || execution.status === 'running') && !execution.cancel_requested)
               && <Button size="small" variant="quiet" loading={cancelling === report.id} disabled={!!cancelling}
-                onClick={() => void cancel(report)}>取消本轮检查</Button>}
+                onClick={() => void cancel(report)}>{uiText("取消本轮检查")}</Button>}
             <CheckReportDetails report={report} active={open} recheck={{ projectId, canvasId, disabled: !!cancelling, onReport: showReport }} />
           </div>
         </details>)}

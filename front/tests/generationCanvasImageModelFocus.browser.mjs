@@ -105,5 +105,18 @@ try{
   assert.equal(await editor.getByRole('combobox',{name:'图片画幅',exact:true}).count(),0,'no adapter capability does not fabricate parameter controls')
   assert.equal(await editor.getByRole('combobox',{name:'图片分辨率',exact:true}).count(),0)
   await page.screenshot({path:join(output,'image-model-unselected-parameters.png'),fullPage:true})
+  const languagePage=await context.newPage()
+  await languagePage.goto('http://127.0.0.1:4459/canvases')
+  await languagePage.getByRole('button',{name:'用户与语言设置'}).click()
+  await languagePage.getByRole('menuitem',{name:'English',exact:true}).click()
+  await languagePage.close()
+  const beforeLocale=(await read()).document.cards.find(c=>c.id==='m')
+  await page.reload();await open('m')
+  const quantity=editor.getByRole('spinbutton',{name:'Image count',exact:true})
+  assert.equal(await quantity.inputValue(),'2 images')
+  await quantity.fill('3');await quantity.press('Tab')
+  for(let i=0;i<80;i++){if((await read()).document.cards.find(c=>c.id==='m').config.count===3)break;await delay(100)}
+  const afterLocale=(await read()).document.cards.find(c=>c.id==='m')
+  assert.deepEqual(afterLocale,{...beforeLocale,config:{...beforeLocale.config,count:3}})
   writeFileSync(join(output,'manifest.json'),JSON.stringify(manifest,null,2));console.log('PASS C59 real image outputs/parameters/preview and F10–F12 threeviewports',output)
 }catch(error){if(page)await page.screenshot({path:join(output,'failure.png'),fullPage:true});throw error}finally{await cleanup()}
