@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { Form, Select } from 'antd'
 
 export type ProjectVisualStyleChoice = '现实' | '动漫'
@@ -73,22 +74,25 @@ function getDefaultStyle(visual: string, options: ProjectStyleFieldOptions): str
 
 /** 复用视觉与视频风格的联动选择；受控模式可在资产档案中横向排列。 */
 export function ProjectVisualStyleAndStyleFields(props: FormModeProps | ControlledModeProps) {
+  const uiText = useUiText()
   const disabled = props.disabled
   const resolvedOptions = resolveOptions(props.options)
+
+  const labels = (items: OptionItem[]) => items.map(item => ({ ...item, label: uiText(item.label) }))
 
   if ('form' in props) {
     const { form } = props
 
     return (
       <>
-        <Form.Item name="visual_style" label="视觉风格" rules={[{ required: true }]}>
+        <Form.Item name="visual_style" label={uiText("视觉风格")} rules={[{ required: true }]}>
           <Select
             disabled={disabled}
             onChange={(v: string) => {
               const nextStyle = getDefaultStyle(v, resolvedOptions)
               form.setFieldValue('style', nextStyle)
             }}
-            options={resolvedOptions.visualStyles}
+            options={labels(resolvedOptions.visualStyles)}
           />
         </Form.Item>
 
@@ -96,8 +100,8 @@ export function ProjectVisualStyleAndStyleFields(props: FormModeProps | Controll
           {({ getFieldValue }) => {
             const visual = (getFieldValue('visual_style') as string | undefined) ?? resolvedOptions.visualStyles[0]?.value ?? '现实'
             return (
-              <Form.Item name="style" label="视频风格" rules={[{ required: true }]}>
-                <Select disabled={disabled} options={resolvedOptions.stylesByVisual[visual] ?? []} />
+              <Form.Item name="style" label={uiText("视频风格")} rules={[{ required: true }]}>
+                <Select disabled={disabled} options={labels(resolvedOptions.stylesByVisual[visual] ?? [])} />
               </Form.Item>
             )
           }}
@@ -111,30 +115,30 @@ export function ProjectVisualStyleAndStyleFields(props: FormModeProps | Controll
   return (
     <div className={props.layout === 'horizontal' ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : 'space-y-3'}>
       <div>
-        <span className="text-gray-600 text-sm">{visualStyleLabel ?? '视觉风格'}</span>
+        <span className="text-gray-600 text-sm">{visualStyleLabel ?? uiText("视觉风格")}</span>
         <Select
           className="mt-1 w-full"
-          aria-label={visualStyleLabel ?? '视觉风格'}
+          aria-label={visualStyleLabel ?? uiText("视觉风格")}
           disabled={disabled}
           value={visual_style ?? undefined}
-          placeholder="未提供"
+          placeholder={uiText("未提供")}
           onChange={(v) => {
             const nextVisual = v as ProjectVisualStyleChoice
             onChange({ visual_style: nextVisual, style: getDefaultStyle(nextVisual, resolvedOptions) })
           }}
-          options={resolvedOptions.visualStyles}
+          options={labels(resolvedOptions.visualStyles)}
         />
       </div>
       <div>
-        <span className="text-gray-600 text-sm">{styleLabel ?? '视频风格'}</span>
+        <span className="text-gray-600 text-sm">{styleLabel ?? uiText("视频风格")}</span>
         <Select
           className="mt-1 w-full"
-          aria-label={styleLabel ?? '视频风格'}
+          aria-label={styleLabel ?? uiText("视频风格")}
           disabled={disabled || !visual_style}
           value={style ?? undefined}
-          placeholder="未提供"
+          placeholder={uiText("未提供")}
           onChange={(v) => { if (visual_style) onChange({ visual_style, style: String(v) }) }}
-          options={visual_style ? resolvedOptions.stylesByVisual[visual_style] ?? [] : []}
+          options={labels(visual_style ? resolvedOptions.stylesByVisual[visual_style] ?? [] : [])}
         />
       </div>
     </div>

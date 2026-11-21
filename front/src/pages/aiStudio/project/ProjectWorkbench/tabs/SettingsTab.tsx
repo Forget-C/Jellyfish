@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../../uiText'
 import { useEffect, useState } from 'react'
 import { Alert, Button, Form, Input, InputNumber, Select, Space, Switch, message } from 'antd'
 import { type ProjectRead, type ProjectUpdate } from '../../../../../services/generated'
@@ -26,6 +27,7 @@ export function SettingsTab({ project, saving, onSave }: {
   saving: boolean
   onSave: (values: ProjectUpdate, coverUpload?: File) => Promise<boolean>
 }) {
+  const uiText = useUiText()
   const [form] = Form.useForm<ProjectUpdate>()
   const { options, videoRatioOptions } = useProjectStyleOptions()
   const [error, setError] = useState('')
@@ -45,7 +47,7 @@ export function SettingsTab({ project, saving, onSave }: {
       if (typeof cover === 'string' || cover === null) update.cover_file_id = cover
       if (await onSave(update, cover instanceof File ? cover : undefined)) {
         setCover(undefined)
-        message.success('项目已更新')
+        message.success(uiText("项目已更新"))
       }
     } catch (cause) {
       setError(apiErrorMessage(cause))
@@ -61,41 +63,41 @@ export function SettingsTab({ project, saving, onSave }: {
 
   return (
     <>
-      <ProjectContentToolbar><h1 className="app-page-title">项目设置</h1></ProjectContentToolbar>
-      <Form aria-label="项目设置表单" form={form} layout="vertical" className="app-settings-form project-settings-form" initialValues={saved} onFinish={save} disabled={saving}>
+      <ProjectContentToolbar><h1 className="app-page-title">{uiText("项目设置")}</h1></ProjectContentToolbar>
+      <Form aria-label={uiText("项目设置表单")} form={form} layout="vertical" className="app-settings-form project-settings-form" initialValues={saved} onFinish={save} disabled={saving}>
         {error && <Alert type="error" showIcon message={error} className="mb-4" />}
         <section className="project-settings-group" aria-labelledby="project-settings-basic">
-          <h2 id="project-settings-basic">基本信息</h2>
+          <h2 id="project-settings-basic">{uiText("基本信息")}</h2>
           <div className="project-settings-basic-fields">
             <ProjectCoverField projectId={project.id} savedId={project.cover_file_id} draft={cover} disabled={saving} onChange={setCover} />
             <div>
-              <Form.Item name="name" label="项目名称" rules={[{ required: true, whitespace: true, message: '请输入项目名称' }]}>
+              <Form.Item name="name" label={uiText("项目名称")} rules={[{ required: true, whitespace: true, message: uiText("请输入项目名称") }]}>
                 <Input />
               </Form.Item>
-              <Form.Item name="description" label="项目简介">
+              <Form.Item name="description" label={uiText("项目简介")}>
                 <Input.TextArea rows={3} />
               </Form.Item>
             </div>
           </div>
         </section>
         <section className="project-settings-group" aria-labelledby="project-settings-generation">
-        <h2 id="project-settings-generation">生成默认设置</h2>
+        <h2 id="project-settings-generation">{uiText("生成默认设置")}</h2>
         <div className="project-settings-short-fields"><ProjectVisualStyleAndStyleFields form={form} options={options} /></div>
-        <div className="project-settings-short-fields"><Form.Item name="seed" label="全局种子值" rules={[{ required: true, type: 'integer', min: 0, message: '请输入非负整数' }]} tooltip="固定种子可确保整部短剧视觉调性一致">
+        <div className="project-settings-short-fields"><Form.Item name="seed" label={uiText("全局种子值")} rules={[{ required: true, type: 'integer', min: 0, message: uiText("请输入非负整数") }]} tooltip={uiText("固定种子可确保整部短剧视觉调性一致")}>
           <InputNumber min={0} className="w-full" />
         </Form.Item>
-        <Form.Item name="default_video_ratio" label="默认视频比例">
-          <Select allowClear placeholder="未设置时由模型/供应商决定" options={videoRatioOptions} />
+        <Form.Item name="default_video_ratio" label={uiText("默认视频比例")}>
+          <Select allowClear placeholder={uiText("未设置时由模型/供应商决定")} options={videoRatioOptions} />
         </Form.Item>
         </div><div className="project-settings-switch-row">
-          <div><span>风格统一</span><p>所有章节继承项目风格</p></div>
-          <Form.Item name="unify_style" valuePropName="checked" noStyle><Switch aria-label="风格统一" /></Form.Item>
+          <div><span>{uiText("风格统一")}</span><p>{uiText("所有章节继承项目风格")}</p></div>
+          <Form.Item name="unify_style" valuePropName="checked" noStyle><Switch aria-label={uiText("风格统一")} /></Form.Item>
         </div>
         </section>
         <Space size={8} className="project-settings-actions">
-          {dirty && <span role="status">有未保存修改</span>}
-          <Button disabled={!dirty || saving} onClick={cancel}>取消</Button>
-          <Button type="primary" htmlType="submit" disabled={!dirty || saving} loading={saving}>保存</Button>
+          {dirty && <span role="status">{uiText("有未保存修改")}</span>}
+          <Button disabled={!dirty || saving} onClick={cancel}>{uiText("取消")}</Button>
+          <Button type="primary" htmlType="submit" disabled={!dirty || saving} loading={saving}>{uiText("保存")}</Button>
         </Space>
       </Form>
     </>

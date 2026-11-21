@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { useEffect, useRef, useState } from 'react'
 import { Button, Drawer } from 'antd'
 import { MenuOutlined } from '@ant-design/icons'
@@ -7,6 +8,7 @@ import './project-navigation.css'
 
 /** 项目菜单在各个普通项目路由间共享，窄屏用同一组链接打开抽屉。 */
 export function ProjectNavigation({ projectId, projectName }: { projectId: string; projectName?: string }) {
+  const uiText = useUiText()
   const { pathname, search } = useLocation()
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -37,29 +39,29 @@ export function ProjectNavigation({ projectId, projectName }: { projectId: strin
     return () => desktop.removeEventListener('change', closeOnDesktop)
   }, [])
 
-  const menu = <nav className="app-project-navigation" aria-label="项目导航">
-    <strong className="app-project-name" title={projectName}>{projectName || '项目'}</strong>
+  const menu = <nav className="app-project-navigation" aria-label={uiText("项目导航")}>
+    <strong className="app-project-name" title={projectName}>{projectName || uiText("项目")}</strong>
     {projectNavigationGroups.map(group => <div className="app-project-nav-group" key={group.label}>
-      <span className="app-project-nav-heading">{group.label}</span>
+      <span className="app-project-nav-heading">{uiText(group.label)}</span>
       {group.items.map(item => <Link
         key={item.key}
         className="app-project-nav-link"
         to={projectTabLocation(projectId, item.key)}
         aria-current={item.key === current ? 'page' : undefined}
         onClick={closeDrawer}
-      ><span aria-hidden="true">{item.icon}</span><span>{item.label}</span></Link>)}
+      ><span aria-hidden="true">{item.icon}</span><span>{uiText(item.label)}</span></Link>)}
     </div>)}
   </nav>
 
   return <>
     <aside className="app-project-sidebar">{menu}</aside>
     <div className="app-project-navigation-toggle">
-      <Button ref={triggerRef} type="text" aria-label="打开项目导航" aria-expanded={open} icon={<MenuOutlined />} onClick={() => setOpen(true)}>
-        {projectName || '项目导航'}
+      <Button ref={triggerRef} type="text" aria-label={uiText("打开项目导航")} aria-expanded={open} icon={<MenuOutlined />} onClick={() => setOpen(true)}>
+        {projectName || uiText("项目导航")}
       </Button>
     </div>
     <Drawer
-      title="项目导航"
+      title={uiText("项目导航")}
       placement="left"
       width={272}
       open={open}

@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -56,6 +57,7 @@ const toUIProject = (p: ProjectRead): ProjectView => {
 }
 
 function ProjectLobby() {
+  const uiText = useUiText()
   const navigate = useNavigate()
   const [wideToolbar, setWideToolbar] = useState(() => window.matchMedia(desktopToolbar).matches)
   useEffect(() => {
@@ -133,7 +135,7 @@ function ProjectLobby() {
         isDesc: sortOrder === 'desc',
       })
       if (revision !== loadRevision.current) return
-      if (!res.data?.items) throw new Error('项目列表不可用')
+      if (!res.data?.items) throw new Error(uiText("项目列表不可用"))
       const count = res.data.pagination.total
       const lastPage = Math.max(1, Math.ceil(count / pageSize))
       if (page > lastPage) {
@@ -151,7 +153,7 @@ function ProjectLobby() {
         setLoading(false)
       }
     }
-  }, [filterTab, keyword, page, pageSize, setPage, sortKey, sortOrder])
+  }, [uiText, filterTab, keyword, page, pageSize, setPage, sortKey, sortOrder])
 
   useEffect(() => {
     void load()
@@ -242,8 +244,8 @@ function ProjectLobby() {
       const deleted = new Set(selectedIds.filter((_, index) => results[index].status === 'fulfilled'))
       if (deleted.size) setReload(previous => previous + 1)
       setSelectedIds(previous => previous.filter(id => !deleted.has(id)))
-      if (deleted.size === selectedIds.length) message.success('已批量删除选中项目')
-      else message.error(deleted.size ? `已删除 ${deleted.size} 个项目，其余项目删除失败` : '批量删除失败')
+      if (deleted.size === selectedIds.length) message.success(uiText("已批量删除选中项目"))
+      else message.error(deleted.size ? uiText("已删除 {{size}} 个项目，其余项目删除失败", { size: deleted.size }) : uiText("批量删除失败"))
     } finally {
       setBatchDeleting(false)
     }
@@ -258,7 +260,7 @@ function ProjectLobby() {
       await StudioProjectsService.deleteProjectApiV1StudioProjectsProjectIdDelete({ projectId: deleteTarget.id })
       setReload(previous => previous + 1)
       setDeleteTarget(null)
-      message.success('已删除')
+      message.success(uiText("已删除"))
     } catch (cause) {
       setDeleteError(apiErrorMessage(cause))
     } finally {
@@ -272,72 +274,72 @@ function ProjectLobby() {
     multiple: true,
     selectedKeys: [sortKey, sortOrder],
     items: [
-      { key: 'sorting', type: 'group', label: '排序', children: sortOptions.map(option => ({
-        ...option, onClick: () => changeQuery('sort', option.key),
+      { key: 'sorting', type: 'group', label: uiText("排序"), children: sortOptions.map(option => ({
+        ...option, label: uiText(option.label), onClick: () => changeQuery('sort', option.key),
       })) },
-      { key: 'direction', type: 'group', label: '排序方向', children: [
-        { key: 'asc', label: '升序', onClick: () => changeQuery('direction', 'asc') },
-        { key: 'desc', label: '降序', onClick: () => changeQuery('direction', 'desc') },
+      { key: 'direction', type: 'group', label: uiText("排序方向"), children: [
+        { key: 'asc', label: uiText("升序"), onClick: () => changeQuery('direction', 'asc') },
+        { key: 'desc', label: uiText("降序"), onClick: () => changeQuery('direction', 'desc') },
       ] },
       { type: 'divider' },
-      { key: 'batch', label: '批量管理', disabled: multiSelectMode, onClick: () => setMultiSelectMode(true) },
+      { key: 'batch', label: uiText("批量管理"), disabled: multiSelectMode, onClick: () => setMultiSelectMode(true) },
     ],
   }
 
   const controls = (
     <div key="controls" className="project-lobby-controls">
       <Input
-        aria-label="搜索项目"
-        placeholder="搜索项目名称或描述"
+        aria-label={uiText("搜索项目")}
+        placeholder={uiText("搜索项目名称或描述")}
         prefix={<SearchOutlined />}
         allowClear
         value={search}
         onChange={event => changeQuery('q', event.target.value)}
       />
       <Select
-        aria-label="制作阶段筛选"
+        aria-label={uiText("制作阶段筛选")}
         popupClassName="project-lobby-options"
         virtual={false}
         value={filterTab}
-        options={[{ value: 'all', label: '全部状态' }, { value: 'editRaw', label: '待补原文' }]}
+        options={[{ value: 'all', label: uiText("全部状态") }, { value: 'editRaw', label: uiText("待补原文") }]}
         onChange={value => changeQuery('stage', value === 'editRaw' ? 'edit_raw' : '')}
       />
       <Dropdown menu={optionsMenu} overlayClassName="project-lobby-options" trigger={['click']} autoFocus>
-        <Button icon={<MoreOutlined />}>排序与批量</Button>
+        <Button icon={<MoreOutlined />}>{uiText("排序与批量")}</Button>
       </Dropdown>
     </div>
   )
   const createProject = (
-    <Button key="create" ref={createButton} className="project-lobby-create" type="primary" icon={<PlusOutlined />} onClick={() => setCreateDrawerOpen(true)}>新建项目</Button>
+    <Button key="create" ref={createButton} className="project-lobby-create" type="primary" icon={<PlusOutlined />} onClick={() => setCreateDrawerOpen(true)}>{uiText("新建项目")}</Button>
   )
 
   return (
     <WorkspaceLayout className="project-lobby">
       <PageToolbar>
         <div className="project-lobby-heading">
-          <h1 className="app-page-title">项目</h1>
+          <h1 className="app-page-title">{uiText("项目")}</h1>
           <span className="project-lobby-count" role="status">
-            {!loading && !loadError && (keyword || filterTab !== 'all' ? `匹配 ${total} 个项目` : `共 ${total} 个项目`)}
+            {!loading && !loadError && (keyword || filterTab !== 'all' ? uiText("匹配 {{total}} 个项目", { total }) : uiText("共 {{total}} 个项目", { total }))}
           </span>
-          {useMock && <span className="project-lobby-count">模拟环境</span>}
+          {useMock && <span className="project-lobby-count">{uiText("模拟环境")}</span>}
         </div>
         {wideToolbar ? [controls, createProject] : [createProject, controls]}
       </PageToolbar>
       {multiSelectMode && (
         <div className="project-lobby-batch">
-          <span aria-live="polite">已选 {selectedIds.length} 个项目</span>
+          <span aria-live="polite">{uiText("已选 {{count}} 个项目", { count: selectedIds.length })}</span>
           <Popconfirm
-            title="批量删除项目"
-            description="确定删除选中的所有项目？该操作不可恢复。"
+            title={uiText("批量删除项目")}
+            description={uiText("确定删除选中的所有项目？该操作不可恢复。")}
             onConfirm={handleBatchDelete}
-            okText="删除"
-            cancelText="取消"
+            okText={uiText("删除")}
+            cancelText={uiText("取消")}
             okButtonProps={{ danger: true }}
             disabled={loading || loadError || !selectedIds.length || batchDeleting}
           >
-            <Button danger disabled={loading || loadError || !selectedIds.length} loading={batchDeleting}>删除选中</Button>
+            <Button danger disabled={loading || loadError || !selectedIds.length} loading={batchDeleting}>{uiText("删除选中")}</Button>
           </Popconfirm>
-          <Button disabled={batchDeleting} onClick={() => { setMultiSelectMode(false); setSelectedIds([]) }}>退出批量管理</Button>
+          <Button disabled={batchDeleting} onClick={() => { setMultiSelectMode(false); setSelectedIds([]) }}>{uiText("退出批量管理")}</Button>
         </div>
       )}
       <div className="app-card-list-content">
@@ -348,23 +350,23 @@ function ProjectLobby() {
           </div>
         </div>
         <WorkspaceScrollPanel ref={panel} className="project-lobby-scroll">
-          {loadError && <Alert showIcon type="error" message="无法读取项目列表" action={<Button onClick={() => void load()}>重试</Button>} />}
+          {loadError && <Alert showIcon type="error" message={uiText("无法读取项目列表")} action={<Button onClick={() => void load()}>{uiText("重试")}</Button>} />}
           {loading ? <Spin /> : !loadError && (
             <>
               {!projects.length && (
-                <Empty description={keyword || filterTab !== 'all' ? '没有匹配的项目' : '暂无项目，点击「新建项目」开始'} />
+                <Empty description={keyword || filterTab !== 'all' ? uiText("没有匹配的项目") : uiText("暂无项目，点击「新建项目」开始")} />
               )}
               <div className="app-card-list-grid project-lobby-grid">
                 {projects.map(project => {
                   const summary = projectStageMap[project.id]
                   const stage = typeof summary === 'object' ? summary : undefined
                   const noChapter = stage?.key === 'create_first_chapter'
-                  const statusText = summary === 'error' ? '读取失败' : '读取中'
-                  const chapterText = stage ? stage.chapterLabel ?? '未创建章节' : statusText
+                  const statusText = uiText(summary === 'error' ? '读取失败' : '读取中')
+                  const chapterText = stage ? (stage.chapter ? uiText("第 {{index}} 章 · {{title}}", stage.chapter) : uiText("未创建章节")) : statusText
                   const sequenceText = !stage ? statusText
-                    : noChapter || stage.sequenceCount === 0 ? '未创建场次'
-                      : stage.sequenceCount === undefined ? '场次数未知' : `本章 ${stage.sequenceCount} 场`
-                  const countText = stage?.chapterCount === undefined ? '章节数未知' : `共 ${stage.chapterCount} 章`
+                    : noChapter || stage.sequenceCount === 0 ? uiText("未创建场次")
+                      : stage.sequenceCount === undefined ? uiText("场次数未知") : uiText("本章 {{count}} 场", { count: stage.sequenceCount })
+                  const countText = stage?.chapterCount === undefined ? uiText("章节数未知") : uiText("共 {{count}} 章", { count: stage.chapterCount })
                   return (
                     <article className="project-lobby-card" key={project.id}>
                       <ProjectCover projectId={project.id} demo={useMock} source={buildFileDownloadUrl(project.cover_file_id)} />
@@ -377,10 +379,10 @@ function ProjectLobby() {
                           )}
                         </h2>
                         <div className="project-lobby-card-row">
-                          <span className="project-lobby-style" title={project.style}>{project.style ?? '未设置类型'}</span>
+                          <span className="project-lobby-style" title={project.style}>{project.style ?? uiText("未设置类型")}</span>
                           {project.updatedAt && (
-                            <span className="project-lobby-meta project-lobby-truncate" title={`更新于 ${project.updatedAt}`}>
-                              更新于 {project.updatedAt}
+                            <span className="project-lobby-meta project-lobby-truncate" title={uiText("更新于 {{updatedAt}}", { updatedAt: project.updatedAt })}>
+                              {uiText("更新于")} {project.updatedAt}
                             </span>
                           )}
                         </div>
@@ -388,9 +390,9 @@ function ProjectLobby() {
                           <FileTextOutlined aria-hidden />
                           <span className="project-lobby-truncate" title={chapterText}>{chapterText}</span>
                           {!multiSelectMode && (summary === 'error' || summary === 'retrying') && (
-                            <button type="button" className="project-lobby-retry" aria-label="重试读取章节"
+                            <button type="button" className="project-lobby-retry" aria-label={uiText("重试读取章节")}
                               aria-disabled={summary === 'retrying'} onClick={event => void retryProjectStage(project.id, event.currentTarget)}>
-                              重试
+                              {uiText("重试")}
                             </button>
                           )}
                         </div>
@@ -405,13 +407,13 @@ function ProjectLobby() {
                               <span className="project-lobby-truncate">{countText}</span>
                             </span>
                           )}
-                          {stage?.key === 'edit_raw' && <Tag bordered={false} className="project-lobby-status">待补原文</Tag>}
+                          {stage?.key === 'edit_raw' && <Tag bordered={false} className="project-lobby-status">{uiText("待补原文")}</Tag>}
                         </div>
                       </div>
                       <div className="project-lobby-card-control">
                         {multiSelectMode ? (
                           <Checkbox
-                            aria-label={`选择 ${project.name}`}
+                            aria-label={uiText("选择 {{name}}", { name: project.name })}
                             checked={selectedIds.includes(project.id)}
                             disabled={batchDeleting}
                             onChange={event => handleToggleSelect(project.id, event.target.checked)}
@@ -419,7 +421,7 @@ function ProjectLobby() {
                         ) : (
                           <Button
                             type="text"
-                            aria-label={`删除 ${project.name}`}
+                            aria-label={uiText("删除 {{name}}", { name: project.name })}
                             icon={<DeleteOutlined />}
                             onClick={event => {
                               deleteTrigger.current = event.currentTarget
@@ -437,10 +439,10 @@ function ProjectLobby() {
           )}
         </WorkspaceScrollPanel>
       </div>
-      <CardListPagination label="项目列表分页" page={page} pageSize={pageSize} total={loadError ? 0 : total}
+      <CardListPagination label={uiText("项目列表分页")} page={page} pageSize={pageSize} total={loadError ? 0 : total}
         compact={!wideToolbar} disabled={loading || batchDeleting || deleting} onChange={changePage} />
       <Modal
-        title="删除项目"
+        title={uiText("删除项目")}
         open={Boolean(deleteTarget)}
         onOk={() => void handleDelete()}
         onCancel={() => { if (!deletePending.current) setDeleteTarget(null) }}
@@ -453,14 +455,14 @@ function ProjectLobby() {
         confirmLoading={deleting}
         cancelButtonProps={{ disabled: deleting, autoFocus: true }}
         okButtonProps={{ danger: true }}
-        okText="删除"
-        cancelText="取消"
+        okText={uiText("删除")}
+        cancelText={uiText("取消")}
         keyboard={!deleting}
         maskClosable={false}
         closable={!deleting}
         destroyOnClose
       >
-        <p>确定删除「{deleteTarget?.name}」？此操作不可恢复。</p>
+        <p>{uiText("确定删除「{{name}}」？此操作不可恢复。", { name: deleteTarget?.name })}</p>
         {deleteError && <Alert type="error" showIcon message={deleteError} />}
       </Modal>
 

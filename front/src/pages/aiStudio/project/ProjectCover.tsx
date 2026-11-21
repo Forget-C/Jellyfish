@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useState } from 'react'
 import { VideoCameraOutlined } from '@ant-design/icons'
 import rain from '../../home/sample-covers/rain.svg'
@@ -13,6 +14,7 @@ export function ProjectCover({ projectId, demo = false, source, alt }: {
   source?: string
   alt?: string
 }) {
+  const uiText = useUiText()
   const [failedSource, setFailedSource] = useState<string>()
   const demoSource = demo ? demoCovers.get(projectId) : undefined
   const image = source ?? demoSource
@@ -22,7 +24,7 @@ export function ProjectCover({ projectId, demo = false, source, alt }: {
       {image && image !== failedSource ? (
         <>
           <img src={image} alt={alt ?? ''} onError={() => setFailedSource(image)} />
-          {demoSource && !source && <span className="project-lobby-cover-label">示例封面</span>}
+          {demoSource && !source && <span className="project-lobby-cover-label">{uiText("示例封面")}</span>}
         </>
       ) : (
         <span

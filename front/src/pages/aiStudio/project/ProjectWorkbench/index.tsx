@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../uiText'
 import { usePageTitle } from '../../../../layouts/pageTitle'
 import { useEffect, useRef, useState, type FC } from 'react'
 import { Card, Button, Space, Dropdown, Empty } from 'antd'
@@ -29,6 +30,7 @@ const resourceKinds: Partial<Record<TabKey, ProjectResourceKind>> = {
 }
 
 const ProjectWorkbench: FC = () => {
+  const uiText = useUiText()
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -58,7 +60,7 @@ const ProjectWorkbench: FC = () => {
     return () => { active = false }
   }, [projectId, chapters])
   const primaryCta = {
-    label: recentDestination ? '继续工作' : chapters.length ? '进入章节场次' : '创建第一章',
+    label: recentDestination ? uiText("继续工作") : chapters.length ? uiText("进入章节场次") : uiText("创建第一章"),
     icon: <PlusOutlined />,
     onClick: () => {
       if (recentDestination) navigate(recentDestination)
@@ -86,21 +88,21 @@ const ProjectWorkbench: FC = () => {
   }
 
   const moreMenuItems: MenuProps['items'] = [
-    { key: 'newActor', label: '关联演员', onClick: () => setTabInUrl('actors') },
-    { key: 'newRole', label: '新建角色', onClick: () => setTabInUrl('roles') },
-    { key: 'upload', label: '上传素材', onClick: () => navigate('/assets') },
-    { key: 'newScene', label: '新建场景', onClick: () => setTabInUrl('scenes') },
-    { key: 'newProp', label: '新建道具', onClick: () => setTabInUrl('props') },
-    { key: 'newCostume', label: '新建服装', onClick: () => setTabInUrl('costumes') },
+    { key: 'newActor', label: uiText("关联演员"), onClick: () => setTabInUrl('actors') },
+    { key: 'newRole', label: uiText("新建角色"), onClick: () => setTabInUrl('roles') },
+    { key: 'upload', label: uiText("上传素材"), onClick: () => navigate('/assets') },
+    { key: 'newScene', label: uiText("新建场景"), onClick: () => setTabInUrl('scenes') },
+    { key: 'newProp', label: uiText("新建道具"), onClick: () => setTabInUrl('props') },
+    { key: 'newCostume', label: uiText("新建服装"), onClick: () => setTabInUrl('costumes') },
   ]
 
   if (!project && !projectLoading) {
     return (
       <Card>
-        <Empty description="项目不存在" />
+        <Empty description={uiText("项目不存在")} />
         <Link to="/projects">
           <Button type="link" icon={<ArrowLeftOutlined />}>
-            返回项目列表
+            {uiText("返回项目列表")}
           </Button>
         </Link>
       </Card>
@@ -109,11 +111,11 @@ const ProjectWorkbench: FC = () => {
 
   return (
     <WorkspaceLayout style={activeTab === 'files' ? { position: 'relative' } : undefined}>
-      <ProjectToolbarProvider title={projectTabLabel(activeTab)} actions={
+      <ProjectToolbarProvider title={uiText(projectTabLabel(activeTab) ?? '')} actions={
         <Space size="small" wrap className="app-page-actions">
           {(!productionPage || recentDestination) && <Button type="primary" icon={primaryCta.icon} onClick={primaryCta.onClick}>{primaryCta.label}</Button>}
           <Dropdown menu={{ items: moreMenuItems }} placement="bottomRight">
-            <Button icon={<EllipsisOutlined />}>更多</Button>
+            <Button icon={<EllipsisOutlined />}>{uiText("更多")}</Button>
           </Dropdown>
         </Space>
       }>

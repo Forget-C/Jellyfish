@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../../uiText'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { chapters as mockChapters, type Project, type Chapter as MockChapter } from '../../../../../mocks/data'
 import { StudioChaptersService, StudioProjectsService } from '../../../../../services/generated'
@@ -32,6 +33,7 @@ function toUIChapter(c: ChapterRead): Chapter {
 }
 
 export function useProject(projectId: string | undefined) {
+  const uiText = useUiText()
   const [project, setProject] = useState<ProjectRead | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -68,7 +70,7 @@ export function useProject(projectId: string | undefined) {
         })
         : await StudioProjectsService.updateProjectApiV1StudioProjectsProjectIdPatch({ projectId, requestBody: values })
       const updated = response.data
-      if (updated?.id !== projectId) throw new Error('未能确认保存结果，请重试')
+      if (updated?.id !== projectId) throw new Error(uiText("未能确认保存结果，请重试"))
       setProject(current => current?.id === updated.id ? updated : current)
       return true
     } finally {
@@ -82,6 +84,7 @@ export function useProject(projectId: string | undefined) {
 
 /** 按服务端分页读取章节；迟到响应不覆盖新查询，读取失败与空列表分别表达。 */
 export function useChapters(projectId: string | undefined, { page = 1, pageSize = 100, query = '' } = {}) {
+  const uiText = useUiText()
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -106,18 +109,18 @@ export function useChapters(projectId: string | undefined, { page = 1, pageSize 
         const res = await StudioChaptersService.listChaptersApiV1StudioChaptersGet({
           projectId, page, pageSize, q: query || undefined,
         })
-        if (!res.data) throw new Error('章节列表读取失败')
+        if (!res.data) throw new Error(uiText("章节列表读取失败"))
         if (identity === request.current) {
           setChapters(res.data.items.map(toUIChapter)); setTotal(res.data.pagination?.total ?? res.data.items.length)
           setTotalKnown(Number.isFinite(res.data.pagination?.total) && (res.data.pagination?.total ?? -1) >= 0)
         }
       }
     } catch {
-      if (identity === request.current) { setChapters([]); setError('章节列表读取失败，请重试') }
+      if (identity === request.current) { setChapters([]); setError(uiText("章节列表读取失败，请重试")) }
     } finally {
       if (identity === request.current) setLoading(false)
     }
-  }, [projectId, page, pageSize, query])
+  }, [uiText, projectId, page, pageSize, query])
 
   useEffect(() => {
     void load()

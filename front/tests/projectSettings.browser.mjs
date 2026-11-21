@@ -165,6 +165,41 @@ try {
   await page.goto(`${origin}/projects`)
   const card = page.getByRole('article').filter({ hasText: '带上传封面的项目' })
   assert.match(await card.locator('.project-lobby-cover img').getAttribute('src'), /uploaded-cover/)
+  const baseline = { ...saved }
+  const bilingualRequests = []
+  for (const english of [false, true]) {
+    saved = { ...baseline }
+    await page.goto(origin + '/projects/settings-project?tab=settings')
+    await name.fill('晨光 Morning')
+    await page.getByRole('switch', { name: '风格统一' }).click()
+    const before = requests.length
+    if (english) {
+      await page.getByRole('button', { name: '用户与语言设置' }).click()
+      await page.getByRole('menuitem', { name: 'English', exact: true }).click()
+      await page.getByRole('navigation', { name: 'Project navigation' }).getByRole('link', { name: 'Project settings' }).waitFor()
+      await page.getByText('Realistic', { exact: true }).waitFor()
+      assert.equal(await page.getByRole('textbox', { name: 'Project name' }).inputValue(), '晨光 Morning')
+      assert.equal(new URL(page.url()).searchParams.get('tab'), 'settings')
+    }
+    assert.equal(requests.length, before)
+    const patch = page.waitForRequest(request => request.method() === 'PATCH')
+    await page.getByRole('button', { name: english ? 'Save' : /保\s*存/ }).click()
+    await patch
+    bilingualRequests.push(requests.at(-1))
+    await pendingSave(false)
+    await page.reload()
+    assert.equal(await page.getByRole('textbox', { name: english ? 'Project name' : /项目名称/ }).inputValue(), '晨光 Morning')
+  }
+  assert.deepEqual(bilingualRequests[0], bilingualRequests[1])
+  assert.equal(bilingualRequests[1].visual_style, '现实')
+  await page.goto(origin + '/projects?q=Morning&sort=name&direction=asc')
+  await page.getByRole('link', { name: '晨光 Morning' }).click()
+  await page.getByRole('link', { name: 'Project overview' }).click()
+  await page.getByRole('heading', { name: 'Project overview' }).waitFor()
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Projects' }).click()
+  assert.equal(await page.getByRole('textbox', { name: 'Search projects' }).inputValue(), 'Morning')
+  assert.equal(new URL(page.url()).searchParams.get('sort'), 'name')
+  assert.equal(new URL(page.url()).searchParams.get('direction'), 'asc')
   assert.deepEqual(errors,[])
   console.log('PASS project settings groups, scoped toolbar, failed-save recovery, saving lock and saved cancel baseline')
 } finally { await cleanup() }
