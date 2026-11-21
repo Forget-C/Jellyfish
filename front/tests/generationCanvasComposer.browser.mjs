@@ -194,16 +194,20 @@ try {
   await detail().getByRole('button', { name: '添加文本参考', exact: true }).click()
   assert.equal(await page.locator('[data-card-id]').count(), countBeforeAdding + 1, 'add creates a visible connected content card')
   const existing = detail().getByRole('combobox', { name: '连接已有卡', exact: true })
-  await existing.press('ArrowDown')
-  let selectedExisting = false
-  for (let index = 0; index < 40; index++) {
-    const active = page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-active')
-    if (await active.count() && (await active.innerText()).trim() === '图片内容卡 · empty') {
-      await existing.press('Enter'); selectedExisting = true; break
-    }
+  const connectExisting = async label => {
     await existing.press('ArrowDown')
+    const listId = await existing.getAttribute('aria-controls')
+    const active = page.locator(`.ant-select-dropdown:has([id="${listId}"]) .ant-select-item-option-active`)
+    for (let index = 0; index < 40; index++) {
+      if (await active.count() && (await active.innerText()).trim() === label) {
+        await existing.press('Enter')
+        return
+      }
+      await existing.press('ArrowDown')
+    }
+    assert.fail('existing card not reachable: ' + label)
   }
-  assert.ok(selectedExisting, 'existing empty image is keyboard reachable')
+  await connectExisting('图片内容卡 · empty')
   assert.equal(await page.locator('[data-card-id]').count(), countBeforeAdding + 1, 'choose existing only adds connection')
   assert.equal(await detail().getByRole('button', { name: '@图片11', exact: true }).count(), 0, 'empty connected output cannot be referenced')
   // Copy carries stable source separately from the human token label.
@@ -220,6 +224,16 @@ try {
   }, copied.structured)
   await detail().getByRole('alert').filter({ hasText: '来源未连接' }).waitFor()
   assert.equal(JSON.parse(await other.locator('[data-segment]').getAttribute('data-segment')).source.card_id, 's10')
+  assert.equal(await detail().getByRole('button', { name: '保存修改' }).isDisabled(), true)
+  assert.ok(!(await read()).document.edges.some(edge => edge.target_card === 'other' && edge.source_card === 's10'))
+  await connectExisting('图片内容卡 · s10')
+  await closeManagement()
+  await detail().getByRole('button', { name: '保存修改', exact: true }).press('Enter')
+  const connected = await poll(state => state.document.cards.find(card => card.id === 'other').prompt.segments.some(segment => segment.kind === 'reference'))
+  const receiver = connected.document.cards.find(card => card.id === 'other')
+  const reference = receiver.prompt.segments.find(segment => segment.kind === 'reference')
+  assert.equal(receiver.input_bindings.find(binding => binding.id === reference.binding_id).source.card_id, 's10')
+  assert.equal(connected.document.edges.filter(edge => edge.target_card === 'other' && edge.source_card === 's10' && edge.target_port === 'image').length, 1)
   await open('m')
   // Foreign structured payload remains foreign even when the target has a local token of that name.
   await editor.fill('')
@@ -228,6 +242,7 @@ try {
     element.focus(); const clipboardData = new DataTransfer(); clipboardData.setData('application/x-jellyfish-prompt+json', payload); element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, clipboardData }))
   }, JSON.stringify(foreign))
   await detail().getByRole('alert').filter({ hasText: '来源属于其他画布' }).waitFor()
+  await detail().getByRole('button', { name: '取消编辑' }).press('Enter')
   // Plain external text is confirmed against current target candidates; escapes stay literal.
   await editor.fill('')
   await editor.evaluate(element => {
@@ -270,6 +285,7 @@ try {
     element.focus(); const clipboardData = new DataTransfer(); clipboardData.setData('application/x-jellyfish-prompt+json', payload); element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, clipboardData }))
   }, JSON.stringify(instruction))
   assert.equal(JSON.parse(await editor.locator('[data-segment]').getAttribute('data-segment')).references[0].source.canvas_id, 'foreign-instruction')
+  await detail().getByRole('button', { name: '取消编辑' }).press('Enter')
   // Native multiline editing persists exact line boundaries through save/reopen.
   await editor.fill('第一行')
   const navigatorNewline = await page.evaluate(() => /Mac|iPhone|iPad/.test(navigator.platform) ? 'Meta+Enter' : 'Control+Enter')
@@ -289,8 +305,13 @@ try {
   assert.equal(escaped.text, '@图片10 /首帧参考')
   // Re-establish a reference for the final guarded disconnect check.
   await editor.fill('@图片10 '); await editor.press('Tab')
+  const guarded = await poll(state => model(state).input_bindings.some(binding => binding.source.card_id === 's10'))
+  const bindingId = model(guarded).input_bindings.find(binding => binding.source.card_id === 's10').id
+  const segment = model(guarded).prompt.segments.find(item => item.binding_id === bindingId)
+  assert.ok(segment)
   await detail().getByRole('button', { name: '断开连接 e-s10', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '请先取消引用' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '请先解除全部引用' }).filter({hasText:segment.id}).waitFor()
+  assert.ok((await read()).document.edges.some(edge => edge.id === 'e-s10'))
   await editor.fill('清理后只保留普通文字')
   await detail().getByRole('button', { name: '断开连接 e-s10', exact: true }).click()
   await save()
@@ -305,7 +326,7 @@ try {
   ], groups: [], edges: [{ id: 'basis-edge', source_card: 'basis', source_port: 'text', target_card: 'text-model', target_port: 'text' }],
   input_order: { 'text-model': { text: ['basis-edge'] } } }
   const basisSaved = await fetch(storyboardCanvasApi(base, canvas.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ request_id: 'basis-tracer', expected_revision: saved.revision, document: basisDocument }) })
+    body: JSON.stringify({ request_id: 'basis-tracer', expected_revision: saved.revision, document: withFixedSource(canvas, basisDocument) }) })
   assert.ok(basisSaved.ok, await basisSaved.text())
   await page.reload()
   await open('basis')

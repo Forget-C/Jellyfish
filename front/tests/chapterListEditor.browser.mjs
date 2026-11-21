@@ -344,15 +344,25 @@ try {
     assert.ok((await saveButton.boundingBox()).height >= (width < 768 ? 36 : 32))
     assert.equal(await editor.getByRole('textbox', { name: '章节原文', exact: true }).evaluate(text => getComputedStyle(text).lineHeight), '23.8px')
     assert.equal(await editor.getByText('修改原文不会同步已有场次', { exact: true }).evaluate(hint => getComputedStyle(hint).fontSize), '12px')
-    const backToNameGap = await editor.evaluate(dialog => {
+    const spacing = await editor.evaluate(dialog => {
       const back = dialog.querySelector('button[aria-label="返回"]')
       const name = dialog.querySelector('input[aria-label="章节名称"]')
       const label = document.createRange()
       label.selectNode(name.closest('label').firstChild)
-      return label.getBoundingClientRect().top - back.getBoundingClientRect().bottom
+      return {
+        gap: label.getBoundingClientRect().top - back.getBoundingClientRect().bottom,
+        bodyPadding: getComputedStyle(name.closest('.ant-drawer-body')).paddingBlockStart,
+        fieldMargin: getComputedStyle(name.closest('label')).marginBlockStart,
+        actionsBelowHeading: dialog.querySelector('.resource-editor-page-actions').getBoundingClientRect().top >= back.getBoundingClientRect().bottom,
+      }
     })
-    const expectedGap = width === 375 ? 108 : 33
-    assert.ok(Math.abs(backToNameGap - expectedGap) <= 2, `${width}px: return-to-name gap is ${backToNameGap}px`)
+    if (width < 768) {
+      assert.equal(spacing.bodyPadding, '12px')
+      assert.equal(spacing.fieldMargin, '12px')
+      assert.ok(spacing.actionsBelowHeading, 'narrow toolbar actions wrap below the heading')
+    } else {
+      assert.ok(Math.abs(spacing.gap - 33) <= 2, `${width}px: return-to-name gap is ${spacing.gap}px`)
+    }
     assert.equal(await editor.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true, `${width}: editor overflow`)
     const close = editor.getByRole('button', { name: '返回', exact: true })
     await close.scrollIntoViewIfNeeded()

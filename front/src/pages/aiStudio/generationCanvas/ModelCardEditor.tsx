@@ -21,6 +21,7 @@ import { MediaResultsPreview } from './MediaResultsPreview'
 import { ImageModelParameters, VideoModelParameters } from './ModelParameters'
 import { CanvasTextPreview } from '../../../components/workbench/CanvasTextPreview'
 import { sourceKey, referencesIn } from './promptRules'
+import { resultScopeIncludes } from './resultConnections'
 import { referenceLabels } from './referenceLabels'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { activeNode, canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
@@ -122,10 +123,13 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     return name || named || cardTitles[source?.type || ''] || output.token || '来源'
   }
   const supportedPorts = (output: CanvasResolvedOutput) => candidatePorts(document, output.source, card.id, capability)
+  const hasSourceConnection = (source: CanvasResolvedOutput['source']) => source.canvas_id === document.id
+    && document.edges?.some(edge => edge.target_card === card.id && edge.source_card === source.card_id
+      && edge.source_port === source.port_id && resultScopeIncludes(edge.result_scope, source.position))
   const candidateIssue = (output: CanvasResolvedOutput) => {
     if (output.source.canvas_id !== document.id) return '来源属于其他画布'
     const source = document.cards?.find(item => item.id === output.source.card_id)
-    if (!source || !(document.edges || []).some(edge => edge.target_card === card.id && edge.source_card === source.id && edge.source_port === output.source.port_id)) return '来源未连接'
+    if (!source || !hasSourceConnection(output.source)) return '来源未连接'
     if (output.available === false) return '来源输出缺失'
     if (!supportedPorts(output).includes(promptInputPort(card, output.source))) return '当前模型不支持直接引用此输入'
     if ('uploading' in source && source.uploading) return '上传中'
@@ -140,6 +144,11 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const labels = referenceLabels(document, sources, card.id)
   const displayLabel = (output: CanvasResolvedOutput) => output.token ? labels.get(sourceKey(output.source)) || output.token : labelFor(output)
   const hasInput = adopted.length > 0 || (editorPrompt(card).segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())
+  const missingPromptConnection = (prompt: EditorPromptDocument) => referencesIn(prompt).some(({ source }) => !hasSourceConnection(source))
+  const changePrompt = (prompt: EditorPromptDocument) => {
+    if (promptDraft || missingPromptConnection(prompt)) setPromptDraft(prompt)
+    else onChange(withEditorPrompt(card, prompt))
+  }
   const submitDisabled = !!(disabled || busy || checking || runDisabled || promptDraft || !hasInput)
   const submit = () => { if (!submitDisabled) onPrecheck?.() }
   const modelParameters = <><Select className="generation-material-model" title={models?.find(model => model.id === card.model_id)?.name} size="small" bordered={false} aria-label={uiText("选择模型")} data-diagnostic-control="model_id" placeholder={uiText("选择模型")} disabled={disabled} value={card.model_id || undefined}
@@ -260,14 +269,13 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
 
     <div className="generation-material-prompt">
       {resolved.error && <Alert type="warning" message={resolved.error} />}
-      {generated && <Space>
-        {promptDraft ? <><WorkbenchButton disabled={disabled} onClick={() => {
+      {(generated || promptDraft) && <Space>
+        {promptDraft ? <><WorkbenchButton disabled={disabled || missingPromptConnection(promptDraft)} onClick={() => {
           const next = withEditorPrompt(card, promptDraft) as VideoModelCard
-          onChange({ ...next, generated_prompt: { ...generated, edit_confirmed: true } })
-          setPromptDraft(undefined)
+          if (onChange(generated ? { ...next, generated_prompt: { ...generated, edit_confirmed: true } } : next) !== false) setPromptDraft(undefined)
         }}>{uiText("保存修改")}</WorkbenchButton><WorkbenchButton onClick={() => setPromptDraft(undefined)}>{uiText("取消编辑")}</WorkbenchButton></>
           : <WorkbenchButton disabled={disabled || busy} onClick={startPromptEdit}>{uiText("编辑提示词")}</WorkbenchButton>}
-        <details><summary>{uiText("查看完整执行提示词")}</summary><CanvasTextPreview text={resolved.compiled?.text || '保存并读取后查看完整提示词'} label={uiText("完整执行提示词")} /></details>
+        {generated && <details><summary>{uiText("查看完整执行提示词")}</summary><CanvasTextPreview text={resolved.compiled?.text || '保存并读取后查看完整提示词'} label={uiText("完整执行提示词")} /></details>}
       </Space>}
       <WorkbenchModal title={uiText("编辑提示词")} open={editRisk} okText={uiText("继续编辑")} cancelText={uiText("取消")} onCancel={() => setEditRisk(false)} onOk={() => {
         setConfirmedHere(true)
@@ -276,7 +284,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
         setEditRisk(false)
         setPromptDraft(editorPrompt(card))
       }}><p>{uiText("修改主体提示词可能改变分镜表达，已采用的设计仍会参与生成。修改不会同步更新设计卡。")}</p></WorkbenchModal>
-      <PromptEditor referenceActionsRef={promptEditor} compact onSubmit={submit} submitDisabled={submitDisabled} toolsHost={referenceTools} document={document} card={card} value={promptDraft || editorPrompt(card)} candidates={sources.map(item => ({ source: item.source, token: item.token || '', displayLabel: displayLabel(item), available: item.available !== false, inputPorts: supportedPorts(item), disabledReason: candidateIssue(item), ...(card.type === 'model.image' ? { name: labelFor(item), fileId: item.modality === 'image' ? item.file_id : undefined, adopted: adopted.some(binding => sourceKey(binding.source) === sourceKey(item.source)) } : {}) }))} disabled={disabled || !!generated && !promptDraft} onChange={prompt => promptDraft ? setPromptDraft(prompt) : onChange(withEditorPrompt(card, prompt))} />
+      <PromptEditor referenceActionsRef={promptEditor} compact onSubmit={submit} submitDisabled={submitDisabled} toolsHost={referenceTools} document={document} card={card} value={promptDraft || editorPrompt(card)} candidates={sources.map(item => ({ source: item.source, token: item.token || '', displayLabel: displayLabel(item), available: item.available !== false, inputPorts: supportedPorts(item), disabledReason: candidateIssue(item), ...(card.type === 'model.image' ? { name: labelFor(item), fileId: item.modality === 'image' ? item.file_id : undefined, adopted: adopted.some(binding => sourceKey(binding.source) === sourceKey(item.source)) } : {}) }))} disabled={disabled || !!generated && !promptDraft} onChange={changePrompt} />
     </div>
     {(disabled || busy || runDisabled) && <small role="status">{busy ? uiText("当前模型运行中") : uiText("当前不可提交，请核对保存与运行状态")}</small>}
   </CardComposer>
