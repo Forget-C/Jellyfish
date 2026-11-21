@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import type { CanvasTransform } from '../../../components/canvas/geometry'
 
 /** 打开编辑器只调整视口；用户输入优先，取消后不续播，也不写入内容／布局撤销。 */
@@ -35,7 +36,8 @@ export function useCanvasEditorReveal(transform: CanvasTransform, update: (offse
       const tick = (now: number) => {
         if (generation.current !== request) return
         const progress = Math.min(1, (now - start) / 150)
-        apply(1 - (1 - progress) ** 3)
+        // 在本帧内提交位移，避免取消后延迟的渲染覆盖键盘或滚轮导航。
+        flushSync(() => apply(1 - (1 - progress) ** 3))
         frame.current = progress < 1 ? requestAnimationFrame(tick) : undefined
       }
       frame.current = requestAnimationFrame(tick)
