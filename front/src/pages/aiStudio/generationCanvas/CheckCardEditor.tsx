@@ -150,7 +150,7 @@ export function CheckCardEditor() {
                   onClick={() => setExpanded(previous => previous.includes(item.id) ? previous.filter(id => id !== item.id) : [...previous, item.id])}
                   icon={<CaretRightOutlined rotate={expanded.includes(item.id) ? 90 : 0} />}>{itemName(item)}</Button>
                 <CheckStatus status={itemState(item)} />
-                <Button size="small" disabled={blocked || checking || item.availability === 'unavailable'} aria-label={`${previous ? '重新检查此项' : '检查此项'}：${itemName(item)}`} onClick={() => void run(item.id)}>{previous ? uiText("重新检查此项") : uiText("检查此项")}</Button>
+                <Button size="small" disabled={blocked || checking || item.availability === 'unavailable'} aria-label={`${uiText(previous ? '重新检查此项' : '检查此项')}：${itemName(item)}`} onClick={() => void run(item.id)}>{previous ? uiText("重新检查此项") : uiText("检查此项")}</Button>
               </div>
               <div className="generation-check-item-body" hidden={!expanded.includes(item.id)}>
                 <p className="generation-check-requirement">{item.requirement}</p>

@@ -41,9 +41,9 @@ export function RunPreview({ preview, canvas, catalog, submitting, disabled, onS
       const explicitLocation = card && diagnosticCardAction(card, target, fields)
       const unavailableCard = cardId && !card
       return <Alert key={`${diagnostic.code}:${index}`} type={diagnostic.severity === 'warning' ? 'warning' : 'error'}
-        message={`${diagnostic.code}: ${diagnostic.message}`} description={<><div>{uiText("阻止：{{value1}}", { value1: diagnostic.blocks.map(action => ({ run: '运行', save: '保存' }[action] || action)).join('、') || '无' })}</div>{unavailableCard && <small>{uiText("问题所指的卡片已不可用")}</small>}</>}
+        message={`${diagnostic.code}: ${diagnostic.message}`} description={<><div>{uiText("阻止：{{value1}}", { value1: diagnostic.blocks.map(action => uiText({ run: '运行', save: '保存' }[action] || action)).join(uiText('、')) || uiText("无") })}</div>{unavailableCard && <small>{uiText("问题所指的卡片已不可用")}</small>}</>}
         action={(explicitLocation || related.length > 0) && <Space wrap>
-          {explicitLocation && <Button size="small" onClick={() => onLocate(target)}>{explicitLocation === '查看卡片' ? explicitLocation : uiText("定位问题")}</Button>}
+          {explicitLocation && <Button size="small" onClick={() => onLocate(target)}>{explicitLocation === '查看卡片' ? uiText(explicitLocation) : uiText("定位问题")}</Button>}
           {related.map((id, position) => {
             const card = canvas?.cards?.find(item => item.id === id)
             const label = card && 'name' in card && card.name?.trim() || uiText("相关卡片 {{value1}}", { value1: position + 1 })
@@ -54,7 +54,7 @@ export function RunPreview({ preview, canvas, catalog, submitting, disabled, onS
     {!!preview.automatic_checks?.length && <section aria-label={uiText("本次自动生成后检查")}>
       <h4>{uiText("完整交付后自动检查")}</h4>
       {preview.automatic_checks.map(plan => <p key={plan.check_card_id}>
-        {uiText("检查卡")} {plan.check_card_id} {uiText("· 生成目标")} {plan.target_card_id} {uiText("· 产物")} {plan.product_count} {uiText("份 ·")} {methods[plan.observation_method]}
+        {uiText("检查卡")} {plan.check_card_id} {uiText("· 生成目标")} {plan.target_card_id} {uiText("· 产物")} {plan.product_count} {uiText("份 ·")} {uiText(methods[plan.observation_method])}
         {uiText(" · 预计调用 {{estimated_calls}} 次", { estimated_calls: plan.estimated_calls })}
         {plan.reason && ` · ${plan.reason}`}
       </p>)}

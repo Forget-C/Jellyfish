@@ -339,6 +339,13 @@ try {
   const translatedReport=editor.getByRole('region',{name:'Check report',exact:true})
   await translatedReport.getByText(/Single-item check/).waitFor()
   await translatedReport.getByText('Risk advisory',{exact:true}).first().waitFor()
+  await editor.getByRole('tab',{name:'Pre-generation check',exact:true}).click()
+  const retry=editor.getByRole('button',{name:/^Recheck item.*镜头1/}).first()
+  const rerun=page.waitForRequest(request=>request.method()==='POST' && request.postDataJSON()?.item_id)
+  await retry.click()
+  const retryRequest=await rerun
+  assert.ok(retryRequest.url().includes(single.id))
+  assert.ok(retryRequest.url().includes('check'))
   console.log('check model, partial failure, single-item retry, and sound capability rule passed')
 } catch (error) {
   await page?.screenshot({ path: join(output, 'failure.png') }).catch(() => {})

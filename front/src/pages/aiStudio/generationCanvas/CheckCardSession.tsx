@@ -122,8 +122,8 @@ function useCheckSession(props: CheckSessionProps) {
   const comparable = !loading && basisCurrent
   const blocked = !!disabled || running || cancelling || !comparable
   const ready = enabledItems.some(item => item.availability !== 'unavailable')
-  const reason = disabled ? '当前只读' : documentPending || !saved ? '保存修改后可检查' : loading ? '正在读取检查依据'
-    : error || preview?.reason || (!basis ? '请连接模型生成卡的生成检查依据' : !ready ? '没有可执行的已启用检查项，请检查配置' : '')
+  const reason = disabled ? uiText("当前只读") : documentPending || !saved ? uiText("保存修改后可检查") : loading ? uiText("正在读取检查依据")
+    : error || preview?.reason || (!basis ? uiText("请连接模型生成卡的生成检查依据") : !ready ? uiText("没有可执行的已启用检查项，请检查配置") : '')
   const showReport = (accepted: CanvasCheckReportRead) => {
     mergeReports([accepted])
   }
