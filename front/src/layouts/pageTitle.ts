@@ -1,3 +1,4 @@
+import { useUiText } from '../uiText'
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { create } from 'zustand'
@@ -19,9 +20,10 @@ export function usePageTitle(title?: string, enabled = true) {
 
 /** 只补取当前页面没有读取的上级名称，不读取当前实体或改变业务编辑基线。 */
 export function useNavigationTitles() {
+  const uiText = useUiText()
   const { pathname } = useLocation()
   const current = useTitleStore()
-  const [ancestors, setAncestors] = useState<{ pathname: string; project?: string; chapter?: string }>({ pathname: '' })
+  const [ancestors, setAncestors] = useState<{ pathname: string; project?: string | null; chapter?: string | null }>({ pathname: '' })
   useEffect(() => {
     let active = true
     const path = pathname.split('/').filter(Boolean)
@@ -30,15 +32,15 @@ export function useNavigationTitles() {
     setAncestors({ pathname })
     if (projectId) {
       void StudioProjectsService.getProjectApiV1StudioProjectsProjectIdGet({ projectId }).then(response => {
-        if (active) setAncestors(previous => ({ ...previous, project: response.data?.id === projectId ? response.data.name : '项目名称暂不可用' }))
-      }).catch(() => { if (active) setAncestors(previous => ({ ...previous, project: '项目名称暂不可用' })) })
+        if (active) setAncestors(previous => ({ ...previous, project: response.data?.id === projectId ? response.data.name : null }))
+      }).catch(() => { if (active) setAncestors(previous => ({ ...previous, project: null })) })
     }
     if (chapterId) {
       void StudioChaptersService.getChapterApiV1StudioChaptersChapterIdGet({ chapterId }).then(response => {
-        if (active) setAncestors(previous => ({ ...previous, chapter: response.data?.id === chapterId && response.data.project_id === projectId ? response.data.title : '章节名称暂不可用' }))
-      }).catch(() => { if (active) setAncestors(previous => ({ ...previous, chapter: '章节名称暂不可用' })) })
+        if (active) setAncestors(previous => ({ ...previous, chapter: response.data?.id === chapterId && response.data.project_id === projectId ? response.data.title : null }))
+      }).catch(() => { if (active) setAncestors(previous => ({ ...previous, chapter: null })) })
     }
     return () => { active = false }
   }, [pathname])
-  return { ...(ancestors.pathname === pathname ? ancestors : {}), page: current.pathname === pathname ? current.title : undefined }
+  return { ...(ancestors.pathname === pathname ? { project: ancestors.project === null ? uiText("项目名称暂不可用") : ancestors.project, chapter: ancestors.chapter === null ? uiText("章节名称暂不可用") : ancestors.chapter } : {}), page: current.pathname === pathname ? current.title : undefined }
 }

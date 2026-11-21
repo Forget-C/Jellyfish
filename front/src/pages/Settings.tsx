@@ -47,6 +47,7 @@ const Settings: React.FC = () => {
           rules={[{ required: true, message: t('settings:validation.roleRequired') }]}
         >
           <Select
+            aria-label={t('settings:role')}
             options={[
               { label: t('settings:roleOptions.admin'), value: 'admin' },
               {

@@ -1463,7 +1463,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           if (result.document) edit(result.document)
           return result.reason
         }} />}
-      <CanvasToolbarMenu label={uiText("布局")} caption="布局">
+      <CanvasToolbarMenu label={uiText("布局")} caption={uiText("布局")}>
         <Button disabled={arrangeDisabled} onClick={arrangeLayout}>{uiText("整理布局")}</Button>
         <Button disabled={!layout.canUndo && (readonly || !history?.canUndoArrangement)}
           onClick={() => { if (layout.canUndo) layout.undo(); else history?.undo() }}>{uiText("撤销布局整理")}</Button>

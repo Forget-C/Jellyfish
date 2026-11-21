@@ -48,7 +48,7 @@ export function MovementEditor({ card: raw, onChange, disabled, editorOpen, onUn
   }, [])
   const labels = photographyRegions.movement.fields
   const additionalDesign = phases.some(phase => phase.name?.trim() || isDesignFieldConfigured({ ...phase.frame, source_locator: '' }))
-  return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} additionalDesign={additionalDesign} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} scopeTools={<DesignScopePopover card={card} onChange={onChange} disabled={disabled} editorOpen={editorOpen} labelPrefix="运镜" />} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
+  return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={photographyPresets.movement} current={movementSummary(card)} additionalDesign={additionalDesign} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} scopeTools={<DesignScopePopover card={card} onChange={onChange} disabled={disabled} editorOpen={editorOpen} labelPrefix={uiText("运镜")} />} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
     <section ref={keyframes} className="movement-keyframes design-stable-region" aria-label={uiText("运镜关键画面")}>
       <MovementPhaseTabs phases={phases} activeId={activeId} onSelect={setSelectedId} editorOpen={editorOpen} disabled={disabled} uses={uses} issues={(references?.issues || []).filter(issue => issue.field_id.startsWith('phase:')).map(issue => issue.field_id.slice(6))}
         onRename={(id, name) => change({ ...latest.current, phases: latest.current.phases?.map(phase => phase.id === id ? { ...phase, name } : phase) })}

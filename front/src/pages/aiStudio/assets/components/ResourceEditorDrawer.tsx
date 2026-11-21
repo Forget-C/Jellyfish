@@ -115,7 +115,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
   useEffect(() => { if (fullDetail && editingGeneration.mode !== 'edit') normalGenerationConfig.current = editingGeneration }, [fullDetail, editingGeneration])
   const loadEpoch = useRef(0)
   const [selectedAngles, setSelectedAngles] = useState<Angle[]>(['FRONT'])
-  const [modelName, setModelName] = useState('读取中')
+  const [modelName, setModelName] = useState<{ name: string } | '读取中' | '尚未配置' | '读取失败' | '模型名称不可用'>('读取中')
   const [modelRetry, setModelRetry] = useState(0)
   const [showPreview, setShowPreview] = useState(false)
   const [previews, setPreviews] = useState<Partial<Record<Angle, RenderedPromptSnapshot>>>({})
@@ -183,7 +183,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
       const id = response.data?.default_image_model_id
       if (!id) { if (active) setModelName('尚未配置'); return }
       const model = await LlmService.getModelApiV1LlmModelsModelIdGet({ modelId: id })
-      if (active) setModelName(model.data?.name ?? '模型名称不可用')
+      if (active) setModelName(typeof model.data?.name === 'string' ? { name: model.data.name } : '模型名称不可用')
     }).catch(() => { if (active) setModelName('读取失败') })
     return () => { active = false }
   }, [open, page, modelRetry])
@@ -521,7 +521,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
         <div className="asset-reference-row">
           <Dropdown trigger={['click']} menu={{ items: (['subject', ...(kind === 'character' ? ['costume', 'prop'] : [])] as ('subject' | 'costume' | 'prop')[]).map(value => ({ key: value, label: uiText("选择参考{{value1}}", { value1: value === 'subject' ? '主体' : value === 'costume' ? '服装' : '道具' }) })), onClick: ({ key }) => { setPurpose(key as 'subject' | 'costume' | 'prop'); setPickerReturn('generation'); setPage('references') } }}><Button className="asset-reference-add" aria-label={uiText("添加参考图片")} icon={<PlusOutlined />} disabled={disabled} /></Dropdown>
           <div className="asset-reference-strip">{!current.length && <span className="asset-reference-empty">{uiText("添加参考图片")}</span>}{current.map((reference, index) => {
-            const referenceName = referenceNames[`${reference.source_kind}:${reference.source_id}`] ?? referenceNames[reference.file_id] ?? (images.some(image => image.file_id === reference.file_id) ? name : '未命名参考')
+            const referenceName = referenceNames[`${reference.source_kind}:${reference.source_id}`] ?? referenceNames[reference.file_id] ?? (images.some(image => image.file_id === reference.file_id) ? name : uiText("未命名参考"))
             return <div className="asset-reference-item" key={`${reference.file_id}:${reference.role}:${index}`}>
               <Image width={88} height={88} src={buildFileDownloadUrl(reference.file_id)} alt={referenceName} />
               <span className="asset-reference-type">{reference.role === 'costume' ? uiText("服装") : reference.role === 'prop' ? uiText("道具") : uiText("主体")}{reference.view_angle ? ` · ${angleLabel(reference.view_angle)}` : ''}</span>
@@ -623,7 +623,7 @@ export function ResourceEditorDrawer({ open, kind, projectId, assetId, seed, onC
             children: <Input.TextArea aria-label={uiText("最终提示词")} readOnly value={snapshot.execution_prompt} rows={10} />,
           }))} />}
         </>}
-        {!fullDetail && <p>{uiText("默认图片模型：")}{modelName}{uiText("。生成设置在关闭对象后恢复默认。")}{modelName === '读取失败' && <Button onClick={() => setModelRetry(value => value + 1)}>{uiText("重试模型信息")}</Button>}</p>}
+        {!fullDetail && <p>{uiText("默认图片模型：")}{typeof modelName === 'object' ? modelName.name : uiText(modelName)}{uiText("。生成设置在关闭对象后恢复默认。")}{modelName === '读取失败' && <Button onClick={() => setModelRetry(value => value + 1)}>{uiText("重试模型信息")}</Button>}</p>}
 
       </div>
   const openGeneration = () => {

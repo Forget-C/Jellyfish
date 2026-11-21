@@ -14,8 +14,8 @@ export function SceneCanvasDeletion({ projectId, canvasId, onClose, onDeleted, o
   const [recoveryBlocked, setRecoveryBlocked] = useState(false)
   const checking = ownership.state === 'checking'
   const blockedReason = checking || ownership.editable ? undefined : ownership.state === 'unsupported'
-    ? '浏览器无法确认画布编辑权，请使用支持编辑权保护的浏览器。'
-    : '画布正在其他页面编辑，请先在原页面处理并释放编辑权。'
+    ? uiText("浏览器无法确认画布编辑权，请使用支持编辑权保护的浏览器。")
+    : uiText("画布正在其他页面编辑，请先在原页面处理并释放编辑权。")
   const canDelete = () => {
     if (!ownership.canEdit()) return false
     let hasDraft: boolean

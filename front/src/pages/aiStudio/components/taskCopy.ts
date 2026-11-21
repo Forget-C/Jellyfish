@@ -1,3 +1,4 @@
+import { uiText } from '../../../uiText'
 export type TaskCopyPreset = {
   title: string
   runningDescription: string
@@ -171,7 +172,7 @@ export function resolveTaskSourceLabel(
   relationEntityId?: string | null,
 ): string | null {
   if (!relationType) return null
-  const label = RELATION_TYPE_LABEL_MAP[relationType] ?? '关联对象'
+  const label = uiText(RELATION_TYPE_LABEL_MAP[relationType] ?? "关联对象")
   if (!relationEntityId) return label
-  return `${label}：${relationEntityId}`
+  return uiText("{{type}}：{{name}}", { type: label, name: relationEntityId })
 }

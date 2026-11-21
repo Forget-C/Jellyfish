@@ -405,8 +405,8 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         {selectedProvider && <Descriptions className="management-details" column={1} layout="vertical" size="small" items={[
           { key: 'name', label: uiText("名称"), children: selectedProvider.name },
           { key: 'url', label: uiText("文本/通用 Base URL"), children: endpointLabel(selectedProvider.base_url) },
-          { key: 'image', label: uiText("图片 Base URL"), children: selectedProvider.image_base_url ? endpointLabel(selectedProvider.image_base_url) : '回退到文本/通用' },
-          { key: 'video', label: uiText("视频 Base URL"), children: selectedProvider.video_base_url ? endpointLabel(selectedProvider.video_base_url) : '回退到文本/通用' },
+          { key: 'image', label: uiText("图片 Base URL"), children: selectedProvider.image_base_url ? endpointLabel(selectedProvider.image_base_url) : uiText("回退到文本/通用") },
+          { key: 'video', label: uiText("视频 Base URL"), children: selectedProvider.video_base_url ? endpointLabel(selectedProvider.video_base_url) : uiText("回退到文本/通用") },
           { key: 'credentials', label: uiText("凭据配置状态"), children: uiText("未知") },
           { key: 'status', label: uiText("状态"), children: selectedProvider.status ? uiText(PROVIDER_STATUS_MAP[selectedProvider.status]?.text ?? "未知") : uiText("未知") },
           { key: 'description', label: uiText("描述"), children: selectedProvider.description || '—' },

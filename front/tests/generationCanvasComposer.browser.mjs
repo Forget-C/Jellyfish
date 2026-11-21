@@ -1,5 +1,5 @@
 import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath, withFixedSource } from './storyboard-canvas-fixture.mjs'
-import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { closeCanvasDetails, openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -51,7 +51,7 @@ try {
   await page.goto(`http://127.0.0.1:4275${storyboardCanvasPath(canvas)}`)
   const save = () => page.getByLabel('画布保存状态').getByText('已保存', { exact: true }).waitFor()
   const detail = () => page.locator('.wb-details:not([hidden])')
-  const open = async id => { const summary = page.locator(`[data-card-id="${id}"]`); await summary.focus(); await summary.press('Enter'); await detail().waitFor(); await openModelInspection(page) }
+  const open = async id => { await closeCanvasDetails(page); const summary = page.locator(`[data-card-id="${id}"]`); await summary.focus(); await summary.press('Enter'); await page.locator('[data-card-details="'+id+'"]:visible').waitFor(); await openModelInspection(page) }
   await open('m')
   const editor = detail().getByRole('textbox', { name: '模型正文', exact: true })
   await editor.waitFor()

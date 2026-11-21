@@ -98,7 +98,7 @@ export function StoryboardContinuityRemoval({ document, card, disabled, prepare,
       {!!offer.plan.labels.length && <><p>{uiText("拟恢复的主体参考")}</p><ul>{offer.plan.labels.map((label, index) => <li key={index}>{label}</li>)}</ul></>}
       {offer.plan.removalIssue && <Alert type="warning" message={offer.plan.removalIssue} />}
       {!!offer.plan.restoreIssues.length && <Alert type="warning" message={uiText("当前无法恢复原参考")}
-        description={<ul>{offer.plan.restoreIssues.map(issue => <li key={issue}>{issue}</li>)}</ul>} />}
+        description={<ul>{offer.plan.restoreIssues.map(issue => <li key={issue}>{uiText(issue)}</li>)}</ul>} />}
       <Space wrap>
         <Button disabled={busy} onClick={() => { setOffer(undefined); setError('') }}>{offer.plan.active ? uiText("取消移除") : uiText("取消恢复")}</Button>
         {offer.plan.active && <Button disabled={disabled || busy || !offer.plan.without} onClick={() => void verify(false)}>

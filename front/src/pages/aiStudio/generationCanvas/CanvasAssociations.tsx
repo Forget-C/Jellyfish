@@ -167,7 +167,7 @@ export function CanvasAssociations({ entries, sourceActions, loading, error, ses
         const hiddenIssue = hidden.some(entry => entry.issue)
         return <div className="canvas-association-group" key={group.kind} aria-label={group.label}>
           {shown.map(entry => <ConfigProvider key={entry.id} componentDisabled={false}>{popover(entry.id,
-            <MaterialReferenceButton output={entry.outputs.find(output => output.file_id) || entry.outputs[0]} label={entry.label} selected={entry.used && !entry.issue} selectedLabel="使用中" icon={entry.kind === 'material' && entry.outputs.some(output => output.file_id) ? undefined : sourceIcon(entry)} issue={entry.issue}
+            <MaterialReferenceButton output={entry.outputs.find(output => output.file_id) || entry.outputs[0]} label={entry.label} selected={entry.used && !entry.issue} selectedLabel={uiText("使用中")} icon={entry.kind === 'material' && entry.outputs.some(output => output.file_id) ? undefined : sourceIcon(entry)} issue={entry.issue}
               data-association-id={entry.id} data-design-source={sourceKey(entry.outputs[0].source)}
               aria-label={entry.description} aria-expanded={surface === entry.id} aria-controls={surface === entry.id ? popupId : undefined} title={entry.description} onMouseDown={event => event.preventDefault()} />,
             details)}</ConfigProvider>)}

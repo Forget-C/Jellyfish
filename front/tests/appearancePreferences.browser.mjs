@@ -91,6 +91,17 @@ try {
   await page.goto(origin + '/settings')
   await page.getByText('Administrator', { exact: true }).first().waitFor()
   await page.getByRole('textbox', { name: 'Nickname' }).waitFor()
+  await page.getByRole('combobox', { name: 'Role', exact: true }).press('ArrowDown')
+  for (const role of ['Administrator','Operator','Guest']) {
+    await page.locator('.ant-select-item-option-content').filter({hasText:new RegExp('^'+role+'$')}).waitFor()
+  }
+  await page.getByText('Operator', { exact: true }).last().click()
+  await page.getByRole('button', { name: 'User and language settings' }).click()
+  await page.getByRole('menuitem', { name: '简体中文', exact: true }).click()
+  await page.getByTitle('运营人员', { exact: true }).waitFor()
+  await page.getByRole('button', { name: '用户与语言设置' }).click()
+  await page.getByRole('menuitem', { name: 'English', exact: true }).click()
+  await page.getByTitle('Operator', { exact: true }).waitFor()
   await page.goto(origin + '/missing-i18n-page')
   await page.getByRole('button', { name: 'Back Home' }).click()
   await page.getByRole('button', { name: 'User and language settings' }).click()

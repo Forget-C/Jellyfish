@@ -16,9 +16,9 @@ export function DesignScopePopover<T extends { scope?: DesignScope; source_locat
   return <ConfigProvider componentDisabled={false}><Popover trigger="click" placement="bottomRight" open={open} onOpenChange={setOpen} getPopupContainer={node => node.closest<HTMLElement>('.design-preset-editor') || node.parentElement!} content={<div className="design-scope-panel" onKeyDown={event => {
     if (event.key === 'Escape' && !event.defaultPrevented) { event.stopPropagation(); setOpen(false); trigger.current?.focus() }
   }}>
-    <DesignScopeEditor card={card} onChange={onChange} disabled={disabled} labelPrefix={labelPrefix} productionLabel="适用制作环节" />
+    <DesignScopeEditor card={card} onChange={onChange} disabled={disabled} labelPrefix={labelPrefix} productionLabel={uiText("适用制作环节")} />
     <p>{uiText("描述整张设计卡的适用限制，随整卡传递；不会自动筛选或判断执行条件。")}</p>
   </div>}>
-    <span className="design-scope-trigger"><WorkbenchIconButton ref={trigger} variant="quiet" label={uiText("整卡适用限制{{value1}}", { value1: count ? ` · 已填写 ${count} 项` : '' })} aria-expanded={open} icon={<FilterOutlined />} />{count > 0 && <i aria-hidden="true" />}</span>
+    <span className="design-scope-trigger"><WorkbenchIconButton ref={trigger} variant="quiet" label={uiText("整卡适用限制{{value1}}", { value1: count ? uiText(" · 已填写 {{count}} 项", { count }) : '' })} aria-expanded={open} icon={<FilterOutlined />} />{count > 0 && <i aria-hidden="true" />}</span>
   </Popover></ConfigProvider>
 }
