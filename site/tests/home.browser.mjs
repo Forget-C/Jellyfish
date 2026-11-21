@@ -29,18 +29,30 @@ try {
     } else {
       assert.equal(await sidebar.isVisible(), false)
     }
-    const controls = page.locator('.jf-preview-button')
-    await controls.nth(1).focus()
-    await page.keyboard.press('Enter')
-    assert.equal(await controls.nth(1).getAttribute('aria-pressed'), 'true')
-    assert.equal(await page.locator('[data-preview]:visible').count(), 1)
-    assert.equal(await page.locator('[aria-label="广告预留位"]').count(), 1)
-    assert.equal(await page.locator('[aria-label="赞助预留位"]').count(), 1)
+    const home = page.locator('main#content')
+    assert.ok(await home.getByText('Jellyfish AI 短剧创作工作台', { exact: true }).isVisible())
+    assert.equal(await home.getByRole('heading', { level: 1 }).innerText(), '雾海来信')
+    assert.equal(await home.getByRole('button', { name: /剧照优先|画布优先/ }).count(), 0)
+    for (const name of ['分镜画布', '镜头结果', '章节原文']) {
+      const button = home.getByRole('button', { name, exact: true })
+      await button.focus()
+      await page.keyboard.press('Enter')
+      assert.equal(await button.getAttribute('aria-pressed'), 'true')
+      assert.ok(await page.locator('#' + await button.getAttribute('aria-controls')).isVisible())
+    }
+    await home.locator('video').evaluate(el => el.play())
+    await page.waitForFunction(() => document.querySelector('video').currentTime > 0)
     for (const dark of [false, true]) {
       await page.evaluate(value => document.documentElement.classList.toggle('dark', value), dark)
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
     }
-    console.log(`Homepage scripts, navigation, placements and layout passed: ${width}px`)
+    const deploy = home.getByRole('link', { name: /本地部署/ }).first()
+    await page.evaluate(() => scrollTo(0, 0))
+    const bounds = await deploy.boundingBox()
+    assert.ok(bounds.y + bounds.height <= 900)
+    await deploy.click()
+    assert.equal(await page.locator('h1').innerText(), '准备安装环境')
+    console.log(`Homepage scripts, navigation, media and layout passed: ${width}px`)
   }
   assert.deepEqual(errors, [])
 } finally {
