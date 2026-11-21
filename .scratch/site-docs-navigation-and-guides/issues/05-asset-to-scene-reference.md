@@ -1,7 +1,8 @@
 # 05: 从资产图片局部修改走到本场已选参考
 
-Status: resolved
+Status: ready-for-agent
 Blocked by: 01, 02
+Resolution: completed
 
 **What to build:** 已有图片时直接为场次选图；需要新视角时，先在资产管理里比较同视角图片、设置默认图与主图。
 

@@ -2,6 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: None
+Resolution: completed
 
 **What to build:** 读者从任一既有入口进入指南，都能看到与文章归属一致的目录，并落到原先引用的内容。
 

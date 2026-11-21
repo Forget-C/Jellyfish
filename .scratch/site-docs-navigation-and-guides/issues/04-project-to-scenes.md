@@ -2,6 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: 01, 02
+Resolution: completed
 
 **What to build:** 新用户用演示原文创建《雾海来信》，保存第一章的两个场次并找回划分记录。
 

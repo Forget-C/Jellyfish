@@ -92,6 +92,10 @@ try {
       await page.getByRole('heading', { level: 1, name: title, exact: true }).waitFor()
     }
 
+    await page.goto(new URL('product/features/#素材试验与交付', base).href)
+    const toolsSection = page.getByRole('heading', { name: /^素材试验与任务/, level: 2 })
+    assert.equal(await toolsSection.locator(':target').count(), 1, '旧产品书签定位到当前工具章节')
+
     await page.goto(new URL('product/workflow/', base).href)
     await page.getByRole('link', { name: '操作指南 · 在工作台生成和编辑分镜' }).click()
     const title = '生成分镜与查看候选画面'

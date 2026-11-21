@@ -2,6 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: 01, 02
+Resolution: completed
 
 **What to build:** 读者能在同一短剧设定下按模态准备输入、查看输出并从最近对话返回。
 

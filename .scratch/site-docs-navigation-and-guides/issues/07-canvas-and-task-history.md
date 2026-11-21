@@ -2,6 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: 01, 02
+Resolution: completed
 
 **What to build:** 读者从独立画布提交一次模型运行，能在任务中心查看状态、回到来源并找到产物。
 

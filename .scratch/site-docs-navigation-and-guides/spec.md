@@ -1,6 +1,7 @@
 # 官网文档改版：从安装到第一张候选图
 
 Status: ready-for-agent
+Resolution: completed
 
 ## Problem Statement
 

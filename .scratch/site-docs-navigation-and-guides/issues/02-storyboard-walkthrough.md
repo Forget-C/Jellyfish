@@ -2,6 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: None
+Resolution: completed
 
 **What to build:** 带读者从已保存的「海边站台」场次生成分镜，核对输入并查看第一张候选图。
 

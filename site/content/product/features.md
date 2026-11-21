@@ -31,7 +31,7 @@ tools:
     guide: "/docs/tools/generation-labs"
     label: "开始一次试验"
 ---
-## 素材试验与任务
+## <span id="素材试验与交付">素材试验与任务</span> {#素材试验与任务}
 
 - **独立画布**适合还未归入具体场次的试验。在一张自由画布上组合文字、参考图和模型输入，留存合适的结果。[使用独立画布]({{< relref "/docs/tools/generation-canvas" >}})
 - **任务中心**汇总生成进度。遇到失败或需要核对来源时，可以从任务回到对应业务记录。[查看与处理任务]({{< relref "/docs/tools/task-center" >}})

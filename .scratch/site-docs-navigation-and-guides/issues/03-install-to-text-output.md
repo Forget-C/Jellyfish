@@ -2,6 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: 01, 02
+Resolution: completed
 
 **What to build:** 首次安装者能启动工作台，登记供应商及文本模型，收到第一条回复。
 

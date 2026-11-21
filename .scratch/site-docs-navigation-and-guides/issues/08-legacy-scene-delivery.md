@@ -1,7 +1,8 @@
 # 08: 移除历史工作台指南并承接已有公开链接
 
-Status: resolved
+Status: ready-for-agent
 Blocked by: 01, 02
+Resolution: completed
 
 **What to build:** 读者从文档目录和产品页只看到当前可操作的功能；已有工作台、单元、剪辑和交付文档书签，转到对应的场次参考、原文划分或分镜结果说明。
 
