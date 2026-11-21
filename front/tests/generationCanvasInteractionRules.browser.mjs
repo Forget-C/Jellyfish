@@ -321,6 +321,10 @@ try {
     await page.waitForFunction(({node,x}) => parseFloat(node.style.left) === x, {node: await card.elementHandle(), x: initial.x})
   })
   await check('Q9 native text undo does not consume canvas movement history', async () => {
+    await card.focus()
+    // Let the previous undo and this focus settle before starting a new layout action.
+    await card.and(page.locator(':focus')).evaluate(() => new Promise(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve))))
     const initial = await pos()
     await card.press('ArrowRight')
     await page.waitForFunction(({node,x}) => parseFloat(node.style.left) === x, {node: await card.elementHandle(), x: initial.x + 10})
