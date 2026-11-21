@@ -255,7 +255,7 @@ export function AssetLibraryTab({ assetType, active }: { assetType: LibraryAsset
         <Input.Search ref={searchInput} aria-label={uiText("搜索{{label}}", { label })} placeholder={uiText("搜索{{label}}名称或描述", { label })} allowClear
           value={search} onChange={event => setSearch(event.target.value)} onSearch={searchAssets} />
         <Button aria-label={uiText("刷新")} icon={<ReloadOutlined aria-hidden="true" />} loading={loading && Boolean(result)} onClick={reload}>{uiText("刷新")}</Button>
-        {result && <span className="management-count">{result.total === undefined ? uiText("已加载 {{length}} 项", { length: result.assets.length }) : uiText("{{value1}} {{total}} 项", { value1: result.query ? '匹配' : '共', total: result.total })}</span>}
+        {result && <span className="management-count">{result.total === undefined ? uiText("已加载 {{length}} 项", { length: result.assets.length }) : uiText("{{value1}} {{total}} 项", { value1: uiText(result.query ? '匹配' : '共'), total: result.total })}</span>}
       </div>
       <ResourceCreateButton kind={assetType} onCreate={() => setCreateOpen(true)} onCreated={refreshCreated}><Button className="management-primary" type="primary" icon={<PlusOutlined aria-hidden="true" />}>{uiText("新建{{label}}", { label })}</Button></ResourceCreateButton>
     </PageToolbar>

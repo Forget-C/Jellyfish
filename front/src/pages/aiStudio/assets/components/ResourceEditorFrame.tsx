@@ -8,6 +8,7 @@ import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../../
 type Props = {
   className?: string
   drawerWidth?: number
+  escapeToParent?: boolean
   id: string; open: boolean; drawer: boolean; inline?: boolean; title: string; backLabel: string
   titleExtra?: ReactNode; onClose: () => void; actions: ReactNode; children: ReactNode
   onBodyReady?: (node: HTMLElement | null) => void
@@ -16,7 +17,7 @@ type Props = {
 }
 
 /** 新建使用抽屉，已有对象详情在正文中展示；两种容器复用同一编辑内容。 */
-export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel, onClose, actions, children, renderToolbar, actionsRef, className, titleExtra, onBodyReady, drawerWidth }: Props) {
+export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel, onClose, actions, children, renderToolbar, actionsRef, className, titleExtra, onBodyReady, drawerWidth, escapeToParent }: Props) {
   const appearance = useAppStore(state => state.appearance)
   const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false })
   const [body, setBody] = useState<HTMLElement | null>(null)
@@ -92,7 +93,7 @@ export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel
     </div>, document.body)}</>
   if (!open) return null
   const escape = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === 'Escape' && backLabel !== '返回' && !event.defaultPrevented) { event.stopPropagation(); onClose() }
+    if (event.key === 'Escape' && escapeToParent && !event.defaultPrevented) { event.stopPropagation(); onClose() }
   }
   if (inline || renderToolbar) return <section onKeyDown={escape} id={id} aria-label={title} className={`resource-editor-page resource-editor-inline ${className ?? ''}`}>
     {renderToolbar ? renderToolbar(toolbar) : <PageToolbar>{toolbar}</PageToolbar>}

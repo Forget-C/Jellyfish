@@ -167,6 +167,8 @@ try {
   await page.getByRole('menuitem', { name: 'English', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: 'Name', exact: true }).inputValue(), '修改后的演员')
   await page.getByRole('textbox', { name: 'Additional information', exact: true }).fill('混合语言 · Blue')
+  await page.getByRole('textbox', { name: 'Additional information', exact: true }).press('Escape')
+  assert.equal(await page.getByRole('dialog', { name: 'Leave asset details' }).count(), 0)
   const [savedProfile] = await Promise.all([
     page.waitForResponse(response => response.request().method() === 'PATCH' && response.ok()),
     page.getByRole('button', { name: 'Save settings', exact: true }).click(),
