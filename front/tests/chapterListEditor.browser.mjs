@@ -114,6 +114,17 @@ try {
   const base = `http://127.0.0.1:${port}/projects/p1?tab=chapters`
   const editor = page.getByRole('dialog', { name: /^编辑章节/ })
   const save = () => editor.getByRole('button', { name: /^保\s*存$/ }).click()
+  const narrowEditorSpacing = async (dialog, name) => {
+    const field = dialog.getByRole('textbox', { name, exact: true })
+    const toolbar = dialog.locator('.app-page-toolbar')
+    const [fieldTop, toolbarBottom] = await Promise.all([
+      field.evaluate(input => input.closest('label').getBoundingClientRect().top),
+      toolbar.evaluate(header => header.getBoundingClientRect().bottom),
+    ])
+    const gap = fieldTop - toolbarBottom
+    assert.ok(Math.abs(gap - 24) <= 2, `${name} at 375px: toolbar-to-field gap is ${gap}px`)
+    assert.equal(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true, `${name} at 375px: editor overflow`)
+  }
   await page.goto(base)
   await page.getByRole('cell', { name: '2 场', exact: true }).waitFor()
   assert.deepEqual(await page.getByRole('columnheader').allTextContents(), ['章节名称', '原文预览', '原文字数', '场次数量', '操作'])
@@ -125,16 +136,19 @@ try {
   assert.equal(await page.locator('.ant-drawer-open').count(), 0)
   await page.getByRole('button', { name: '用户与语言设置' }).click()
   await page.getByRole('menuitem', { name: 'English', exact: true }).click()
+  await page.setViewportSize({ width: 375, height: 812 })
   await page.getByRole('button', { name: '1. 章节 1 · Edit chapter', exact: true }).click()
   const englishEditor = page.getByRole('dialog', { name: 'Edit chapter · 章节 1' })
   assert.equal(await englishEditor.getByRole('textbox', { name: 'Chapter source', exact: true }).inputValue(), '她推开门。')
   assert.equal(await englishEditor.getByRole('textbox', { name: 'Chapter name' }).inputValue(), '章节 1')
+  await narrowEditorSpacing(englishEditor, 'Chapter name')
   await page.route('**/script-processing/check-consistency-async', route => route.fulfill({
     json: { success: true, data: { task_id: 'check90', status: 'queued' } },
   }), { times: 1 })
   await englishEditor.getByRole('button', { name: 'Source consistency check' }).click()
   await page.getByText('Consistency check started', { exact: true }).waitFor()
   await englishEditor.getByRole('button', { name: 'Back', exact: true }).waitFor()
+  await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto(base)
   await page.getByRole('button', { name: 'User and language settings' }).click()
   await page.getByRole('menuitem', { name: '简体中文', exact: true }).click()
@@ -360,6 +374,7 @@ try {
       assert.equal(spacing.bodyPadding, '12px')
       assert.equal(spacing.fieldMargin, '12px')
       assert.ok(spacing.actionsBelowHeading, 'narrow toolbar actions wrap below the heading')
+      await narrowEditorSpacing(editor, '章节名称')
     } else {
       assert.ok(Math.abs(spacing.gap - 33) <= 2, `${width}px: return-to-name gap is ${spacing.gap}px`)
     }

@@ -127,14 +127,14 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     && document.edges?.some(edge => edge.target_card === card.id && edge.source_card === source.card_id
       && edge.source_port === source.port_id && resultScopeIncludes(edge.result_scope, source.position))
   const candidateIssue = (output: CanvasResolvedOutput) => {
-    if (output.source.canvas_id !== document.id) return '来源属于其他画布'
+    if (output.source.canvas_id !== document.id) return uiText("来源属于其他画布")
     const source = document.cards?.find(item => item.id === output.source.card_id)
-    if (!source || !hasSourceConnection(output.source)) return '来源未连接'
-    if (output.available === false) return '来源输出缺失'
-    if (!supportedPorts(output).includes(promptInputPort(card, output.source))) return '当前模型不支持直接引用此输入'
-    if ('uploading' in source && source.uploading) return '上传中'
-    if ('file_id' in source && source.file_id !== output.file_id) return '正在更新候选'
-    if (output.basis_current === false) return '来源依据已变，需重新生成'
+    if (!source || !hasSourceConnection(output.source)) return uiText("来源未连接")
+    if (output.available === false) return uiText("来源输出缺失")
+    if (!supportedPorts(output).includes(promptInputPort(card, output.source))) return uiText("当前模型不支持直接引用此输入")
+    if ('uploading' in source && source.uploading) return uiText("上传中")
+    if ('file_id' in source && source.file_id !== output.file_id) return uiText("正在更新候选")
+    if (output.basis_current === false) return uiText("来源依据已变，需重新生成")
     return undefined
   }
   // 保存刷新期间仍展示已采用但暂未解析的来源，不将缺失来源误报为新候选。

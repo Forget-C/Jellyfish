@@ -110,6 +110,22 @@ try {
     assert.equal(await list.isVisible(),true);assert.equal(await page.getByRole('region',{name:'运行预检',exact:true}).count(),0)
     await f.input.press('ArrowDown');assert.equal(await list.locator('[aria-selected="true"]').getAttribute('aria-label'),'@图片2')
   })
+  await probe('English unavailable candidate explains why it is disabled and keeps the source name',async()=>{
+    const f=await fixture('英文候选禁用原因')
+    await page.evaluate(() => localStorage.setItem('jellyfish_language', 'en-US'))
+    await page.route('**/cards/model/outputs?project_id=*',async route=>{
+      const response=await route.fetch(), json=await response.json()
+      for(const item of json.data.candidates) if(item.source.card_id==='ref') item.available=false
+      await route.fulfill({response,json})
+    })
+    await page.reload()
+    await f.card.press('Enter')
+    await f.editor.getByRole('textbox',{name:'Model prompt',exact:true}).fill('@张')
+    const option=page.getByRole('listbox',{name:'Reference candidates',exact:true}).getByRole('option',{name:'@张三',exact:true})
+    await option.getByText('Source output missing',{exact:true}).waitFor()
+    assert.equal(await option.isDisabled(),true)
+    assert.equal(await option.getAttribute('aria-description'),'张三 · Source output missing')
+  })
   await probe('renaming and collision changes update existing references without rebinding; clearing restores numbering',async()=>{
     const f=await fixture('改名同步',{refs:[{id:'front',type:'reference.character',name:'张三',angle:'正面',image_binding:{file_id:files[0]}},{id:'side',type:'reference.character',name:'李四',angle:'侧面',image_binding:{file_id:files[2]}}]})
     await f.input.fill('@张');await f.input.press('Enter')
