@@ -1,6 +1,6 @@
 import { uiText, useUiText } from '../../../uiText'
 import type { ReactNode } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Alert,
   Button,
@@ -118,7 +118,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
 
   useEffect(() => () => credentialsRequest.current?.cancel(), [])
 
-  const providerNameOptions = useMemo(() => {
+  const getProviderNameOptions = () => {
     const fromApi = supportedSpecs.map(spec => ({
       label: spec.is_experimental ? uiText("{{display_name}}（实验）", { display_name: spec.display_name }) : spec.display_name,
       value: spec.display_name,
@@ -126,7 +126,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
     const name = providerEditing?.name?.trim()
     if (!name || supportedSpecs.some(spec => spec.display_name === name || spec.aliases?.includes(name))) return fromApi
     return [{ label: uiText("{{name}}（历史/未在清单内）", { name }), value: name }, ...fromApi]
-  }, [supportedSpecs, providerEditing])
+  }
 
   const applyDefaultBaseUrlForDisplayName = (displayName: string) => {
     const spec = supportedSpecs.find(item => item.display_name === displayName || item.aliases?.includes(displayName))
@@ -206,9 +206,9 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
     try {
       await modal.confirm({
         title: uiText("删除供应商「{{name}}」？", { name: provider.name }),
-        content: linked === 0 ? '删除后无法恢复。' : linked === undefined
-          ? '未能读取关联模型数量。删除后，关联模型可能失效。'
-          : `该供应商关联 ${linked} 个模型，删除后关联模型可能失效。`,
+        content: linked === 0 ? uiText("删除后无法恢复。") : linked === undefined
+          ? uiText("未能读取关联模型数量。删除后，关联模型可能失效。")
+          : uiText("该供应商关联 {{linked}} 个模型，删除后关联模型可能失效。", { linked }),
         okText: uiText("删除"),
         okType: 'danger',
         onOk: async () => {
@@ -289,15 +289,15 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
       title: uiText("地址摘要"), dataIndex: 'base_url', key: 'base_url', ellipsis: true,
       render: (url: string) => {
         const address = endpointLabel(url)
-        return address === '未知' || address === '—' ? address : maskUrl(address)
+        return address === uiText("未知") || address === '—' ? address : maskUrl(address)
       },
     },
-    { title: uiText("凭据配置状态"), key: 'credentials', width: 132, render: () => '未知' },
+    { title: uiText("凭据配置状态"), key: 'credentials', width: 132, render: () => uiText("未知") },
     {
       title: uiText("状态"), dataIndex: 'status', key: 'status', width: 90,
       render: (status: ProviderRead['status']) => status
-        ? <Tag color={PROVIDER_STATUS_MAP[status]?.color}>{PROVIDER_STATUS_MAP[status]?.text ?? uiText("未知")}</Tag>
-        : '未知',
+        ? <Tag color={PROVIDER_STATUS_MAP[status]?.color}>{uiText(PROVIDER_STATUS_MAP[status]?.text ?? "未知")}</Tag>
+        : uiText("未知"),
     },
     {
       title: uiText("操作"), key: 'action', width: 224,
@@ -344,7 +344,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
               })),
             }}
           >
-            <Button icon={<DownOutlined />}>{uiText("排序：")}{SORT_OPTIONS.find(option => option.value === sortBy)?.label}</Button>
+            <Button icon={<DownOutlined />}>{uiText("排序：")}{uiText(SORT_OPTIONS.find(option => option.value === sortBy)?.label ?? '')}</Button>
           </Dropdown>
           {result && <span className="management-count">
             {result.total === undefined ? uiText("已加载 {{length}} 个供应商", { length: result.providers.length }) : uiText("共 {{total}} 个供应商", { total: result.total })}
@@ -407,8 +407,8 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
           { key: 'url', label: uiText("文本/通用 Base URL"), children: endpointLabel(selectedProvider.base_url) },
           { key: 'image', label: uiText("图片 Base URL"), children: selectedProvider.image_base_url ? endpointLabel(selectedProvider.image_base_url) : '回退到文本/通用' },
           { key: 'video', label: uiText("视频 Base URL"), children: selectedProvider.video_base_url ? endpointLabel(selectedProvider.video_base_url) : '回退到文本/通用' },
-          { key: 'credentials', label: uiText("凭据配置状态"), children: '未知' },
-          { key: 'status', label: uiText("状态"), children: selectedProvider.status ? PROVIDER_STATUS_MAP[selectedProvider.status]?.text ?? '未知' : '未知' },
+          { key: 'credentials', label: uiText("凭据配置状态"), children: uiText("未知") },
+          { key: 'status', label: uiText("状态"), children: selectedProvider.status ? uiText(PROVIDER_STATUS_MAP[selectedProvider.status]?.text ?? "未知") : uiText("未知") },
           { key: 'description', label: uiText("描述"), children: selectedProvider.description || '—' },
           { key: 'created', label: uiText("创建人"), children: selectedProvider.created_by || '—' },
         ]} />}
@@ -433,7 +433,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
               optionFilterProp="label"
               loading={supportedLoading}
               placeholder={supportedLoading ? uiText("加载供应商清单…") : uiText("选择供应商")}
-              options={providerNameOptions}
+              options={getProviderNameOptions()}
               notFoundContent={supportedLoading ? uiText("加载中…") : uiText("暂无数据")}
               onChange={(v) => applyDefaultBaseUrlForDisplayName(String(v))}
             />

@@ -226,12 +226,12 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
     return () => { active = false }
   }, [defaultModelsDrawerOpen, defaultOptionsRevision])
 
-  const getProviderName = (id: string) => providers.find((p) => p.id === id)?.name || '未知'
+  const getProviderName = (id: string) => providers.find((p) => p.id === id)?.name || uiText("未知")
 
   const renderDefaultModel = (model: ModelRead) => {
     const field = DEFAULT_MODEL_FIELD_BY_CATEGORY[model.category]
     const defaultId = modelSettings?.[field]
-    if (defaultId === undefined) return '未知'
+    if (defaultId === undefined) return uiText("未知")
     return defaultId === model.id ? <Tag color="blue">{uiText("默认")}</Tag> : '—'
   }
 
@@ -456,7 +456,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
       title: uiText("类别"), dataIndex: 'category', key: 'category', width: 102,
       render: (category: ModelCategoryKey) => categoryLabelMap[category]
         ? <Tag color={categoryColorMap[category]}>{uiText(categoryLabelMap[category])}</Tag>
-        : '未知',
+        : uiText("未知"),
     },
     {
       title: uiText("关联供应商"), dataIndex: 'provider_id', key: 'provider_id', width: '16%', ellipsis: true,
@@ -592,7 +592,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
         }}
       >
         {selectedModel && <Descriptions className="management-details" column={1} layout="vertical" size="small" items={[
-          { key: 'name', label: uiText("名称"), children: selectedModel.name || '未知' },
+          { key: 'name', label: uiText("名称"), children: selectedModel.name || uiText("未知") },
           { key: 'category', label: uiText("类别"), children: uiText(categoryLabelMap[selectedModel.category] ?? '未知') },
           { key: 'provider', label: uiText("关联供应商"), children: getProviderName(selectedModel.provider_id) },
           { key: 'default', label: uiText("默认标记"), children: renderDefaultModel(selectedModel) },

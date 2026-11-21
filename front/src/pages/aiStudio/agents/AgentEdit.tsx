@@ -297,7 +297,7 @@ export default function AgentEdit() {
                     {testLogs.length > 0 && (
                       <div className="mb-2 text-gray-600">
                         {testLogs.map((line, i) => (
-                          <div key={i}>{line}</div>
+                          <div key={i}>{uiText(line)}</div>
                         ))}
                       </div>
                     )}
