@@ -21,6 +21,7 @@ test('English UI messages cover literal calls and preserve interpolation paramet
     if (!/\.tsx?$/.test(file) || file.startsWith('services/generated/') || file === 'components/workbench/WorkbenchExamples.tsx') continue
     const ast = ts.createSourceFile(file, readFileSync(join(src, file), 'utf8'), ts.ScriptTarget.Latest)
     function visit(node) {
+      if (ts.isJsxText(node) && /\p{Script=Han}/u.test(node.text)) missing.add(file + ' — ' + node.text.trim())
       if (ts.isJsxAttribute(node) && displayAttributes.has(node.name.getText(ast)) && node.initializer && ts.isStringLiteral(node.initializer) &&
         /\p{Script=Han}/u.test(node.initializer.text)) missing.add(file + ' — ' + node.name.getText(ast) + '=' + node.initializer.text)
       if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'uiText') {

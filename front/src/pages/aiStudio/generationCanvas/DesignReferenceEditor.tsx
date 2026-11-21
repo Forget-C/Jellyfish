@@ -27,6 +27,7 @@ import { CanvasTextPreview } from '../../../components/workbench/CanvasTextPrevi
 
 type TargetField = { fieldId: string; segmentId?: string; serial: number }
 interface ReferenceContext {
+  referenceText: ReadonlyMap<string, string>;
   savedRevision?: number; targetField?: TargetField; issues: DesignReferenceIssue[];
   document: CanvasDocument; card: GenerationCard; candidates: Candidate[]; disabled?: boolean;
   focus: (handle: React.RefObject<PromptEditorHandle>, label: string) => void;
@@ -55,7 +56,9 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
   if ('examples' in card) for (const example of card.examples || []) if (!sources.some(item => sourceKey(item.source) === sourceKey(example.source))) sources.push({ source: example.source, file_id: example.file_id, modality: example.source.port_id === 'video' ? 'video' : example.source.port_id === 'audio' ? 'audio' : 'image', available: false })
   sources = includeConnectedSources(document, card.id, sources)
   const labels = referenceLabels(document, sources, card.id, isFlatDesign(card))
-  const labelFor = (item: CanvasResolvedOutput) => item.token ? labels.get(sourceKey(item.source)) || item.token : cardDefinitions[document.cards?.find(source => source.id === item.source.card_id)?.type || '']?.title || uiText("@缺失来源")
+  const sourceText = (item: CanvasResolvedOutput) => item.token ? labels.get(sourceKey(item.source)) || item.token : cardDefinitions[document.cards?.find(source => source.id === item.source.card_id)?.type || '']?.title || '@缺失来源'
+  const referenceText = new Map(sources.map(item => [sourceKey(item.source), sourceText(item)]))
+  const labelFor = (item: CanvasResolvedOutput) => item.token ? sourceText(item) : uiText(sourceText(item))
   const candidates: Candidate[] = sources.filter(item => document.cards?.find(source => source.id === item.source.card_id)?.type !== 'direction.criterion').map(item => {
     const source = document.cards?.find(value => value.id === item.source.card_id)
     const connected = item.source.canvas_id === document.id && document.edges?.some(edge => edge.target_card === card.id && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)
@@ -86,8 +89,9 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
     const inUse = !!example || !!target || entry.outputs.some(output => used.has(sourceKey(output.source)))
     const empty = source && !inUse && entry.outputs.every(output => output.available === false)
     const issue = empty ? source.type?.startsWith('model.') ? uiText("尚无生成结果") : uiText("暂无可用内容") : [...new Set(entry.outputs.flatMap(output => associationIssues(output).map(issue => issue.message)))].join('；') || undefined
-    return { ...entry, label: source && 'name' in source && source.name || (entry.kind === 'design' ? cardDefinitions[source?.type || '']?.title : undefined) || labelFor(entry.outputs[0]),
-      description: uiText("候选 {{value1}} · {{value2}}", { value1: entry.kind === 'design' ? `${cardDefinitions[source?.type || '']?.title || ''} ${name}`.trim() : name, value2: usages.length ? usages.join('；') : inUse ? uiText("使用中") : uiText("候选") }),
+    const designTitle = entry.kind === 'design' && source?.type ? uiText(cardDefinitions[source.type]?.title || '') : ''
+    return { ...entry, label: source && 'name' in source && source.name || designTitle || labelFor(entry.outputs[0]),
+      description: uiText("候选 {{value1}} · {{value2}}", { value1: entry.kind === 'design' ? `${designTitle} ${name}`.trim() : name, value2: usages.length ? usages.join('；') : inUse ? uiText("使用中") : uiText("候选") }),
       used: inUse, issue,
     }
   })
@@ -138,7 +142,7 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
     </>
   }
   const renderCandidates = (advanced: boolean) => <CanvasAssociations entries={entries} sourceActions={sourceActions} loading={resolved.loading} error={resolved.error} sessionKey={`${card.id}:${editorOpen}:${advanced}`} expanded={!!expandedSource} onLocateSource={onLocateDesign} onInspect={() => setExpandedSource(undefined)} renderDetails={(entry, context) => renderDetails(entry, advanced, context)} />
-  return <DesignReferenceContext.Provider value={{ card, document, savedRevision, candidates, disabled, targetField, issues: resolved.outputs.flatMap(output => output.payload && 'reference_issues' in output.payload ? output.payload.reference_issues || [] : []), focus: (handle, label) => { focused.current = handle; focusedLabel.current = label }, changeMode, renderCandidates }}><div className="design-reference-owner">{children}</div></DesignReferenceContext.Provider>
+  return <DesignReferenceContext.Provider value={{ referenceText, card, document, savedRevision, candidates, disabled, targetField, issues: resolved.outputs.flatMap(output => output.payload && 'reference_issues' in output.payload ? output.payload.reference_issues || [] : []), focus: (handle, label) => { focused.current = handle; focusedLabel.current = label }, changeMode, renderCandidates }}><div className="design-reference-owner">{children}</div></DesignReferenceContext.Provider>
 }
 
 /** Reuse the model's editing surface; field source identities are persisted directly. */
@@ -153,7 +157,7 @@ export function ReferencedDesignFieldEditor(props: ComponentProps<typeof DesignF
   const onChange = (next: EditorPromptDocument) => {
     // A pasted model instruction is literal field data; it cannot configure this design's consumer.
     const segments: NonNullable<DesignFieldDocument['segments']> = (next.segments || []).flatMap<NonNullable<DesignFieldDocument['segments']>[number]>(segment => segment.kind === 'instruction' ? [{ id: segment.id, kind: 'text' as const, text: `/${segment.command} ${JSON.stringify(segment.parameters || {})} ` }, ...(segment.references || []).map(reference => ({ id: reference.id, kind: 'reference' as const, source: reference.source }))] : segment.kind === 'reference' ? [{ id: segment.id, kind: 'reference' as const, source: segment.source }] : [segment])
-    const text = segments.map(segment => segment.kind === 'text' ? segment.text : context.candidates.find(item => sourceKey(item.source) === sourceKey(segment.source))?.displayLabel || uiText("@缺失来源")).join('')
+    const text = segments.map(segment => segment.kind === 'text' ? segment.text : (context.referenceText.get(sourceKey(segment.source)) || '@缺失来源')).join('')
     // The editor drops empty text nodes on blur. Locating an empty field must not become an edit.
     const content = (parts: NonNullable<DesignFieldDocument['segments']>) => parts.filter(part => part.kind === 'reference' || part.text).map(part => part.kind === 'reference' ? ['reference', part.source] : ['text', part.text])
     if (JSON.stringify(content(segments)) === JSON.stringify(content(prompt.segments as NonNullable<DesignFieldDocument['segments']> || []))) return

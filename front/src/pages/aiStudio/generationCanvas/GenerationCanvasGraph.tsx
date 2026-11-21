@@ -1658,13 +1658,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
                   if (key === 'remove') { edit({ ...document, groups: groups.filter(item => item.id !== group.id) }); clearSelection() }
                   else if (key === 'expand') edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, collapsed: false } : item) })
                   else setGroupPanel(key as 'name' | 'members')
-                } }}><Button aria-label={uiText("管理编组")} title={uiText("管理编组")} className="wb-icon-action" icon={<MoreOutlined />} /></Dropdown>
+                } }}><Button data-group-management-trigger aria-label={uiText("管理编组")} title={uiText("管理编组")} className="wb-icon-action" icon={<MoreOutlined />} /></Dropdown>
                 {groupPanel && <div className="generation-group-management">
                   {groupPanel === 'name' ? <Input autoFocus aria-label={uiText("分组名称")} value={group.name} disabled={readonly} onChange={event => edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, name: event.target.value } : item) })} />
                     : <Select aria-label={uiText("分组成员 {{name}}", { name: group.name })} mode="multiple" value={members} disabled={readonly}
                       options={cards.filter(card => members.includes(card.id) || !groups.some(item => item.card_ids?.includes(card.id))).map(card => ({ value: card.id, label: `${cardTitles[card.type || '']} ${card.id.slice(0, 4)}` }))}
                       onChange={ids => edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, card_ids: ids } : item) })} />}
-                  <WorkbenchIconButton label={uiText("完成编组管理")} icon={<CloseOutlined />} onClick={event => { setGroupPanel(undefined); event.currentTarget.closest('.generation-group-actions')?.querySelector<HTMLButtonElement>('button[aria-label="管理编组"]')?.focus() }} />
+                  <WorkbenchIconButton label={uiText("完成编组管理")} icon={<CloseOutlined />} onClick={event => { setGroupPanel(undefined); event.currentTarget.closest('.generation-group-actions')?.querySelector<HTMLButtonElement>('button[data-group-management-trigger]')?.focus() }} />
                 </div>}
               </div>}
             </div>
