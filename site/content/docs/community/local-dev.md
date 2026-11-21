@@ -1,7 +1,8 @@
 ---
 title: "开发快速开始"
-weight: 2
+weight: 1
 description: "启动本地 API、Worker 和前端，完成基本联调。"
+url: "/docs/getting-started/local-dev/"
 ---
 
 ## 准备环境

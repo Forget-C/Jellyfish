@@ -291,3 +291,23 @@ body { background: var(--jf-bg); color: var(--jf-text); }
   .jf-placements { grid-template-columns: 1fr; }
   .jf-placement { padding: 24px; }
 }
+
+.jf-product-page { padding-top: clamp(32px, 6vw, 80px); }
+.jf-product-page h1 { font-size: clamp(36px, 4.4vw, 62px); line-height: 1.14; letter-spacing: -.045em; font-weight: 650; }
+.jf-product-hero { display: grid; grid-template-columns: 1fr 1.15fr; align-items: center; gap: clamp(24px, 5vw, 70px); }
+.jf-product-hero h1 { margin: 14px 0 20px; }
+.jf-product-hero .jf-btn { margin-top: 26px; }
+.jf-product-hero img { width: 100%; height: auto; border-radius: 14px; }
+.jf-product-hero figcaption { margin-top: 8px; color: var(--jf-muted); font-size: 13px; }
+.jf-product-stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; margin-top: 36px; }
+.jf-product-stages blockquote { margin: 16px 0 10px; padding-left: 14px; border-left: 2px solid var(--jf-accent); font-size: 18px; line-height: 1.65; }
+.jf-product-stages p,.jf-tool p { color: var(--jf-muted); line-height: 1.75; }
+.jf-tools-heading .jf-lead { margin-top: 14px; }
+.jf-tool-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; margin-top: 32px; }
+.jf-tool { overflow: hidden; background: var(--jf-surface); border: 1px solid var(--jf-line); border-radius: 14px; }
+.jf-tool img { display: block; width: 100%; height: auto; border-bottom: 1px solid var(--jf-line); }
+.jf-tool > div { padding: 20px 24px 14px; }
+.jf-tool h2 { margin-bottom: 6px; font-size: 24px; }
+@media (max-width: 768px) {
+  .jf-product-hero,.jf-tool-grid,.jf-product-stages { grid-template-columns: 1fr; }
+}

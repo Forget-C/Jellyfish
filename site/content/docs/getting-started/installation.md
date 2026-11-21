@@ -1,5 +1,5 @@
 ---
-title: "安装说明"
+title: "准备安装环境"
 weight: 1
 description: "准备 Jellyfish 的部署环境并获取项目。"
 ---

@@ -1,36 +1,25 @@
 ---
 title: "产品"
 weight: 1
-description: "理解 Jellyfish 的定位、能力结构、工作流和路线图。"
+description: "Jellyfish 将章节原文、场次参考与生成画面放在同一个短剧创作工作台。"
 images:
-  - /images/og-default.svg
+  - /images/projects/sea-letter.webp
+aliases:
+  - /product/roadmap/
 cascade:
   params:
     toc: false
+stages:
+  - title: "从一段原文开始"
+    excerpt: "末班车已经离开。林夏走向长椅，发现一只旧信封。"
+    detail: "站台和次日清晨的堤岸分属两场戏。每个场次都留有对应的章节原文。"
+    link: "从一章原文里找到两场戏"
+  - title: "把心事写成动作"
+    excerpt: "她正要拆开信封，手指却停住了。"
+    detail: "在文本实验室试写同一个特写的两种拍法，再决定观众该看见什么。"
+    link: "用三个无对白镜头讲清认出"
+  - title: "对照画面选拍法"
+    excerpt: "灯下的林夏已经打开了信。这个动作是否太早？"
+    detail: "在分镜画布上对照镜头描述和候选图，找到下一次要调整的细节。"
+    link: "用候选画面检验镜头想法"
 ---
-
-Jellyfish 是一个面向 **AI 短剧生产** 的工作台型产品，重点不是单点生成，而是把脚本、分镜、资产、生成、剪辑这些环节串成一条可复用、可追踪的生产链。
-
-## 你可以把它理解成什么
-
-- 一个围绕短剧生产组织起来的 Studio 工作台
-- 一个把 AI 能力接入业务流程的内容生产系统
-- 一个支持场次创作和独立生成画布的开源工作台
-
-## 当前重点能力
-
-- 项目与章节管理
-- 场次划分、导演设计、拍摄与剪辑
-- 角色 / 场景 / 道具 / 服装管理
-- 模型与 Agent 管理
-- 图片 / 视频任务链路
-- 素材采用、章节交付与整场视频导出
-
-## 建议阅读顺序
-
-1. [功能总览](/product/features/)
-2. [工作流](/product/workflow/)
-3. [截图展示](/product/screenshots/)
-4. [路线图](/product/roadmap/)
-
-准备使用时，从[安装与部署](/docs/getting-started/)或[使用指南](/docs/guide/)开始。

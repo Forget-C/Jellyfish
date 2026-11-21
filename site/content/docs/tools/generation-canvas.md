@@ -1,6 +1,8 @@
 ---
 title: "使用生成画布"
 description: "在独立画布中准备素材和模型输入，执行模型卡并管理成果。"
+weight: 2
+url: "/docs/guide/generation-canvas/"
 ---
 
 生成画布独立于项目，适合组织素材、试写提示词和尝试生成。它与场次工作台分开，使用前无需创建章节、场次或生产单元。需要按场次设计、拍摄和交付时，请阅读[场次创作与导出](/docs/guide/sequence-workflow/)。

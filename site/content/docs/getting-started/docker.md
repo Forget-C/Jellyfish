@@ -1,6 +1,6 @@
 ---
-title: "Docker 部署"
-weight: 3
+title: "启动并检查服务"
+weight: 2
 description: "通过 Docker Compose 启动应用和配套服务。"
 ---
 
@@ -29,3 +29,5 @@ Compose 启动前端、后端、任务 Worker、MySQL 和 RustFS。数据库迁�
 - 若迁移或初始化任务失败，用同一 Compose 配置执行 `logs backend-migrate backend-seed-system-data` 查看原因，修正配置后再启动。数据库与媒体保存在持久卷中，请保留这些卷。
 
 升级已有部署前先备份数据库，核对现有版本及回退方式。维护步骤见[数据库升级与回退](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/guides/database-upgrade.md)。
+
+服务正常后，继续[配置生成模型]({{< relref "model-setup" >}})，或[先创建一个项目]({{< relref "/docs/guide/first-project" >}})。
