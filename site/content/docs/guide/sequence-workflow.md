@@ -1,4 +1,6 @@
 ---
+aliases:
+  - /docs/legacy/edit-delivery/
 title: "生成分镜与查看候选画面"
 weight: 4
 ---
@@ -52,7 +54,7 @@ weight: 4
 这里的本地演示输出中，林夏已经把信展开。如果要让观众只看见她认出字迹，可以把动作改成“指尖停在封口，信仍合着”，重新预检并执行。在「运行历史」中找回不同尝试，分别核对手指、封口和人物视线。
 
 {{< moved-section "为场次准备对象参考" "/docs/guide/scene-references" >}}
-{{< moved-section "使用旧版场次记录" "/docs/legacy/versions" >}}
-{{< moved-section "从设计进入拍摄" "/docs/legacy/unit-shooting" >}}
-{{< moved-section "审片采用和剪辑" "/docs/legacy/edit-delivery" >}}
-{{< moved-section "用于章节和整场导出" "/docs/legacy/edit-delivery" >}}
+{{< moved-section "使用旧版场次记录" "/docs/guide/chapter-and-scene-versions" "查看或恢复历史划分" >}}
+{{< moved-section "从设计进入拍摄" "/docs/guide/sequence-workflow" "在工作台生成和编辑分镜" >}}
+{{< moved-section "审片采用和剪辑" "/docs/guide/sequence-workflow" "预览分镜生成的候选图" >}}
+{{< moved-section "用于章节和整场导出" "/docs/guide/sequence-workflow" "预览分镜生成的候选图" >}}
