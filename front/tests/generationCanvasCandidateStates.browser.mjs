@@ -78,7 +78,7 @@ try {
   assert.equal(await detail.getByRole('button',{name:/^候选 /}).count(),1)
   await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
   const observer=await context.newPage();await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}});await observer.goto(page.url());await observer.getByText('此画布当前只读',{exact:true}).waitFor()
-  await observer.locator('[data-card-id="dialogue"]').locator('.generation-card-body').click()
+  await observer.locator('[data-card-id="dialogue"]').press('Enter')
   const readonly=observer.locator('.wb-details:visible')
   await readonly.getByRole('button',{name:/候选 张三 · 已用作说话对象/}).click()
   await observer.locator('.ant-popover:visible').getByText(/已用作说话对象/).waitFor()
