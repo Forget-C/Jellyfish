@@ -29,7 +29,7 @@ try {
     if (url.pathname.endsWith('/cancel')) {
       cancelAttempt += 1
       if (cancelAttempt === 1) return route.fulfill({ status: 404, json: { detail: 'Task not found' } })
-      if (cancelAttempt === 2) return route.fulfill({ status: 409, json: { detail: '诊断 · worker busy' } })
+      if (cancelAttempt === 2) return route.fulfill({ status: 409, json: { success: false, message: '诊断 · worker busy' } })
       cancelled.push(url.pathname.split('/').at(-2))
       tasks[0].cancel_requested = true
       return route.fulfill({ json: { data: { task_id: 'task-0', cancel_requested: true } } })

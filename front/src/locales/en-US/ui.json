@@ -59,6 +59,7 @@
   "{{title}}正在取消": "Cancelling {{title}}",
   "{{title}}进行中": "{{title}} in progress",
   "{{title}}（第{{index}}章）": "{{title}} (chapter {{index}})",
+  "{{type}}：{{name}}": "{{type}}: {{name}}",
   "{{value1}} {{total}} 项": "{{value1}} {{total}} items",
   "{{value1}} · 预览": "{{value1}} · Preview",
   "{{value1}} 个已选项仍需补充内容或确认范围": "{{value1}} selected items still need content or a confirmed range",

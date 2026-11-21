@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { uiText } from '../../../uiText'
+import { useEffect, useRef, useState } from 'react'
 import { type NavigateFunction } from 'react-router-dom'
 import { StudioChaptersService, type TaskSourceRead } from '../../../services/generated'
 import { workbenchManagementLocation } from '../directing/chapterNavigation'
@@ -8,6 +9,7 @@ import type { TaskUiItem } from './taskUiStore'
 
 type ResolvedTaskMeta = {
   sourceLabel?: string | null
+  sourceType?: string
   navigateTo?: string | null
 }
 
@@ -87,7 +89,7 @@ async function resolveTaskMeta(task: TaskUiItem): Promise<ResolvedTaskMeta | nul
     const chapter = res.data
     if (!chapter) return null
     return {
-      sourceLabel: chapter.title ? `章节：${chapter.title}` : `章节：${relationEntityId}`,
+      sourceType: '章节', sourceLabel: chapter.title || relationEntityId,
       navigateTo: workbenchManagementLocation(chapter.project_id, chapter.id, undefined, 'division'),
     }
   }
@@ -122,7 +124,7 @@ async function resolveTaskMeta(task: TaskUiItem): Promise<ResolvedTaskMeta | nul
                 ? `/assets/props/${relationEntityId}/edit`
                 : `/assets/costumes/${relationEntityId}/edit`
       return {
-        sourceLabel: name ? `${labelPrefix}：${name}` : `${labelPrefix}：${relationEntityId}`,
+        sourceType: labelPrefix, sourceLabel: name || relationEntityId,
         navigateTo,
       }
     } catch {
@@ -162,7 +164,7 @@ async function resolveTaskMeta(task: TaskUiItem): Promise<ResolvedTaskMeta | nul
               ? '道具'
               : '服装'
       return {
-        sourceLabel: name ? `${labelPrefix}：${name}` : `${labelPrefix}：${assetId}`,
+        sourceType: labelPrefix, sourceLabel: name || assetId,
         navigateTo: buildPath(assetId),
       }
     } catch {
@@ -221,9 +223,7 @@ export function useResolvedTaskCenterTasks(
 
   }, [metaMap, tasks])
 
-  return useMemo(
-    () =>
-      tasks.map((task) => {
+  return tasks.map((task) => {
         if (task.sourceResolved) {
           const meta = sourceMeta(task.source, task)
           return {
@@ -236,7 +236,7 @@ export function useResolvedTaskCenterTasks(
         const meta = key ? metaMap[key] : undefined
         return {
           ...task,
-          sourceLabel: task.sourceLabel ?? meta?.sourceLabel ?? null,
+          sourceLabel: task.sourceLabel ?? (meta?.sourceType ? uiText("{{type}}：{{name}}", { type: uiText(meta.sourceType), name: meta.sourceLabel }) : meta?.sourceLabel) ?? null,
           onNavigate:
             task.onNavigate ??
             (meta?.navigateTo
@@ -245,7 +245,5 @@ export function useResolvedTaskCenterTasks(
                 }
               : null),
         }
-      }),
-    [metaMap, navigate, tasks],
-  )
+      })
 }
