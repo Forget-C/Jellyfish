@@ -27,11 +27,20 @@ export default function ManagementLayout() {
   }, [])
   useEffect(() => { setOpen(false) }, [key])
 
+  const restoreNavigationFocus = () => requestAnimationFrame(() => {
+    const trigger = navigationTrigger.current
+    if (trigger?.getAttribute('aria-expanded') === 'false') trigger.focus({ preventScroll: true })
+  })
+  const closeDrawer = () => {
+    setOpen(false)
+    restoreNavigationFocus()
+  }
+
   const links = (
     <nav className="management-links" aria-label={uiText("管理导航")}>
       {managementNavigation.map(({ to, label }) => (
         <Link key={to} to={to} className="app-nav-link"
-          aria-current={currentPage === to ? 'page' : undefined} onClick={() => setOpen(false)}>
+          aria-current={currentPage === to ? 'page' : undefined} onClick={wide ? undefined : closeDrawer}>
           {uiText(label)}
         </Link>
       ))}
@@ -46,8 +55,8 @@ export default function ManagementLayout() {
             aria-expanded={open} onClick={() => setOpen(true)}>{uiText("管理导航")}</Button>
         </div>
         <Drawer title={uiText("管理导航")} aria-label={uiText("管理导航")} placement="left" width="min(272px, 100vw)" open={open}
-          onClose={() => setOpen(false)}
-          afterOpenChange={shown => { if (!shown) requestAnimationFrame(() => navigationTrigger.current?.focus({ preventScroll: true })) }}>{links}</Drawer>
+          onClose={closeDrawer}
+          afterOpenChange={shown => { if (!shown) restoreNavigationFocus() }}>{links}</Drawer>
       </>}
       <WorkspaceScrollPanel className="management-content"><Outlet /></WorkspaceScrollPanel>
     </WorkspaceLayout>
