@@ -209,17 +209,21 @@ try {
 
   omitTotal = false
   await search.fill('验收文本模型')
-  await modelRow.getByRole('button', { name: `编辑 ${model.name}`, exact: true }).click()
-  const edit = page.getByRole('dialog', { name: '编辑模型' })
-  const description = edit.getByRole('textbox', { name: '描述', exact: true })
+  await page.getByRole('button', { name: '用户与语言设置' }).click()
+  await page.getByRole('menuitem', { name: 'English', exact: true }).click()
+  await modelRow.getByRole('button', { name: `Edit ${model.name}`, exact: true }).press('Enter')
+  const edit = page.getByRole('dialog', { name: 'Edit model' })
+  const description = edit.getByRole('textbox', { name: 'Description', exact: true })
   await description.fill('更新后的完整描述')
-  const save = edit.getByRole('button', { name: /确\s*定/ })
+  const save = edit.getByRole('button', { name: 'OK' })
   await save.click()
-  await page.getByText('保存失败').waitFor()
+  await page.getByText('Save failed').waitFor()
   assert.equal(await description.inputValue(), '更新后的完整描述')
   editFails = false
   await save.click()
   await edit.waitFor({ state: 'hidden' })
+  await page.getByRole('button', { name: 'User and language settings' }).click()
+  await page.getByRole('menuitem', { name: '简体中文', exact: true }).click()
   await modelRow.getByText('更新后的完整描述', { exact: true }).waitFor()
 
   await modelRow.getByRole('button', { name: `${model.name}的更多操作` }).click()

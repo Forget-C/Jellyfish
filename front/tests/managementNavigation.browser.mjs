@@ -133,6 +133,17 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2))
     await page.screenshot({ path: output + '/' + width + '-management.png', animations: 'disabled' })
   }
+  await page.getByRole('button', { name: '用户与语言设置' }).click()
+  await page.getByRole('menuitem', { name: 'English', exact: true }).click()
+  await page.getByRole('button', { name: 'Open management navigation' }).click()
+  const englishNav = page.getByRole('navigation', { name: 'Management navigation' })
+  for (const name of ['Model management', 'Prompt templates', 'Agent management', 'File manager', 'Asset library']) {
+    await englishNav.getByRole('link', { name, exact: true }).waitFor()
+  }
+  await englishNav.getByRole('link', { name: 'Prompt templates' }).click()
+  await page.getByRole('heading', { name: 'Prompt templates' }).waitFor()
+  await page.getByRole('button', { name: 'User and language settings' }).click()
+  await page.getByRole('menuitem', { name: '简体中文', exact: true }).click()
   const banner = page.getByRole('banner')
   const brand = banner.getByRole('link', { name: 'Jellyfish 首页', exact: true })
   for (const [width, expectedHeight] of [[768, 56], [767, 100]]) {

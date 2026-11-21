@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { readFile } from 'node:fs/promises'
-import ts from 'typescript'
-const source = await readFile(new URL('../src/layouts/navigation.ts', import.meta.url), 'utf8')
-const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText
-const { pageBreadcrumbs, mainNavigation } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
+import { loadFrontendModule } from './load-frontend-module.mjs'
+
+const { pageBreadcrumbs, mainNavigation } = await loadFrontendModule('layouts/navigation')
 
 test('scene breadcrumbs preserve valid parent routes and readable names', () => {
   assert.deepEqual(pageBreadcrumbs('/projects/p1/chapters/ch1/sequences/s1', { project: '旧信', chapter: '第二章', page: '旧信重逢' }), [

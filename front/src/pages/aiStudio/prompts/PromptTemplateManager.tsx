@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -101,6 +102,7 @@ function getGroupKey(category: string): (typeof groupOrder)[number] {
 }
 
 const PromptTemplateManager: FC = () => {
+  const uiText = useUiText()
   const [templates, setTemplates] = useState<PromptTemplateSummary[]>([])
   const [selected, setSelected] = useState<PromptTemplateRead | null>(null)
   const [searchText, setSearchText] = useState('')
@@ -157,7 +159,7 @@ const PromptTemplateManager: FC = () => {
     setDetailError(false)
     try {
       const { data } = await StudioPromptsService.getPromptTemplateApiV1StudioPromptsTemplateIdGet({ templateId: id })
-      if (!data) throw new Error('模板详情响应无效')
+      if (!data) throw new Error(uiText("模板详情响应无效"))
       if (request === detailRequest.current) setSelected(data)
     } catch {
       if (request === detailRequest.current) setDetailError(true)
@@ -173,7 +175,7 @@ const PromptTemplateManager: FC = () => {
         page: nextPage, pageSize: PAGE_SIZE, q: nextQuery || undefined,
       })
       if (requestId !== requestIdRef.current) return
-      if (!data) throw new Error('模板列表响应无效')
+      if (!data) throw new Error(uiText("模板列表响应无效"))
       const { items, pagination } = data
       const totalCount = pagination.total
 
@@ -194,7 +196,7 @@ const PromptTemplateManager: FC = () => {
         setLoading(false)
       }
     }
-  }, [clearDetail])
+  }, [uiText, clearDetail])
 
   const loadCategories = async () => {
     try {
@@ -295,7 +297,7 @@ const PromptTemplateManager: FC = () => {
     if (rawDefaults) {
       const parsed = JSON.parse(rawDefaults)
       if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-        throw new Error('变量默认值必须是 JSON 对象')
+        throw new Error(uiText("变量默认值必须是 JSON 对象"))
       }
       variableDefaults = Object.fromEntries(
         Object.entries(parsed).map(([key, value]) => [key, String(value)]),
@@ -325,11 +327,11 @@ const PromptTemplateManager: FC = () => {
           requestBody: payload,
         })
         if (!res.data) {
-          message.error('添加提示词失败')
+          message.error(uiText("添加提示词失败"))
           return
         }
 
-        message.success('提示词已添加')
+        message.success(uiText("提示词已添加"))
         setFormOpen(false)
         createForm.resetFields()
         clearDetail()
@@ -341,7 +343,7 @@ const PromptTemplateManager: FC = () => {
       }
 
       if (!editingTemplateId) {
-        message.error('编辑目标不存在')
+        message.error(uiText("编辑目标不存在"))
         return
       }
 
@@ -350,12 +352,12 @@ const PromptTemplateManager: FC = () => {
         requestBody: payload,
       })
       if (!res.data) {
-        message.error('更新提示词失败')
+        message.error(uiText("更新提示词失败"))
         return
       }
       const updatedTemplate = res.data
 
-      message.success('提示词已更新')
+      message.success(uiText("提示词已更新"))
       setFormOpen(false)
       setEditingTemplateId(null)
       createForm.resetFields()
@@ -364,7 +366,8 @@ const PromptTemplateManager: FC = () => {
       void loadTemplates(page, query)
     } catch (error) {
       if (error && typeof error === 'object' && 'errorFields' in error) return
-      message.error(apiErrorMessage(error))
+      const reason = apiErrorMessage(error)
+      message.error(reason === '请先将同类别的其他模板设为默认' ? uiText("请先将同类别的其他模板设为默认") : reason)
     } finally {
       submittingRef.current = false
       setSubmitting(false)
@@ -373,12 +376,12 @@ const PromptTemplateManager: FC = () => {
 
   const handleDeleteTemplate = (template: PromptTemplateRead) => {
     Modal.confirm({
-      title: '删除提示词',
+      title: uiText("删除提示词"),
       zIndex: 1100,
-      content: `确定删除「${template.name}」吗？此操作不可恢复。`,
-      okText: '删除',
+      content: uiText("确定删除「{{name}}」吗？此操作不可恢复。", { name: template.name }),
+      okText: uiText("删除"),
       okType: 'danger',
-      cancelText: '取消',
+      cancelText: uiText("取消"),
       onOk: async () => {
         try {
           await StudioPromptsService.deletePromptTemplateApiV1StudioPromptsTemplateIdDelete({
@@ -389,7 +392,7 @@ const PromptTemplateManager: FC = () => {
             setTemplates(previous => previous.filter(item => item.id !== template.id))
             setTotal(previous => previous === undefined ? undefined : Math.max(0, previous - 1))
           }
-          message.success('提示词已删除')
+          message.success(uiText("提示词已删除"))
           if (activeDetail.current === template.id) {
             clearDetail()
             selectedButton.current = null
@@ -402,7 +405,7 @@ const PromptTemplateManager: FC = () => {
             void loadTemplates(page, query)
           }
         } catch (error) {
-          message.error('删除提示词失败')
+          message.error(uiText("删除提示词失败"))
           throw error
         }
       },
@@ -411,23 +414,23 @@ const PromptTemplateManager: FC = () => {
 
   const restoreSystemDefault = (template: PromptTemplateRead) => {
     Modal.confirm({
-      title: '恢复系统默认模板',
+      title: uiText("恢复系统默认模板"),
       zIndex: 1100,
-      content: `将「${template.name}」恢复为本类别的默认提示词，替换当前默认选择；不会修改模板正文。`,
-      okText: '恢复默认',
-      cancelText: '取消',
+      content: uiText("将「{{name}}」恢复为本类别的默认提示词，替换当前默认选择；不会修改模板正文。", { name: template.name }),
+      okText: uiText("恢复默认"),
+      cancelText: uiText("取消"),
       onOk: async () => {
         try {
           const res = await StudioPromptsService.updatePromptTemplateApiV1StudioPromptsTemplateIdPatch({
             templateId: template.id,
             requestBody: { is_default: true },
           })
-          if (!res.data) throw new Error('缺少更新结果')
-          message.success('已恢复系统默认模板')
+          if (!res.data) throw new Error(uiText("缺少更新结果"))
+          message.success(uiText("已恢复系统默认模板"))
           if (activeDetail.current === template.id) setSelected(res.data)
           void loadTemplates(page, query)
         } catch (error) {
-          message.error('恢复系统默认模板失败')
+          message.error(uiText("恢复系统默认模板失败"))
           throw error
         }
       },
@@ -443,54 +446,54 @@ const PromptTemplateManager: FC = () => {
     <div className="management-prompt-reader-heading">
       <h2>{selected.name}</h2>
       <div className="management-prompt-reader-actions">
-        {!selected.is_system && <Button size="small" onClick={() => openEditModal(selected)}>编辑</Button>}
-        {selected.is_system && !selected.is_default && <Button size="small" onClick={() => void restoreSystemDefault(selected)}>恢复默认</Button>}
-        {!selected.is_system && <Button size="small" danger onClick={() => handleDeleteTemplate(selected)}>删除</Button>}
+        {!selected.is_system && <Button size="small" onClick={() => openEditModal(selected)}>{uiText("编辑")}</Button>}
+        {selected.is_system && !selected.is_default && <Button size="small" onClick={() => void restoreSystemDefault(selected)}>{uiText("恢复默认")}</Button>}
+        {!selected.is_system && <Button size="small" danger onClick={() => handleDeleteTemplate(selected)}>{uiText("删除")}</Button>}
       </div>
     </div>
     <div className="management-prompt-reader-tags">
-      <Tag bordered={false}>{categoryLabels[selected.category] || selected.category}</Tag>
-      {selected.is_system && <Tag bordered={false} color="gold">系统预置</Tag>}
-      {selected.is_default && <Tag bordered={false} color="blue">默认提示词</Tag>}
+      <Tag bordered={false}>{uiText(categoryLabels[selected.category] || selected.category)}</Tag>
+      {selected.is_system && <Tag bordered={false} color="gold">{uiText("系统预置")}</Tag>}
+      {selected.is_default && <Tag bordered={false} color="blue">{uiText("默认提示词")}</Tag>}
     </div>
-    <p className="management-prompt-reader-summary">{selected.preview || '暂无简介'}</p>
-    <h3>正文</h3>
+    <p className="management-prompt-reader-summary">{selected.preview || uiText("暂无简介")}</p>
+    <h3>{uiText("正文")}</h3>
     <pre className="management-prompt-reader-content">{selected.content}</pre>
-    <h3>变量</h3>
-    <p>{selected.variables.length ? selected.variables.join(', ') : '暂无变量'}</p>
-    <h3>变量默认值</h3>
+    <h3>{uiText("变量")}</h3>
+    <p>{selected.variables.length ? selected.variables.join(', ') : uiText("暂无变量")}</p>
+    <h3>{uiText("变量默认值")}</h3>
     {Object.keys(selected.variable_defaults ?? {}).length
       ? <pre className="management-prompt-reader-defaults">{JSON.stringify(selected.variable_defaults, null, 2)}</pre>
-      : <p>暂无默认值</p>}
+      : <p>{uiText("暂无默认值")}</p>}
   </> : detailId ? (detailError
-    ? <Alert type="error" message="无法读取模板详情" action={<Button onClick={() => void loadDetail(detailId)}>重试</Button>} />
-    : <Skeleton active />) : <p className="management-prompt-reader-empty">选择模板阅读正文</p>
+    ? <Alert type="error" message={uiText("无法读取模板详情")} action={<Button onClick={() => void loadDetail(detailId)}>{uiText("重试")}</Button>} />
+    : <Skeleton active />) : <p className="management-prompt-reader-empty">{uiText("选择模板阅读正文")}</p>
 
   return (
     <WorkspaceLayout className="management-page prompt-manager">
-      <PageToolbar title="提示词模板" className="management-toolbar">
-        <span className="management-count">{loaded ? total === undefined ? `已加载 ${templates.length} 项` : `共 ${total} 项` : loading ? '读取中' : '数量未知'}</span>
+      <PageToolbar title={uiText("提示词模板")} className="management-toolbar">
+        <span className="management-count">{loaded ? total === undefined ? uiText("已加载 {{length}} 项", { length: templates.length }) : uiText("共 {{total}} 项", { total }) : loading ? uiText("读取中") : uiText("数量未知")}</span>
         <div className="management-tools">
-          <Input.Search aria-label="搜索模板名称或简介" placeholder="搜索模板名称或简介" allowClear
+          <Input.Search aria-label={uiText("搜索模板名称或简介")} placeholder={uiText("搜索模板名称或简介")} allowClear
             value={searchText} onSearch={handleSearch} onChange={event => {
               setSearchText(event.target.value)
               if (!event.target.value) handleSearch('')
             }} />
-          <Button onClick={() => { void loadTemplates(page, query); if (detailId) void loadDetail(detailId) }} disabled={loading}>刷新模板</Button>
+          <Button onClick={() => { void loadTemplates(page, query); if (detailId) void loadDetail(detailId) }} disabled={loading}>{uiText("刷新模板")}</Button>
         </div>
-        <Button type="primary" className="management-primary" onClick={openCreateModal}>添加提示词</Button>
+        <Button type="primary" className="management-primary" onClick={openCreateModal}>{uiText("添加提示词")}</Button>
       </PageToolbar>
       <div className="management-panel prompt-columns">
-        <section className="management-surface prompt-list" aria-label="模板列表" tabIndex={-1} ref={listRef} aria-busy={loading}>
-          {loadError && <Alert type="error" showIcon message={loaded ? '刷新模板失败，已保留当前内容' : '无法读取模板列表'}
-            action={<Button size="small" disabled={loading} onClick={() => void loadTemplates(page, query)}>重试</Button>} />}
+        <section className="management-surface prompt-list" aria-label={uiText("模板列表")} tabIndex={-1} ref={listRef} aria-busy={loading}>
+          {loadError && <Alert type="error" showIcon message={loaded ? uiText("刷新模板失败，已保留当前内容") : uiText("无法读取模板列表")}
+            action={<Button size="small" disabled={loading} onClick={() => void loadTemplates(page, query)}>{uiText("重试")}</Button>} />}
           <WorkspaceScrollPanel>
             {!loaded && loading ? <Skeleton active paragraph={{ rows: 6 }} /> : !loadError && templates.length === 0 ? <div className="management-prompt-reader-empty">
-              <p>{query ? '没有匹配的模板' : '暂无提示词模板'}</p>
-              {query && <Button size="small" onClick={() => { setSearchText(''); handleSearch('') }}>清除搜索</Button>}
+              <p>{query ? uiText("没有匹配的模板") : uiText("暂无提示词模板")}</p>
+              {query && <Button size="small" onClick={() => { setSearchText(''); handleSearch('') }}>{uiText("清除搜索")}</Button>}
             </div> : null}
             {templateGroups.map(group => <section key={group.key} className="prompt-group">
-              <h2>{group.title}</h2>
+              <h2>{uiText(group.title)}</h2>
               {group.children.map(item => <button type="button" key={item.key} title={item.title}
                 aria-pressed={detailId === item.key} onClick={event => {
                   selectedButton.current = event.currentTarget
@@ -502,11 +505,11 @@ const PromptTemplateManager: FC = () => {
           {loaded && total !== undefined && <Pagination size="small" current={page} pageSize={PAGE_SIZE} total={total}
             disabled={loading} showSizeChanger={false} onChange={handlePageChange} />}
         </section>
-        {wide && <WorkspaceScrollPanel className="management-surface management-prompt-reader" role="region" aria-label="模板阅读">
+        {wide && <WorkspaceScrollPanel className="management-surface management-prompt-reader" role="region" aria-label={uiText("模板阅读")}>
           {readerContent}
         </WorkspaceScrollPanel>}
       </div>
-      {!wide && <Drawer title="模板阅读" aria-label="模板阅读" width="min(720px, 100vw)" open={readerOpen}
+      {!wide && <Drawer title={uiText("模板阅读")} aria-label={uiText("模板阅读")} width="min(720px, 100vw)" open={readerOpen}
         onClose={() => {
           setReaderOpen(false)
           requestAnimationFrame(restoreListFocus)
@@ -517,7 +520,7 @@ const PromptTemplateManager: FC = () => {
       </Drawer>}
 
       <Modal
-        title={modalMode === 'create' ? '添加提示词' : '编辑提示词'}
+        title={modalMode === 'create' ? uiText("添加提示词") : uiText("编辑提示词")}
         open={formOpen}
         zIndex={1100}
         closable={!submitting}
@@ -530,48 +533,48 @@ const PromptTemplateManager: FC = () => {
           setEditingTemplateId(null)
         }}
         onOk={handleFormSubmit}
-        okText="保存"
-        cancelText="取消"
+        okText={uiText("保存")}
+        cancelText={uiText("取消")}
         confirmLoading={submitting}
         destroyOnClose
       >
         <Form layout="vertical" form={createForm}>
           <Form.Item
-            label="模板类别"
+            label={uiText("模板类别")}
             name="category"
-            rules={[{ required: true, message: '请选择模板类别' }]}
+            rules={[{ required: true, message: uiText("请选择模板类别") }]}
           >
-            <Select options={categoryOptions} placeholder="请选择类别" />
+            <Select options={categoryOptions.map(option => ({ ...option, label: uiText(option.label) }))} placeholder={uiText("请选择类别")} />
           </Form.Item>
           <Form.Item
-            label="模板名称"
+            label={uiText("模板名称")}
             name="name"
-            rules={[{ required: true, message: '请输入模板名称' }]}
+            rules={[{ required: true, message: uiText("请输入模板名称") }]}
           >
-            <Input maxLength={255} placeholder="例如：分镜基础提示词" />
+            <Input maxLength={255} placeholder={uiText("例如：分镜基础提示词")} />
           </Form.Item>
-          <Form.Item label="预览文案" name="preview">
-            <Input.TextArea rows={2} maxLength={500} placeholder="用于列表预览的简短说明" />
+          <Form.Item label={uiText("预览文案")} name="preview">
+            <Input.TextArea rows={2} maxLength={500} placeholder={uiText("用于列表预览的简短说明")} />
           </Form.Item>
           <Form.Item
-            label="模板内容"
+            label={uiText("模板内容")}
             name="content"
-            rules={[{ required: true, message: '请输入模板内容' }]}
+            rules={[{ required: true, message: uiText("请输入模板内容") }]}
           >
-            <Input.TextArea rows={6} placeholder="请输入提示词模板内容" />
+            <Input.TextArea rows={6} placeholder={uiText("请输入提示词模板内容")} />
           </Form.Item>
-          <Form.Item label="变量（回车添加）" name="variables">
+          <Form.Item label={uiText("变量（回车添加）")} name="variables">
             <Select
               mode="tags"
               tokenSeparators={[',', '，']}
               open={false}
-              placeholder="例如：subject, style, lighting"
+              placeholder={uiText("例如：subject, style, lighting")}
             />
           </Form.Item>
-          <Form.Item label="变量默认值（JSON 对象）" name="variable_defaults_json">
-            <Input.TextArea rows={4} placeholder={'例如：{\n  "background_instruction": "Plain studio background"\n}'} />
+          <Form.Item label={uiText("变量默认值（JSON 对象）")} name="variable_defaults_json">
+            <Input.TextArea rows={4} placeholder={uiText("例如：{\n  \"background_instruction\": \"Plain studio background\"\n}")} />
           </Form.Item>
-          <Form.Item label="设为默认提示词" name="is_default" valuePropName="checked">
+          <Form.Item label={uiText("设为默认提示词")} name="is_default" valuePropName="checked">
             <Switch />
           </Form.Item>
         </Form>

@@ -1,3 +1,4 @@
+import { useUiText } from '../uiText'
 import { useEffect, useRef, useState } from 'react'
 import { Button, Drawer } from 'antd'
 import { MenuOutlined } from '@ant-design/icons'
@@ -8,6 +9,7 @@ import './management-layout.css'
 
 /** 现有管理地址共用一个领域侧栏，详情页依然由原业务路由承载。 */
 export default function ManagementLayout() {
+  const uiText = useUiText()
   const { key, pathname } = useLocation()
   const [open, setOpen] = useState(false)
   const navigationTrigger = useRef<HTMLButtonElement>(null)
@@ -26,11 +28,11 @@ export default function ManagementLayout() {
   useEffect(() => { setOpen(false) }, [key])
 
   const links = (
-    <nav className="management-links" aria-label="管理导航">
+    <nav className="management-links" aria-label={uiText("管理导航")}>
       {managementNavigation.map(({ to, label }) => (
         <Link key={to} to={to} className="app-nav-link"
           aria-current={currentPage === to ? 'page' : undefined} onClick={() => setOpen(false)}>
-          {label}
+          {uiText(label)}
         </Link>
       ))}
     </nav>
@@ -40,10 +42,10 @@ export default function ManagementLayout() {
     <WorkspaceLayout className="management-layout">
       {wide ? links : <>
         <div className="management-navigation-trigger">
-          <Button ref={navigationTrigger} type="text" icon={<MenuOutlined />} aria-label="打开管理导航"
-            aria-expanded={open} onClick={() => setOpen(true)}>管理导航</Button>
+          <Button ref={navigationTrigger} type="text" icon={<MenuOutlined />} aria-label={uiText("打开管理导航")}
+            aria-expanded={open} onClick={() => setOpen(true)}>{uiText("管理导航")}</Button>
         </div>
-        <Drawer title="管理导航" aria-label="管理导航" placement="left" width="min(272px, 100vw)" open={open}
+        <Drawer title={uiText("管理导航")} aria-label={uiText("管理导航")} placement="left" width="min(272px, 100vw)" open={open}
           onClose={() => setOpen(false)}
           afterOpenChange={shown => { if (!shown) requestAnimationFrame(() => navigationTrigger.current?.focus({ preventScroll: true })) }}>{links}</Drawer>
       </>}

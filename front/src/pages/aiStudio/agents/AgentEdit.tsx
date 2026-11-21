@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { usePageTitle } from '../../../layouts/pageTitle'
 import React, { useEffect, useState } from 'react'
 import {
@@ -33,6 +34,7 @@ const AGENT_TYPES: { value: AgentTypeKey; label: string }[] = [
 ]
 
 export default function AgentEdit() {
+  const uiText = useUiText()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [agent, setAgent] = useState<Agent | null>(null)
@@ -64,7 +66,7 @@ export default function AgentEdit() {
       setEditDesc(a.description)
       setPromptDraft('从以下剧本中提取主线剧情，输出结构化 JSON。')
     } catch {
-      message.error('加载 Agent 失败')
+      message.error(uiText("加载 Agent 失败"))
       navigate('/agents')
     } finally {
       setLoading(false)
@@ -84,10 +86,10 @@ export default function AgentEdit() {
         type: editType,
         description: editDesc.trim(),
       })
-      message.success('保存成功')
+      message.success(uiText("保存成功"))
       setAgent((prev) => (prev ? { ...prev, name: editName, type: editType, description: editDesc } : null))
     } catch {
-      message.error('保存失败')
+      message.error(uiText("保存失败"))
     } finally {
       setSaving(false)
     }
@@ -113,7 +115,7 @@ export default function AgentEdit() {
       )
     } catch {
       setTestLogs((l) => [...l, '[ERROR] 执行失败'])
-      message.error('测试执行失败')
+      message.error(uiText("测试执行失败"))
     } finally {
       setTesting(false)
     }
@@ -121,15 +123,15 @@ export default function AgentEdit() {
 
   // 简易工作流占位节点（后续可替换为 React Flow）
   const workflowNodes = [
-    { id: 'start', label: '开始', type: 'start' },
-    { id: 'llm1', label: 'LLM 提取', type: 'llm' },
-    { id: 'end', label: '结束', type: 'end' },
+    { id: 'start', label: uiText("开始"), type: 'start' },
+    { id: 'llm1', label: uiText("LLM 提取"), type: 'llm' },
+    { id: 'end', label: uiText("结束"), type: 'end' },
   ]
 
   if (loading || !agent) {
     return (
       <div className="flex items-center justify-center h-full text-gray-500">
-        {loading ? '加载中...' : null}
+        {loading ? uiText("加载中...") : null}
       </div>
     )
   }
@@ -139,13 +141,13 @@ export default function AgentEdit() {
       {/* 顶部工具栏 */}
       <div className="app-page-toolbar">
         <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate('/agents')}>
-          返回列表
+          {uiText("返回列表")}
         </Button>
         <Input
           value={editName}
           onChange={(e) => setEditName(e.target.value)}
           className="font-medium w-48"
-          placeholder="Agent 名称"
+          placeholder={uiText("Agent 名称")}
         />
         <Select
           value={editType}
@@ -154,12 +156,12 @@ export default function AgentEdit() {
           style={{ width: 140 }}
         />
         <Space className="ml-auto">
-          <Button icon={<HistoryOutlined />}>版本管理</Button>
+          <Button icon={<HistoryOutlined />}>{uiText("版本管理")}</Button>
           <Button icon={<ThunderboltOutlined />} loading={testing} onClick={() => void handleRunTest()}>
-            测试
+            {uiText("测试")}
           </Button>
           <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={() => void handleSave()}>
-            保存
+            {uiText("保存")}
           </Button>
         </Space>
       </div>
@@ -168,7 +170,7 @@ export default function AgentEdit() {
       <Layout className="app-editor-split flex-1 min-h-0 flex-row overflow-hidden">
         {/* 左侧：工作流编辑器占位 */}
         <div className="flex-1 min-w-0 overflow-auto p-4 bg-gray-50 border-r border-gray-200">
-          <div className="text-sm text-gray-500 mb-2">工作流编排（可接入 React Flow）</div>
+          <div className="text-sm text-gray-500 mb-2">{uiText("工作流编排（可接入 React Flow）")}</div>
           <div className="relative rounded-lg border-2 border-dashed border-gray-300 bg-white p-6 min-h-[320px]">
             <div className="flex flex-col items-center gap-4">
               {workflowNodes.map((node, i) => (
@@ -192,7 +194,7 @@ export default function AgentEdit() {
             </div>
             <div className="absolute bottom-3 right-3 flex gap-2">
               <Button size="small" icon={<PlusOutlined />}>
-                添加节点
+                {uiText("添加节点")}
               </Button>
             </div>
           </div>
@@ -202,23 +204,23 @@ export default function AgentEdit() {
         <div className="app-editor-properties flex-shrink-0 overflow-auto border-l border-gray-200 bg-white">
           <div className="p-4 border-b border-gray-100 font-medium flex items-center gap-2">
             <SettingOutlined />
-            节点属性
+            {uiText("节点属性")}
           </div>
           <div className="p-4 space-y-4">
             {selectedNodeId ? (
               <>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">提示词</label>
+                  <label className="block text-sm text-gray-600 mb-1">{uiText("提示词")}</label>
                   <Input.TextArea
                     rows={6}
                     value={promptDraft}
                     onChange={(e) => setPromptDraft(e.target.value)}
-                    placeholder="输入系统提示词..."
+                    placeholder={uiText("输入系统提示词...")}
                     className="font-mono text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">温度 (Temperature)</label>
+                  <label className="block text-sm text-gray-600 mb-1">{uiText("温度 (Temperature)")}</label>
                   <Slider min={0} max={2} step={0.1} value={temperature} onChange={setTemperature} />
                   <span className="text-xs text-gray-400">{temperature}</span>
                 </div>
@@ -229,19 +231,19 @@ export default function AgentEdit() {
                 </div>
                 {agent.type === 'plot' && (
                   <div>
-                    <label className="block text-sm text-gray-600 mb-1">主线保留阈值</label>
+                    <label className="block text-sm text-gray-600 mb-1">{uiText("主线保留阈值")}</label>
                     <InputNumber min={0} max={1} step={0.1} defaultValue={0.5} className="w-full" />
                   </div>
                 )}
                 {agent.type === 'character' && (
                   <div>
-                    <label className="block text-sm text-gray-600 mb-1">角色数量上限</label>
+                    <label className="block text-sm text-gray-600 mb-1">{uiText("角色数量上限")}</label>
                     <InputNumber min={1} max={100} defaultValue={20} className="w-full" />
                   </div>
                 )}
               </>
             ) : (
-              <div className="text-gray-500 text-sm">在左侧点击节点以编辑属性</div>
+              <div className="text-gray-500 text-sm">{uiText("在左侧点击节点以编辑属性")}</div>
             )}
           </div>
         </div>
@@ -258,25 +260,25 @@ export default function AgentEdit() {
         >
           <Space>
             <PlayCircleOutlined />
-            <span className="font-medium">测试区</span>
+            <span className="font-medium">{uiText("测试区")}</span>
           </Space>
           <Button type="text" size="small">
-            {testPanelCollapsed ? '展开' : '收起'}
+            {testPanelCollapsed ? uiText("展开") : uiText("收起")}
           </Button>
         </div>
         {!testPanelCollapsed && (
           <div className="flex-1 min-h-0 flex overflow-hidden">
             <div className="w-1/2 flex flex-col border-r border-gray-100 p-3">
-              <div className="text-sm text-gray-500 mb-1">输入（剧本片段 / JSON）</div>
+              <div className="text-sm text-gray-500 mb-1">{uiText("输入（剧本片段 / JSON）")}</div>
               <Input.TextArea
-                placeholder="粘贴剧本或测试数据..."
+                placeholder={uiText("粘贴剧本或测试数据...")}
                 value={testInput}
                 onChange={(e) => setTestInput(e.target.value)}
                 className="flex-1 font-mono text-sm resize-none"
                 rows={6}
               />
               <Button type="primary" icon={<ThunderboltOutlined />} loading={testing} className="mt-2" onClick={() => void handleRunTest()}>
-                运行
+                {uiText("运行")}
               </Button>
             </div>
             <div className="w-1/2 flex flex-col overflow-hidden p-3">
@@ -285,8 +287,8 @@ export default function AgentEdit() {
                 onChange={(k) => setTestTab(k as 'output' | 'history')}
                 size="small"
                 items={[
-                  { key: 'output', label: '输出' },
-                  { key: 'history', label: '历史记录' },
+                  { key: 'output', label: uiText("输出") },
+                  { key: 'history', label: uiText("历史记录") },
                 ]}
               />
               {testTab === 'output' && (
@@ -299,12 +301,12 @@ export default function AgentEdit() {
                         ))}
                       </div>
                     )}
-                    {testOutput || '运行后在此显示结果'}
+                    {testOutput || uiText("运行后在此显示结果")}
                   </div>
                 </>
               )}
               {testTab === 'history' && (
-                <div className="text-gray-500 text-sm flex-1 overflow-auto">暂无历史测试记录</div>
+                <div className="text-gray-500 text-sm flex-1 overflow-auto">{uiText("暂无历史测试记录")}</div>
               )}
             </div>
           </div>

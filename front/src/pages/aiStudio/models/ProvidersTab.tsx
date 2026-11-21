@@ -1,3 +1,4 @@
+import { uiText, useUiText } from '../../../uiText'
 import type { ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -33,11 +34,12 @@ function endpointLabel(value?: string | null) {
     const url = new URL(value)
     return `${url.protocol}//${url.host}${url.pathname}`
   } catch {
-    return '未知'
+    return uiText("未知")
   }
 }
 
 export default function ProvidersTab({ header }: { header: ReactNode }) {
+  useUiText()
   const [result, setResult] = useState<{ providers: ProviderRead[]; total?: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -104,7 +106,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
     void request.then(response => {
       if (active) setSupportedSpecs(response.data ?? [])
     }).catch(() => {
-      if (active) message.error('加载系统支持的供应商列表失败')
+      if (active) message.error(uiText("加载系统支持的供应商列表失败"))
     }).finally(() => {
       if (active) setSupportedLoading(false)
     })
@@ -118,12 +120,12 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
 
   const providerNameOptions = useMemo(() => {
     const fromApi = supportedSpecs.map(spec => ({
-      label: spec.is_experimental ? `${spec.display_name}（实验）` : spec.display_name,
+      label: spec.is_experimental ? uiText("{{display_name}}（实验）", { display_name: spec.display_name }) : spec.display_name,
       value: spec.display_name,
     }))
     const name = providerEditing?.name?.trim()
     if (!name || supportedSpecs.some(spec => spec.display_name === name || spec.aliases?.includes(name))) return fromApi
-    return [{ label: `${name}（历史/未在清单内）`, value: name }, ...fromApi]
+    return [{ label: uiText("{{name}}（历史/未在清单内）", { name }), value: name }, ...fromApi]
   }, [supportedSpecs, providerEditing])
 
   const applyDefaultBaseUrlForDisplayName = (displayName: string) => {
@@ -162,7 +164,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         if (values.api_key && values.api_key !== '********') requestBody.api_key = values.api_key
         if (values.api_secret && values.api_secret !== '********') requestBody.api_secret = values.api_secret
         await LlmService.updateProviderApiV1LlmProvidersProviderIdPatch({ providerId: providerEditing.id, requestBody })
-        message.success('供应商已更新')
+        message.success(uiText("供应商已更新"))
       } else {
         const id = typeof crypto !== 'undefined' && crypto.randomUUID
           ? crypto.randomUUID()
@@ -177,13 +179,13 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
             api_secret: values.api_secret,
           },
         })
-        message.success('供应商已添加')
+        message.success(uiText("供应商已添加"))
       }
       closeProviderModal()
       reload()
     } catch (error) {
       if (error && typeof error === 'object' && 'errorFields' in error) return
-      message.error('保存供应商失败，请重试')
+      message.error(uiText("保存供应商失败，请重试"))
     } finally {
       saveInFlight.current = false
       setSaving(false)
@@ -203,11 +205,11 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
     }
     try {
       await modal.confirm({
-        title: `删除供应商「${provider.name}」？`,
+        title: uiText("删除供应商「{{name}}」？", { name: provider.name }),
         content: linked === 0 ? '删除后无法恢复。' : linked === undefined
           ? '未能读取关联模型数量。删除后，关联模型可能失效。'
           : `该供应商关联 ${linked} 个模型，删除后关联模型可能失效。`,
-        okText: '删除',
+        okText: uiText("删除"),
         okType: 'danger',
         onOk: async () => {
           try {
@@ -220,11 +222,11 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
                 total: previous.total === undefined ? undefined : Math.max(0, previous.total - 1),
               }
             })
-            message.success('供应商已删除')
+            message.success(uiText("供应商已删除"))
             if (result?.providers.length === 1 && page > 1) setPage(page - 1)
             else reload()
           } catch (error) {
-            message.error('删除供应商失败，请重试')
+            message.error(uiText("删除供应商失败，请重试"))
             throw error
           }
         },
@@ -258,7 +260,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         form.setFieldsValue({ api_key: response.data?.api_key ?? '', api_secret: response.data?.api_secret ?? '' })
       }
     } catch {
-      if (credentialsRequest.current === request) message.error('加载供应商密钥失败，可留空或重新填写后保存')
+      if (credentialsRequest.current === request) message.error(uiText("加载供应商密钥失败，可留空或重新填写后保存"))
     } finally {
       if (credentialsRequest.current === request) {
         credentialsRequest.current = null
@@ -274,7 +276,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
 
   const providerColumns: TableColumnsType<ProviderRead> = [
     {
-      title: '名称', dataIndex: 'name', key: 'name', width: 180,
+      title: uiText("名称"), dataIndex: 'name', key: 'name', width: 180,
       render: (name: string, record) => (
         <Button type="link" className="management-name" title={name} onClick={event => {
           detailTrigger.current = event.currentTarget
@@ -284,31 +286,31 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
       ),
     },
     {
-      title: '地址摘要', dataIndex: 'base_url', key: 'base_url', ellipsis: true,
+      title: uiText("地址摘要"), dataIndex: 'base_url', key: 'base_url', ellipsis: true,
       render: (url: string) => {
         const address = endpointLabel(url)
         return address === '未知' || address === '—' ? address : maskUrl(address)
       },
     },
-    { title: '凭据配置状态', key: 'credentials', width: 132, render: () => '未知' },
+    { title: uiText("凭据配置状态"), key: 'credentials', width: 132, render: () => '未知' },
     {
-      title: '状态', dataIndex: 'status', key: 'status', width: 90,
+      title: uiText("状态"), dataIndex: 'status', key: 'status', width: 90,
       render: (status: ProviderRead['status']) => status
-        ? <Tag color={PROVIDER_STATUS_MAP[status]?.color}>{PROVIDER_STATUS_MAP[status]?.text ?? '未知'}</Tag>
+        ? <Tag color={PROVIDER_STATUS_MAP[status]?.color}>{PROVIDER_STATUS_MAP[status]?.text ?? uiText("未知")}</Tag>
         : '未知',
     },
     {
-      title: '操作', key: 'action', width: 224,
+      title: uiText("操作"), key: 'action', width: 224,
       render: (_, record) => (
         <Space size={4}>
-          <Button type="text" size="small" aria-label={`编辑 ${record.name}`} onClick={() => void openProviderModal(record)}>编辑</Button>
-          <Button type="text" size="small" disabled>测试（暂未接入）</Button>
+          <Button type="text" size="small" aria-label={uiText("编辑 {{name}}", { name: record.name })} onClick={() => void openProviderModal(record)}>{uiText("编辑")}</Button>
+          <Button type="text" size="small" disabled>{uiText("测试（暂未接入）")}</Button>
           <Dropdown trigger={['click']} menu={{ items: [{
-            key: 'delete', label: '删除', danger: true, icon: <DeleteOutlined />,
+            key: 'delete', label: uiText("删除"), danger: true, icon: <DeleteOutlined />,
             disabled: confirmingDelete,
             onClick: () => void handleDeleteProvider(record),
           }] }}>
-            <Button type="text" size="small" icon={<MoreOutlined />} aria-label={`${record.name}的更多操作`} />
+            <Button type="text" size="small" icon={<MoreOutlined />} aria-label={uiText("{{name}}的更多操作", { name: record.name })} />
           </Dropdown>
         </Space>
       ),
@@ -321,9 +323,9 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
       <PageToolbar className="management-toolbar">
         <div className="management-tools">
           <Input
-            aria-label="搜索供应商"
+            aria-label={uiText("搜索供应商")}
             prefix={<SearchOutlined />}
-            placeholder="搜索名称或描述"
+            placeholder={uiText("搜索名称或描述")}
             allowClear
             value={search}
             onChange={event => changeSearch(event.target.value)}
@@ -334,7 +336,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
               selectable: true,
               selectedKeys: [sortBy],
               items: SORT_OPTIONS.filter(option => option.value !== 'category').map(option => ({
-                key: option.value, label: option.label,
+                key: option.value, label: uiText(option.label),
                 onClick: () => {
                   setSortBy(option.value as 'updated' | 'name')
                   setPage(1)
@@ -342,24 +344,24 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
               })),
             }}
           >
-            <Button icon={<DownOutlined />}>排序：{SORT_OPTIONS.find(option => option.value === sortBy)?.label}</Button>
+            <Button icon={<DownOutlined />}>{uiText("排序：")}{SORT_OPTIONS.find(option => option.value === sortBy)?.label}</Button>
           </Dropdown>
           {result && <span className="management-count">
-            {result.total === undefined ? `已加载 ${result.providers.length} 个供应商` : `共 ${result.total} 个供应商`}
+            {result.total === undefined ? uiText("已加载 {{length}} 个供应商", { length: result.providers.length }) : uiText("共 {{total}} 个供应商", { total: result.total })}
           </span>}
         </div>
         <Button className="management-primary" type="primary" icon={<PlusOutlined />} onClick={() => void openProviderModal()}>
-          添加供应商
+          {uiText("添加供应商")}
         </Button>
       </PageToolbar>
       <WorkspaceScrollPanel className="management-panel">
         {loadFailed && <Alert
           showIcon
           type="error"
-          message={result ? '刷新供应商失败，仍显示上次结果' : '加载供应商失败'}
-          action={<Button size="small" onClick={reload}>重试</Button>}
+          message={result ? uiText("刷新供应商失败，仍显示上次结果") : uiText("加载供应商失败")}
+          action={<Button size="small" onClick={reload}>{uiText("重试")}</Button>}
         />}
-        {loading && !result && <div className="management-surface" role="status" aria-label="正在加载供应商">
+        {loading && !result && <div className="management-surface" role="status" aria-label={uiText("正在加载供应商")}>
           <Skeleton active paragraph={{ rows: 4 }} />
         </div>}
         {result && <div className="management-surface">
@@ -373,10 +375,10 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
             pagination={result.total === undefined ? false : { current: page, pageSize: PAGE_SIZE, total: result.total, showSizeChanger: false, hideOnSinglePage: true, onChange: setPage }}
             locale={{
               emptyText: loadFailed || loading ? null : (
-                <Empty description={search.trim() ? '无匹配结果' : '暂无供应商'}>
+                <Empty description={search.trim() ? uiText("无匹配结果") : uiText("暂无供应商")}>
                   {search.trim()
-                    ? <Button onClick={() => changeSearch('')}>清除搜索</Button>
-                    : <Button onClick={() => void openProviderModal()}>添加第一个供应商</Button>}
+                    ? <Button onClick={() => changeSearch('')}>{uiText("清除搜索")}</Button>
+                    : <Button onClick={() => void openProviderModal()}>{uiText("添加第一个供应商")}</Button>}
                 </Empty>
               ),
             }}
@@ -387,8 +389,8 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
 
       <Drawer
         className="app-detail-drawer"
-        title="供应商详情"
-        aria-label="供应商详情"
+        title={uiText("供应商详情")}
+        aria-label={uiText("供应商详情")}
         open={detailPanelOpen}
         placement="right"
         width="min(100vw, 420px)"
@@ -401,20 +403,20 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         }}
       >
         {selectedProvider && <Descriptions className="management-details" column={1} layout="vertical" size="small" items={[
-          { key: 'name', label: '名称', children: selectedProvider.name },
-          { key: 'url', label: '文本/通用 Base URL', children: endpointLabel(selectedProvider.base_url) },
-          { key: 'image', label: '图片 Base URL', children: selectedProvider.image_base_url ? endpointLabel(selectedProvider.image_base_url) : '回退到文本/通用' },
-          { key: 'video', label: '视频 Base URL', children: selectedProvider.video_base_url ? endpointLabel(selectedProvider.video_base_url) : '回退到文本/通用' },
-          { key: 'credentials', label: '凭据配置状态', children: '未知' },
-          { key: 'status', label: '状态', children: selectedProvider.status ? PROVIDER_STATUS_MAP[selectedProvider.status]?.text ?? '未知' : '未知' },
-          { key: 'description', label: '描述', children: selectedProvider.description || '—' },
-          { key: 'created', label: '创建人', children: selectedProvider.created_by || '—' },
+          { key: 'name', label: uiText("名称"), children: selectedProvider.name },
+          { key: 'url', label: uiText("文本/通用 Base URL"), children: endpointLabel(selectedProvider.base_url) },
+          { key: 'image', label: uiText("图片 Base URL"), children: selectedProvider.image_base_url ? endpointLabel(selectedProvider.image_base_url) : '回退到文本/通用' },
+          { key: 'video', label: uiText("视频 Base URL"), children: selectedProvider.video_base_url ? endpointLabel(selectedProvider.video_base_url) : '回退到文本/通用' },
+          { key: 'credentials', label: uiText("凭据配置状态"), children: '未知' },
+          { key: 'status', label: uiText("状态"), children: selectedProvider.status ? PROVIDER_STATUS_MAP[selectedProvider.status]?.text ?? '未知' : '未知' },
+          { key: 'description', label: uiText("描述"), children: selectedProvider.description || '—' },
+          { key: 'created', label: uiText("创建人"), children: selectedProvider.created_by || '—' },
         ]} />}
       </Drawer>
 
       {modalContext}
       <Modal
-        title={providerEditing ? '编辑供应商' : '添加供应商'}
+        title={providerEditing ? uiText("编辑供应商") : uiText("添加供应商")}
         open={providerModalOpen}
         onCancel={() => { if (!saving) closeProviderModal() }}
         onOk={() => void handleSaveProvider()}
@@ -425,45 +427,45 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         destroyOnClose
       >
         <Form form={form} layout="vertical" className="pt-2">
-          <Form.Item name="name" label="名称" rules={[{ required: true, message: '请选择供应商' }]}>
+          <Form.Item name="name" label={uiText("名称")} rules={[{ required: true, message: uiText("请选择供应商") }]}>
             <Select
               showSearch
               optionFilterProp="label"
               loading={supportedLoading}
-              placeholder={supportedLoading ? '加载供应商清单…' : '选择供应商'}
+              placeholder={supportedLoading ? uiText("加载供应商清单…") : uiText("选择供应商")}
               options={providerNameOptions}
-              notFoundContent={supportedLoading ? '加载中…' : '暂无数据'}
+              notFoundContent={supportedLoading ? uiText("加载中…") : uiText("暂无数据")}
               onChange={(v) => applyDefaultBaseUrlForDisplayName(String(v))}
             />
           </Form.Item>
           <Form.Item
             name="base_url"
-            label="文本/通用 Base URL"
-            rules={[{ required: true }, { type: 'url', message: '请输入有效 URL' }]}
+            label={uiText("文本/通用 Base URL")}
+            rules={[{ required: true }, { type: 'url', message: uiText("请输入有效 URL") }]}
           >
             <Input placeholder="https://api.openai.com/v1" />
           </Form.Item>
-          <Form.Item name="image_base_url" label="图片 Base URL（可选覆盖）" rules={[{ type: 'url', message: '请输入有效 URL' }]}>
-            <Input placeholder="留空则回退到文本/通用 Base URL" />
+          <Form.Item name="image_base_url" label={uiText("图片 Base URL（可选覆盖）")} rules={[{ type: 'url', message: uiText("请输入有效 URL") }]}>
+            <Input placeholder={uiText("留空则回退到文本/通用 Base URL")} />
           </Form.Item>
-          <Form.Item name="video_base_url" label="视频 Base URL（可选覆盖）" rules={[{ type: 'url', message: '请输入有效 URL' }]}>
-            <Input placeholder="留空则回退到文本/通用 Base URL" />
+          <Form.Item name="video_base_url" label={uiText("视频 Base URL（可选覆盖）")} rules={[{ type: 'url', message: uiText("请输入有效 URL") }]}>
+            <Input placeholder={uiText("留空则回退到文本/通用 Base URL")} />
           </Form.Item>
-          <Form.Item name="api_key" label="API Key" help={providerEditing ? '留空则不修改' : '请勿分享密钥'}>
+          <Form.Item name="api_key" label="API Key" help={providerEditing ? uiText("留空则不修改") : uiText("请勿分享密钥")}>
             <Input.Password placeholder="AK" disabled={credentialsLoading} />
           </Form.Item>
-          <Form.Item name="api_secret" label="API Secret" help={providerEditing ? '留空则不修改' : undefined}>
+          <Form.Item name="api_secret" label="API Secret" help={providerEditing ? uiText("留空则不修改") : undefined}>
             <Input.Password placeholder="SK" disabled={credentialsLoading} />
           </Form.Item>
-          <Form.Item name="description" label="描述">
-            <Input.TextArea rows={2} placeholder="支持 GPT 系列模型" />
+          <Form.Item name="description" label={uiText("描述")}>
+            <Input.TextArea rows={2} placeholder={uiText("支持 GPT 系列模型")} />
           </Form.Item>
-          <Form.Item name="status" label="状态" initialValue="active">
+          <Form.Item name="status" label={uiText("状态")} initialValue="active">
             <Select
               options={[
-                { label: '活跃', value: 'active' },
-                { label: '测试中', value: 'testing' },
-                { label: '禁用', value: 'disabled' },
+                { label: uiText("活跃"), value: 'active' },
+                { label: uiText("测试中"), value: 'testing' },
+                { label: uiText("禁用"), value: 'disabled' },
               ]}
             />
           </Form.Item>

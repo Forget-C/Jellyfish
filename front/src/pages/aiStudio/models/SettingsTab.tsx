@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, ConfigProvider, Form, InputNumber, Select, Skeleton } from 'antd'
 import { WorkspaceScrollPanel } from '../../../components'
@@ -13,6 +14,7 @@ type SettingsState =
 const runtimeTheme = { token: { controlHeight: 36 } }
 
 export default function SettingsTab({ onOpenModels }: { onOpenModels: () => void }) {
+  const uiText = useUiText()
   const [state, setState] = useState<SettingsState>({ status: 'loading' })
   const [retryCount, setRetryCount] = useState(0)
   const [saving, setSaving] = useState(false)
@@ -67,29 +69,29 @@ export default function SettingsTab({ onOpenModels }: { onOpenModels: () => void
 
   return (
     <WorkspaceScrollPanel className="management-panel">
-      <section className="management-surface runtime-settings" aria-label="模型运行设置">
+      <section className="management-surface runtime-settings" aria-label={uiText("模型运行设置")}>
         <div className="runtime-settings-note">
-          <span>此处配置全局运行参数，默认模型在模型页维护。</span>
-          <Button type="link" size="small" onClick={onOpenModels}>前往模型页</Button>
+          <span>{uiText("此处配置全局运行参数，默认模型在模型页维护。")}</span>
+          <Button type="link" size="small" onClick={onOpenModels}>{uiText("前往模型页")}</Button>
         </div>
         {state.status === 'loading' && (
-          <div role="status" aria-label="正在读取运行设置"><Skeleton active paragraph={{ rows: 2 }} /></div>
+          <div role="status" aria-label={uiText("正在读取运行设置")}><Skeleton active paragraph={{ rows: 2 }} /></div>
         )}
         {state.status === 'error' && (
           <Alert
             type="error"
             showIcon
-            message="读取运行设置失败"
+            message={uiText("读取运行设置失败")}
             action={<Button size="small" onClick={() => {
               setState({ status: 'loading' })
               setRetryCount(count => count + 1)
-            }}>重试</Button>}
+            }}>{uiText("重试")}</Button>}
           />
         )}
         {state.status === 'loaded' && (
           <ConfigProvider theme={runtimeTheme}>
             <Form<RuntimeValues>
-              aria-label="运行参数"
+              aria-label={uiText("运行参数")}
               className="runtime-settings-form"
               form={form}
               layout="vertical"
@@ -100,18 +102,18 @@ export default function SettingsTab({ onOpenModels }: { onOpenModels: () => void
             >
               <Form.Item
                 name="api_timeout"
-                label="API 超时（秒）"
-                rules={[{ type: 'integer', required: true, min: 5, max: 300, message: '请输入 5 至 300 之间的整数秒数' }]}
+                label={uiText("API 超时（秒）")}
+                rules={[{ type: 'integer', required: true, min: 5, max: 300, message: uiText("请输入 5 至 300 之间的整数秒数") }]}
               >
-                <InputNumber min={5} max={300} placeholder="未知，请填写" />
+                <InputNumber min={5} max={300} placeholder={uiText("未知，请填写")} />
               </Form.Item>
               <Form.Item
                 name="log_level"
-                label="日志级别"
-                rules={[{ required: true, message: '请选择日志级别' }]}
+                label={uiText("日志级别")}
+                rules={[{ required: true, message: uiText("请选择日志级别") }]}
               >
                 <Select
-                  placeholder="未知，请选择"
+                  placeholder={uiText("未知，请选择")}
                   options={[
                     { label: 'Debug', value: 'debug' },
                     { label: 'Info', value: 'info' },
@@ -121,9 +123,9 @@ export default function SettingsTab({ onOpenModels }: { onOpenModels: () => void
                 />
               </Form.Item>
               <div className="runtime-settings-actions">
-                <Button type="primary" htmlType="submit" loading={saving}>保存设置</Button>
-                {saveFeedback === 'success' && <span role="status">设置已保存</span>}
-                {saveFeedback === 'error' && <span role="alert">保存运行设置失败，输入已保留，请重试。</span>}
+                <Button type="primary" htmlType="submit" loading={saving}>{uiText("保存设置")}</Button>
+                {saveFeedback === 'success' && <span role="status">{uiText("设置已保存")}</span>}
+                {saveFeedback === 'error' && <span role="alert">{uiText("保存运行设置失败，输入已保留，请重试。")}</span>}
               </div>
             </Form>
           </ConfigProvider>

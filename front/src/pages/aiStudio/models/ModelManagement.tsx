@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useRef, useState } from 'react'
 import { Tabs } from 'antd'
 import ProvidersTab from './ProvidersTab'
@@ -6,6 +7,7 @@ import SettingsTab from './SettingsTab'
 import { PageToolbar, WorkspaceLayout } from '../../../components'
 
 export default function ModelManagement() {
+  const uiText = useUiText()
   const [activeTab, setActiveTab] = useState<string>('providers')
   const headerRef = useRef<HTMLDivElement>(null)
   const selectTab = (key: string) => {
@@ -14,16 +16,16 @@ export default function ModelManagement() {
     requestAnimationFrame(() => headerRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus())
   }
   const header = <div ref={headerRef} className="management-model-header">
-    <PageToolbar title="模型管理" className="management-heading">
+    <PageToolbar title={uiText("模型管理")} className="management-heading">
       <Tabs
         className="management-tabs"
         activeKey={activeTab}
         onChange={selectTab}
         size="small"
         items={[
-          { key: 'providers', label: '供应商' },
-          { key: 'models', label: '模型' },
-          { key: 'settings', label: '运行设置' },
+          { key: 'providers', label: uiText("供应商") },
+          { key: 'models', label: uiText("模型") },
+          { key: 'settings', label: uiText("运行设置") },
         ]}
       />
     </PageToolbar>
