@@ -28,7 +28,7 @@ function connectionReason(document: CanvasDocument, edge: GenerationEdge, capabi
     if (source.type === 'direction.criterion' && target.type?.startsWith('direction.') && edge.source_port === 'text') return uiText("验收要求仅支持验收关联")
     return uiText("端口值种类不匹配，不提供隐式转换")
   }
-  if (source.type === 'direction.criterion' && edge.source_port === 'criterion' && edge.target_port === 'acceptance_basis' && (!('name' in source) || !source.name?.trim())) return uiText("请先填写验收要求名称")
+  if (source.type === 'direction.criterion' && edge.source_port === 'criterion' && edge.target_port === 'acceptance_basis' && (!('name' in source) || !source.name?.trim())) return '请先填写验收要求名称'
   if (capability && (!capability.input_ports.includes(edge.target_port) || target.type !== `model.${capability.modality}`)) return uiText("所选模型未接入该输入用途")
   const edges = document.edges || []
   if (!expanding && findConnection(document, edge)) return uiText("同一端口连接已存在")

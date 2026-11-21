@@ -176,7 +176,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     }
     return items
   }, [uiText, document, cardDefinitions, cardTitles])
-  const inputLabel = (card: GenerationCard, port: string) => cardDefinitions[card.type || '']?.inputs.find(item => item.id === port)?.label || portLabels[port]
+  const inputLabel = (card: GenerationCard, port: string) => uiText(cardDefinitions[card.type || '']?.inputs.find(item => item.id === port)?.label || portLabels[port] || port)
   const [displayFilter, setDisplayFilter] = useState<CanvasDisplayFilter>({ group: '', modality: '', problems: false })
   const [multiSelectMode, setMultiSelectMode] = useState(false)
   const stackMoved = useRef(false)
@@ -806,7 +806,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       const target = event.target as Element
       if (!container.current?.contains(target) && !target.closest('.generation-card-editor')?.querySelector(`[data-canvas-details="${CSS.escape(document.id)}"]`)) return
       event.preventDefault(); setCardMenuId(undefined)
-      container.current?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(cardMenuId)}"] [aria-label="卡片操作"]`)?.focus({ preventScroll: true })
+      container.current?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(cardMenuId)}"] [data-card-menu-trigger]`)?.focus({ preventScroll: true })
     }
     const up = (event: KeyboardEvent) => { if (event.key.startsWith('Arrow') && !movement.pointerActive) finishMove() }
     const blur = () => finishMove()
@@ -1045,11 +1045,11 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const options = !result && sourceConnection && id !== sourceConnection.card ? compatibleOptions(sourceConnection.card, id) : []
     const outputName = ({ text: '文本', image: '图片', video: '视频', audio: '音频' })[definition?.modality || 'text']
     const hoveredPoint = drag ? connectionPointAt(drag.x, drag.y) : undefined
-    const summary = result ? (result.output.available === false ? '当前输出缺失' : linkedResultTitle(result.output))
+    const summary = result ? (result.output.available === false ? uiText("当前输出缺失") : linkedResultTitle(result.output))
       : sourceConnection && id !== sourceConnection.card
-        ? existingSource(sourceConnection.card, id) ? '已连接，选择可定位连线'
-          : options[0] ? connectionPolicy(document, options[0])?.message : connectionFailure(sourceConnection.card, id)
-        : `${outputName}${(runtime?.outputs[card.id]?.length || 0) > 1 ? ` · ${runtime?.outputs[card.id]?.length} 项` : ''}`
+        ? existingSource(sourceConnection.card, id) ? uiText("已连接，选择可定位连线")
+          : options[0] ? uiText(connectionPolicy(document, options[0])?.message || "") : uiText(connectionFailure(sourceConnection.card, id))
+        : (runtime?.outputs[card.id]?.length || 0) > 1 ? uiText("{{name}} · {{count}} 项", { name: uiText(outputName), count: runtime?.outputs[card.id]?.length }) : uiText(outputName)
     const sidesToRender = result ? ['right'] as const : connectionSides
     return sidesToRender.map(side => {
       const connected = result ? projectedConnections.some(connection => connection.results.some(item => item.id === id)) : edges.some(edge => {
@@ -1099,7 +1099,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       return references.some(reference => matches(reference.source) && members.some(member => member.source_port === reference.source?.port_id)) ? [segment.kind === 'instruction' ? '指令引用 · ' + segment.command : `模型正文引用 · 第 ${index + 1} 段`] : []
     }) : []
     const frame = !resultSource && target && 'frame_target' in target && target.frame_target?.card_id === edge.source_card ? ['画面定位 · ' + target.frame_target.state_id] : []
-    return [...new Set([...used, ...fields, ...prompt, ...frame])].join('／') || (members.length === 1 && target ? `${inputLabel(target, edge.target_port)} · 候选` : '来源候选 · 在接收卡选择用途')
+    return [...new Set([...used, ...fields, ...prompt, ...frame])].join('／') || (members.length === 1 && target ? uiText("{{port}} · 候选", { port: inputLabel(target, edge.target_port) }) : uiText("来源候选 · 在接收卡选择用途"))
   }
   const edgeLabel = (edge: GenerationEdge) => `${cardLabel(edge.source_card)} → ${cardLabel(edge.target_card)} · ${edgePurpose(edge)}`
   const inspectedEdge = edges.find(edge => edge.id === selectedEdgeId)
@@ -1505,7 +1505,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       {multiSelectMode && <><Button onClick={() => setMultiSelectMode(false)}>{uiText("完成选择")}</Button><Button onClick={clearSelection}>{uiText("退出多选")}</Button></>}
     </div>}
     <div className="canvas-bottom-right generation-bottom-right">
-      {(reason || storageError) && <div role="status" className="canvas-status-host">{storageError ? uiText("布局本地保存失败：{{storageError}}", { storageError }) : reason}</div>}
+      {(reason || storageError) && <div role="status" className="canvas-status-host">{storageError ? uiText("布局本地保存失败：{{storageError}}", { storageError }) : reason === '请先填写验收要求名称' ? uiText(reason) : reason}</div>}
       {contentHistory}
     </div>
     <div ref={viewport.surface} {...viewport.surfaceProps} className={`generation-surface${spaceHeld ? ' generation-surface-pan-ready' : ''}`} aria-label={uiText("生成画布视口")}
@@ -1747,7 +1747,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
               closeMenu: () => {
                 setCardMenuId(undefined)
                 requestAnimationFrame(() => container.current?.querySelector<HTMLElement>(
-                  `[data-card-id="${CSS.escape(card.id)}"] [aria-label="卡片操作"]`)?.focus({ preventScroll: true }))
+                  `[data-card-id="${CSS.escape(card.id)}"] [data-card-menu-trigger]`)?.focus({ preventScroll: true }))
               },
             }))}
             sourceControl={sources.length ? <CanvasSourcePopover items={sources} onLocate={locateSource} /> : undefined}

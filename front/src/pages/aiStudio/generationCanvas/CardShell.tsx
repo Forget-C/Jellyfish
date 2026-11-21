@@ -100,7 +100,7 @@ export function CardShell({ id, title, name, label, type, contextKey, point, sca
     <header><button type="button" data-keyboard-move aria-label={uiText("移动布局：{{value1}}", { value1: name || title })} title={uiText("拖动卡片，或用方向键移动")}>{type?.startsWith('direction.') ? <DesignIcon /> : type?.endsWith('image') || type?.startsWith('reference.') ? <PictureOutlined /> : type?.endsWith('video') ? <VideoCameraOutlined /> : type?.endsWith('audio') ? <AudioOutlined /> : <FileTextOutlined />}</button>
       <strong title={name || title}>{name || title}</strong>{name && <small>{title}</small>}
       {issueIndicator}
-      {setMenu && <WorkbenchIconButton ref={menuTrigger} label={uiText("卡片操作")} icon={<MoreOutlined />} variant="quiet" aria-expanded={menu} onClick={() => setMenu(!menu)} />}
+      {setMenu && <WorkbenchIconButton ref={menuTrigger} data-card-menu-trigger label={uiText("卡片操作")} icon={<MoreOutlined />} variant="quiet" aria-expanded={menu} onClick={() => setMenu(!menu)} />}
       {menu && <div className="generation-card-menu" onPointerDown={event => event.stopPropagation()}>
         {menuAction}
         {onContextActions && <WorkbenchButton onClick={event=>onContextActions(event.currentTarget)}>{uiText("复制、封面与下载…")}</WorkbenchButton>}
