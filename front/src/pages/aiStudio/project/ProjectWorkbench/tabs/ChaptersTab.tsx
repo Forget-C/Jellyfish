@@ -1,3 +1,4 @@
+import { useUiText } from '../../../../../uiText'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Empty, Input, Space, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
@@ -20,6 +21,7 @@ export function ChaptersTab() {
 }
 
 function ChaptersContent() {
+  const uiText = useUiText()
   const { projectId = '' } = useParams()
   const navigate = useNavigate()
   const { state, key: locationKey } = useLocation()
@@ -90,12 +92,12 @@ function ChaptersContent() {
   }, { replace: true })
   const restoreFocus = () => {
     if (trigger.current?.isConnected) trigger.current.focus({ preventScroll: true })
-    else root.current?.querySelector<HTMLInputElement>('input[aria-label="搜索章节"]')?.focus({ preventScroll: true })
+    else root.current?.querySelector<HTMLInputElement>('input[data-chapter-search]')?.focus({ preventScroll: true })
   }
   /** 分页列表不能推算最后一章序号；沿现有接口按序号倒序读取一条。 */
   const create = async (draft: ChapterDraft, enter: boolean) => {
     const last = await StudioChaptersService.listChaptersApiV1StudioChaptersGet({ projectId, page: 1, pageSize: 1, order: 'index', isDesc: true })
-    if (!last.data) throw new Error('章节顺序读取失败，请重试')
+    if (!last.data) throw new Error(uiText("章节顺序读取失败，请重试"))
     const id = newId('c')
     await StudioChaptersService.createChapterApiV1StudioChaptersPost({ requestBody: {
       ...draft, id, project_id: projectId, index: (last.data.items[0]?.index || 0) + 1, summary: '', status: 'draft',
@@ -115,41 +117,41 @@ function ChaptersContent() {
   return <div ref={root} className="project-chapter-list">
     <ProjectContentToolbar>
       <div className="project-content-toolbar-leading">
-        <h1 className="app-page-title">章节场次</h1>
-        <span className="project-toolbar-count">{loading || error || !totalKnown ? '数量未确认' : `共 ${total} 章`}</span>
-        <Input.Search aria-label="搜索章节" placeholder="搜索章节标题或摘要" allowClear value={query}
+        <h1 className="app-page-title">{uiText("章节场次")}</h1>
+        <span className="project-toolbar-count">{loading || error || !totalKnown ? uiText("数量未确认") : uiText("共 {{total}} 章", { total })}</span>
+        <Input.Search data-chapter-search aria-label={uiText("搜索章节")} placeholder={uiText("搜索章节标题或摘要")} allowClear value={query}
           onChange={event => changePage(1, event.target.value)} />
       </div>
-      <Button type="primary" icon={<PlusOutlined />} onClick={event => { trigger.current = event.currentTarget; setCreating(true) }}>新建章节</Button>
+      <Button type="primary" icon={<PlusOutlined />} onClick={event => { trigger.current = event.currentTarget; setCreating(true) }}>{uiText("新建章节")}</Button>
     </ProjectContentToolbar>
     <div className="project-production-surface">
-      {showOffPageChapter && <Alert type="info" message={`返回章节：${showOffPageChapter.title}`} action={<Space wrap>
-        <Button onClick={() => openEditor(showOffPageChapter.id)}>编辑章节</Button>
-        <Button data-chapter-workbench={showOffPageChapter.id} onClick={() => openManagement(showOffPageChapter.id)}>工作台管理</Button>
+      {showOffPageChapter && <Alert type="info" message={uiText("返回章节：{{title}}", { title: showOffPageChapter.title })} action={<Space wrap>
+        <Button onClick={() => openEditor(showOffPageChapter.id)}>{uiText("编辑章节")}</Button>
+        <Button data-chapter-workbench={showOffPageChapter.id} onClick={() => openManagement(showOffPageChapter.id)}>{uiText("工作台管理")}</Button>
       </Space>} />}
-      {error ? <Alert type="error" showIcon message={error} action={<Button onClick={() => void refresh()}>重试</Button>} />
+      {error ? <Alert type="error" showIcon message={error} action={<Button onClick={() => void refresh()}>{uiText("重试")}</Button>} />
         : <Table rowKey="id" className="chapter-table" dataSource={chapters} loading={loading}
           pagination={{ current: page, pageSize: 10, total, showSizeChanger: false, onChange: next => changePage(next) }}
-          locale={{ emptyText: <Empty description={query ? '没有匹配的章节' : '添加第一章，开始划分场次'} /> }} columns={[
-            { title: '章节名称', key: 'title', width: '38%', render: (_, chapter) => {
+          locale={{ emptyText: <Empty description={query ? uiText("没有匹配的章节") : uiText("添加第一章，开始划分场次")} /> }} columns={[
+            { title: uiText("章节名称"), key: 'title', width: '38%', render: (_, chapter) => {
               const production = chapterProduction(chapter)
               return <div className="chapter-list-production">
-                <Button type="link" className="chapter-title-link" aria-label={`${chapter.index}. ${chapter.title} · 编辑章节`} onClick={() => openEditor(chapter.id)}>{chapter.index}. {chapter.title}</Button>
+                <Button type="link" className="chapter-title-link" aria-label={uiText("{{index}}. {{title}} · 编辑章节", { index: chapter.index, title: chapter.title })} onClick={() => openEditor(chapter.id)}>{chapter.index}. {chapter.title}</Button>
                 <div className="chapter-list-state">
                   <span className="chapter-production-state" data-tone={production.tone}>{production.state}</span>
                 </div>
               </div>
             } },
-            { title: '原文预览', key: 'preview', responsive: ['lg'], render: (_, chapter) => <p className="chapter-table-preview">{chapter.rawText || '未填写原文'}</p> },
-            { title: '原文字数', key: 'words', width: 100, responsive: ['md'], render: (_, chapter) => chapter.rawText?.length ?? 0 },
-            { title: '场次数量', key: 'count', width: 100, render: (_, chapter) => chapter.sequenceCount === undefined ? '—' : `${chapter.sequenceCount} 场` },
-            { title: '操作', key: 'actions', width: 200, render: (_, chapter) => {
+            { title: uiText("原文预览"), key: 'preview', responsive: ['lg'], render: (_, chapter) => <p className="chapter-table-preview">{chapter.rawText || uiText("未填写原文")}</p> },
+            { title: uiText("原文字数"), key: 'words', width: 100, responsive: ['md'], render: (_, chapter) => chapter.rawText?.length ?? 0 },
+            { title: uiText("场次数量"), key: 'count', width: 100, render: (_, chapter) => chapter.sequenceCount === undefined ? '—' : uiText("{{count}} 场", { count: chapter.sequenceCount }) },
+            { title: uiText("操作"), key: 'actions', width: 200, render: (_, chapter) => {
               const action = chapterAction(chapter)
               return <Space size={8} wrap>
-                {action.target === 'edit' && <Button type="link" onClick={() => openEditor(chapter.id)}>编辑原文</Button>}
+                {action.target === 'edit' && <Button type="link" onClick={() => openEditor(chapter.id)}>{uiText("编辑原文")}</Button>}
                 <Button type="link" data-chapter-workbench={chapter.id}
                   onClick={() => action.target === 'source' ? openAction(chapter) : openManagement(chapter.id)}>
-                  {action.target === 'source' ? '划分场次' : '工作台管理'}
+                  {action.target === 'source' ? uiText("划分场次") : uiText("工作台管理")}
                 </Button>
               </Space>
             } },

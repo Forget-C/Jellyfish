@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal, flushSync } from 'react-dom'
 import { Alert, Button, Card, Checkbox, Modal, Space, Spin } from 'antd'
@@ -25,6 +26,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
   actionHost?: HTMLDivElement | null
   embedded?: boolean
 }) {
+  const uiText = useUiText()
   const interactionRef = useRef<DivisionInteraction>()
   const [interaction, setInteraction] = useState<DivisionInteractionStatus>({ dirty: false })
   const interactionChanged = useCallback((status: DivisionInteractionStatus) => { epoch.current++; setInteraction(status) }, [])
@@ -63,11 +65,11 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     const key = `${projectId}:${chapterId}`
     try {
       const response = await StudioDirectingService.directingChapter({ projectId, chapterId })
-      if (!response.data) throw new Error('章节原文读取失败')
+      if (!response.data) throw new Error(uiText("章节原文读取失败"))
       if (identity.current === key) { setChapter(response.data); setLoadError('') }
       return response.data
     } catch (cause) { if (identity.current === key) setLoadError(apiErrorMessage(cause)); return undefined }
-  }, [projectId, chapterId])
+  }, [uiText, projectId, chapterId])
   useEffect(() => {
     const editingEpoch = epoch
     identity.current = `${projectId}:${chapterId}`
@@ -78,9 +80,9 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     if (chapter && !editor) {
       setEditor({ chapter, draft: initialDivision(chapter) }); setActiveId(embedded ? sequenceId : sequenceId || chapter.sequences[0]?.id)
       if (chapter.sequences.some(row => row.source_changed)) setSourceChoice(chapter)
-      if (sequenceId && !chapter.sequences.some(row => row.id === sequenceId)) setError('场次不存在或已退出当前划分')
+      if (sequenceId && !chapter.sequences.some(row => row.id === sequenceId)) setError(uiText("场次不存在或已退出当前划分"))
     }
-  }, [chapter, editor, sequenceId, embedded])
+  }, [uiText, chapter, editor, sequenceId, embedded])
   useEffect(() => {
     if (embedded) {
       setActiveId(sequenceId)
@@ -93,7 +95,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     const read = async () => {
       try {
         const response = await StudioDirectingService.directingDivisionHistory({ projectId, chapterId, pageSize: 1 })
-        if (!response.data) throw new Error('进行中的分析记录读取失败')
+        if (!response.data) throw new Error(uiText("进行中的分析记录读取失败"))
         if (!active) return
         setActiveTasks(response.data.active_task_ids || []); setTasksReady(true)
         if (response.data.active_task_ids?.length) timer = setTimeout(() => { void read() }, 2500)
@@ -101,7 +103,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     }
     void read()
     return () => { active = false; clearTimeout(timer) }
-  }, [projectId, chapterId, historyRefresh])
+  }, [uiText, projectId, chapterId, historyRefresh])
   const editDraft = (draft: ChapterDivisionDraft) => {
     if (!editor || busy || pendingSave || viewing) return
     epoch.current++; setEditor({ ...editor, draft }); setPreview(undefined); setIdentityConfirmed(false); setError(''); setNotice('')
@@ -121,7 +123,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     })
     onChanged(selected || '', saved.chapter.sequences.length)
     void reload().then(latest => {
-      if (latest && latest.current_version?.id !== saved.chapter.current_version?.id) setNotice('本次保存已成功；当前划分随后已有新版本。已保留本次结果，请核对最新划分。')
+      if (latest && latest.current_version?.id !== saved.chapter.current_version?.id) setNotice(uiText("本次保存已成功；当前划分随后已有新版本。已保留本次结果，请核对最新划分。"))
     })
   }
   const submit = async (body: DivisionSave) => {
@@ -130,7 +132,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     setBusy(true); setError(''); setPendingSave(body); setRetryReady(false)
     try {
       const response = await StudioDirectingService.directingSaveDivision({ projectId, chapterId, requestBody: body })
-      if (!response.data) throw new Error('未收到保存回执，请核对提交结果')
+      if (!response.data) throw new Error(uiText("未收到保存回执，请核对提交结果"))
       acceptSaved(response.data); return true
     } catch (cause) {
       if (cause instanceof ApiError && cause.status >= 400 && cause.status < 500) {
@@ -141,14 +143,14 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
   }
   const save = async () => {
     if (!preview || !editor || JSON.stringify(divisionRequest(editor.draft, editor.chapter.raw_text)) !== JSON.stringify(preview.draft)) {
-      setError('请先取消离开，在本页预览并确认整章划分变更。'); return false
+      setError(uiText("请先取消离开，在本页预览并确认整章划分变更。")); return false
     }
     if (preview.value.blockers.length || (preview.value.identity_confirmation_required && !identityConfirmed)) return false
     const saved = await submit({ request_id: newKey(), draft: preview.draft, preview_token: preview.value.preview_token, identity_changes_confirmed: identityConfirmed })
     saveApproval.current?.(saved); saveApproval.current = undefined
     return saved
   }
-  const guard = useWorkspaceDraft({ name: '本章划分草稿', dirty: draftDirty || interaction.dirty, saveBlockedReason: preparationOpen ? '请先保存或取消拍摄解释' : interaction.blocked, busy: busy || !!pendingSave, save: async () => {
+  const guard = useWorkspaceDraft({ name: uiText("本章划分草稿"), dirty: draftDirty || interaction.dirty, saveBlockedReason: preparationOpen ? uiText("请先保存或取消拍摄解释") : interaction.blocked, busy: busy || !!pendingSave, save: async () => {
       if (!await previewChanges()) return false
       return new Promise<boolean>(resolve => { saveApproval.current = resolve })
     },
@@ -157,12 +159,12 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     if (!editor || !chapter || busy || interaction.blocked || !draftDirty && !interaction.dirty) return false
     setBusy(true); setError('')
     try {
-      if ((!editor.draft.source_basis_id && editor.chapter.source_version !== chapter.source_version) || !divisionBaselineMatches(editor.draft, chapter)) throw new Error('原文或场次集合已变化，草稿已保留。请对照最新划分后处理。')
+      if ((!editor.draft.source_basis_id && editor.chapter.source_version !== chapter.source_version) || !divisionBaselineMatches(editor.draft, chapter)) throw new Error(uiText("原文或场次集合已变化，草稿已保留。请对照最新划分后处理。"))
       const prepared = interactionRef.current ? interactionRef.current.prepare() : editor.draft
-      if (!prepared) { setError('请先完成或取消当前操作'); return false }
+      if (!prepared) { setError(uiText("请先完成或取消当前操作")); return false }
       const draft = divisionRequest(prepared, editor.chapter.raw_text)
       const response = await StudioDirectingService.directingPreviewDivision({ projectId, chapterId, requestBody: draft })
-      if (!response.data) throw new Error('没有取得划分预览，请重试')
+      if (!response.data) throw new Error(uiText("没有取得划分预览，请重试"))
       setPreview({ value: response.data, draft }); setIdentityConfirmed(false); return true
     } catch (cause) { setError(apiErrorMessage(cause)); if (cause instanceof ApiError && cause.status === 409) void reload(); return false }
     finally { setBusy(false) }
@@ -173,7 +175,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     try {
       const response = await StudioDirectingService.directingDivisionReceipt({ projectId, chapterId, requestId: pendingSave.request_id })
       if (response.data) acceptSaved(response.data)
-      else { setRetryReady(true); setNotice('尚无提交回执，可以使用同一请求安全重试。') }
+      else { setRetryReady(true); setNotice(uiText("尚无提交回执，可以使用同一请求安全重试。")) }
     } catch (cause) { setError(apiErrorMessage(cause)) } finally { setBusy(false) }
   }
   const startAnalysis = async () => {
@@ -182,9 +184,9 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
     const startedEpoch = epoch.current, startedChapter = editor.chapter
     try {
       const response = await StudioDirectingService.directingAnalyzeChapter({ projectId, chapterId, requestBody: {} })
-      if (!response.data) throw new Error('未收到分析任务，请从历史版本核对受理情况')
+      if (!response.data) throw new Error(uiText("未收到分析任务，请从历史版本核对受理情况"))
       setRunning({ id: response.data.task_id, epoch: startedEpoch, chapter: startedChapter }); setHistoryRefresh(value => value + 1)
-      setNotice('正在分析，可以继续编辑；分析期间有新修改时，结果会保留到历史版本。')
+      setNotice(uiText("正在分析，可以继续编辑；分析期间有新修改时，结果会保留到历史版本。"))
     } catch (cause) { setError(apiErrorMessage(cause)) }
     finally { writing.current = false; setBusy(false) }
   }
@@ -196,7 +198,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
       try {
         const response = await StudioDirectingService.directingDivisionAnalysis({ projectId, chapterId, taskId: running.id })
         if (!active) return
-        if (!response.data) throw new Error('分析状态读取失败')
+        if (!response.data) throw new Error(uiText("分析状态读取失败"))
         const detail = response.data
         setAnalysisError('')
         if (['queued', 'running'].includes(detail.analysis.status)) { timer = setTimeout(() => { void poll() }, 2500); return }
@@ -210,15 +212,15 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
           if (safe && !detail.issues.length) {
             const draft = analysisDivision(latest, detail)
             epoch.current++; setEditor({ chapter: latest, draft }); setActiveId(draft.members[0]?.key); setPreview(undefined)
-            setNotice('AI 生成 · 未保存。请核对场次范围与身份，保存后形成新版本。')
-          } else setNotice('新 AI 方案已保留到历史版本；当前草稿未被覆盖，可展开核对后载入编辑。')
-        } else setNotice(detail.analysis.status === 'cancelled' ? '分析已取消，原草稿保持不变。' : '分析失败，原草稿保持不变；可在历史版本查看记录。')
+            setNotice(uiText("AI 生成 · 未保存。请核对场次范围与身份，保存后形成新版本。"))
+          } else setNotice(uiText("新 AI 方案已保留到历史版本；当前草稿未被覆盖，可展开核对后载入编辑。"))
+        } else setNotice(detail.analysis.status === 'cancelled' ? uiText("分析已取消，原草稿保持不变。") : uiText("分析失败，原草稿保持不变；可在历史版本查看记录。"))
         setRunning(undefined); setHistoryRefresh(value => value + 1)
       } catch (cause) { if (active) { setAnalysisError(apiErrorMessage(cause)); timer = setTimeout(() => { void poll() }, 5000) } }
     }
     void poll()
     return () => { active = false; clearTimeout(timer) }
-  }, [running, projectId, chapterId, reload])
+  }, [uiText, running, projectId, chapterId, reload])
   const loadHistory = (selection: DivisionHistorySelection) => {
     if (busy || pendingSave || writing.current) return
     const apply = async () => {
@@ -226,20 +228,20 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
       writing.current = true; epoch.current++; setBusy(true)
       try {
         const latest = await reload()
-        if (!latest) throw new Error('最新划分读取失败，草稿保持不变')
+        if (!latest) throw new Error(uiText("最新划分读取失败，草稿保持不变"))
         // 展开后可能发生并发变更；载入时重新读取来源与待恢复对象版本。
         const detail = selection.kind === 'version'
           ? (await StudioDirectingService.directingDivisionVersion({ projectId, chapterId, versionId: selection.detail.version.id })).data
           : (await StudioDirectingService.directingDivisionAnalysis({ projectId, chapterId, taskId: selection.detail.analysis.id })).data
-        if (!detail) throw new Error('历史详情读取失败')
+        if (!detail) throw new Error(uiText("历史详情读取失败"))
         const version = 'version' in detail ? detail : undefined
         const draft = version ? versionDivision(latest, version) : analysisDivision(latest, detail as DivisionAnalysisDetail)
         epoch.current++; setEditor({ chapter: version ? { ...latest, raw_text: version.chapter.raw_text, source_version: version.chapter.source_version } : latest, draft, history: version }); setActiveId(draft.members[0]?.key)
-        setViewing(undefined); setHistoryOpen(false); setPreview(undefined); setError(''); setNotice('历史方案已载入草稿。请核对范围与身份，保存将形成新版本。')
+        setViewing(undefined); setHistoryOpen(false); setPreview(undefined); setError(''); setNotice(uiText("历史方案已载入草稿。请核对范围与身份，保存将形成新版本。"))
         if (targetTask) onCloseTask?.()
       } catch (cause) { setError(apiErrorMessage(cause)) } finally { writing.current = false; setBusy(false) }
     }
-    if (draftDirty) Modal.confirm({ title: '替换当前未保存草稿？', content: '载入历史方案会替换当前输入；正式版本保持不变。', okText: '替换草稿', cancelText: '取消', onOk: apply })
+    if (draftDirty) Modal.confirm({ title: uiText("替换当前未保存草稿？"), content: uiText("载入历史方案会替换当前输入；正式版本保持不变。"), okText: uiText("替换草稿"), cancelText: uiText("取消"), onOk: apply })
     else void apply()
   }
   const chooseSource = async (useLatest: boolean) => {
@@ -253,11 +255,11 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
         let detail: DivisionVersionDetail | undefined
         while (versionId) {
           const response = await StudioDirectingService.directingDivisionVersion({ projectId, chapterId, versionId })
-          if (!response.data) throw new Error('原版本依据读取失败')
+          if (!response.data) throw new Error(uiText("原版本依据读取失败"))
           if (!wanted || response.data.chapter.source_version === wanted.source.version) { detail = response.data; break }
           versionId = response.data.base_revision_id || undefined
         }
-        if (!detail) throw new Error('找不到场次原文快照，请使用最新原文并重新核对范围')
+        if (!detail) throw new Error(uiText("找不到场次原文快照，请使用最新原文并重新核对范围"))
         const basis = detail.chapter
         const preserved = { ...basis, current_version: sourceChoice.current_version,
           sequences: sourceChoice.sequences.map(row => ({ ...row, source_changed: row.source.version !== basis.source_version })) }
@@ -273,38 +275,38 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
         return member.reconfirm_source && matches.length === 1 ? { ...member, span: matches[0] } : member
       })
       setEditor({ chapter: sourceChoice, draft }); setSourceChoice(undefined)
-      setNotice('请核对最新原文中的场次范围，保存后采用')
+      setNotice(uiText("请核对最新原文中的场次范围，保存后采用"))
     }
   }
-  const readFailure = loadError && <Alert type="error" message={loadError} action={<Button onClick={() => void reload()}>重试</Button>} />
+  const readFailure = loadError && <Alert type="error" message={loadError} action={<Button onClick={() => void reload()}>{uiText("重试")}</Button>} />
   if (!chapter || !editor) return <Space>{loadError ? readFailure : <Spin />}</Space>
   const draft = editor.draft
   const stale = (!draft.source_basis_id && editor.chapter.source_version !== chapter.source_version) || !divisionBaselineMatches(draft, chapter) || editor.chapter.current_version?.id !== chapter.current_version?.id
   const saveActions = <Space wrap className="chapter-division-save">
-    <span className="chapter-division-version">{chapter.current_version ? `当前 v${chapter.current_version.number}` : '尚未保存版本'}</span>
+    <span className="chapter-division-version">{chapter.current_version ? uiText("当前 v{{number}}", { number: chapter.current_version.number }) : uiText("尚未保存版本")}</span>
     <Button icon={<MagicWandIcon />} disabled={!chapter.raw_text.trim() || !!running || !!activeTasks.length || !tasksReady || stale || !!viewing || interaction.dirty || !!interaction.blocked} onClick={() => {
-      Modal.confirm({ title: '确认智能划分？', content: draftDirty ? '将调用 AI 分析本章原文，分析成功后替换当前草稿；若分析期间继续编辑，AI 结果将保留到历史版本。' : '将调用 AI 分析本章原文并生成场次划分草稿，确认后开始任务。', okText: '开始划分', cancelText: '取消', onOk: startAnalysis })
-    }}>{running || activeTasks.length ? '划分中…' : '智能划分'}</Button>
-    <Button ref={preparationTrigger} icon={<VideoCameraOutlined aria-hidden />} disabled={!!sourceChoice || !((viewing?.chapter || editor.chapter).raw_text.trim())} onClick={() => { epoch.current++; setPreparationOpen(true) }}>拍摄解释</Button>
-    <Button icon={<HistoryOutlined aria-hidden />} disabled={interaction.dirty || !!interaction.blocked} onClick={() => { epoch.current++; setHistoryOpen(true) }}>历史版本</Button>
-    {!viewing && <Button type="primary" icon={<SaveOutlined aria-hidden />} disabled={!draftDirty && !interaction.dirty || stale || !!interaction.blocked} onClick={() => void previewChanges()}>保存为新版本</Button>}
+      Modal.confirm({ title: uiText("确认智能划分？"), content: draftDirty ? uiText("将调用 AI 分析本章原文，分析成功后替换当前草稿；若分析期间继续编辑，AI 结果将保留到历史版本。") : uiText("将调用 AI 分析本章原文并生成场次划分草稿，确认后开始任务。"), okText: uiText("开始划分"), cancelText: uiText("取消"), onOk: startAnalysis })
+    }}>{running || activeTasks.length ? uiText("划分中…") : uiText("智能划分")}</Button>
+    <Button ref={preparationTrigger} icon={<VideoCameraOutlined aria-hidden />} disabled={!!sourceChoice || !((viewing?.chapter || editor.chapter).raw_text.trim())} onClick={() => { epoch.current++; setPreparationOpen(true) }}>{uiText("拍摄解释")}</Button>
+    <Button icon={<HistoryOutlined aria-hidden />} disabled={interaction.dirty || !!interaction.blocked} onClick={() => { epoch.current++; setHistoryOpen(true) }}>{uiText("历史版本")}</Button>
+    {!viewing && <Button type="primary" icon={<SaveOutlined aria-hidden />} disabled={!draftDirty && !interaction.dirty || stale || !!interaction.blocked} onClick={() => void previewChanges()}>{uiText("保存为新版本")}</Button>}
   </Space>
   return <div className="chapter-division">
     {interaction.blocked && <Alert type="info" message={interaction.blocked} />}
     {readFailure}{error && <Alert type="error" showIcon message={error} />}{notice && <Alert type="info" message={notice} />}
-    {analysisError && <Alert type="warning" message={`分析状态读取失败，正在重试读取：${analysisError}`} />}
-    {pendingSave && <Alert type="warning" message="保存结果尚未确认。草稿与请求身份已保留，核对后才能继续编辑或离开。" action={<Space wrap>
-      <Button loading={busy} onClick={() => void recover()}>核对上次保存</Button>{retryReady && <Button disabled={busy} onClick={() => void submit(pendingSave)}>重试同一提交</Button>}
+    {analysisError && <Alert type="warning" message={uiText("分析状态读取失败，正在重试读取：{{analysisError}}", { analysisError })} />}
+    {pendingSave && <Alert type="warning" message={uiText("保存结果尚未确认。草稿与请求身份已保留，核对后才能继续编辑或离开。")} action={<Space wrap>
+      <Button loading={busy} onClick={() => void recover()}>{uiText("核对上次保存")}</Button>{retryReady && <Button disabled={busy} onClick={() => void submit(pendingSave)}>{uiText("重试同一提交")}</Button>}
     </Space>} />}
-    {stale && <Alert type="warning" message="原文或场次集合已变化，当前仍显示编辑时的原文和完整草稿，未自动覆盖。" action={<Button disabled={busy || !!pendingSave} onClick={() => setDiscardOpen(true)}>查看最新划分</Button>} />}
-    {!chapter.raw_text.trim() && <Alert type="info" message={embedded ? '本章尚未填写原文' : '请先添加章节原文。'}
-      action={<Button onClick={() => guard(onEdit)}>前往章节填写原文</Button>} />}
+    {stale && <Alert type="warning" message={uiText("原文或场次集合已变化，当前仍显示编辑时的原文和完整草稿，未自动覆盖。")} action={<Button disabled={busy || !!pendingSave} onClick={() => setDiscardOpen(true)}>{uiText("查看最新划分")}</Button>} />}
+    {!chapter.raw_text.trim() && <Alert type="info" message={embedded ? uiText("本章尚未填写原文") : uiText("请先添加章节原文。")}
+      action={<Button onClick={() => guard(onEdit)}>{uiText("前往章节填写原文")}</Button>} />}
     <WorkspaceWriteBoundary busy={busy || !!pendingSave}>
       {(actionHost ? createPortal(<WorkspaceWriteBoundary busy={busy || !!pendingSave}>{saveActions}</WorkspaceWriteBoundary>, actionHost) : saveActions)}
-      {viewing && <Alert type="info" message={`正在查看 v${viewing.version.number}（只读） · 当前${chapter.current_version ? ` v${chapter.current_version.number}` : '尚无版本'}，当前草稿已保留。`} action={<Space wrap>
-        <Button onClick={() => { epoch.current++; setViewing(undefined) }}>返回当前编辑</Button><Button onClick={() => loadHistory({ kind: 'version', detail: viewing })}>基于此版本编辑</Button>
+      {viewing && <Alert type="info" message={uiText("正在查看 v{{number}}（只读） · 当前{{value2}}，当前草稿已保留。", { number: viewing.version.number, value2: chapter.current_version ? ` v${chapter.current_version.number}` : uiText("尚无版本") })} action={<Space wrap>
+        <Button onClick={() => { epoch.current++; setViewing(undefined) }}>{uiText("返回当前编辑")}</Button><Button onClick={() => loadHistory({ kind: 'version', detail: viewing })}>{uiText("基于此版本编辑")}</Button>
       </Space>} />}
-      {viewing && viewing.chapter.source_version !== chapter.source_version && <Alert type="warning" message="此版本使用保存时的原文，载入编辑将沿用该原文。" />}
+      {viewing && viewing.chapter.source_version !== chapter.source_version && <Alert type="warning" message={uiText("此版本使用保存时的原文，载入编辑将沿用该原文。")} />}
       <ChapterDivisionEditor interactionRef={interactionRef} onInteractionChange={interactionChanged} busy={busy || !!pendingSave} management={embedded} key={viewing ? `history:${viewing.version.id}` : 'editor'} projectId={projectId}
         chapter={viewing?.chapter || editor.chapter} draft={viewing ? initialDivision(viewing.chapter) : draft}
         activeId={viewing ? historyActiveId : activeId} onActive={viewing ? setHistoryActiveId : setActiveId}
@@ -318,35 +320,35 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
         setPreparationOpen(false)
         requestAnimationFrame(() => preparationTrigger.current?.focus({ preventScroll: true }))
       }} />}
-    <Modal title="原文有变动，是否使用最新原文" open={!!sourceChoice} closable={false} maskClosable={false} keyboard={false}
-      footer={<Space><Button disabled={sourceChoosing || !sourceChoice?.current_version} onClick={() => void chooseSource(false)}>不使用，沿用原版本</Button><Button disabled={sourceChoosing} type="primary" onClick={() => void chooseSource(true)}>使用最新原文</Button></Space>}>
-      <p>使用最新原文后需核对场次范围；沿用原版本可继续维护已有场次及该版拍摄解释。</p>
+    <Modal title={uiText("原文有变动，是否使用最新原文")} open={!!sourceChoice} closable={false} maskClosable={false} keyboard={false}
+      footer={<Space><Button disabled={sourceChoosing || !sourceChoice?.current_version} onClick={() => void chooseSource(false)}>{uiText("不使用，沿用原版本")}</Button><Button disabled={sourceChoosing} type="primary" onClick={() => void chooseSource(true)}>{uiText("使用最新原文")}</Button></Space>}>
+      <p>{uiText("使用最新原文后需核对场次范围；沿用原版本可继续维护已有场次及该版拍摄解释。")}</p>
       {error && <Alert type="error" message={error} />}
     </Modal>
     <DivisionHistoryDrawer open={historyOpen || !!targetTask} targetTask={targetTask} projectId={projectId} chapterId={chapterId} refreshKey={historyRefresh}
       onClose={() => { setHistoryOpen(false); if (targetTask) onCloseTask?.() }}
       onView={detail => { if (busy || pendingSave) return; epoch.current++; setViewing(detail); setHistoryActiveId(detail.chapter.sequences[0]?.id); setHistoryOpen(false) }} onLoad={loadHistory} />
-    <Modal zIndex={2100} title="划分变更预览" open={!!preview && !pendingSave} width={800} onCancel={() => { setPreview(undefined); saveApproval.current?.(false); saveApproval.current = undefined }} footer={<Space wrap>
-      <Button onClick={() => { setPreview(undefined); saveApproval.current?.(false); saveApproval.current = undefined }}>继续编辑</Button><Button type="primary" disabled={!!preview?.value.blockers.length || (!!preview?.value.identity_confirmation_required && !identityConfirmed)} onClick={() => void save()}>保存本章划分</Button>
+    <Modal zIndex={2100} title={uiText("划分变更预览")} open={!!preview && !pendingSave} width={800} onCancel={() => { setPreview(undefined); saveApproval.current?.(false); saveApproval.current = undefined }} footer={<Space wrap>
+      <Button onClick={() => { setPreview(undefined); saveApproval.current?.(false); saveApproval.current = undefined }}>{uiText("继续编辑")}</Button><Button type="primary" disabled={!!preview?.value.blockers.length || (!!preview?.value.identity_confirmation_required && !identityConfirmed)} onClick={() => void save()}>{uiText("保存本章划分")}</Button>
     </Space>}>
-      {preview && <><p>原文不会改变。未变化的场次保持版本和来源；退出只移出当前划分，历史成果保留，不自动迁移。</p>
-        {preview.value.impacts.filter(impact => impact.changes.length).map((impact, index) => <Card key={`${impact.key}:${index}`} size="small" title={`${impact.after?.title || impact.before?.title} · ${impact.changes.map(change => changes[change]).join('、') || '保留（无变化）'}`}>
-          {impact.before && <p>原场次：{impact.before.title} · 原顺序 {impact.before.position + 1}</p>}
-          {impact.after && <p>保存后身份：{impact.after.sequence_id ? '沿用原场次' : '新增场次'} · 顺序 {preview.draft.members.findIndex(row => row.key === impact.key) + 1}</p>}
-          {impact.before && <details><summary>变更前原文</summary><p className="chapter-source-excerpt">{impact.before.source_text}</p></details>}
-          {impact.after && <details><summary>变更后原文</summary><p className="chapter-source-excerpt">{sourceSlice(editor.chapter.raw_text, impact.after.span)}</p></details>}
-          <p>保留成果：设计 {impact.design_count} · 计划 {impact.plan_count} · 素材 {impact.take_count} · 剪辑 {impact.cut_count}{impact.active_cut_revision_id ? ' · 有当前采用' : ''}</p>
+      {preview && <><p>{uiText("原文不会改变。未变化的场次保持版本和来源；退出只移出当前划分，历史成果保留，不自动迁移。")}</p>
+        {preview.value.impacts.filter(impact => impact.changes.length).map((impact, index) => <Card key={`${impact.key}:${index}`} size="small" title={`${impact.after?.title || impact.before?.title} · ${impact.changes.map(change => uiText(changes[change])).join(uiText("、")) || uiText("保留（无变化）")}`}>
+          {impact.before && <p>{uiText("原场次：")}{impact.before.title} {uiText("· 原顺序")} {impact.before.position + 1}</p>}
+          {impact.after && <p>{uiText("保存后身份：")}{impact.after.sequence_id ? uiText("沿用原场次") : uiText("新增场次")} {uiText("· 顺序")} {preview.draft.members.findIndex(row => row.key === impact.key) + 1}</p>}
+          {impact.before && <details><summary>{uiText("变更前原文")}</summary><p className="chapter-source-excerpt">{impact.before.source_text}</p></details>}
+          {impact.after && <details><summary>{uiText("变更后原文")}</summary><p className="chapter-source-excerpt">{sourceSlice(editor.chapter.raw_text, impact.after.span)}</p></details>}
+          <p>{uiText("保留成果：设计")} {impact.design_count} {uiText("· 计划")} {impact.plan_count} {uiText("· 素材")} {impact.take_count} {uiText("· 剪辑")} {impact.cut_count}{impact.active_cut_revision_id ? uiText(" · 有当前采用") : ''}</p>
         </Card>)}
-        <p>未分配原文：{preview.value.unassigned_character_count} 字</p>
-        {preview.draft.lineage.map(origin => <p key={origin.sequence_id}>{editor.chapter.sequences.find(row => row.id === origin.sequence_id)?.title} → {origin.target_keys.map(key => preview.draft.members.find(row => row.key === key)?.title).join('、') || '退出当前划分'}</p>)}
+        <p>{uiText("未分配原文：")}{preview.value.unassigned_character_count} {uiText("字")}</p>
+        {preview.draft.lineage.map(origin => <p key={origin.sequence_id}>{editor.chapter.sequences.find(row => row.id === origin.sequence_id)?.title} → {origin.target_keys.map(key => preview.draft.members.find(row => row.key === key)?.title).join('、') || uiText("退出当前划分")}</p>)}
         {preview.value.blockers.map(blocker => <Alert key={blocker} type="error" message={blocker} />)}
-        {preview.value.identity_confirmation_required && <Checkbox checked={identityConfirmed} onChange={event => setIdentityConfirmed(event.target.checked)}>我已核对拆分、合并、退出和恢复的身份去向；已有成果不自动迁移。</Checkbox>}
+        {preview.value.identity_confirmation_required && <Checkbox checked={identityConfirmed} onChange={event => setIdentityConfirmed(event.target.checked)}>{uiText("我已核对拆分、合并、退出和恢复的身份去向；已有成果不自动迁移。")}</Checkbox>}
       </>}
     </Modal>
-    <Modal cancelText="取消" title={stale ? '对照最新划分' : '放弃整章草稿'} open={discardOpen} onCancel={() => setDiscardOpen(false)} okText="放弃草稿并载入最新划分" onOk={() => {
-      epoch.current++; setEditor({ chapter, draft: initialDivision(chapter) }); setActiveId(chapter.sequences[0]?.id); setPreview(undefined); setDiscardOpen(false); setViewing(undefined); setError(''); setNotice('已载入最新划分。')
+    <Modal cancelText={uiText("取消")} title={stale ? uiText("对照最新划分") : uiText("放弃整章草稿")} open={discardOpen} onCancel={() => setDiscardOpen(false)} okText={uiText("放弃草稿并载入最新划分")} onOk={() => {
+      epoch.current++; setEditor({ chapter, draft: initialDivision(chapter) }); setActiveId(chapter.sequences[0]?.id); setPreview(undefined); setDiscardOpen(false); setViewing(undefined); setError(''); setNotice(uiText("已载入最新划分。"))
     }}>
-      <p>将放弃本章尚未保存的全部修改，正式数据不会变化。</p>{stale && <><p>草稿基线：{editor.chapter.sequences.map(row => row.title).join('、')}</p><p>最新划分：{chapter.sequences.map(row => row.title).join('、')}</p><details><summary>对照最新原文</summary><p className="chapter-source-excerpt">{chapter.raw_text}</p></details></>}
+      <p>{uiText("将放弃本章尚未保存的全部修改，正式数据不会变化。")}</p>{stale && <><p>{uiText("草稿基线：")}{editor.chapter.sequences.map(row => row.title).join('、')}</p><p>{uiText("最新划分：")}{chapter.sequences.map(row => row.title).join('、')}</p><details><summary>{uiText("对照最新原文")}</summary><p className="chapter-source-excerpt">{chapter.raw_text}</p></details></>}
     </Modal>
   </div>
 }

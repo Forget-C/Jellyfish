@@ -1,13 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
-import ts from 'typescript'
+import { loadFrontendModule } from './load-frontend-module.mjs'
 
-const compile = name => readFile(new URL(`../src/pages/aiStudio/directing/${name}.ts`, import.meta.url), 'utf8').then(source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText)
-const selection = `data:text/javascript;base64,${Buffer.from(await compile('sourceSelection')).toString('base64')}`
-const common = `data:text/javascript;base64,${Buffer.from(await compile('common')).toString('base64')}`
-const code = (await compile('chapterDivision')).replaceAll("'./sourceSelection'", JSON.stringify(selection)).replaceAll("'./common'", JSON.stringify(common))
-const { initialDivision, changeDivisionSpan, divisionRequest, removeDivisionMember, divisionBaselineMatches, analysisDivision, versionDivision } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
+const { initialDivision, changeDivisionSpan, divisionRequest, removeDivisionMember, divisionBaselineMatches, analysisDivision, versionDivision } = await loadFrontendModule('pages/aiStudio/directing/chapterDivision')
 const chapter = { source_version: 'v1', raw_text: '前😀段。后段。尾段。', sequences: [
   { id: 's1', title: '前场', version: 1, source_changed: false, span: { start: 0, end: 4 } },
   { id: 's2', title: '后场', version: 3, source_changed: false, span: { start: 4, end: 7 } },

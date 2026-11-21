@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useEffect, useLayoutEffect, useRef, useState, useId, type ReactNode } from 'react'
 import { Button, Radio, Popover, Space, Tooltip } from 'antd'
 import { SelectOutlined, InfoCircleOutlined, FontSizeOutlined } from '@ant-design/icons'
@@ -14,6 +15,7 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
   actions?: ReactNode; preserveFocusScroll?: boolean
   readOnly?: boolean
 }) {
+  const uiText = useUiText()
   const modeName = useId()
   const root = useRef<HTMLDivElement>(null)
   const plain = useRef<HTMLTextAreaElement>(null)
@@ -73,21 +75,21 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
     previousPending.current = pendingSpan
   }, [pendingSpan])
   const rememberScroll = (value: number) => { scrollTop.current = value; saveChapterBrowse(projectId, chapterId, { sourceTop: value }) }
-  return <section className="chapter-source-reader" aria-label="完整章节原文">
+  return <section className="chapter-source-reader" aria-label={uiText("完整章节原文")}>
     <div className="chapter-source-reader-tools">
-      <Space wrap><strong>章节原文</strong>{actions}</Space>
+      <Space wrap><strong>{uiText("章节原文")}</strong>{actions}</Space>
       <Space className="chapter-source-view-tools">
-        <span role="radiogroup" aria-label="原文选择方式"><Radio.Group name={modeName} className="chapter-selection-method" value={native ? 'native' : 'pointer'} onChange={event => setNative(event.target.value === 'native')}>
-          <Tooltip title="鼠标框选"><Radio.Button value="pointer" aria-label="鼠标框选"><SelectOutlined aria-hidden /></Radio.Button></Tooltip>
-          <Tooltip title="键盘／触屏选择"><Radio.Button value="native" aria-label="键盘／触屏选择"><FontSizeOutlined aria-hidden /></Radio.Button></Tooltip>
+        <span role="radiogroup" aria-label={uiText("原文选择方式")}><Radio.Group name={modeName} className="chapter-selection-method" value={native ? 'native' : 'pointer'} onChange={event => setNative(event.target.value === 'native')}>
+          <Tooltip title={uiText("鼠标框选")}><Radio.Button value="pointer" aria-label={uiText("鼠标框选")}><SelectOutlined aria-hidden /></Radio.Button></Tooltip>
+          <Tooltip title={uiText("键盘／触屏选择")}><Radio.Button value="native" aria-label={uiText("键盘／触屏选择")}><FontSizeOutlined aria-hidden /></Radio.Button></Tooltip>
         </Radio.Group></span>
-        <Popover trigger={['click']} content={<p style={{ maxWidth: 280 }}>{readOnly ? '正在只读查看历史原文和场次范围。' : '选择连续原文后执行操作。浅蓝为已划分，橙色为当前选区，红色表示重叠。键盘选择可使用方向键及 Shift。'}</p>}>
-          <Button type="text" icon={<InfoCircleOutlined aria-hidden />} aria-label="选区说明" />
+        <Popover trigger={['click']} content={<p style={{ maxWidth: 280 }}>{readOnly ? uiText("正在只读查看历史原文和场次范围。") : uiText("选择连续原文后执行操作。浅蓝为已划分，橙色为当前选区，红色表示重叠。键盘选择可使用方向键及 Shift。")}</p>}>
+          <Button type="text" icon={<InfoCircleOutlined aria-hidden />} aria-label={uiText("选区说明")} />
         </Popover>
       </Space>
     </div>
     {native ? <>
-      <textarea ref={plain} aria-label="键盘或触屏选择原文" className="chapter-source-native" readOnly value={raw} onScroll={event => rememberScroll(event.currentTarget.scrollTop)} onKeyDown={event => {
+      <textarea ref={plain} aria-label={uiText("键盘或触屏选择原文")} className="chapter-source-native" readOnly value={raw} onScroll={event => rememberScroll(event.currentTarget.scrollTop)} onKeyDown={event => {
         // 只读文本在部分平台上用方向键滚动；显式提供逐字符键盘选择，跳过 UTF-16 代理对。
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) || event.altKey) return
         if (['ArrowLeft', 'ArrowRight'].includes(event.key) && (event.metaKey || event.ctrlKey)) return
@@ -118,8 +120,8 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
         const owners = marks.filter(mark => mark.span.start < end && start < mark.span.end)
         const active = span && span.start < end && start < span.end
         const confirmed = owners.filter(mark => !mark.candidate)
-        const labels = marks.filter(mark => mark.span.start === start).map(mark => `${mark.label}开始`)
-        const endings = marks.filter(mark => mark.span.end === end).map(mark => `${mark.label}结束`)
+        const labels = marks.filter(mark => mark.span.start === start).map(mark => uiText("{{label}}开始", { label: mark.label }))
+        const endings = marks.filter(mark => mark.span.end === end).map(mark => uiText("{{label}}结束", { label: mark.label }))
         return <span key={start} data-source-start={start} data-mark-id={owners[0]?.id}
           className={`${confirmed.length ? 'source-assigned' : ''} ${owners.some(mark => mark.candidate) ? 'source-candidate' : ''} ${confirmed.length > 1 ? 'source-conflict' : ''} ${active ? 'source-selection' : ''}`}
           title={owners.map(mark => mark.label).join(' / ')}>

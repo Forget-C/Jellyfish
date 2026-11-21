@@ -1,3 +1,4 @@
+import { uiText } from '../../../uiText'
 import type { Note_Input } from '../../../services/generated'
 
 /** 新增人工创作内容时保留来源，不冒充模型或原文事实。 */
@@ -23,8 +24,8 @@ export function excerptMatches(raw: string, excerpt: string) {
 /** 用 Unicode 字符位置表达摘录，重复文本要求用户指定位置。 */
 export function excerptSpan(raw: string, excerpt: string, selectedStart?: number) {
   const matches = excerptMatches(raw, excerpt)
-  if (!matches.length) throw new Error('请使用章节中连续、未经改写的一段原文')
+  if (!matches.length) throw new Error(uiText("请使用章节中连续、未经改写的一段原文"))
   const selected = selectedStart === undefined ? undefined : matches.find(span => span.start === selectedStart)
-  if (matches.length > 1 && !selected) throw new Error('这段原文多次出现，请选择对应的位置')
+  if (matches.length > 1 && !selected) throw new Error(uiText("这段原文多次出现，请选择对应的位置"))
   return selected || matches[0]
 }

@@ -1,3 +1,4 @@
+import { uiText } from '../../../uiText'
 import type { ChapterSequences, DivisionAnalysisDetail, DivisionDraft, DivisionMember, DivisionVersionDetail, SourceSpan } from '../../../services/generated'
 import { excerptMatches } from './common'
 import { sameSpan, sourceSlice } from './sourceSelection'
@@ -47,22 +48,22 @@ export function removeDivisionMember(draft: ChapterDivisionDraft, key: string): 
 /** 提交前统一检查完整方案；未分配正文允许保留。 */
 export function divisionRequest(draft: ChapterDivisionDraft, raw: string): DivisionDraft {
   for (const member of draft.members) {
-    if (!member.title.trim()) throw new Error('请填写全部场次名称')
+    if (!member.title.trim()) throw new Error(uiText("请填写全部场次名称"))
     const span = member.span
     if (!span || !Number.isInteger(span.start) || !Number.isInteger(span.end) || span.start < 0 || span.end <= span.start || span.end > Array.from(raw).length || !sourceSlice(raw, span).trim()) {
-      throw new Error(`场次「${member.title}」需要有效的连续原文范围`)
+      throw new Error(uiText("场次「{{title}}」需要有效的连续原文范围", { title: member.title }))
     }
   }
   const ordered = orderedDivisionMembers(draft.members)
   for (let index = 1; index < ordered.length; index++) {
-    if (ordered[index].span!.start < ordered[index - 1].span!.end) throw new Error(`场次「${ordered[index - 1].title}」与「${ordered[index].title}」范围重叠`)
+    if (ordered[index].span!.start < ordered[index - 1].span!.end) throw new Error(uiText("场次「{{value1}}」与「{{value2}}」范围重叠", { value1: ordered[index - 1].title, value2: ordered[index].title }))
   }
   return { ...draft, members: ordered.map(({ suggested_excerpt: _excerpt, ...member }) => ({ ...member, title: member.title.trim(), span: member.span! })) }
 }
 
 /** AI 始终载入同一编辑器；重复摘录保持待定位，不猜测身份。 */
 export function analysisDivision(chapter: ChapterSequences, detail: DivisionAnalysisDetail): ChapterDivisionDraft {
-  if (!detail.result || detail.issues.length) throw new Error('历史分析资料不完整，不能载入编辑')
+  if (!detail.result || detail.issues.length) throw new Error(uiText("历史分析资料不完整，不能载入编辑"))
   const draft = initialDivision(chapter)
   return { ...draft, source_task_id: detail.analysis.id, history_reconfirmed: detail.source_changed || detail.baseline_changed,
     members: detail.result.scenes.map((row, index) => {
