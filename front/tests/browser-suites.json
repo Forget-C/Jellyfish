@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "task-center-locale": { "file": "taskCenterLocale.browser.mjs", "ports": [4889], "timeoutMs": 90000 },
     "shooting-preparation": {"file": "shootingPreparation.browser.mjs", "ports": [4386, 8386], "timeoutMs": 180000},
     "independent-canvas": { "file": "independentCanvas.browser.mjs", "ports": [4471, 8471], "timeoutMs": 180000 },
 

@@ -1,3 +1,4 @@
+import { uiText, useUiText } from '../../../uiText'
 import type { ButtonProps } from 'antd'
 import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 import { Button, Drawer, Empty, Progress, Segmented, Select, Tag } from 'antd'
@@ -7,7 +8,7 @@ import {
   CloseCircleOutlined,
   DownOutlined,
 } from '@ant-design/icons'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { TaskUiItem } from './taskUiStore'
 import {
@@ -17,6 +18,8 @@ import {
   useTaskUiStore,
 } from './taskUiStore'
 import { useResolvedTaskCenterTasks } from './taskCenterMeta'
+import { formatElapsedMs, formatStartedAt } from './taskTime'
+import { TASK_KIND_TITLE_MAP } from './taskCopy'
 import { TaskHistory } from './TaskHistory'
 
 /** 工作台实例复用灰阶动作；全站任务中心继续使用原主题。 */
@@ -27,41 +30,19 @@ function TaskCenterButton({ workbench, type, danger, ...props }: ButtonProps & {
 const TASK_CENTER_OPEN_STORAGE_KEY = 'jellyfish_task_center_open_v1'
 const TASK_CENTER_PAGE_SIZE = 3
 
-function formatElapsedMs(elapsedMs?: number | null): string | null {
-  if (elapsedMs == null || elapsedMs < 0) return null
-  const totalSeconds = Math.floor(elapsedMs / 1000)
-  if (totalSeconds < 60) return `${totalSeconds} 秒`
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  if (minutes < 60) return seconds > 0 ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分`
-  const hours = Math.floor(minutes / 60)
-  const remainMinutes = minutes % 60
-  return remainMinutes > 0 ? `${hours} 小时 ${remainMinutes} 分` : `${hours} 小时`
-}
-
-function formatStartedAt(startedAtTs?: number | null): string | null {
-  if (!startedAtTs) return null
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(new Date(startedAtTs * 1000))
-}
-
 function taskTone(task: TaskUiItem): { color: string; label: string } {
-  if (task.status === 'cancelled') return { color: 'orange', label: '已取消' }
-  if (task.status === 'failed') return { color: 'red', label: '失败' }
-  if (task.status === 'succeeded') return { color: 'green', label: '已完成' }
-  if (task.cancelRequested) return { color: 'orange', label: '取消中' }
-  if (task.status === 'running') return { color: 'blue', label: '运行中' }
-  return { color: 'default', label: '排队中' }
+  if (task.status === 'cancelled') return { color: 'orange', label: uiText("已取消") }
+  if (task.status === 'failed') return { color: 'red', label: uiText("失败") }
+  if (task.status === 'succeeded') return { color: 'green', label: uiText("已完成") }
+  if (task.cancelRequested) return { color: 'orange', label: uiText("取消中") }
+  if (task.status === 'running') return { color: 'blue', label: uiText("运行中") }
+  return { color: 'default', label: uiText("排队中") }
 }
 
 /** 展示近期活动任务，并提供独立的完整历史查询入口。 */
 export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
+  useUiText()
+  const drawerTitleId = useId()
   const [historyOpen, setHistoryOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
@@ -106,16 +87,8 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
   )
   const activeContexts = useMemo(() => flattenPageContexts(contextScopes), [contextScopes])
   const resolvedTasks = useResolvedTaskCenterTasks(tasks, navigate)
-  const taskKindOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(resolvedTasks.map((task) => task.title).filter((value): value is string => !!value)),
-      ).map((title) => ({
-        label: title,
-        value: title,
-      })),
-    [resolvedTasks],
-  )
+  const taskKindOptions = Array.from(new Set(resolvedTasks.map(task => task.taskKind || task.title).filter((kind): kind is string => !!kind)))
+    .map(value => ({ value, label: TASK_KIND_TITLE_MAP[value] ? uiText(TASK_KIND_TITLE_MAP[value]) : value }))
   const summaryCounts = useMemo(
     () => ({
       current: resolvedTasks.filter((task) => isTaskHighlighted(task, activeContexts)).length,
@@ -137,7 +110,7 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
         if (effectiveScopeFilter === 'current' && !isTaskHighlighted(task, activeContexts)) return false
         if (effectiveScopeFilter === 'active' && !['queued', 'running'].includes(task.status)) return false
         if (effectiveScopeFilter === 'settled' && !['succeeded', 'failed', 'cancelled'].includes(task.status)) return false
-        if (taskKindFilter && task.title !== taskKindFilter) return false
+        if (taskKindFilter && (task.taskKind || task.title) !== taskKindFilter) return false
         return true
       }),
     [activeContexts, effectiveScopeFilter, resolvedTasks, taskKindFilter],
@@ -148,7 +121,7 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
     () => filteredTasks.slice((currentPage - 1) * TASK_CENTER_PAGE_SIZE, currentPage * TASK_CENTER_PAGE_SIZE),
     [currentPage, filteredTasks],
   )
-  const groupedTasks = useMemo(() => {
+  const groupedTasks = (() => {
     if (effectiveScopeFilter !== 'all') {
       return [{ key: effectiveScopeFilter, title: null as string | null, tasks: pagedTasks }]
     }
@@ -165,19 +138,19 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
         !['queued', 'running', 'succeeded', 'failed', 'cancelled'].includes(task.status),
     )
     return [
-      { key: 'current', title: currentTasks.length > 0 ? `当前页 ${currentTasks.length}` : null, tasks: currentTasks },
-      { key: 'active', title: activeTasks.length > 0 ? `运行中 ${activeTasks.length}` : null, tasks: activeTasks },
-      { key: 'settled', title: settledTasks.length > 0 ? `最近结束 ${settledTasks.length}` : null, tasks: settledTasks },
-      { key: 'all', title: otherTasks.length > 0 ? `全部 ${otherTasks.length}` : null, tasks: otherTasks },
+      { key: 'current', title: currentTasks.length > 0 ? uiText("当前页 {{length}}", { length: currentTasks.length }) : null, tasks: currentTasks },
+      { key: 'active', title: activeTasks.length > 0 ? uiText("运行中 {{length}}", { length: activeTasks.length }) : null, tasks: activeTasks },
+      { key: 'settled', title: settledTasks.length > 0 ? uiText("最近结束 {{length}}", { length: settledTasks.length }) : null, tasks: settledTasks },
+      { key: 'all', title: otherTasks.length > 0 ? uiText("全部 {{length}}", { length: otherTasks.length }) : null, tasks: otherTasks },
     ].filter((group) => group.tasks.length > 0)
-  }, [activeContexts, effectiveScopeFilter, pagedTasks])
+  })()
   return (
     <>
-      <TaskCenterButton workbench={workbench} type="text" className="app-task-trigger" aria-label="任务中心" aria-expanded={open} onClick={toggleOpen}>
-        任务 {(!workbench || summaryCounts.active > 0) && <span className="app-task-count" aria-label={`${workbench ? '排队及运行任务' : '运行中任务'} ${summaryCounts.active}`}>{workbench && summaryCounts.active > 99 ? '99+' : summaryCounts.active}</span>}<DownOutlined className={workbench ? 'canvas-menu-chevron' : undefined} />
+      <TaskCenterButton workbench={workbench} type="text" className="app-task-trigger" aria-label={uiText("任务中心")} aria-expanded={open} onClick={toggleOpen}>
+        {uiText("任务")} {(!workbench || summaryCounts.active > 0) && <span className="app-task-count" aria-label={`${workbench ? uiText("排队及运行任务") : uiText("运行中任务")} ${summaryCounts.active}`}>{workbench && summaryCounts.active > 99 ? '99+' : summaryCounts.active}</span>}<DownOutlined className={workbench ? 'canvas-menu-chevron' : undefined} />
       </TaskCenterButton>
-      <Drawer title="任务中心" rootClassName={workbench ? 'canvas-task-center' : undefined} className={workbench ? 'app-task-drawer' : 'app-task-drawer app-detail-drawer'} width={416} open={open} onClose={() => setOpen(false)} extra={<TaskCenterButton workbench={workbench} onClick={() => { setHistoryOpen(true); setOpen(false) }}>历史</TaskCenterButton>}>
-        {/\/chapters\/[^/]+\/sequences\/[^/]+$/.test(location.pathname) && <TaskCenterButton workbench={workbench} block style={{ marginBottom: 12 }} onClick={() => { setOpen(false); window.dispatchEvent(new Event('sequence-open-task-results')) }}>查看本场任务与业务结果</TaskCenterButton>}
+      <Drawer title={<span id={drawerTitleId} ref={element => element?.closest('[role="dialog"]')?.setAttribute('aria-labelledby', drawerTitleId)}>{uiText("任务中心")}</span>} rootClassName={workbench ? 'canvas-task-center' : undefined} className={workbench ? 'app-task-drawer' : 'app-task-drawer app-detail-drawer'} width={416} open={open} onClose={() => setOpen(false)} extra={<TaskCenterButton workbench={workbench} onClick={() => { setHistoryOpen(true); setOpen(false) }}>{uiText("历史")}</TaskCenterButton>}>
+        {/\/chapters\/[^/]+\/sequences\/[^/]+$/.test(location.pathname) && <TaskCenterButton workbench={workbench} block style={{ marginBottom: 12 }} onClick={() => { setOpen(false); window.dispatchEvent(new Event('sequence-open-task-results')) }}>{uiText("查看本场任务与业务结果")}</TaskCenterButton>}
             <div className="app-task-filters mb-3 flex flex-col gap-2">
               <Segmented
                 size="small"
@@ -187,17 +160,18 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
                   setPage(1)
                 }}
                 options={[
-                  { label: '智能', value: 'auto' },
-                  { label: `当前页 ${summaryCounts.current}`, value: 'current' },
-                  { label: `运行中 ${summaryCounts.active}`, value: 'active' },
-                  { label: `最近结束 ${summaryCounts.settled}`, value: 'settled' },
-                  { label: '全部', value: 'all' },
+                  { label: uiText("智能"), value: 'auto' },
+                  { label: uiText("当前页 {{current}}", { current: summaryCounts.current }), value: 'current' },
+                  { label: uiText("运行中 {{active}}", { active: summaryCounts.active }), value: 'active' },
+                  { label: uiText("最近结束 {{settled}}", { settled: summaryCounts.settled }), value: 'settled' },
+                  { label: uiText("全部"), value: 'all' },
                 ]}
               />
               <Select
                 size="small"
                 allowClear
-                placeholder="按任务类型筛选"
+                aria-label={uiText("按任务类型筛选")}
+                placeholder={uiText("按任务类型筛选")}
                 value={taskKindFilter}
                 onChange={(value) => {
                   setTaskKindFilter(value)
@@ -206,11 +180,11 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
                 options={taskKindOptions}
               />
               <div className="text-[11px] text-gray-400">
-                默认优先：当前页 → 运行中 → 最近结束 → 全部 · 每页最多 3 条
+                {uiText("默认优先：当前页 → 运行中 → 最近结束 → 全部 · 每页最多 3 条")}
               </div>
             </div>
             {filteredTasks.length === 0 ? (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前没有任务记录" />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={uiText("当前没有任务记录")} />
             ) : (
               <div className="space-y-3">
                 {groupedTasks.map((group) => (
@@ -230,15 +204,15 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
                         >
                           <div className="app-task-card-header flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <div className="app-task-title font-medium text-sm truncate">{task.title}</div>
+                              <div className="app-task-title font-medium text-sm truncate">{task.taskKind && TASK_KIND_TITLE_MAP[task.taskKind] === task.title ? uiText(task.title) : task.title}</div>
                               {task.sourceLabel ? <div className="mt-1 text-xs text-gray-500 truncate">{task.sourceLabel}</div> : null}
                               <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
-                                {highlighted ? <Tag color="blue">当前页面</Tag> : null}
+                                {highlighted ? <Tag color="blue">{uiText("当前页面")}</Tag> : null}
                                 <Tag color={tone.color}>{tone.label}</Tag>
-                                {task.progress == null ? null : <span>进度 {Math.max(0, Math.min(100, Math.round(task.progress)))}%</span>}
-                                {elapsed ? <span>耗时 {elapsed}</span> : null}
+                                {task.progress === null || task.progress === undefined ? null : <span>{uiText("进度")} {Math.max(0, Math.min(100, Math.round(task.progress)))}%</span>}
+                                {elapsed ? <span>{uiText("耗时")} {elapsed}</span> : null}
                               </div>
-                              {startedAt ? <div className="mt-1 text-xs text-gray-400">开始于 {startedAt}</div> : null}
+                              {startedAt ? <div className="mt-1 text-xs text-gray-400">{uiText("开始于")} {startedAt}</div> : null}
                             </div>
                             <div className="app-task-actions flex flex-col gap-2">
                               {task.onNavigate ? (
@@ -250,7 +224,7 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
                                     setOpen(false)
                                   }}
                                 >
-                                  查看
+                                  {uiText("查看")}
                                 </TaskCenterButton>
                               ) : null}
                               {task.onCancel ? (
@@ -261,7 +235,7 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
                                   disabled={task.cancelRequested}
                                   onClick={task.onCancel}
                                 >
-                                  {task.cancelRequested ? '正在取消' : '取消'}
+                                  {task.cancelRequested ? uiText("正在取消") : uiText("取消")}
                                 </TaskCenterButton>
                               ) : task.status === 'queued' || task.status === 'running' ? (
                                 <TaskCenterButton workbench={workbench}
@@ -273,12 +247,12 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
                                     void cancelTask(task.taskId)
                                   }}
                                 >
-                                  {task.cancelRequested ? '正在取消' : '取消'}
+                                  {task.cancelRequested ? uiText("正在取消") : uiText("取消")}
                                 </TaskCenterButton>
                               ) : null}
                             </div>
                           </div>
-                          {task.progress == null ? null : <Progress
+                          {task.progress === null || task.progress === undefined ? null : <Progress
                             percent={Math.max(0, Math.min(100, Math.round(task.progress)))}
                             size="small"
                             status={
@@ -302,7 +276,7 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
                       size="small"
                       type="text"
                       icon={<ArrowLeftOutlined />}
-                      aria-label="上一页任务" title="上一页任务"
+                      aria-label={uiText("上一页任务")} title={uiText("上一页任务")}
                       disabled={currentPage <= 1}
                       onClick={() => setPage((prev) => Math.max(1, prev - 1))}
                     />
@@ -311,7 +285,7 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
                       size="small"
                       type="text"
                       icon={<ArrowRightOutlined />}
-                      aria-label="下一页任务" title="下一页任务"
+                      aria-label={uiText("下一页任务")} title={uiText("下一页任务")}
                       disabled={currentPage >= totalPages}
                       onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
                     />

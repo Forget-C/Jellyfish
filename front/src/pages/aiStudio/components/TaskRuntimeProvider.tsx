@@ -1,3 +1,4 @@
+import { useUiText } from '../../../uiText'
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { FilmService, type TaskListItemRead } from '../../../services/generated'
@@ -12,6 +13,7 @@ type TaskRuntimeProviderProps = {
 }
 
 export function TaskRuntimeProvider({ children }: TaskRuntimeProviderProps) {
+  const uiText = useUiText()
   const setServerTasks = useTaskUiStore((state) => state.setServerTasks)
 
   useEffect(() => {
@@ -30,7 +32,7 @@ export function TaskRuntimeProvider({ children }: TaskRuntimeProviderProps) {
             cursor,
           })
           if (cancelled) return
-          if (!res.data) throw new Error('任务列表响应缺少数据')
+          if (!res.data) throw new Error(uiText("任务列表响应缺少数据"))
           tasks.push(...res.data.items)
           cursor = res.data.next_cursor ?? null
         } while (cursor)
@@ -52,7 +54,7 @@ export function TaskRuntimeProvider({ children }: TaskRuntimeProviderProps) {
       cancelled = true
       if (timer) window.clearTimeout(timer)
     }
-  }, [setServerTasks])
+  }, [uiText, setServerTasks])
 
   return <>{children}</>
 }

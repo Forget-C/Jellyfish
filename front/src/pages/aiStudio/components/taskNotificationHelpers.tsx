@@ -1,8 +1,12 @@
+import { currentLanguage } from '../../../i18n'
+import { uiText, useUiText } from '../../../uiText'
 import { useEffect, useMemo, useRef } from 'react'
 import { Button, Space, notification } from 'antd'
 import type { ReactNode } from 'react'
 import type { RelationTaskState } from '../project/ProjectWorkbench/relationTasks'
 import { useTaskUiStore } from './taskUiStore'
+
+import { formatElapsedMs, formatStartedAt } from './taskTime'
 
 const SETTLED_TASK_RETAIN_MS = 8000
 
@@ -21,40 +25,16 @@ type RelationTaskNotificationOptions = {
   onNavigate?: (() => void) | null
 }
 
-function formatElapsedMs(elapsedMs?: number | null): string | null {
-  if (elapsedMs == null || elapsedMs < 0) return null
-  const totalSeconds = Math.floor(elapsedMs / 1000)
-  if (totalSeconds < 60) return `${totalSeconds} 秒`
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  if (minutes < 60) return seconds > 0 ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分`
-  const hours = Math.floor(minutes / 60)
-  const remainMinutes = minutes % 60
-  return remainMinutes > 0 ? `${hours} 小时 ${remainMinutes} 分` : `${hours} 小时`
-}
-
-function formatStartedAt(startedAtTs?: number | null): string | null {
-  if (!startedAtTs) return null
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(new Date(startedAtTs * 1000))
-}
-
-function buildDescription(task: RelationTaskState, runningDescription: string, cancellingDescription: string): ReactNode {
+function buildDescription(task: RelationTaskState, runningDescription: string, cancellingDescription: string, locale: ReturnType<typeof currentLanguage>): ReactNode {
   const parts: string[] = []
-  parts.push(`进度 ${Math.max(0, Math.min(100, Math.round(task.progress)))}%`)
+  parts.push(`${uiText("进度")} ${Math.max(0, Math.min(100, Math.round(task.progress)))}%`)
   const elapsedLabel = formatElapsedMs(task.elapsedMs)
   if (elapsedLabel) {
-    parts.push(task.cancelRequested || task.finishedAtTs ? `累计耗时 ${elapsedLabel}` : `已运行 ${elapsedLabel}`)
+    parts.push(task.cancelRequested || task.finishedAtTs ? `${uiText("累计耗时")} ${elapsedLabel}` : `${uiText("已运行")} ${elapsedLabel}`)
   }
-  const startedAtLabel = formatStartedAt(task.startedAtTs)
+  const startedAtLabel = formatStartedAt(task.startedAtTs, locale)
   if (startedAtLabel) {
-    parts.push(`开始于 ${startedAtLabel}`)
+    parts.push(`${uiText("开始于")} ${startedAtLabel}`)
   }
   return (
     <div className="space-y-1">
@@ -78,15 +58,17 @@ export function useRelationTaskNotification({
   onCancel,
   onNavigate,
 }: RelationTaskNotificationOptions) {
+  const uiText = useUiText()
   const previousTaskIdRef = useRef<string | null>(null)
   const previousSettledKeyRef = useRef<string | null>(null)
   const settledRemoveTimersRef = useRef<Record<string, number>>({})
   const upsertTask = useTaskUiStore((state) => state.upsertTask)
   const removeTask = useTaskUiStore((state) => state.removeTask)
+  const language = currentLanguage()
   const description = useMemo(() => {
     if (!task) return null
-    return buildDescription(task, runningDescription, cancellingDescription)
-  }, [cancellingDescription, runningDescription, task])
+    return buildDescription(task, runningDescription, cancellingDescription, language)
+  }, [cancellingDescription, runningDescription, task, language])
 
   useEffect(() => {
     const previousTaskId = previousTaskIdRef.current
@@ -123,7 +105,7 @@ export function useRelationTaskNotification({
     })
     notification.open({
       key: task.taskId,
-      message: task.cancelRequested ? `${title}正在取消` : `${title}进行中`,
+      message: task.cancelRequested ? uiText("{{title}}正在取消", { title }) : uiText("{{title}}进行中", { title }),
       description,
       duration: 0,
       placement,
@@ -132,18 +114,18 @@ export function useRelationTaskNotification({
           <Space size={8}>
             {onNavigate ? (
               <Button size="small" onClick={onNavigate}>
-                查看
+                {uiText("查看")}
               </Button>
             ) : null}
             {onCancel && !task.cancelRequested ? (
               <Button size="small" danger onClick={onCancel}>
-                取消任务
+                {uiText("取消任务")}
               </Button>
             ) : null}
           </Space>
         ) : undefined,
     })
-  }, [description, onCancel, onNavigate, placement, sourceLabel, task, title, upsertTask])
+  }, [uiText, description, onCancel, onNavigate, placement, sourceLabel, task, title, upsertTask])
 
   useEffect(() => {
     if (!settledTask) return
@@ -154,17 +136,17 @@ export function useRelationTaskNotification({
     const elapsedLabel = formatElapsedMs(settledTask.elapsedMs)
     const startedAtLabel = formatStartedAt(settledTask.startedAtTs)
     const details = [
-      `进度 ${Math.max(0, Math.min(100, Math.round(settledTask.progress)))}%`,
-      elapsedLabel ? `累计耗时 ${elapsedLabel}` : null,
-      startedAtLabel ? `开始于 ${startedAtLabel}` : null,
+      `${uiText("进度")} ${Math.max(0, Math.min(100, Math.round(settledTask.progress)))}%`,
+      elapsedLabel ? `${uiText("累计耗时")} ${elapsedLabel}` : null,
+      startedAtLabel ? `${uiText("开始于")} ${startedAtLabel}` : null,
     ].filter(Boolean)
 
     const statusMeta =
       settledTask.status === 'succeeded'
-        ? { message: `${title}已完成`, description: successDescription || '任务已执行完成。', duration: 3.5 as number }
+        ? { message: uiText("{{title}}已完成", { title }), description: successDescription || uiText("任务已执行完成。"), duration: 3.5 as number }
         : settledTask.status === 'cancelled'
-          ? { message: `${title}已取消`, description: cancelledDescription || '任务已停止执行。', duration: 4.5 as number }
-          : { message: `${title}失败`, description: failedDescription || '任务执行失败，请稍后重试。', duration: 6 as number }
+          ? { message: uiText("{{title}}已取消", { title }), description: cancelledDescription || uiText("任务已停止执行。"), duration: 4.5 as number }
+          : { message: uiText("{{title}}失败", { title }), description: failedDescription || uiText("任务执行失败，请稍后重试。"), duration: 6 as number }
 
     upsertTask({
       taskId: settledTask.taskId,
@@ -200,9 +182,9 @@ export function useRelationTaskNotification({
       ),
       duration: statusMeta.duration,
       placement,
-      btn: onNavigate ? <Button size="small" onClick={onNavigate}>查看</Button> : undefined,
+      btn: onNavigate ? <Button size="small" onClick={onNavigate}>{uiText("查看")}</Button> : undefined,
     })
-  }, [cancelledDescription, failedDescription, onNavigate, placement, removeTask, settledTask, sourceLabel, successDescription, title, upsertTask])
+  }, [uiText, cancelledDescription, failedDescription, onNavigate, placement, removeTask, settledTask, sourceLabel, successDescription, title, upsertTask])
 
   useEffect(() => {
     return () => {

@@ -1,3 +1,4 @@
+import { uiText } from '../../../uiText'
 import { message } from 'antd'
 import { create } from 'zustand'
 import { FilmService } from '../../../services/generated'
@@ -182,9 +183,11 @@ export const useTaskUiStore = create<TaskUiState>((set, get) => ({
           optimisticItems: nextOptimisticItems,
         }
       })
-      message.success(data?.effective_immediately ? '任务已取消' : '已发送取消请求')
-    } catch {
-      message.error('取消任务失败')
+      message.success(data?.effective_immediately ? uiText("任务已取消") : uiText("已发送取消请求"))
+    } catch (error) {
+      const response = error as { status?: number; body?: { detail?: unknown } }
+      const detail = response.body?.detail
+      message.error(response.status === 404 ? uiText("任务不存在") : typeof detail === 'string' && detail ? detail : uiText("取消任务失败"))
     }
   },
   setOpen: (open) => set(() => ({ open })),

@@ -45,44 +45,9 @@
     },
     {
       "file": "src/pages/aiStudio/components/TaskCenter.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "712355e45847ba10b3ab27096c2b6855cc79792bcbf95626e6b946a3c4c37efe",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/components/TaskCenter.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "7fae1752157e2243c4514accc72458de49b5af15a972a601f4414f83945460bd",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/components/TaskCenter.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "9e0643d83dc047be78d51d1a4832a0c1d6fc2f1ecd2a6231f0e2d1085cc64f94",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/components/TaskCenter.tsx",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "c3ee9718a30e694ebdcfe4bdbe24fc669e256d98a58ae2502d7dc76fa3208746",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/components/TaskHistory.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "bd49f95618aa01f3e0e28bec41aabb192b841e10a1cdd378731c6cd30a08ed4d",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/components/taskNotificationHelpers.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "9e0643d83dc047be78d51d1a4832a0c1d6fc2f1ecd2a6231f0e2d1085cc64f94",
       "count": 1
     },
     {
