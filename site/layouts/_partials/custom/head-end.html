@@ -41,3 +41,10 @@
   {{- end }}
 </script>
 
+
+{{/* The mobile menu already lists Product, Docs and Blog alongside Home.
+     Hextra also expands the homepage's full content tree when Home is page-backed. */}}
+<style>
+  .hextra-sidebar-item:has(> a[href="{{ site.Home.RelPermalink }}"]) > button,
+  .hextra-sidebar-item:has(> a[href="{{ site.Home.RelPermalink }}"]) + .hextra-sidebar-children { display: none; }
+</style>

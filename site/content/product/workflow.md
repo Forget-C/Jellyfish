@@ -30,7 +30,7 @@ aliases:
 
 ![海边站台的角色、场所和道具各自关联了参考图](../../images/screenshots/home/object-references.webp)
 
-[操作指南 · 为场次选用对象参考]({{< relref "/docs/guide/sequence-workflow" >}}#为场次准备对象参考)
+[操作指南 · 为场次选用对象参考]({{< relref "/docs/guide/scene-references" >}}#为场次准备对象参考)
 
 ## 把镜头描述放回分镜画布
 
@@ -48,4 +48,4 @@ aliases:
 
 [操作指南 · 预览分镜生成的候选图]({{< relref "/docs/guide/sequence-workflow" >}}#预览分镜生成的候选图)
 
-本例展示到单张候选画面。已有旧版场次素材的项目，可以继续[审片、剪辑与交付章节]({{< relref "/docs/guide/sequence-workflow" >}}#审片采用和剪辑)。
+本例展示到单张候选画面。已有旧版场次素材的项目，可以继续[审片、剪辑与交付章节]({{< relref "/docs/legacy/edit-delivery" >}}#审片采用和剪辑)。

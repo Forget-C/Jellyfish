@@ -1,7 +1,7 @@
 ---
 title: "使用生成画布"
 description: "在独立画布中准备素材和模型输入，执行模型卡并管理成果。"
-weight: 2
+weight: 3
 url: "/docs/guide/generation-canvas/"
 ---
 
@@ -31,6 +31,6 @@ url: "/docs/guide/generation-canvas/"
 
 上传及生成的媒体直接进入「文件管理」，可在其他画布中继续选用。文本保存在画布和运行历史中，不会自动生成文本文件。删除画布会清理其专属运行记录，媒体文件继续保留；仍被画布当前内容或历史引用的文件不能删除。画布有运行中任务时，需要等待任务结束后再删除。
 
-自由画布保留「基础卡」「参考卡」「模型生成」三类。设计与检查六类卡片属于分镜画布，需从项目的场次工作台使用；两类画布通过文件管理复用媒体，不提供整图转换或跨画布动态引用。
+<span id="按需使用检查卡"></span>自由画布保留「基础卡」「参考卡」「模型生成」三类。设计与检查六类卡片属于分镜画布，需从项目的场次工作台使用；两类画布通过文件管理复用媒体，不提供整图转换或跨画布动态引用。
 
 技术契约见[生成画布架构与执行边界](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/architecture/generation-canvas.md)，已确认设计范围见[首版检查项目录](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/design/generation-canvas-check-catalog.md)。

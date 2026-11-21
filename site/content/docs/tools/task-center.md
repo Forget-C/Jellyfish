@@ -1,7 +1,7 @@
 ---
 title: "查看与处理任务"
 description: "在任务中心查看进度、取消活动任务，并从业务页面查看结果或重新提交。"
-weight: 3
+weight: 4
 url: "/docs/guide/task-center/"
 ---
 

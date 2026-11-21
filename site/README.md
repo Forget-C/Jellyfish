@@ -36,6 +36,23 @@ GitHub Pages 发布时会在 CI 中显式传入生产环境的 `baseURL`。
 
 当前仓库不保存 Hextra 主题源码，开发和 CI 都通过 Hugo Modules 即时拉取主题。
 
+## 验证文档导航与部署前缀
+
+从同一工作树分别打开实时预览和新生成的静态站。静态输出使用本次新建的目录，避免已移动的旧文章残留。下面从仓库根目录执行：
+
+```bash
+preview_dir=$(mktemp -d)
+hugo --source site --destination "$preview_dir/Jellyfish" --baseURL http://127.0.0.1:1317/Jellyfish/ --minify
+python3 -m http.server 1317 --bind 127.0.0.1 --directory "$preview_dir"
+```
+
+使用前端要求的 Node 版本和已安装的 Playwright 浏览器，从另一终端分别验收两个入口。使用本机 Chrome 时设置 `PLAYWRIGHT_CHANNEL=chrome`。
+
+```bash
+SITE_BASE_URL=http://localhost:1313/ node site/tests/docs-navigation.browser.mjs
+SITE_BASE_URL=http://127.0.0.1:1317/Jellyfish/ node site/tests/docs-navigation.browser.mjs
+```
+
 ## 模块依赖约定
 
 - 本地更新或新增主题模块时，使用 `hugo mod tidy`
