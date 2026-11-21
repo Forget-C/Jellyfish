@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import uvicorn
 from fastapi import Body
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 from app.core.db import Base
 from app.dependencies import get_db
 from app.main import app
@@ -23,8 +24,10 @@ if database_url:
     parsed = make_url(database_url)
     if parsed.get_backend_name() != 'mysql' or not (parsed.database or '').startswith('jellyfish_check'):
         raise ValueError('browser MySQL evidence requires an explicit jellyfish_check database')
+# Reload can cancel an SQLite stream while SQLAlchemy is closing its connection.
+# Use a fresh connection for each checkout in the file-backed browser fixture.
 engine = create_async_engine(database_url, isolation_level='READ COMMITTED') if database_url else create_async_engine(
-    'sqlite+aiosqlite:///' + os.environ['CANVAS_BROWSER_DATABASE'])
+    'sqlite+aiosqlite:///' + os.environ['CANVAS_BROWSER_DATABASE'], poolclass=NullPool)
 project_id = os.environ.get('CANVAS_BROWSER_PROJECT_ID', 'canvas-project')
 provider_id = project_id + '-provider' if database_url else 'canvas-runtime-provider'
 model_id = project_id + '-text' if database_url else 'canvas-runtime-text'
