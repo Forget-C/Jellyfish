@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, AutoComplete, Form, Input, Modal, Select, Typography } from 'antd'
+import { Alert, AutoComplete, Col, Descriptions, Form, Input, Modal, Row, Select, theme } from 'antd'
 import { LlmService } from '../../../services/generated/services/LlmService'
 import { ApiError } from '../../../services/generated'
 import type { ModelCategoryKey, ProviderRead, ProviderSupportedRead, ProviderTestResult } from '../../../services/generated'
@@ -31,6 +31,8 @@ export function ProviderTestModal({ provider, spec, endpointLabel, onClose }: {
   const [catalogFailed, setCatalogFailed] = useState(false)
   const [result, setResult] = useState<ProviderTestResult>()
   const [failure, setFailure] = useState('')
+  const { token } = theme.useToken()
+  const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const inFlight = useRef(false)
 
@@ -46,6 +48,7 @@ export function ProviderTestModal({ provider, spec, endpointLabel, onClose }: {
 
   async function submit() {
     if (inFlight.current || !model.trim() || !category) return
+    setConfirming(false)
     inFlight.current = true
     setBusy(true)
     setResult(undefined)
@@ -69,34 +72,54 @@ export function ProviderTestModal({ provider, spec, endpointLabel, onClose }: {
   }
 
   const override = category === 'image' ? provider.image_base_url : category === 'video' ? provider.video_base_url : ''
-  return <Modal open title={uiText('测试调用')} cancelText={uiText('关闭')} okText={uiText('开始付费测试')}
-    closable={!busy} keyboard={!busy} cancelButtonProps={{ disabled: busy }}
-    onCancel={() => { if (!inFlight.current) onClose() }} onOk={() => void submit()} confirmLoading={busy}
-    okButtonProps={{ disabled: !category || !model.trim() }} maskClosable={!busy}>
-    <Form layout="vertical">
-      <Typography.Paragraph>{uiText('配置名称')} · {provider.name}</Typography.Paragraph>
-      <Form.Item label={uiText('远端模型')} htmlFor="probe-model" help={catalogFailed ? uiText('获取模型列表失败，可手动输入。') : undefined}>
-        {spec.live_model_catalog
-          ? <AutoComplete id="probe-model" value={model} options={options} disabled={busy}
-            filterOption={(value, option) => !!option?.value.toLowerCase().includes(value.toLowerCase())}
-            placeholder={uiText('选择或输入模型名称')} onChange={value => { setModel(value); setResult(undefined); setFailure('') }} />
-          : <Input id="probe-model" value={model} disabled={busy} placeholder={uiText('输入模型名称')}
-            onChange={event => { setModel(event.target.value); setResult(undefined); setFailure('') }} />}
-      </Form.Item>
-      <Form.Item label={uiText('调用类型')} htmlFor="probe-category">
-        <Select id="probe-category" value={category} disabled={busy || available.length === 1}
-          placeholder={uiText('选择调用类型')} onChange={value => { setCategory(value); setResult(undefined); setFailure('') }}
-          options={available.map(value => ({ value, label: uiText(categories[value]) }))} />
-      </Form.Item>
-      {category && <>
-        <Typography.Paragraph>{uiText('调用地址')} · {endpointLabel(override || provider.base_url || spec.default_base_url)}</Typography.Paragraph>
-        <Typography.Paragraph>{uiText('测试文本')} · {spec.test_prompts?.[category]}</Typography.Paragraph>
-      </>}
-      <Alert type="warning" showIcon message={uiText('本次测试会向供应商发起真实调用，可能产生费用。')} />
-      {(result || failure) && <div role="status"><Alert showIcon
-        type={result && ['success', 'accepted'].includes(result.outcome) ? 'success' : 'warning'}
-        message={uiText(result ? messages[result.outcome] : failure)}
-        description={result?.http_status ? `HTTP ${result.http_status}` : undefined} /></div>}
-    </Form>
-  </Modal>
+  return <>
+    <Modal open width={560} title={uiText('测试调用')} cancelText={uiText('关闭')} okText={uiText('测试')}
+      closable={!busy} keyboard={!busy} cancelButtonProps={{ disabled: busy }}
+      onCancel={() => {
+        if (confirming) setConfirming(false)
+        else if (!inFlight.current) onClose()
+      }} onOk={() => setConfirming(true)} confirmLoading={busy}
+      okButtonProps={{ disabled: !category || !model.trim() }} maskClosable={!busy && !confirming}>
+      <Form layout="vertical" className="pt-2">
+        <Row gutter={16}>
+          <Col xs={24} sm={16}>
+            <Form.Item label={uiText('远端模型')} htmlFor="probe-model" help={catalogFailed ? uiText('获取模型列表失败，可手动输入。') : undefined}>
+              {spec.live_model_catalog
+                ? <AutoComplete id="probe-model" value={model} options={options} disabled={busy}
+                  filterOption={(value, option) => !!option?.value.toLowerCase().includes(value.toLowerCase())}
+                  placeholder={uiText('选择或输入模型名称')} onChange={value => { setModel(value); setResult(undefined); setFailure('') }} />
+                : <Input id="probe-model" value={model} disabled={busy} placeholder={uiText('输入模型名称')}
+                  onChange={event => { setModel(event.target.value); setResult(undefined); setFailure('') }} />}
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={8}>
+            <Form.Item label={uiText('调用类型')} htmlFor="probe-category">
+              <Select id="probe-category" value={category} disabled={busy || available.length === 1}
+                placeholder={uiText('选择调用类型')} onChange={value => { setCategory(value); setResult(undefined); setFailure('') }}
+                options={available.map(value => ({ value, label: uiText(categories[value]) }))} />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Descriptions size="small" column={1} colon={false}
+          style={{ background: token.colorFillQuaternary, borderRadius: token.borderRadiusLG, padding: token.paddingSM }}
+          contentStyle={{ overflowWrap: 'anywhere' }}
+          items={[
+            { key: 'config', label: uiText('配置名称'), children: provider.name },
+            ...(category ? [
+              { key: 'endpoint', label: uiText('调用地址'), children: endpointLabel(override || provider.base_url || spec.default_base_url) },
+              { key: 'prompt', label: uiText('测试文本'), children: spec.test_prompts?.[category] },
+            ] : []),
+          ]} />
+        {(result || failure) && <div role="status" style={{ marginTop: token.marginSM }}><Alert showIcon
+          type={result && ['success', 'accepted'].includes(result.outcome) ? 'success' : 'warning'}
+          message={uiText(result ? messages[result.outcome] : failure)}
+          description={result?.http_status ? `HTTP ${result.http_status}` : undefined} /></div>}
+      </Form>
+    </Modal>
+    <Modal open={confirming} title={uiText('确认付费测试？')} width={400}
+      okText={uiText('确认测试')} cancelText={uiText('取消')} cancelButtonProps={{ autoFocus: true }}
+      onCancel={() => setConfirming(false)} onOk={() => void submit()} destroyOnClose>
+      {uiText('本次测试会向供应商发起真实调用，可能产生费用。')}
+    </Modal>
+  </>
 }

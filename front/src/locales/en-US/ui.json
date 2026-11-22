@@ -1,7 +1,8 @@
 {
   "请检查供应商配置、模型名称和调用类型，本次未提交。": "Check the configuration, model name, and request type. The call was not submitted.",
   "测试调用": "Test call",
-  "开始付费测试": "Start paid test",
+  "确认付费测试？": "Confirm paid test?",
+  "确认测试": "Confirm test",
   "远端模型": "Remote model",
   "获取模型列表失败，可手动输入。": "Could not load the model list. Enter a model name manually.",
   "选择或输入模型名称": "Select or enter a model name",
