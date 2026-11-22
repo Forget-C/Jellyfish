@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { CanvasAssistantProposal } from './CanvasAssistantProposal';
 import type { CanvasAssistantReadContext } from './CanvasAssistantReadContext';
+import type { CanvasAssistantSkillUse } from './CanvasAssistantSkillUse';
 /**
  * A completed turn in the order visible to the user.
  */
@@ -16,4 +17,5 @@ export type CanvasAssistantExchange = {
     reply: string;
     proposal?: (CanvasAssistantProposal | null);
     revises?: (string | null);
+    skills?: (Array<CanvasAssistantSkillUse> | null);
 };

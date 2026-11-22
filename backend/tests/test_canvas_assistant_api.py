@@ -80,7 +80,9 @@ async def test_assistant_switches_model_without_losing_visible_card_scope(canvas
         answer = {'role': 'assistant', 'content': '已分析'}
         reason = 'stop'
         if tool_result is None:
-            assert [tool['function']['name'] for tool in body['tools']] == ['read_canvas_context']
+            assert {tool['function']['name'] for tool in body['tools']} == {
+                'read_canvas_context', 'load_canvas_skill', 'read_canvas_skill_example',
+            }
             answer = {'role': 'assistant', 'tool_calls': [{
                 'id': 'call-context', 'type': 'function',
                 'function': {'name': 'read_canvas_context', 'arguments': '{}'},

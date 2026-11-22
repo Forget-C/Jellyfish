@@ -46,6 +46,14 @@ class CanvasAssistantMessage(BaseModel):
     revises: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')] | None = None
 
 
+class CanvasAssistantSkillUse(BaseModel):
+    """Version of a product skill actually loaded to answer a message."""
+
+    id: str
+    name: str
+    version: str
+
+
 class CanvasAssistantExchange(BaseModel):
     """A completed turn in the order visible to the user."""
 
@@ -59,6 +67,7 @@ class CanvasAssistantExchange(BaseModel):
     reply: str
     proposal: CanvasAssistantProposal | None = None
     revises: str | None = None
+    skills: list[CanvasAssistantSkillUse] | None = None
 
 
 class CanvasAssistantHistory(BaseModel):

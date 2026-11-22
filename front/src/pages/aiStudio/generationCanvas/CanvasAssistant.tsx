@@ -214,6 +214,9 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
               }
               return true
             }} />}
+          {!!turn.skills?.length && <small className="canvas-assistant-skills">
+            {turn.skills.map(skill => skill.name).join('、')}
+          </small>}
         </article>)}
         {sending && <p role="status">{uiText("助手正在回复")}</p>}
         <div ref={lastTurn} />

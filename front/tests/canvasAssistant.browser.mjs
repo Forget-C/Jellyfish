@@ -25,15 +25,25 @@ const provider = createHttpServer(async (request, response) => {
   const { model, messages, tools } = JSON.parse(Buffer.concat(chunks).toString())
   const turns = messages.filter(message => message.role === 'user').map(message => message.content)
   if (model === 'browser-tool-model') {
-    assert.ok(tools.some(tool => tool.function.name === 'read_canvas_context'))
+    const names = tools.map(tool => tool.function.name)
+    assert.ok(names.includes('read_canvas_context'))
+    assert.ok(names.includes('load_canvas_skill'))
+    assert.ok(!names.includes('write_file'))
     const result = messages.find(message => message.role === 'tool' && message.tool_call_id === 'context')
     const draft = result && JSON.parse(result.content)
     const requestEdit = turns.at(-1) === '把这张卡的推近放慢'
+    const useSkill = turns.at(-1) === '只从摄影角度看'
+    const loaded = messages.some(message => message.role === 'tool' && message.tool_call_id === 'load_canvas_skill')
     const proposed = messages.some(message => message.role === 'tool' && message.tool_call_id === 'proposal')
-    let answer = { role: 'assistant', content: requestEdit ? '已给出修改建议' : '找到原先的草稿' }
+    let answer = { role: 'assistant', content: requestEdit ? '已给出修改建议' : useSkill ? '建议保持景别，再选择机位。' : '找到原先的草稿' }
     if (!result) {
       answer = { role: 'assistant', tool_calls: [{
         id: 'context', type: 'function', function: { name: 'read_canvas_context', arguments: '{}' },
+      }] }
+    } else if (useSkill && !loaded) {
+      answer = { role: 'assistant', tool_calls: [{
+        id: 'load_canvas_skill', type: 'function', function: { name: 'load_canvas_skill',
+          arguments: JSON.stringify({ skill_id: 'shot-staging' }) },
       }] }
     } else if (requestEdit && !proposed) {
       const card = draft.cards.find(item => item.id === draft.target_card_ids[0])
@@ -183,6 +193,10 @@ try {
     await panel.getByText('找到原先的草稿').waitFor()
     assert.deepEqual(observed.at(-1).target_card_ids, ['target'])
     assert.equal(observed.at(-1).cards[0].prompt.segments[0].text, '只在本地编辑器看到')
+    await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('只从摄影角度看')
+    await panel.getByRole('button', { name: '发送消息' }).click()
+    await panel.getByText('建议保持景别，再选择机位。', { exact: true }).waitFor()
+    await panel.getByText('镜头与场面调度', { exact: true }).waitFor()
     const after = (await (await fetch(url)).json()).data
     assert.equal(after.document.cards.find(item => item.id === 'target').prompt.segments[0].text, '已保存正文')
     assert.equal(after.document.cards.find(item => item.id === 'target').model_id, 'original-video-generator')
@@ -215,7 +229,7 @@ try {
     for (let attempt = 0; attempt < 40 && await storedText() !== original; attempt++) await delay(150)
     assert.equal(await storedText(), original, 'one undo restores the saved field')
   }
-  assert.equal(observed.length, 2)
+  assert.equal(observed.length, 4)
   console.log('Assistant conversation persisted independently on both real canvas entries.')
 } finally {
   acceptSlowReply()

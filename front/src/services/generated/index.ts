@@ -175,6 +175,7 @@ export type { CanvasAssistantProposal } from './models/CanvasAssistantProposal';
 export type { CanvasAssistantProposalDecision } from './models/CanvasAssistantProposalDecision';
 export type { CanvasAssistantProposalResult } from './models/CanvasAssistantProposalResult';
 export type { CanvasAssistantReadContext } from './models/CanvasAssistantReadContext';
+export type { CanvasAssistantSkillUse } from './models/CanvasAssistantSkillUse';
 export type { CanvasAutomaticCheckEstimate } from './models/CanvasAutomaticCheckEstimate';
 export type { CanvasCardOutputs } from './models/CanvasCardOutputs';
 export type { CanvasCardTypeDefinition } from './models/CanvasCardTypeDefinition';

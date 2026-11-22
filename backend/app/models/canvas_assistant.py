@@ -43,3 +43,4 @@ class CanvasAssistantTurn(Base):
     proposal: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     proposal_receipt: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     revises: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    skills: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
