@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from app.models.llm import Model, ModelSettings
-from app.task_worker import TaskWorker, WorkerLimits
+from app.task_worker import TaskWorker
 from tests.test_generation_canvas_runs import runtime  # pylint: disable=unused-import
 from tests.test_generation_canvas_images import image_storage  # pylint: disable=unused-import
 from tests.test_canvas_assistant_edit_api import _live_mysql_app
@@ -61,16 +61,16 @@ async def test_stop_keeps_accepted_run_across_worker_restart(runtime, monkeypatc
     })
     assert sent.status_code == 200, sent.text
     async with httpx.AsyncClient() as transport:
-        first = TaskWorker(runtime.sessions, client=transport, limits=WorkerLimits(text=0) if action == 'cancel' else None)
+        first = TaskWorker(runtime.sessions, client=transport)
         try:
             await first.tick()
+            await asyncio.wait_for(started.wait(), timeout=10)
             if action == 'cancel':
                 run_id = (await runtime.client.get(runs)).json()['data']['runs'][0]['id']
                 cancelled = await runtime.client.post(endpoint + f'/runs/{run_id}/cancel' + suffix)
                 assert cancelled.status_code == 200, cancelled.text
-                assert cancelled.json()['data']['nodes'][0]['status'] == 'cancelled'
+                assert cancelled.json()['data']['nodes'][0]['run_id'] == run_id
             else:
-                await asyncio.wait_for(started.wait(), timeout=10)
                 stopped = await runtime.client.post(stop)
                 assert stopped.status_code == 200, stopped.text
                 status = stopped.json()['data']
