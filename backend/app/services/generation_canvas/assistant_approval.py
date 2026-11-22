@@ -3,6 +3,7 @@
 import re
 
 from app.schemas.canvas_assistant_edit import DeleteCardEdit, MovementFieldEdit, ReleaseBindingEdit, VideoPromptSegmentEdit
+from app.services.generation_canvas.assistant_targets import shot_request_matches
 
 _AMBIGUOUS = re.compile(r'[?？「」『』“”"`]|不要|别|是否|可以吗|怎么样|如何|如果|能否|例如|比如|建议|'
                         r'\b(?:do not|don.t|should|could|might|if|example|suggest)\b', re.I)
@@ -12,6 +13,8 @@ _RELEASE = re.compile(_PREFIX + r'(?:解除|取消(?:采用)?|断开|unlink|rele
 _FIELD = re.compile(_PREFIX + r'(?:(?:把|将).+(?:改|设|换|放慢|加快|缩短|延长|减慢)|'
                     r'(?:修改|改写|调整|更新|替换|放慢|加快|缩短|延长|change|replace|set|slow|update).+)', re.I)
 _SPEED = re.compile(r'速度|放慢|加快|减慢|慢一点|快一点|\bspeed\b|\bslower\b|\bfaster\b', re.I)
+_PUSH = re.compile(r'推近|推进|推镜|\bpush(?:ing)?\s+in\b', re.I)
+_PULL = re.compile(r'拉远|后拉|拉开|\bpull(?:ing)?\s+(?:out|back)\b', re.I)
 _MOVEMENT_FIELD_NAMES = {
     'movement_type': '运镜类型', 'movement_start': '运动起点', 'movement_trigger': '运动触发',
     'movement_path': '运动路径', 'movement_speed': '运动速度', 'end_frame': '结束画面',
@@ -28,7 +31,7 @@ def _single_change(proposal):
     return proposal.groups[0].edits[0] if len(proposal.groups) == 1 and len(proposal.groups[0].edits) == 1 else None
 
 
-def automatic_approval_allowed(text: str, context: dict | None, proposal, group_ids=None) -> bool:
+def automatic_approval_allowed(text: str, context: dict | None, proposal, document, group_ids=None) -> bool:
     """Authorize one unambiguous change using the user's words, never model output."""
     if not context or _AMBIGUOUS.search(text):
         return False
@@ -47,13 +50,15 @@ def automatic_approval_allowed(text: str, context: dict | None, proposal, group_
     if isinstance(target, ReleaseBindingEdit):
         match = _RELEASE.fullmatch(command)
         return bool(match and _names_binding(match[1], context, change.card_id, target.binding_id))
-    edit = re.split(r'[,，;；。]', command, maxsplit=1)[0]
-    if not _FIELD.fullmatch(edit):
+    edit = re.split(r'[,，;；。]|并\s*(?=生成)', command, maxsplit=1)[0]
+    if not _FIELD.fullmatch(edit) or not shot_request_matches(edit, document, change.card_id):
         return False
     if isinstance(target, MovementFieldEdit):
         return (_MOVEMENT_FIELD_NAMES[target.field] in edit
                 or target.field == 'movement_speed' and bool(_SPEED.search(edit)))
     if not isinstance(target, VideoPromptSegmentEdit) or not re.search(r'提示词|推近|拉远|运镜|\bprompt\b', edit, re.I):
+        return False
+    if (_PUSH.search(edit) and _PULL.search(change.after)) or (_PULL.search(edit) and _PUSH.search(change.after)):
         return False
     card = next((entry for entry in context['cards'] if entry['id'] == change.card_id), {})
     segments = [segment for segment in card.get('prompt', {}).get('segments', []) if segment['kind'] == 'text']

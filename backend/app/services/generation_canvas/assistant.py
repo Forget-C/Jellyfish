@@ -86,9 +86,10 @@ class CanvasAssistant:
     async def _exchange(self, turn: CanvasAssistantTurn, approval_mode='manual') -> CanvasAssistantExchange:
         exchange = CanvasAssistantExchange.model_validate(turn)
         exchange.generation = await read_generation(self.db, turn.canvas_id, turn.request_id)
-        exchange.automatic_approval = bool(approval_mode == 'automatic' and exchange.proposal
-                                           and exchange.proposal.state == 'pending' and automatic_approval_allowed(
-                                               exchange.text, turn.context, exchange.proposal))
+        if approval_mode == 'automatic' and exchange.proposal and exchange.proposal.state == 'pending':
+            canvas = await self.store.get(turn.canvas_id)
+            exchange.automatic_approval = automatic_approval_allowed(
+                exchange.text, turn.context, exchange.proposal, CanvasDocument.model_validate(canvas.document))
         return exchange
 
     async def stop(self, canvas_id: str, source_id: str) -> CanvasAssistantExchange:

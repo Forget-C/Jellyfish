@@ -103,6 +103,7 @@ async def test_worker_resumes_exact_authorized_versions(runtime, monkeypatch):
 @pytest.mark.parametrize('scenario, expected_state, expected_runs', [
     ('approve', 'running', 1), ('reject', 'rejected', 0), ('precheck', 'failed', 0), ('edit_only', None, 0),
     ('partial_group', 'running', 1), ('automatic', 'running', 1),
+    ('named_match', 'running', 1), ('named_mismatch', None, 0), ('wrong_direction', None, 0),
 ])
 async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypatch, scenario, expected_state,
                                                                expected_runs):
@@ -120,6 +121,12 @@ async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypa
     })
     if scenario == 'partial_group':
         document['cards'][-1]['prompt']['segments'].append({'kind': 'text', 'id': 'q', 'text': '保持构图'})
+    if scenario.startswith('named_'):
+        document['cards'].append({'id': 'other', 'type': 'model.video'})
+        document['groups'] = [
+            {'id': 'shot-three', 'name': '镜头三', 'card_ids': ['v']},
+            {'id': 'shot-four', 'name': '镜头四', 'card_ids': ['other']},
+        ]
     saved = await runtime.client.put(runtime.url, json={
         'request_id': 'add-video', 'expected_revision': current['revision'], 'document': document,
     })
@@ -130,7 +137,7 @@ async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypa
     assistant = endpoint + '/assistant' + suffix
     decision = endpoint + '/assistant/proposals/edit-one' + suffix
     runs = endpoint + '/runtime' + suffix
-    if scenario == 'automatic':
+    if scenario in ('automatic', 'named_match', 'named_mismatch', 'wrong_direction'):
         preference = await runtime.client.patch(endpoint + '/assistant/approval' + suffix,
                                                 json={'approval_mode': 'automatic'})
         assert preference.status_code == 200, preference.text
@@ -145,6 +152,8 @@ async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypa
             name = 'read_canvas_context' if not results else 'propose_canvas_edit'
             args = {} if not results else {'card_id': 'v', 'text': '缓慢推近',
                 'target': {'kind': 'video_prompt_segment', 'segment_id': 'p'}}
+            if results and scenario == 'wrong_direction':
+                args['text'] = '后拉'
             if results and scenario == 'partial_group':
                 name = 'propose_canvas_edit_groups'
                 alternate = {**args, 'text': '换成大特写',
@@ -162,14 +171,16 @@ async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypa
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
     sent = await runtime.client.post(assistant, json={
         'request_id': 'edit-one',
-        'text': '把推近放慢' if scenario == 'edit_only' else '把推近放慢，生成一版',
+        'text': {'edit_only': '把推近放慢', 'named_match': '把镜头三的推近放慢并生成一版',
+                 'named_mismatch': '把镜头四的推近放慢，生成一版',
+                 'wrong_direction': '把这张卡的推近放慢'}.get(scenario, '把推近放慢，生成一版'),
         'context': {'draft': current['document'], 'revision': current['revision'], 'scope': 'selection', 'card_ids': ['v']},
     })
     assert sent.status_code == 200, sent.text
     assert sent.json()['data']['proposal']['state'] == 'pending'
-    assert sent.json()['data']['automatic_approval'] is (scenario == 'automatic')
+    assert sent.json()['data']['automatic_approval'] is (scenario in ('automatic', 'named_match'))
     generation = sent.json()['data']['generation']
-    if scenario == 'edit_only':
+    if scenario in ('edit_only', 'named_mismatch', 'wrong_direction'):
         assert generation is None
     else:
         assert generation['state'] == 'waiting_approval'
@@ -177,11 +188,20 @@ async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypa
     async with httpx.AsyncClient() as transport:
         worker = TaskWorker(runtime.sessions, client=transport, limits=WorkerLimits(submit=0))
         try:
+            if scenario in ('named_mismatch', 'wrong_direction'):
+                refused = await runtime.client.post(decision, json={
+                    'action': 'approve', 'expected_revision': current['revision'], 'approval_mode': 'automatic',
+                })
+                assert refused.status_code == 409, refused.text
+                await worker.tick()
+                assert (await runtime.client.get(runs)).json()['data']['runs'] == []
+                assert (await runtime.client.get(runtime.url)).json()['data']['revision'] == current['revision']
+                return
             await worker.tick()
             assert (await runtime.client.get(runs)).json()['data']['runs'] == []
             action = 'reject' if scenario == 'reject' else 'approve'
             choice = {'action': action, 'expected_revision': current['revision']}
-            if scenario == 'automatic':
+            if scenario in ('automatic', 'named_match'):
                 choice['approval_mode'] = 'automatic'
             if scenario == 'partial_group':
                 choice['group_ids'] = ['1']

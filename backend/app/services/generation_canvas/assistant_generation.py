@@ -14,6 +14,7 @@ from app.schemas.canvas_assistant_generation import (CanvasAssistantGenerationRe
                                                        CanvasAssistantGenerationVersion)
 from app.schemas.generation_canvas import CanvasDocument, CanvasPrecheckRequest, CanvasRunSubmit
 from app.services.generation_canvas.assistant_edits import resolve_assistant_proposal
+from app.services.generation_canvas.assistant_targets import shot_request_matches
 from app.services.generation_canvas.runtime import CanvasRuntime
 from app.services.generation_canvas.store import CanvasStore
 from app.services.task_service import utcnow
@@ -42,7 +43,7 @@ def _explicit_quantity(text: str) -> tuple[int, bool, str | None] | None:
         ending = next(prefix for prefix in _AFTER_EDIT if request.startswith(prefix))
         request = request.removeprefix(ending).lstrip('，, ')
     else:
-        split = re.search(r'(?:[，,；;。]\s*|(?:改好|修改|调整|更新)后\s*)(?:然后|并)?\s*'
+        split = re.search(r'(?:[，,；;。]\s*|(?:改好|修改|调整|更新)后\s*|并\s*)(?:然后|并)?\s*'
                           r'(?=(?:请|帮我|给我|再)?生成)', request)
         if split and _EDIT_PREFIX.match(request):
             prefix = request[:split.start()]
@@ -80,7 +81,7 @@ def generation_authorization(turn: CanvasAssistantTurn, document: CanvasDocument
         return None
     card_id, = target_ids
     card = next((item for item in document.cards if item.id == card_id and item.type.startswith('model.')), None)
-    if card is None:
+    if card is None or not shot_request_matches(turn.text, document, card_id):
         return None
     state, error = ('waiting_approval', None) if waits_for_edit else ('queued', None)
     if waits_for_edit and not turn.proposal:
