@@ -160,7 +160,7 @@ try {
     await open()
     await panel.getByText('默认模型 · browser-assistant-model · 仅文字对话', { exact: true }).click()
     await page.locator('.ant-select-item-option').getByText('browser-tool-model · 可读画布', { exact: true }).click()
-    await panel.getByText('browser-tool-model · 可读画布', { exact: true }).waitFor()
+    await panel.getByTitle('browser-tool-model · 可读画布', { exact: true }).waitFor()
     await panel.getByRole('button', { name: '发送消息' }).click()
     await panel.getByText('找到原先的草稿').waitFor()
     assert.deepEqual(observed.at(-1).target_card_ids, ['target'])
@@ -170,7 +170,7 @@ try {
     assert.equal(after.document.cards.find(item => item.id === 'target').model_id, 'original-video-generator')
     await page.reload()
     await open()
-    await panel.getByText('browser-tool-model · 可读画布', { exact: true }).waitFor()
+    await panel.getByTitle('browser-tool-model · 可读画布', { exact: true }).waitFor()
   }
   assert.equal(observed.length, 2)
   console.log('Assistant conversation persisted independently on both real canvas entries.')
