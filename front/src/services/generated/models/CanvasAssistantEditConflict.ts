@@ -4,7 +4,9 @@
 /* eslint-disable */
 import type { AddCanvasCardTarget } from './AddCanvasCardTarget';
 import type { AdoptFirstFrameTarget } from './AdoptFirstFrameTarget';
+import type { DeleteCardEdit } from './DeleteCardEdit';
 import type { MovementFieldEdit } from './MovementFieldEdit';
+import type { ReleaseBindingEdit } from './ReleaseBindingEdit';
 import type { VideoPromptSegmentEdit } from './VideoPromptSegmentEdit';
 /**
  * Current field value which prevents a group from being applied.
@@ -12,6 +14,6 @@ import type { VideoPromptSegmentEdit } from './VideoPromptSegmentEdit';
 export type CanvasAssistantEditConflict = {
     group_id: string;
     card_id: string;
-    target: (VideoPromptSegmentEdit | MovementFieldEdit | AddCanvasCardTarget | AdoptFirstFrameTarget);
+    target: (VideoPromptSegmentEdit | MovementFieldEdit | DeleteCardEdit | ReleaseBindingEdit | AddCanvasCardTarget | AdoptFirstFrameTarget);
     current: (string | null);
 };

@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
-from app.schemas.canvas_assistant import (CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
+from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
                                           CanvasAssistantModelSelection)
 from app.schemas.common import PaginatedData, paginated_response, ApiResponse, created_response, empty_response, success_response
 from app.schemas.generation_canvas import CanvasRename, CanvasSummary, CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError, CanvasModelCapability, CanvasCompiledInput
@@ -13,7 +13,7 @@ from app.services.generation_canvas.store import CanvasStore
 from app.services.generation_canvas.capabilities import model_capability
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposalDecision, CanvasAssistantProposalResult
 from app.services.generation_canvas.assistant import CanvasAssistant
-from app.services.generation_canvas.assistant_edits import resolve_assistant_proposal
+from app.services.generation_canvas.assistant_generation import decide_assistant_generation_edit
 
 router = APIRouter()
 
@@ -81,12 +81,20 @@ async def set_assistant_model(canvas_id: str, body: CanvasAssistantModelSelectio
     return success_response(await CanvasAssistant(db, project_id).set_model(canvas_id, body))
 
 
+@router.patch('/{canvas_id}/assistant/approval', response_model=ApiResponse[CanvasAssistantApprovalSetting],
+              operation_id='canvas_assistant_set_approval')
+async def set_assistant_approval(canvas_id: str, body: CanvasAssistantApprovalSetting, project_id: str = '',
+                                 db: AsyncSession = Depends(get_db, scope='function')):
+    """Set the assistant approval mode for this canvas."""
+    return success_response(await CanvasAssistant(db, project_id).set_approval(canvas_id, body))
+
+
 @router.post('/{canvas_id}/assistant/proposals/{source_id}', response_model=ApiResponse[CanvasAssistantProposalResult],
              operation_id='canvas_assistant_decide_proposal')
 async def decide_assistant_proposal(canvas_id: str, source_id: str, body: CanvasAssistantProposalDecision,
                                     project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """Approve a saved preview through the existing canvas save transaction, or reject it."""
-    return success_response(await resolve_assistant_proposal(db, project_id, canvas_id, source_id, body))
+    return success_response(await decide_assistant_generation_edit(db, project_id, canvas_id, source_id, body))
 
 
 @router.put('/{canvas_id}', response_model=ApiResponse[CanvasSaved], operation_id='canvas_save',

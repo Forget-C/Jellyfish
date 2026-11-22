@@ -16,11 +16,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.canvas_assistant import CanvasAssistantSession, CanvasAssistantTurn
 from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.models.llm import ModelCategoryKey
-from app.schemas.canvas_assistant import (CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
+from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
                                           CanvasAssistantModelSelection, CanvasAssistantReadContext, CanvasAssistantSkillUse)
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.assistant_context import resolve_assistant_context
 from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
+from app.services.generation_canvas.assistant_approval import automatic_approval_allowed
+from app.services.generation_canvas.assistant_generation import (
+    freeze_generation_basis, generation_authorization, read_generation, update_generation_for_decision,
+)
 from app.services.generation_canvas.assistant_structure import structural_preview_tool
 from app.services.generation_canvas.assistant_media import (
     describe_assistant_media, resolve_assistant_media, retain_assistant_media,
@@ -65,9 +69,26 @@ class CanvasAssistant:
         await self.store.get(canvas_id)
         session = await self.db.get(CanvasAssistantSession, canvas_id)
         return CanvasAssistantHistory(
-            turns=[CanvasAssistantExchange.model_validate(turn) for turn in await self._turns(canvas_id)],
+            turns=[await self._exchange(turn) for turn in await self._turns(canvas_id)],
             model_id=session.model_id if session else None,
+            approval_mode=session.approval_mode if session else 'manual',
         )
+
+    async def set_approval(self, canvas_id: str, choice: CanvasAssistantApprovalSetting) -> CanvasAssistantApprovalSetting:
+        """Save the approval preference for the verified canvas."""
+        await self._ensure_session(canvas_id)
+        session = await self._lock_session(canvas_id)
+        session.approval_mode = choice.approval_mode
+        await self.db.flush()
+        return choice
+
+    async def _exchange(self, turn: CanvasAssistantTurn, approval_mode='manual') -> CanvasAssistantExchange:
+        exchange = CanvasAssistantExchange.model_validate(turn)
+        exchange.generation = await read_generation(self.db, turn.canvas_id, turn.request_id)
+        exchange.automatic_approval = bool(approval_mode == 'automatic' and exchange.proposal
+                                           and exchange.proposal.state == 'pending' and automatic_approval_allowed(
+                                               exchange.text, turn.context, exchange.proposal))
+        return exchange
 
     async def set_model(self, canvas_id: str, choice: CanvasAssistantModelSelection) -> CanvasAssistantModelSelection:
         """Persist a conversation-only model choice after checking its text capability."""
@@ -120,14 +141,15 @@ class CanvasAssistant:
             canvas = await self.store.get(canvas_id)
             scoped = resolve_assistant_context(canvas, command.context)
             context = scoped.model_dump(mode='json')
-            edit_draft = CanvasAssistantEditDraft(scoped, CanvasDocument.model_validate(canvas.document))
+            edit_draft = CanvasAssistantEditDraft(scoped, CanvasDocument.model_validate(canvas.document),
+                                                      CanvasDocument.model_validate(command.context.draft))
         previous = await self.db.get(CanvasAssistantTurn, (canvas_id, command.request_id))
         if previous is not None:
             attached_ids = [attachment['file_id'] for attachment in (previous.attachments or [])]
             if (previous.text != command.text or previous.context != context
                     or previous.revises != command.revises or attached_ids != command.attachment_file_ids):
                 raise HTTPException(409, 'Request already used for a different assistant message')
-            return CanvasAssistantExchange.model_validate(previous)
+            return await self._exchange(previous, session.approval_mode)
 
         revised_proposal = await self._revised_proposal(canvas_id, command.revises, edit_draft)
         now = datetime.now(UTC).replace(tzinfo=None)
@@ -189,6 +211,7 @@ class CanvasAssistant:
                 superseded['groups'] = [{**group, 'state': 'superseded'} if group['state'] == 'pending'
                                         else group for group in superseded['groups']]
             revised_proposal.proposal = superseded
+            await update_generation_for_decision(self.db, canvas_id, command.revises, 'superseded')
         session.sequence += 1
         await retain_assistant_media(self.db, self.store.project_id, canvas_id, sources)
         turn = CanvasAssistantTurn(
@@ -199,7 +222,15 @@ class CanvasAssistant:
         )
         self.db.add(turn)
         await self.db.flush()
-        return CanvasAssistantExchange.model_validate(turn)
+        if context:
+            canvas = await self.store.get(canvas_id)
+            authorization = generation_authorization(turn, CanvasDocument.model_validate(canvas.document), canvas.revision)
+            if authorization is not None:
+                self.db.add(authorization)
+                await self.db.flush()
+                if authorization.state == 'queued':
+                    await freeze_generation_basis(self.db, self.store.project_id, authorization)
+        return await self._exchange(turn, session.approval_mode)
 
     async def _revised_proposal(self, canvas_id, source_id, edit_draft, *, lock=False):
         if source_id is None:
@@ -242,9 +273,14 @@ class CanvasAssistant:
             tools.append(edit_draft.groups_tool())
             guidance += ('只有当前用户明确要求修改或修订建议时，才用 propose_canvas_edit 或 propose_canvas_edit_groups 提出变更。依赖的改动同组，独立改动分组。'
                          '仅询问创作方法时只给建议。工具只预览，需用户确认，禁止声称已写入。')
+        if edit_draft and edit_draft.saved_cards:
+            tools.append(edit_draft.removal_tool())
+            guidance += ('可以通过 propose_canvas_removal 预览删除现存卡片或解除一条已采用输入；'
+                         '明确请求使用原目标，整理过程中推断的移除仍需用户确认。')
         agent = create_deep_agent(
             model=client, middleware=[canvas_tools_only({entry.name for entry in tools})], tools=tools,
-            system_prompt='你是 Jellyfish 的画布助手。使用用户的语言回答影视创作问题。' + guidance,
+            system_prompt=('你是 Jellyfish 的画布助手。使用用户的语言回答影视创作问题。'
+                           '生成由画布服务核对用户授权并显示真实状态，请以状态为准。') + guidance,
         )
         try:
             async with asyncio.timeout(MODEL_DEADLINE_SECONDS):

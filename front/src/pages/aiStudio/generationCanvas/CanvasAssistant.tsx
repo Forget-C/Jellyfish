@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { CommentOutlined, CloseOutlined } from '@ant-design/icons'
-import { Alert, Input, Select, Spin } from 'antd'
+import { Alert, Checkbox, Input, Select, Spin } from 'antd'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantMessage, FileRead, ModelRead } from '../../../services/generated'
 import { AssistantEditGroups, AssistantProposal } from './AssistantProposal'
+import { AssistantGeneration } from './AssistantGeneration'
 import { useUiText } from '../../../uiText'
 import { CanvasAssistantAttachments, CanvasAssistantEvidence } from './CanvasAssistantAttachments'
 import './canvasAssistant.css'
@@ -12,12 +13,13 @@ import './canvasAssistant.css'
 type AssistantScope = NonNullable<CanvasAssistantMessage['context']>['scope'] | 'text'
 
 /** Nonmodal conversation for one saved canvas. Closing it keeps the draft and in-flight reply. */
-export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft, approve, approvalDisabled }: {
+export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft, approve, approvalDisabled, openRun }: {
   canvasId: string
   projectId: string
   selectedCards: string[]
-  approve: (sourceId: string, groupIds?: string[]) => Promise<boolean>
+  approve: (sourceId: string, groupIds?: string[], automatic?: boolean) => Promise<boolean>
   approvalDisabled: boolean
+  openRun: (runId: string) => void
   readDraft: () => Pick<CanvasAssistantDraftContext, 'draft' | 'revision'>
 }) {
   const uiText = useUiText()
@@ -38,6 +40,9 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
   const [models, setModels] = useState<ModelRead[]>([])
   const [savingModel, setSavingModel] = useState(false)
   const [modelError, setModelError] = useState(false)
+  const [automaticApproval, setAutomaticApproval] = useState(false)
+  const [savingApproval, setSavingApproval] = useState(false)
+  const [approvalError, setApprovalError] = useState(false)
   const [scope, setScope] = useState<AssistantScope>()
   const pending = useRef<CanvasAssistantMessage>()
   const sendingNow = useRef(false)
@@ -45,6 +50,27 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
   const panelId = 'canvas-assistant-' + canvasId
   const inputId = panelId + '-input'
   const effectiveScope = scope ?? (selectedCards.length ? 'selection' : 'text')
+  const activeGeneration = turns?.some(turn => turn.generation?.state === 'queued' || turn.generation?.state === 'running')
+
+  useEffect(() => {
+    if (!open || !activeGeneration) return
+    let request: ReturnType<typeof Canvases.canvasAssistantHistory> | undefined
+    let active = true
+    const timer = window.setInterval(() => {
+      if (request) return
+      request = Canvases.canvasAssistantHistory({ canvasId, projectId })
+      void request.then(response => {
+        if (!active || !response.data) return
+        const updates = new Map(response.data?.turns.map(turn => [turn.request_id, turn.generation]))
+        setTurns(previous => previous?.map(turn => {
+          const generation = updates.get(turn.request_id)
+          return generation ? { ...turn, generation } : turn
+        }))
+      }).catch(() => { /* The next observation resumes after a transient read failure. */ })
+        .finally(() => { request = undefined })
+    }, 1500)
+    return () => { active = false; window.clearInterval(timer); request?.cancel() }
+  }, [open, activeGeneration, canvasId, projectId])
 
   useEffect(() => {
     if (!open) return
@@ -57,6 +83,7 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
         setTurns(previous => (previous?.[previous.length - 1]?.sequence ?? 0) > (saved[saved.length - 1]?.sequence ?? 0)
           ? previous : saved)
         setModelId(response.data.model_id ?? null)
+        setAutomaticApproval(response.data.approval_mode === 'automatic')
       }
     }).catch(() => { if (current) setHistoryError(true) })
     return () => { current = false; request.cancel() }
@@ -96,7 +123,7 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
 
   const send = async () => {
     const text = draft.trim()
-    if (sendingNow.current || savingModel || uploadingReference || !turns || !text) return
+    if (sendingNow.current || savingModel || savingApproval || uploadingReference || !turns || !text) return
     if (!revising && !pending.current && effectiveScope === 'selection' && !selectedCards.length) return
     const revisionTargets = revising?.proposal?.groups
       ? [...new Set(revising.proposal.groups.filter(group => group.state === 'pending')
@@ -131,6 +158,16 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
       setDraft('')
       setReferenceFiles([])
       pending.current = undefined
+      if (turn.automatic_approval && !approvalDisabled && turn.proposal) {
+        const groupIds = turn.proposal.groups?.map(group => group.id)
+        try {
+          if (!await approve(turn.request_id, groupIds, true)) setApprovalError(true)
+          const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId })
+          if (data) setTurns(data.turns)
+        } catch {
+          setApprovalError(true)
+        }
+      }
     } catch (error) {
       const detail = error instanceof ApiError ? error.body?.message ?? error.body?.detail : undefined
       setSendError(detail === 'ASSISTANT_TOOL_CALLING_REQUIRED' ? 'tools'
@@ -154,6 +191,22 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
       setModelError(true)
     } finally {
       setSavingModel(false)
+    }
+  }
+
+  const chooseApproval = async (enabled: boolean) => {
+    setSavingApproval(true)
+    setApprovalError(false)
+    try {
+      const { data } = await Canvases.canvasAssistantSetApproval({
+        canvasId, projectId, requestBody: { approval_mode: enabled ? 'automatic' : 'manual' },
+      })
+      if (!data) throw new Error('missing assistant approval preference')
+      setAutomaticApproval(data.approval_mode === 'automatic')
+    } catch {
+      setApprovalError(true)
+    } finally {
+      setSavingApproval(false)
     }
   }
 
@@ -204,6 +257,9 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
           disabled={sending} options={scopeOptions}
           onChange={value => { setScope(value); pending.current = undefined; setSendError(undefined) }} />
         {modelError && <span role="alert">{uiText("无法读取或切换助手模型")}</span>}
+        <Checkbox checked={automaticApproval} disabled={sending || savingApproval || !turns}
+          onChange={event => { void chooseApproval(event.target.checked) }}>{uiText("自动审批明确请求")}</Checkbox>
+        {approvalError && <span role="alert">{uiText("无法完成自动审批，请核对当前设置和修改建议")}</span>}
       </div>
       <div className="canvas-assistant-history" role="log" aria-live="polite">
         {historyError && <Alert type="error" message={uiText("暂时无法读取助手对话")}
@@ -213,6 +269,8 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
           <div className="canvas-assistant-question">{turn.text}</div>
           {!!turn.attachments?.length && <CanvasAssistantEvidence attachments={turn.attachments} />}
           <div>{turn.reply}</div>
+          {turn.generation && <AssistantGeneration generation={turn.generation}
+            openRun={runId => { close(); openRun(runId) }} />}
           {turn.proposal?.groups?.length ? <AssistantEditGroups groups={turn.proposal.groups}
             current={() => readDraft().draft}
             editDisabled={approvalDisabled || sending}
@@ -251,15 +309,21 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
                 })
                 if (!data) return false
               }
-              setTurns(current => current?.map(item => item.request_id === turn.request_id && item.proposal
-                ? { ...item, proposal: { ...item.proposal, state: action === 'approve' ? 'applied' : 'rejected' } }
-                : item))
+              const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId })
+              if (!data) return false
+              setTurns(data.turns)
               if (revising?.request_id === turn.request_id) {
                 pending.current = undefined
                 setRevising(undefined)
               }
               return true
             }} />}
+          {turn.approval_audit?.map((entry, index) => <small key={index}>
+            {uiText(entry.mode === 'automatic' ? '自动审批明确请求' : '人工审批')} · {
+              uiText(entry.outcome === 'rejected' ? '建议已拒绝' : entry.outcome === 'conflict'
+                ? '与当前画布冲突' : entry.outcome === 'partial' ? '部分建议已写入' : '已写入画布')
+            }
+          </small>)}
           {!!turn.skills?.length && <small className="canvas-assistant-skills">
             {turn.skills.map(skill => skill.name).join('、')}
           </small>}
@@ -285,7 +349,7 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
           setUploading={setUploadingReference} disabled={sending || !turns}
           onChange={files => { setReferenceFiles(files); pending.current = undefined; setSendError(undefined) }} />
         <WorkbenchButton htmlType="submit" variant="primary" loading={sending}
-          disabled={!turns || !draft.trim() || savingModel || uploadingReference || !revising && !pending.current && effectiveScope === 'selection' && !selectedCards.length}>{uiText("发送消息")}</WorkbenchButton>
+          disabled={!turns || !draft.trim() || savingModel || savingApproval || uploadingReference || !revising && !pending.current && effectiveScope === 'selection' && !selectedCards.length}>{uiText("发送消息")}</WorkbenchButton>
       </form>
     </aside>}
   </div>

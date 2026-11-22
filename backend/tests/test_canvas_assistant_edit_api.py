@@ -236,3 +236,108 @@ async def _restart_and_replay(tmp_path, url, decision, groups):
         assert replay.status_code == 200, replay.text
         assert replay.json()['data']['receipt']['revision'] == decision['expected_revision'] + 2
         return replay
+
+
+@pytest.mark.asyncio
+async def test_canvas_approval_mode_is_persisted_per_canvas(canvas_client):
+    first = (await canvas_client.post('/canvases', json={'name': '第一张'})).json()['data']['id']
+    second = (await canvas_client.post('/canvases', json={'name': '第二张'})).json()['data']['id']
+    first_url = f'/canvases/{first}/assistant'
+    second_url = f'/canvases/{second}/assistant'
+    assert (await canvas_client.get(first_url)).json()['data']['approval_mode'] == 'manual'
+    enabled = await canvas_client.patch(first_url + '/approval', json={'approval_mode': 'automatic'})
+    assert enabled.status_code == 200, enabled.text
+    assert (await canvas_client.get(first_url)).json()['data']['approval_mode'] == 'automatic'
+    assert (await canvas_client.get(second_url)).json()['data']['approval_mode'] == 'manual'
+    disabled = await canvas_client.patch(first_url + '/approval', json={'approval_mode': 'manual'})
+    assert disabled.status_code == 200, disabled.text
+    assert (await canvas_client.get(first_url)).json()['data']['approval_mode'] == 'manual'
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures('assistant_edit_model')
+@pytest.mark.parametrize('action', ['edit', 'edit-conflict', 'delete', 'release'])
+async def test_auto_approval_follows_user_words_and_preserves_conflicts(canvas_client, monkeypatch, action):
+    canvas = (await canvas_client.post('/canvases', json={'name': '自动审批'})).json()['data']
+    url = f"/canvases/{canvas['id']}"
+    assistant = url + '/assistant'
+    card = {'id': 'target', 'type': 'model.video', 'prompt': {'segments': [
+        {'kind': 'text', 'id': 'first', 'text': '快速推近'},
+    ]}}
+    draft = {**canvas['document'], 'cards': [card]}
+    conflict = action == 'edit-conflict'
+    if conflict:
+        action = 'edit'
+    if action == 'release':
+        draft['cards'].append({'id': 'reference', 'type': 'content.text', 'text': '原文'})
+        draft['edges'] = [{'id': 'linked', 'source_card': 'reference', 'source_port': 'text',
+                           'target_card': 'target', 'target_port': 'text'}]
+        draft['input_order'] = {'target': {'text': ['linked']}}
+        card['input_bindings'] = [{'id': 'selected-text', 'input_port': 'text', 'source': {
+            'canvas_id': canvas['id'], 'card_id': 'reference', 'port_id': 'text', 'position': 0,
+        }}]
+    saved = await canvas_client.put(url, json={'request_id': 'initial', 'expected_revision': 0, 'document': draft})
+    assert saved.status_code == 200, saved.text
+    revision = saved.json()['data']['revision']
+    assert (await canvas_client.patch(assistant + '/approval', json={'approval_mode': 'automatic'})).status_code == 200
+    initial = {'revision': revision, 'draft': draft, 'scope': 'selection', 'card_ids': ['target']}
+    name = 'propose_canvas_edit' if action == 'edit' else 'propose_canvas_removal'
+    target = {'edit': {'kind': 'video_prompt_segment', 'segment_id': 'first'},
+              'delete': {'kind': 'delete_card'},
+              'release': {'kind': 'release_binding', 'binding_id': 'selected-text'}}[action]
+    original_send = httpx.AsyncClient.send
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original_send(client, request, **kwargs)
+        body = json.loads(request.content)
+        count = sum(message['role'] == 'tool' for message in body['messages'])
+        call = 'read_canvas_context' if count == 0 else name if count == 1 else None
+        message = {'role': 'assistant', 'content': '准备了修改建议'}
+        if call:
+            args = {} if count == 0 else {'card_id': 'target', 'target': target}
+            if count and action == 'edit':
+                args['text'] = '缓慢推近'
+            message = {'role': 'assistant', 'tool_calls': [{'id': f'call-{call}', 'type': 'function',
+                'function': {'name': call, 'arguments': json.dumps(args)}}]}
+        return httpx.Response(200, request=request, json={
+            'id': 'answer', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+            'choices': [{'index': 0, 'finish_reason': 'tool_calls' if call else 'stop', 'message': message}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    inferred = await canvas_client.post(assistant, json={'request_id': 'inferred', 'context': initial,
+                                                            'text': '整理一下画布' if action != 'edit' else '这种镜头怎么拍？'})
+    assert inferred.status_code == 200, inferred.text
+    assert inferred.json()['data']['automatic_approval'] is False
+    group = {'group_ids': ['1']} if action != 'edit' else {}
+    decision = {'action': 'approve', 'approval_mode': 'automatic', 'expected_revision': revision, **group}
+    inferred_decision = assistant + '/proposals/inferred'
+    assert (await canvas_client.post(inferred_decision, json=decision)).status_code == 409
+    rejected = await canvas_client.post(inferred_decision, json={**decision, 'action': 'reject', 'approval_mode': 'manual'})
+    assert rejected.status_code == 200, rejected.text
+    assert (await canvas_client.get(url)).json()['data']['revision'] == revision
+
+    request = {'edit': '把这张卡的推近放慢', 'delete': '删除这张卡', 'release': '解除这条引用'}[action]
+    explicit = await canvas_client.post(assistant, json={'request_id': 'explicit', 'context': initial, 'text': request})
+    assert explicit.status_code == 200, explicit.text
+    assert explicit.json()['data']['automatic_approval'] is True
+    if conflict:
+        card['prompt']['segments'][0]['text'] = '手动环绕'
+        saved = await canvas_client.put(url, json={'request_id': 'manual', 'expected_revision': revision, 'document': draft})
+        assert saved.status_code == 200, saved.text
+    approval = await canvas_client.post(assistant + '/proposals/explicit', json=decision)
+    assert approval.status_code == 200, approval.text
+    entry = (await canvas_client.get(assistant)).json()['data']['turns'][1]['approval_audit'][0]
+    assert (entry['source_id'], entry['mode'], entry['outcome']) == (
+        'explicit', 'automatic', 'conflict' if conflict else 'applied',
+    )
+    output = (await canvas_client.get(url)).json()['data']['document']
+    if action == 'edit':
+        assert output['cards'][0]['prompt']['segments'][0]['text'] == ('手动环绕' if conflict else '缓慢推近')
+    elif action == 'delete':
+        assert output['cards'] == []
+    else:
+        assert output['cards'][0]['input_bindings'] == []
+        assert len(output['edges']) == 1
+    assert (await canvas_client.get(url + '/runtime')).json()['data']['runs'] == []

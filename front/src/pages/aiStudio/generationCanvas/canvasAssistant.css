@@ -163,3 +163,12 @@
   flex-wrap: wrap;
   gap: 4px;
 }
+
+.canvas-assistant-generation {
+  display: grid;
+  gap: 4px;
+}
+
+.canvas-assistant-generation small {
+  display: block;
+}

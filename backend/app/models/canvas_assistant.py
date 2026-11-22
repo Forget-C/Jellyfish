@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, ForeignKeyConstraint, Index, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,6 +21,7 @@ class CanvasAssistantSession(Base):
     pending_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
     pending_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     model_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    approval_mode: Mapped[str] = mapped_column(String(12), nullable=False, server_default='manual')
 
 
 class CanvasAssistantTurn(Base):
@@ -45,3 +46,25 @@ class CanvasAssistantTurn(Base):
     revises: Mapped[str | None] = mapped_column(String(64), nullable=True)
     skills: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     attachments: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    approval_audit: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+
+
+class CanvasAssistantGeneration(Base):
+    """A user-approved quantity for one model card, independent of model replies."""
+
+    __tablename__ = 'canvas_assistant_generations'
+    __table_args__ = (
+        ForeignKeyConstraint(('canvas_id', 'source_id'),
+            ('canvas_assistant_turns.canvas_id', 'canvas_assistant_turns.request_id'), ondelete='CASCADE'),
+        Index('ix_canvas_assistant_generation_queue', 'state', 'created_at'),
+    )
+
+    canvas_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    source_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    card_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    requested_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(24), nullable=False)
+    expected_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    basis_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
