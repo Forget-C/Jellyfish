@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.schemas.canvas_assistant_edit import CanvasAssistantApprovalAudit, CanvasAssistantProposal
+from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationRead
 
 
 class CanvasAssistantDraftContext(BaseModel):
@@ -100,6 +101,7 @@ class CanvasAssistantExchange(BaseModel):
     skills: list[CanvasAssistantSkillUse] | None = None
     automatic_approval: bool = False
     approval_audit: list[CanvasAssistantApprovalAudit] | None = None
+    generation: CanvasAssistantGenerationRead | None = None
 
 
 class CanvasAssistantHistory(BaseModel):

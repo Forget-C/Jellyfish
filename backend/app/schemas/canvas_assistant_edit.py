@@ -4,6 +4,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationRead
+
 from app.schemas.generation_canvas import CanvasRead, CanvasSaved
 
 
@@ -108,6 +110,7 @@ class CanvasAssistantProposalResult(BaseModel):
     receipt: CanvasSaved | None = None
     canvas: CanvasRead | None = None
     conflicts: list[CanvasAssistantEditConflict] = Field(default_factory=list)
+    generation: CanvasAssistantGenerationRead | None = None
 
 
 CanvasAssistantEditText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16000)]

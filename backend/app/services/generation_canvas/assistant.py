@@ -22,6 +22,9 @@ from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.assistant_context import resolve_assistant_context
 from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
 from app.services.generation_canvas.assistant_approval import automatic_approval_allowed
+from app.services.generation_canvas.assistant_generation import (
+    freeze_generation_basis, generation_authorization, read_generation, update_generation_for_decision,
+)
 from app.services.generation_canvas.assistant_media import (
     describe_assistant_media, resolve_assistant_media, retain_assistant_media,
 )
@@ -65,7 +68,7 @@ class CanvasAssistant:
         await self.store.get(canvas_id)
         session = await self.db.get(CanvasAssistantSession, canvas_id)
         return CanvasAssistantHistory(
-            turns=[CanvasAssistantExchange.model_validate(turn) for turn in await self._turns(canvas_id)],
+            turns=[await self._exchange(turn) for turn in await self._turns(canvas_id)],
             model_id=session.model_id if session else None,
             approval_mode=session.approval_mode if session else 'manual',
         )
@@ -77,6 +80,14 @@ class CanvasAssistant:
         session.approval_mode = choice.approval_mode
         await self.db.flush()
         return choice
+
+    async def _exchange(self, turn: CanvasAssistantTurn, approval_mode='manual') -> CanvasAssistantExchange:
+        exchange = CanvasAssistantExchange.model_validate(turn)
+        exchange.generation = await read_generation(self.db, turn.canvas_id, turn.request_id)
+        exchange.automatic_approval = bool(approval_mode == 'automatic' and exchange.proposal
+                                           and exchange.proposal.state == 'pending' and automatic_approval_allowed(
+                                               exchange.text, turn.context, exchange.proposal))
+        return exchange
 
     async def set_model(self, canvas_id: str, choice: CanvasAssistantModelSelection) -> CanvasAssistantModelSelection:
         """Persist a conversation-only model choice after checking its text capability."""
@@ -138,7 +149,7 @@ class CanvasAssistant:
             if (previous.text != command.text or previous.context != context
                     or previous.revises != command.revises or attached_ids != command.attachment_file_ids):
                 raise HTTPException(409, 'Request already used for a different assistant message')
-            return self._exchange(previous, session.approval_mode)
+            return await self._exchange(previous, session.approval_mode)
 
         revised_proposal = await self._revised_proposal(canvas_id, command.revises, edit_draft)
         now = datetime.now(UTC).replace(tzinfo=None)
@@ -199,6 +210,7 @@ class CanvasAssistant:
                 superseded['groups'] = [{**group, 'state': 'superseded'} if group['state'] == 'pending'
                                         else group for group in superseded['groups']]
             revised_proposal.proposal = superseded
+            await update_generation_for_decision(self.db, canvas_id, command.revises, 'superseded')
         session.sequence += 1
         await retain_assistant_media(self.db, self.store.project_id, canvas_id, sources)
         turn = CanvasAssistantTurn(
@@ -209,15 +221,15 @@ class CanvasAssistant:
         )
         self.db.add(turn)
         await self.db.flush()
-        return self._exchange(turn, session.approval_mode)
-
-    @staticmethod
-    def _exchange(turn, approval_mode):
-        value = CanvasAssistantExchange.model_validate(turn)
-        value.automatic_approval = bool(approval_mode == 'automatic' and value.proposal
-                                        and value.proposal.state == 'pending' and automatic_approval_allowed(
-                                            value.text, turn.context, value.proposal))
-        return value
+        if context:
+            canvas = await self.store.get(canvas_id)
+            authorization = generation_authorization(turn, CanvasDocument.model_validate(canvas.document), canvas.revision)
+            if authorization is not None:
+                self.db.add(authorization)
+                await self.db.flush()
+                if authorization.state == 'queued':
+                    await freeze_generation_basis(self.db, self.store.project_id, authorization)
+        return await self._exchange(turn, session.approval_mode)
 
     async def _revised_proposal(self, canvas_id, source_id, edit_draft, *, lock=False):
         if source_id is None:
@@ -259,7 +271,8 @@ class CanvasAssistant:
                          '明确请求使用原目标，整理过程中推断的移除仍需用户确认。')
         agent = create_deep_agent(
             model=client, middleware=[canvas_tools_only({entry.name for entry in tools})], tools=tools,
-            system_prompt='你是 Jellyfish 的画布助手。使用用户的语言回答影视创作问题。' + guidance,
+            system_prompt=('你是 Jellyfish 的画布助手。使用用户的语言回答影视创作问题。'
+                           '生成由画布服务核对用户授权并显示真实状态，请以状态为准。') + guidance,
         )
         try:
             async with asyncio.timeout(MODEL_DEADLINE_SECONDS):

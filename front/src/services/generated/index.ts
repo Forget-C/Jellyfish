@@ -175,6 +175,8 @@ export type { CanvasAssistantDraftContext } from './models/CanvasAssistantDraftC
 export type { CanvasAssistantEditConflict } from './models/CanvasAssistantEditConflict';
 export type { CanvasAssistantEditGroup } from './models/CanvasAssistantEditGroup';
 export type { CanvasAssistantExchange } from './models/CanvasAssistantExchange';
+export type { CanvasAssistantGenerationRead } from './models/CanvasAssistantGenerationRead';
+export type { CanvasAssistantGenerationVersion } from './models/CanvasAssistantGenerationVersion';
 export type { CanvasAssistantHistory } from './models/CanvasAssistantHistory';
 export type { CanvasAssistantMessage } from './models/CanvasAssistantMessage';
 export type { CanvasAssistantModelSelection } from './models/CanvasAssistantModelSelection';

@@ -40,6 +40,7 @@ from app.services.directing.existing_storyboard_check import (
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.directing.store import DirectingStore, ContinuityNotReady, RevisionConflict
 from app.services.generation.media_execution import build_media_input, deliver_media, load_media_inputs, restore_media_config, store_media_output
+from app.services.generation_canvas.assistant_generation import advance_assistant_generations
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.script_processing_worker import generate_script_result
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
@@ -148,6 +149,10 @@ class TaskWorker:
 
     async def tick(self) -> None:
         """只在资源有空位时领取任务；远端任务只读取状态，不重新入队。"""
+        try:
+            await advance_assistant_generations(self.sessions)
+        except Exception as error:
+            logger.warning("canvas assistant admission failed: %s", type(error).__name__)
         async with self.sessions() as db:
             await TaskService(db).expire_tasks()
             remote_count = await db.scalar(select(func.count()).select_from(Task).where(

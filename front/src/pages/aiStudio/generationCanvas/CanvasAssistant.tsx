@@ -5,6 +5,7 @@ import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbe
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantMessage, FileRead, ModelRead } from '../../../services/generated'
 import { AssistantEditGroups, AssistantProposal } from './AssistantProposal'
+import { AssistantGeneration } from './AssistantGeneration'
 import { useUiText } from '../../../uiText'
 import { CanvasAssistantAttachments, CanvasAssistantEvidence } from './CanvasAssistantAttachments'
 import './canvasAssistant.css'
@@ -12,12 +13,13 @@ import './canvasAssistant.css'
 type AssistantScope = NonNullable<CanvasAssistantMessage['context']>['scope'] | 'text'
 
 /** Nonmodal conversation for one saved canvas. Closing it keeps the draft and in-flight reply. */
-export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft, approve, approvalDisabled }: {
+export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft, approve, approvalDisabled, openRun }: {
   canvasId: string
   projectId: string
   selectedCards: string[]
   approve: (sourceId: string, groupIds?: string[], automatic?: boolean) => Promise<boolean>
   approvalDisabled: boolean
+  openRun: (runId: string) => void
   readDraft: () => Pick<CanvasAssistantDraftContext, 'draft' | 'revision'>
 }) {
   const uiText = useUiText()
@@ -48,6 +50,27 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
   const panelId = 'canvas-assistant-' + canvasId
   const inputId = panelId + '-input'
   const effectiveScope = scope ?? (selectedCards.length ? 'selection' : 'text')
+  const activeGeneration = turns?.some(turn => turn.generation?.state === 'queued' || turn.generation?.state === 'running')
+
+  useEffect(() => {
+    if (!open || !activeGeneration) return
+    let request: ReturnType<typeof Canvases.canvasAssistantHistory> | undefined
+    let active = true
+    const timer = window.setInterval(() => {
+      if (request) return
+      request = Canvases.canvasAssistantHistory({ canvasId, projectId })
+      void request.then(response => {
+        if (!active || !response.data) return
+        const updates = new Map(response.data?.turns.map(turn => [turn.request_id, turn.generation]))
+        setTurns(previous => previous?.map(turn => {
+          const generation = updates.get(turn.request_id)
+          return generation ? { ...turn, generation } : turn
+        }))
+      }).catch(() => { /* The next observation resumes after a transient read failure. */ })
+        .finally(() => { request = undefined })
+    }, 1500)
+    return () => { active = false; window.clearInterval(timer); request?.cancel() }
+  }, [open, activeGeneration, canvasId, projectId])
 
   useEffect(() => {
     if (!open) return
@@ -244,6 +267,8 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
           <div className="canvas-assistant-question">{turn.text}</div>
           {!!turn.attachments?.length && <CanvasAssistantEvidence attachments={turn.attachments} />}
           <div>{turn.reply}</div>
+          {turn.generation && <AssistantGeneration generation={turn.generation}
+            openRun={runId => { close(); openRun(runId) }} />}
           {turn.proposal?.groups?.length ? <AssistantEditGroups groups={turn.proposal.groups}
             current={() => readDraft().draft}
             editDisabled={approvalDisabled || sending}
