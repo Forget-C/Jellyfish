@@ -109,6 +109,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
   const [categoryFilter, setCategoryFilter] = useState<ModelCategoryKey | null>(null)
   const [modelEditorOpen, setModelEditorOpen] = useState(false)
   const initialFields = useRef<Partial<ModelFormValues>>({})
+  const pendingName = useRef('')
   const advanced = useRef<HTMLDetailsElement>(null)
   const [discardOpen, setDiscardOpen] = useState(false)
   const [modelEditing, setModelEditing] = useState<ModelRead | null>(null)
@@ -304,6 +305,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
   }, [modelEditorOpen, modelEditing, selectedFormProviderId])
 
   const closeModelEditor = () => {
+    pendingName.current = ''
     setDiscardOpen(false)
     setModelEditorOpen(false)
     setModelEditing(null)
@@ -321,7 +323,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
       field === 'names'
         ? JSON.stringify(current.names ?? []) !== JSON.stringify(baseline.names ?? [])
         : normalize(current[field]) !== normalize(baseline[field]))
-    if (changed) setDiscardOpen(true)
+    if (changed || pendingName.current.trim()) setDiscardOpen(true)
     else closeModelEditor()
   }
 
@@ -370,7 +372,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
         })
         const createdCount = response.data?.created?.length ?? 0
         const skippedCount = response.data?.skipped?.length ?? 0
-        message.success(uiText("已添加 {{createdCount}} 个模型{{value2}}", { createdCount, value2: skippedCount ? `，跳过 ${skippedCount} 个已存在模型` : '' }))
+        message.success(uiText("已添加 {{createdCount}} 个模型{{value2}}", { createdCount, value2: skippedCount ? uiText("，跳过 {{count}} 个已存在模型", { count: skippedCount }) : '' }))
       }
       closeModelEditor()
       reload()
@@ -709,6 +711,9 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
                 <Select
                   aria-label={uiText("模型名称")}
                   mode="tags"
+                  onSearch={value => { pendingName.current = value }}
+                  onBlur={() => { pendingName.current = '' }}
+                  onChange={() => { pendingName.current = '' }}
                   tokenSeparators={[',', '，']}
                   loading={formCatalogLoading}
                   disabled={!selectedFormCategory}

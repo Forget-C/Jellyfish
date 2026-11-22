@@ -2639,6 +2639,7 @@
   "高级参数": "Advanced parameters",
   "参数必须为 JSON 对象": "Parameters must be a JSON object",
   "描述和参数仅用于手动填写的模型。目录模型沿用目录中的值。": "Description and parameters apply to manually entered models. Catalog models keep their catalog values.",
+  "，跳过 {{count}} 个已存在模型": ", skipped {{count}} existing models",
   "添加模型": "Add model",
   "添加模型失败": "Could not add model",
   "添加模型来源": "Add model source",
