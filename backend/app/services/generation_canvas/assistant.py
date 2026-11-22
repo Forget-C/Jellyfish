@@ -22,6 +22,7 @@ from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.assistant_context import resolve_assistant_context
 from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
 from app.services.generation_canvas.assistant_approval import automatic_approval_allowed
+from app.services.generation_canvas.assistant_layout import CanvasAssistantLayoutDraft
 from app.services.generation_canvas.assistant_generation import (
     freeze_generation_basis, generation_authorization, read_generation, update_generation_for_decision,
 )
@@ -106,6 +107,8 @@ class CanvasAssistant:
                         for group in proposal['groups']
                     ]
                 turn.proposal = proposal
+            if turn.layout and turn.layout['state'] in ('proposed', 'waiting'):
+                turn.layout = {**turn.layout, 'state': 'rejected'}
             entry = await self.db.get(CanvasAssistantGeneration, (canvas_id, source_id), with_for_update=True,
                                       populate_existing=True)
             if entry is not None:
@@ -175,12 +178,15 @@ class CanvasAssistant:
         session = await self._lock_session(canvas_id)
         context = None
         edit_draft = None
+        layout_draft = None
         if command.context:
             canvas = await self.store.get(canvas_id)
             scoped = resolve_assistant_context(canvas, command.context)
             context = scoped.model_dump(mode='json')
             edit_draft = CanvasAssistantEditDraft(scoped, CanvasDocument.model_validate(canvas.document),
                                                       CanvasDocument.model_validate(command.context.draft))
+            if scoped.layout_positions:
+                layout_draft = CanvasAssistantLayoutDraft(scoped, edit_draft.visible_document)
         previous = await self.db.get(CanvasAssistantTurn, (canvas_id, command.request_id))
         if previous is not None:
             attached_ids = [attachment['file_id'] for attachment in (previous.attachments or [])]
@@ -218,6 +224,7 @@ class CanvasAssistant:
             reply, skills = await self._reply(
                 client, messages, CanvasAssistantReadContext.model_validate(context) if context else None,
                 edit_draft, supports_tools=capability.tool_calling, structure_tool=structure_tool,
+                layout_draft=layout_draft,
             )
         except HTTPException:
             await self.db.execute(update(CanvasAssistantSession).where(
@@ -250,6 +257,7 @@ class CanvasAssistant:
             model_id=model_id, text=command.text, reply=reply, context=context, attachments=attachments,
             skills=[skill.model_dump() for skill in skills],
             proposal=proposal.model_dump(mode='json') if proposal else None, revises=command.revises,
+            layout=layout_draft.proposal.model_dump(mode='json') if layout_draft and layout_draft.proposal else None,
         )
         self.db.add(turn)
         await self.db.flush()
@@ -291,7 +299,8 @@ class CanvasAssistant:
 
     @staticmethod
     async def _reply(client, messages, context: CanvasAssistantReadContext | None,
-                     edit_draft: CanvasAssistantEditDraft | None, *, supports_tools: bool, structure_tool=None
+                     edit_draft: CanvasAssistantEditDraft | None, *, supports_tools: bool, structure_tool=None,
+                     layout_draft: CanvasAssistantLayoutDraft | None = None,
                      ) -> tuple[str, list[CanvasAssistantSkillUse]]:
         @tool
         def read_canvas_context() -> str:
@@ -319,6 +328,11 @@ class CanvasAssistant:
             tools.append(edit_draft.removal_tool())
             guidance += ('可以通过 propose_canvas_removal 预览删除现存卡片或解除一条已采用输入；'
                          '明确请求使用原目标，整理过程中推断的移除仍需用户确认。')
+        if layout_draft:
+            tools.append(layout_draft.tool())
+            guidance += ('用户明确要求分组、移动或整理时，可使用 propose_canvas_layout 预览浏览器布局，'
+                         '读出本次目标坐标，仅用锁定卡片。分组和移动可在同一建议提供。'
+                         '等待用户确认和编辑器回执，禁止提议期间声称已完成。')
         agent = create_deep_agent(
             model=client, middleware=[canvas_tools_only({entry.name for entry in tools})], tools=tools,
             system_prompt=('你是 Jellyfish 的画布助手。使用用户的语言回答影视创作问题。'

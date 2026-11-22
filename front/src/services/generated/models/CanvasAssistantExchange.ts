@@ -5,6 +5,7 @@
 import type { CanvasAssistantApprovalAudit } from './CanvasAssistantApprovalAudit';
 import type { CanvasAssistantAttachment } from './CanvasAssistantAttachment';
 import type { CanvasAssistantGenerationRead } from './CanvasAssistantGenerationRead';
+import type { CanvasAssistantLayout } from './CanvasAssistantLayout';
 import type { CanvasAssistantProposal } from './CanvasAssistantProposal';
 import type { CanvasAssistantReadContext } from './CanvasAssistantReadContext';
 import type { CanvasAssistantSkillUse } from './CanvasAssistantSkillUse';
@@ -26,4 +27,5 @@ export type CanvasAssistantExchange = {
     approval_audit?: (Array<CanvasAssistantApprovalAudit> | null);
     generation?: (CanvasAssistantGenerationRead | null);
     stopped?: boolean;
+    layout?: (CanvasAssistantLayout | null);
 };

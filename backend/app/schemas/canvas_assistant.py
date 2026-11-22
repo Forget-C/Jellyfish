@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_vali
 from app.schemas.canvas_assistant_edit import CanvasAssistantApprovalAudit, CanvasAssistantProposal
 from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationRead
 from app.schemas.canvas_assistant_media import CanvasAssistantAttachment
+from app.schemas.canvas_assistant_layout import CanvasAssistantLayout, CanvasAssistantPoint, CardId
 
 
 class CanvasAssistantDraftContext(BaseModel):
@@ -16,6 +17,7 @@ class CanvasAssistantDraftContext(BaseModel):
     revision: int = Field(ge=0)
     scope: Literal['selection', 'canvas']
     card_ids: list[str] = Field(default_factory=list)
+    layout_positions: dict[CardId, CanvasAssistantPoint] | None = Field(default=None, max_length=1000)
 
     @model_validator(mode='after')
     def check_selected_cards(self):
@@ -31,6 +33,7 @@ class CanvasAssistantReadContext(BaseModel):
     scope: Literal['selection', 'canvas']
     target_card_ids: list[str]
     cards: list[dict]
+    layout_positions: dict[str, CanvasAssistantPoint] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class CanvasAssistantModelSelection(BaseModel):
@@ -90,6 +93,7 @@ class CanvasAssistantExchange(BaseModel):
     approval_audit: list[CanvasAssistantApprovalAudit] | None = None
     generation: CanvasAssistantGenerationRead | None = None
     stopped: bool = False
+    layout: CanvasAssistantLayout | None = None
 
 
 class CanvasAssistantHistory(BaseModel):

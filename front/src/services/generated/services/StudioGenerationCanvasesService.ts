@@ -5,6 +5,7 @@
 import type { ApiResponse_CanvasAssistantApprovalSetting_ } from '../models/ApiResponse_CanvasAssistantApprovalSetting_';
 import type { ApiResponse_CanvasAssistantExchange_ } from '../models/ApiResponse_CanvasAssistantExchange_';
 import type { ApiResponse_CanvasAssistantHistory_ } from '../models/ApiResponse_CanvasAssistantHistory_';
+import type { ApiResponse_CanvasAssistantLayout_ } from '../models/ApiResponse_CanvasAssistantLayout_';
 import type { ApiResponse_CanvasAssistantModelSelection_ } from '../models/ApiResponse_CanvasAssistantModelSelection_';
 import type { ApiResponse_CanvasAssistantProposalResult_ } from '../models/ApiResponse_CanvasAssistantProposalResult_';
 import type { ApiResponse_CanvasCardOutputs_ } from '../models/ApiResponse_CanvasCardOutputs_';
@@ -28,6 +29,7 @@ import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_CanvasSummary__ } from '../models/ApiResponse_PaginatedData_CanvasSummary__';
 import type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from '../models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
 import type { CanvasAssistantApprovalSetting } from '../models/CanvasAssistantApprovalSetting';
+import type { CanvasAssistantLayoutDecision } from '../models/CanvasAssistantLayoutDecision';
 import type { CanvasAssistantMessage } from '../models/CanvasAssistantMessage';
 import type { CanvasAssistantModelSelection } from '../models/CanvasAssistantModelSelection';
 import type { CanvasAssistantProposalDecision } from '../models/CanvasAssistantProposalDecision';
@@ -429,6 +431,40 @@ export class StudioGenerationCanvasesService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/proposals/{source_id}',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Decide Layout
+     * Approve a local layout or record the editing browser's result.
+     * @returns ApiResponse_CanvasAssistantLayout_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantDecideLayout({
+        canvasId,
+        sourceId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        requestBody: CanvasAssistantLayoutDecision,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantLayout_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/layout/{source_id}',
             path: {
                 'canvas_id': canvasId,
                 'source_id': sourceId,
