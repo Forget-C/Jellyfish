@@ -31,7 +31,6 @@ from app.services.llm.provider_registry import (
     list_registered_providers,
     register_many,
     register_provider,
-    resolve_provider_key_from_name,
 )
 from app.services.llm.provider_resolver import (
     ResolvedProviderConfig,
@@ -69,7 +68,6 @@ __all__ = [
     "list_registered_providers",
     "register_many",
     "register_provider",
-    "resolve_provider_key_from_name",
     "resolve_provider_config",
     "resolve_provider_config_by_model",
 ]

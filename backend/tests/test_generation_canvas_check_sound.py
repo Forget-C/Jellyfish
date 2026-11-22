@@ -40,8 +40,8 @@ async def test_sound_matches_actual_model_and_keeps_technical_constraints(canvas
         provider = await db.get(Provider, 'canvas-provider')
         provider.api_key = 'fixture-key'
         db.add_all([
-            Provider(id='p08-ark', name='volcengine', base_url='https://ark.fixture.test', api_key='fixture-key'),
-            Provider(id='p08-vidu', name='vidu', base_url='https://vidu.fixture.test', api_key='fixture-key'),
+            Provider(id='p08-ark', provider_key='volcengine', name='volcengine', base_url='https://ark.fixture.test', api_key='fixture-key'),
+            Provider(id='p08-vidu', provider_key='vidu', name='vidu', base_url='https://vidu.fixture.test', api_key='fixture-key'),
         ])
         await db.flush()
         db.add_all([
@@ -133,7 +133,7 @@ async def test_sound_matches_actual_model_and_keeps_technical_constraints(canvas
 @pytest.mark.asyncio
 async def test_sound_text_classifier_needs_real_source_evidence_and_uses_frozen_capability(runtime, monkeypatch):
     async with runtime.sessions.begin() as db:
-        db.add(Provider(id='p08-ark', name='volcengine', base_url='https://ark.fixture.test', api_key='fixture-key'))
+        db.add(Provider(id='p08-ark', provider_key='volcengine', name='volcengine', base_url='https://ark.fixture.test', api_key='fixture-key'))
         await db.flush()
         db.add_all([
             Model(id='seedance', name='doubao-seedance-2-0-260128', category='video', provider_id='p08-ark'),

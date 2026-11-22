@@ -18,8 +18,8 @@ async def seed():
     register_video_model_capability(provider='vidu', model_prefix='graph-video-alt', capability=VideoModelCapability(
         supports_subject_image_reference=False, allowed_ratios={'16:9'}, supports_seed=False, max_seconds=3))
     async with sessions.begin() as db:
-        db.add_all([Provider(id='graph-provider', name='openai', base_url='https://example.test'),
-                    Provider(id='graph-video-provider', name='vidu', base_url='https://example.test')])
+        db.add_all([Provider(id='graph-provider', provider_key='openai', name='openai', base_url='https://example.test'),
+                    Provider(id='graph-video-provider', provider_key='vidu', name='vidu', base_url='https://example.test')])
         await db.flush()
         db.add_all([Model(id=f'graph-{kind}', name=f'真实接入{kind}', category=kind, provider_id='graph-provider')
                     for kind in ('text', 'image', 'video')])

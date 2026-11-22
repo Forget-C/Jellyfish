@@ -113,7 +113,7 @@ async def test_actual_worker_receives_complete_shot_design_with_explicit_ancesto
             model = await db.get(Model, runtime.model_id)
             model.name, model.category, model.params = 'doubao-seedance', 'video', {}
             provider = await db.get(Provider, runtime.provider_id)
-            provider.name = 'volcengine'
+            provider.provider_key = 'volcengine'
     source = lambda card, port, **extra: {'canvas_id': runtime.canvas_id, 'card_id': card, 'port_id': port, 'position': 0, **extra}
     doc = runtime.document
     doc.update(cards=[{'id': 'person', 'type': 'direction.event', 'event_id': 'alice', 'name': '钟响', 'action_change': {'state': 'fact', 'text': '秘密事件正文'}},

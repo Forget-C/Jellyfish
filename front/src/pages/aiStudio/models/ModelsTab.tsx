@@ -258,12 +258,12 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
   }
 
   const providerSelectOptions = useMemo(
-    () => providers.map(provider => ({ label: provider.name, value: provider.id })),
-    [providers],
+    () => providers.map(provider => ({ label: `${provider.name}（${supportedProviders.find(spec => spec.key === provider.provider_key)?.display_name ?? provider.provider_key}）`, value: provider.id })),
+    [providers, supportedProviders],
   )
   const selectedFormProvider = providers.find(provider => provider.id === selectedFormProviderId)
   const selectedProviderSpec = selectedFormProvider && supportedProviders.find(
-    spec => spec.display_name === selectedFormProvider.name || spec.aliases?.includes(selectedFormProvider.name),
+    spec => spec.key === selectedFormProvider.provider_key,
   )
   const supportedFormCategories = selectedProviderSpec?.supported_categories ?? []
   const categorySelectOptions = MODEL_CATEGORIES
@@ -285,8 +285,12 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
     })
     void request.then(({ data }) => {
       if (active) setFormCatalog(data ?? null)
-    }).catch(() => {
-      if (active) message.error(uiText("获取模型列表失败，仍可手动填写模型名称"))
+    }).catch(error => {
+      if (!active) return
+      const reason = error instanceof ApiError ? error.body?.message : undefined
+      if (typeof reason === 'string' && reason.startsWith('Provider api_key is empty')) message.error(uiText("请先为此配置填写 API Key"))
+      else if (typeof reason === 'string' && reason.startsWith('Provider api_secret is empty')) message.error(uiText("请先为此配置填写 API Secret"))
+      else message.error(uiText("获取模型列表失败，仍可手动填写模型名称"))
     }).finally(() => {
       if (active) setFormCatalogLoading(false)
     })

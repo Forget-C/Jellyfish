@@ -39,7 +39,7 @@ async def media_database():
 async def submit_media(sessions, *, modality="image", provider_name="Vidu"):
     """通过真实提交器受理实验室媒体任务，使用类别专用地址。"""
     async with sessions.begin() as db:
-        db.add(Provider(id="provider", name=provider_name, api_key="original-secret",
+        db.add(Provider(id="provider", provider_key=provider_name.lower(), name="Production", api_key="original-secret",
             base_url="https://common.invalid", image_base_url="https://images.invalid", video_base_url="https://videos.invalid"))
         db.add(ExperimentSession(id="session", lab_type=modality))
         await db.flush()

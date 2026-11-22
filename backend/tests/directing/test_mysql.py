@@ -89,7 +89,7 @@ async def test_mysql_concurrent_design_cut_and_take_writes():
         async with sessions.begin() as db:
             service = BatchService(db, "p1")
             assert (await service.active_cut(sequence_id)).id == cut.id
-            db.add(Provider(id="provider1", name="OpenAI", base_url="https://example.invalid/v1", api_key="test-only", status="active"))
+            db.add(Provider(id="provider1", provider_key='openai', name="OpenAI", base_url="https://example.invalid/v1", api_key="test-only", status="active"))
             await db.flush()
             db.add(Model(id="model1", name="sora-test", category="video", provider_id="provider1", params={}))
             await db.flush()

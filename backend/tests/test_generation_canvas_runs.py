@@ -36,7 +36,7 @@ async def runtime(tmp_path, request):
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     async with sessions.begin() as db:
         db.add(Project(id=project_id, name='project', style='真人都市'))
-        db.add(Provider(id=provider_id, name='openai', api_key='private-secret', base_url='https://frozen.test/v1'))
+        db.add(Provider(id=provider_id, provider_key='openai', name='openai', api_key='private-secret', base_url='https://frozen.test/v1'))
         await db.flush()
         db.add(Model(id=model_id, name='frozen-model', category='text', provider_id=provider_id, params={'temperature': 0.3, 'default_headers': {'Authorization': 'Bearer model-private-secret'}}))
     real_app = getattr(request, 'param', None) == 'app-handler'
@@ -106,7 +106,7 @@ async def test_ordinary_omni_text_generation_keeps_its_frozen_request_without_ch
         model.name = 'qwen3.8-omni-flash'
         model.params = {'temperature': 0.3, 'extra_body': {'enable_thinking': True}}
         provider = await db.get(Provider, runtime.provider_id)
-        provider.name = 'aliyun_bailian'
+        provider.provider_key = 'aliyun_bailian'
     await accept(runtime)
     async with runtime.sessions.begin() as db:
         model = await db.get(Model, runtime.model_id)

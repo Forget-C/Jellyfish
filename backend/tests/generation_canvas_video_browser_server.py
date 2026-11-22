@@ -78,7 +78,7 @@ async def seed():
     bootstrap_all_registries()
     await prepare()
     async with sessions.begin() as db:
-        db.add_all([Provider(id='frames-provider', name='volcengine', api_key='test', base_url='https://video.test'), Provider(id='subjects-provider', name='vidu', api_key='test', base_url='https://video.test')])
+        db.add_all([Provider(id='frames-provider', provider_key='volcengine', name='volcengine', api_key='test', base_url='https://video.test'), Provider(id='subjects-provider', provider_key='vidu', name='vidu', api_key='test', base_url='https://video.test')])
         await db.flush()
         db.add_all([Model(id='video-frames', name='doubao-seedance', category='video', provider_id='frames-provider'), Model(id='video-subjects', name='viduq2-pro', category='video', provider_id='subjects-provider')])
 

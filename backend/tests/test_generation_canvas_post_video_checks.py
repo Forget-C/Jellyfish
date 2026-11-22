@@ -31,8 +31,8 @@ async def test_r04_sends_audio_free_video_and_validates_evidence_ranges(runtime,
     async with runtime.sessions.begin() as db:
         model = await db.get(Model, runtime.model_id)
         model.category, model.name, model.params = 'video', 'doubao-seedance', {}
-        (await db.get(Provider, runtime.provider_id)).name = 'volcengine'
-        db.add(Provider(id='vision-provider', name='aliyun_bailian', api_key='vision-secret',
+        (await db.get(Provider, runtime.provider_id)).provider_key = 'volcengine'
+        db.add(Provider(id='vision-provider', provider_key='aliyun_bailian', name='aliyun_bailian', api_key='vision-secret',
                         base_url='https://vision.test/compatible-mode/v1'))
         await db.flush()
         db.add(Model(id='video-check', name=check_model, provider_id='vision-provider', category='text'))

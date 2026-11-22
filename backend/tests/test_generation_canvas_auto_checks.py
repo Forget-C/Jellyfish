@@ -21,7 +21,7 @@ async def test_complete_result_sets_use_frozen_automatic_checks_and_durable_edge
     async with runtime.sessions.begin() as db:
         generation = await db.get(Model, runtime.model_id)
         generation.category, generation.name, generation.params = 'image', 'image-model', {}
-        db.add(Provider(id='vision-provider', name='aliyun_bailian', api_key='frozen-check-key', base_url='https://vision.test/v1'))
+        db.add(Provider(id='vision-provider', provider_key='aliyun_bailian', name='aliyun_bailian', api_key='frozen-check-key', base_url='https://vision.test/v1'))
         await db.flush()
         db.add(Model(id='vision', name='qwen3-vl-plus', provider_id='vision-provider', category='text'))
 

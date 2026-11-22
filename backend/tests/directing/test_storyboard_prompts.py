@@ -65,7 +65,7 @@ async def test_video_candidate_has_generated_prompt_before_review(tmp_path, monk
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = '人物停步。灯熄灭。' if failure in ('partial', 'mixed') else '人物停步。'
-            db.add_all([Provider(id='prompt-provider', name='openai', base_url='https://fixture.test/v1', api_key='test'), Provider(id='prompt-vidu', name='vidu', base_url='https://fixture.test/v1', api_key='test')])
+            db.add_all([Provider(id='prompt-provider', provider_key='openai', name='openai', base_url='https://fixture.test/v1', api_key='test'), Provider(id='prompt-vidu', provider_key='vidu', name='vidu', base_url='https://fixture.test/v1', api_key='test')])
             await db.flush()
             db.add_all([Model(id='prompt-text', name='text', category='text', provider_id='prompt-provider'),
                         Model(id='prompt-video', name='viduq2', category='video', provider_id='prompt-vidu')])

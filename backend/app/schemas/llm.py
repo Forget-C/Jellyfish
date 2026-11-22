@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, HttpUrl, field_validator
 
 from app.core.contracts.model_catalog import ModelCatalogSource, ProviderModelCandidate
 from app.models.llm import LogLevel, ModelCategoryKey, ProviderStatus
 
 
+ConfigName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+
+
+def _valid_endpoint(value: str) -> str:
+    HttpUrl(value)
+    return value.strip()
+
+
 class ProviderBase(BaseModel):
     """供应商通用字段（不含敏感字段）。"""
 
-    name: str = Field(..., description="供应商名称")
+    provider_key: str = Field(..., description="供应商稳定键")
+    name: ConfigName = Field(..., description="配置名称")
     base_url: str = Field(..., description="文本/通用 API Base URL")
     image_base_url: str | None = Field(None, description="图片能力 API Base URL（可选覆盖）")
     video_base_url: str | None = Field(None, description="视频能力 API Base URL（可选覆盖）")
@@ -28,6 +37,8 @@ class ProviderBase(BaseModel):
 class ProviderCreate(ProviderBase):
     """创建供应商时的请求体，允许填写敏感字段。"""
 
+    _validate_endpoint = field_validator("base_url")(_valid_endpoint)
+
     id: str = Field(..., description="供应商 ID")
     api_key: str = Field("", description="API Key（敏感，不在响应中回显）")
     api_secret: str = Field("", description="API Secret（敏感，不在响应中回显）")
@@ -36,7 +47,17 @@ class ProviderCreate(ProviderBase):
 class ProviderUpdate(BaseModel):
     """更新供应商时的可选字段。"""
 
-    name: str | None = Field(None, description="供应商名称")
+    model_config = ConfigDict(extra="forbid")
+    _validate_endpoint = field_validator("base_url")(_valid_endpoint)
+
+    @field_validator("name", "base_url", mode="before")
+    @classmethod
+    def reject_null(cls, value: Any) -> Any:
+        if value is None:
+            raise ValueError("field cannot be null")
+        return value
+
+    name: ConfigName | None = Field(None, description="配置名称")
     base_url: str | None = Field(None, description="文本/通用 API Base URL")
     image_base_url: str | None = Field(None, description="图片能力 API Base URL（可选覆盖）")
     video_base_url: str | None = Field(None, description="视频能力 API Base URL（可选覆盖）")

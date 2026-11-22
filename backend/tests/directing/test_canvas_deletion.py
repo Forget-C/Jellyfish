@@ -19,7 +19,7 @@ async def scene_path(client, sessions):
     """准备可走真实分镜受理接口的场次和隔离模型。"""
     bootstrap_all_registries()
     async with sessions.begin() as db:
-        db.add(Provider(id='delete-provider', name='openai', base_url='https://fixture.test/v1', api_key='fixture'))
+        db.add(Provider(id='delete-provider', provider_key='openai', name='openai', base_url='https://fixture.test/v1', api_key='fixture'))
         await db.flush()
         db.add(Model(id='delete-model', name='fixture-text', category='text', provider_id='delete-provider', params={}))
     chapter = (await client.get(CHAPTER)).json()['data']

@@ -65,7 +65,7 @@ async def test_whole_chapter_check_keeps_original_report(tmp_path, monkeypatch):
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = '甲在车旁。乙从另一侧下车。'
-            db.add(Provider(id='provider', name='openai', base_url='https://prep.test/v1', api_key='test'))
+            db.add(Provider(id='provider', provider_key='openai', name='openai', base_url='https://prep.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='text', name='text', category='text', provider_id='provider'))
         chapter = (await client.get(BASE)).json()['data']

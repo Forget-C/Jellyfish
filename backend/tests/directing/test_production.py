@@ -17,7 +17,7 @@ from tests.directing.test_store import database, frozen
 
 async def prepare(db, design_payload=None, reference_origin=None):
     """明确拆为单镜试拍，供应商配置只供离线提交验证。"""
-    db.add(Provider(id="provider1", name="OpenAI", base_url="https://example.invalid/v1", api_key="test-only", status="active"))
+    db.add(Provider(id="provider1", provider_key='openai', name="OpenAI", base_url="https://example.invalid/v1", api_key="test-only", status="active"))
     await db.flush()
     db.add(Model(id="model1", name="sora-test", category="video", provider_id="provider1", params={}))
     await db.flush()
@@ -294,7 +294,7 @@ async def test_grouped_references_reach_provider_and_keep_history(tmp_path, monk
     async with database(tmp_path) as sessions:
         async with sessions.begin() as db:
             service, sequence, original_plan, original_prompt, _ = await prepare(db)
-            (await db.get(Provider, "provider1")).name = "Vidu"
+            (await db.get(Provider, "provider1")).provider_key = 'vidu'
             (await db.get(Model, "model1")).name = "viduq2"
             db.add(FileItem(id="image2", type="image", name="侧面", storage_key="files/side.png"))
             await db.flush()
@@ -354,7 +354,7 @@ async def test_frame_inputs_are_rejected_before_adapter_can_drop_them(tmp_path):
             plan = await frozen(service, sequence, "plan", data)
             with pytest.raises(ValueError, match="最多发送 1 张"):
                 await service.compile_unit(sequence, plan.id, "u1")
-            (await db.get(Provider, "provider1")).name = "Kling"
+            (await db.get(Provider, "provider1")).provider_key = "kling"
             (await db.get(Model, "model1")).name = "kling-3.0-turbo"
             await db.flush()
             with pytest.raises(ValueError, match="不支持所选帧位置"):

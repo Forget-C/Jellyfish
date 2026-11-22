@@ -61,7 +61,11 @@ class Provider(Base, TimestampMixin):
     __tablename__ = "providers"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="供应商 ID")
-    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True, comment="供应商名称")
+    provider_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(
+        String(255, collation="utf8mb4_0900_as_ci").with_variant(String(255, collation="NOCASE"), "sqlite"),
+        nullable=False, index=True, comment="配置名称",
+    )
     base_url: Mapped[str] = mapped_column(String(1024), nullable=False, comment="文本/通用 API Base URL")
     image_base_url: Mapped[str | None] = mapped_column(
         String(1024),
@@ -94,6 +98,7 @@ class Provider(Base, TimestampMixin):
 
     __table_args__ = (
         Index("ix_providers_updated_at", "updated_at"),
+        Index("uq_provider_config_name", "provider_key", "name", unique=True),
         Index("ix_providers_status", "status"),
     )
 

@@ -31,7 +31,7 @@ def solid_png(rgb):
 async def prepare(runtime, image_storage):
     red, green = solid_png((255, 0, 0)), solid_png((0, 255, 0))
     async with runtime.sessions.begin() as db:
-        db.add(Provider(id='visual-provider', name='aliyun_bailian', api_key='visual-secret',
+        db.add(Provider(id='visual-provider', provider_key='aliyun_bailian', name='aliyun_bailian', api_key='visual-secret',
                         base_url='https://vision.test/compatible-mode/v1'))
         await db.flush()
         db.add(Model(id='visual-model', name='qwen3-vl-plus', provider_id='visual-provider', category='text'))

@@ -124,7 +124,7 @@ async def test_production_design_task_keeps_results_sources_and_file_protection(
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             _, sequence_id, _, _, _ = await setup_story(db)
-            db.add(Provider(id='director-provider', name='openai', base_url='https://director.test/v1', api_key='test'))
+            db.add(Provider(id='director-provider', provider_key='openai', name='openai', base_url='https://director.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='director-text', name='text', category='text', provider_id='director-provider'))
         base = '/api/v1/studio/projects/p1/directing'
@@ -285,9 +285,9 @@ async def test_reference_capabilities_use_model_and_adapter_rules(tmp_path):
     from app.models.llm import Provider, Model
     async with database(tmp_path) as sessions:
         async with sessions.begin() as db:
-            db.add_all([Provider(id="v", name="Vidu", api_key="test", base_url="https://example.invalid"),
-                        Provider(id="o", name="OpenAI", api_key="test", base_url="https://example.invalid"),
-                        Provider(id="k", name="Kling", api_key="test", base_url="https://example.invalid")])
+            db.add_all([Provider(id="v", provider_key='vidu', name="Vidu", api_key="test", base_url="https://example.invalid"),
+                        Provider(id="o", provider_key='openai', name="OpenAI", api_key="test", base_url="https://example.invalid"),
+                        Provider(id="k", provider_key='kling', name="Kling", api_key="test", base_url="https://example.invalid")])
             await db.flush()
             db.add_all([Model(id="v1", provider_id="v", name="viduq2", category="video"),
                         Model(id="o1", provider_id="o", name="unknown-video", category="video"),

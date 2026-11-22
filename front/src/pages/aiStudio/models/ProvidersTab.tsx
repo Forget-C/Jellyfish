@@ -22,6 +22,7 @@ import type { TableColumnsType } from 'antd'
 import { DeleteOutlined, DownOutlined, MoreOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { PageToolbar, WorkspaceScrollPanel } from '../../../components'
 import { LlmService } from '../../../services/generated/services/LlmService'
+import { ApiError } from '../../../services/generated'
 import type { ProviderRead, ProviderSupportedRead } from '../../../services/generated'
 import { PROVIDER_STATUS_MAP, SORT_OPTIONS, maskUrl } from './constants'
 
@@ -118,22 +119,32 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
 
   useEffect(() => () => credentialsRequest.current?.cancel(), [])
 
-  const getProviderNameOptions = () => {
-    const fromApi = supportedSpecs.map(spec => ({
-      label: spec.is_experimental ? uiText("{{display_name}}（实验）", { display_name: spec.display_name }) : spec.display_name,
-      value: spec.display_name,
-    }))
-    const name = providerEditing?.name?.trim()
-    if (!name || supportedSpecs.some(spec => spec.display_name === name || spec.aliases?.includes(name))) return fromApi
-    return [{ label: uiText("{{name}}（历史/未在清单内）", { name }), value: name }, ...fromApi]
-  }
+  const selectedKey = Form.useWatch('provider_key', form)
+  const selectedSpec = supportedSpecs.find(spec => spec.key === selectedKey)
+  const presetOptions = supportedSpecs.map(spec => ({
+    value: spec.key,
+    label: spec.is_experimental ? uiText("{{display_name}}（实验）", { display_name: spec.display_name }) : spec.display_name,
+  }))
 
-  const applyDefaultBaseUrlForDisplayName = (displayName: string) => {
-    const spec = supportedSpecs.find(item => item.display_name === displayName || item.aliases?.includes(displayName))
-    const defaultUrl = spec?.default_base_url?.trim()
-    if (!defaultUrl) return
-    const current = (form.getFieldValue('base_url') as string | undefined)?.trim()
-    if (!providerEditing || !current) form.setFieldsValue({ base_url: defaultUrl })
+  const changePreset = (key: string) => {
+    const next = supportedSpecs.find(spec => spec.key === key)
+    if (!next) return
+    const values = form.getFieldsValue()
+    const apply = () => form.setFieldsValue({
+      provider_key: key,
+      name: !values.name?.trim() || values.name === selectedSpec?.display_name ? next.display_name : values.name,
+      base_url: next.default_base_url ?? '',
+      image_base_url: '', video_base_url: '', api_key: '', api_secret: '',
+    })
+    if ((values.base_url && values.base_url !== selectedSpec?.default_base_url)
+        || values.image_base_url || values.video_base_url || values.api_key || values.api_secret) {
+      form.setFieldValue('provider_key', selectedKey)
+      modal.confirm({
+        title: uiText("切换供应商？"),
+        content: uiText("通用地址将使用新预设，图片和视频地址、API Key 和 API Secret 将清空。"),
+        okText: uiText("切换"), onOk: apply,
+      })
+    } else apply()
   }
 
   const closeProviderModal = () => {
@@ -152,7 +163,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
     try {
       const values = await form.validateFields()
       const sharedFields = {
-        name: values.name,
+        name: values.name.trim(),
         base_url: values.base_url,
         image_base_url: values.image_base_url ?? null,
         video_base_url: values.video_base_url ?? null,
@@ -173,6 +184,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
           requestBody: {
             ...sharedFields,
             id,
+            provider_key: values.provider_key,
             description: values.description,
             status: values.status,
             api_key: values.api_key,
@@ -185,7 +197,9 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
       reload()
     } catch (error) {
       if (error && typeof error === 'object' && 'errorFields' in error) return
-      message.error(uiText("保存供应商失败，请重试"))
+      if (error instanceof ApiError && error.status === 409) {
+        form.setFields([{ name: 'name', errors: [uiText("该供应商下已存在同名配置")] }])
+      } else message.error(uiText("保存供应商失败，请重试"))
     } finally {
       saveInFlight.current = false
       setSaving(false)
@@ -244,6 +258,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
     setProviderModalOpen(true)
     if (!provider) return
     form.setFieldsValue({
+      provider_key: provider.provider_key,
       name: provider.name,
       base_url: provider.base_url,
       image_base_url: provider.image_base_url,
@@ -285,6 +300,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         }}>{name}</Button>
       ),
     },
+    { title: uiText("供应商"), dataIndex: 'provider_key', render: (key: string) => supportedSpecs.find(spec => spec.key === key)?.display_name ?? key },
     {
       title: uiText("地址摘要"), dataIndex: 'base_url', key: 'base_url', ellipsis: true,
       render: (url: string) => {
@@ -427,16 +443,21 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         destroyOnClose
       >
         <Form form={form} layout="vertical" className="pt-2">
-          <Form.Item name="name" label={uiText("名称")} rules={[{ required: true, message: uiText("请选择供应商") }]}>
+          <Form.Item name="provider_key" label={uiText("供应商")} rules={[{ required: true, message: uiText("请选择供应商") }]}>
             <Select
+              aria-label={uiText("供应商")}
               showSearch
               optionFilterProp="label"
               loading={supportedLoading}
               placeholder={supportedLoading ? uiText("加载供应商清单…") : uiText("选择供应商")}
-              options={getProviderNameOptions()}
+              disabled={!!providerEditing}
+              options={presetOptions}
               notFoundContent={supportedLoading ? uiText("加载中…") : uiText("暂无数据")}
-              onChange={(v) => applyDefaultBaseUrlForDisplayName(String(v))}
+              onChange={changePreset}
             />
+          </Form.Item>
+          <Form.Item name="name" label={uiText("配置名称")} rules={[{ required: true, whitespace: true }]}>
+            <Input maxLength={255} />
           </Form.Item>
           <Form.Item
             name="base_url"
@@ -451,10 +472,10 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
           <Form.Item name="video_base_url" label={uiText("视频 Base URL（可选覆盖）")} rules={[{ type: 'url', message: uiText("请输入有效 URL") }]}>
             <Input placeholder={uiText("留空则回退到文本/通用 Base URL")} />
           </Form.Item>
-          <Form.Item name="api_key" label="API Key" help={providerEditing ? uiText("留空则不修改") : uiText("请勿分享密钥")}>
+          <Form.Item name="api_key" label="API Key" extra={selectedSpec?.requires_api_key && uiText("调用时必需")} help={providerEditing ? uiText("留空则不修改") : uiText("请勿分享密钥")}>
             <Input.Password placeholder="AK" disabled={credentialsLoading} />
           </Form.Item>
-          <Form.Item name="api_secret" label="API Secret" help={providerEditing ? uiText("留空则不修改") : undefined}>
+          <Form.Item name="api_secret" label="API Secret" extra={selectedSpec?.requires_api_secret && uiText("调用时必需")} help={providerEditing ? uiText("留空则不修改") : undefined}>
             <Input.Password placeholder="SK" disabled={credentialsLoading} />
           </Form.Item>
           <Form.Item name="description" label={uiText("描述")}>

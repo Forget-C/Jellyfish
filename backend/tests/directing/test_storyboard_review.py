@@ -75,7 +75,7 @@ async def test_review_retry_uses_the_retained_draft_and_protects_application(tmp
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
-            db.add(Provider(id='review-provider', name='openai', base_url='https://fixture.test/v1', api_key='test'))
+            db.add(Provider(id='review-provider', provider_key='openai', name='openai', base_url='https://fixture.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='review-text', name='text', category='text', provider_id='review-provider'))
         chapter = '/api/v1/studio/projects/p1/directing/chapters/ch1'
@@ -214,7 +214,7 @@ async def test_targeted_repair_preserves_evidence_and_never_repeats(tmp_path, mo
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
-            db.add(Provider(id='repair-provider', name='openai', base_url='https://fixture.test/v1', api_key='test'))
+            db.add(Provider(id='repair-provider', provider_key='openai', name='openai', base_url='https://fixture.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='repair-text', name='text', category='text', provider_id='repair-provider'))
         chapter = '/api/v1/studio/projects/p1/directing/chapters/ch1'
@@ -373,7 +373,7 @@ async def test_risk_acceptance_requires_exact_conflicts_and_real_restore(tmp_pat
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
-            db.add(Provider(id='risk-provider', name='openai', base_url='https://fixture.test/v1', api_key='test'))
+            db.add(Provider(id='risk-provider', provider_key='openai', name='openai', base_url='https://fixture.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='risk-text', name='text', category='text', provider_id='risk-provider'))
         chapter = '/api/v1/studio/projects/p1/directing/chapters/ch1'
@@ -506,7 +506,7 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = '张三等待。张三离开。' if outcome == 'shared_multiple' else '张三等待。'
-            db.add(Provider(id='structure-provider', name='openai', base_url='https://fixture.test/v1', api_key='test'))
+            db.add(Provider(id='structure-provider', provider_key='openai', name='openai', base_url='https://fixture.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='structure-text', name='text', category='text', provider_id='structure-provider'))
         chapter = '/api/v1/studio/projects/p1/directing/chapters/ch1'

@@ -17,7 +17,7 @@ from tests.test_generation_canvas_images import image_storage  # noqa: F401
 @pytest.mark.parametrize('runtime', [None, 'mysql'], indirect=True)
 async def test_text_then_image_then_video_uses_completed_outputs_and_preview(runtime, image_storage, monkeypatch):
     async with runtime.sessions.begin() as db:
-        db.add(Provider(id=runtime.provider_id + '-video', name='volcengine', base_url='https://video.test/v1', api_key='video-secret'))
+        db.add(Provider(id=runtime.provider_id + '-video', provider_key='volcengine', name='volcengine', base_url='https://video.test/v1', api_key='video-secret'))
         await db.flush()
         db.add(Model(id=runtime.model_id + '-image', name='image-model', category='image', provider_id=runtime.provider_id))
         db.add(Model(id=runtime.model_id + '-video', name='doubao-seedance', category='video', provider_id=runtime.provider_id + '-video'))

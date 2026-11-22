@@ -55,7 +55,7 @@ async def test_saved_check_recovers_and_applies_an_exact_correction(tmp_path, mo
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
-            db.add(Provider(id='saved-provider', name='openai', base_url='https://fixture.test/v1', api_key='test'))
+            db.add(Provider(id='saved-provider', provider_key='openai', name='openai', base_url='https://fixture.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='saved-text', name='text', category='text', provider_id='saved-provider'))
         chapter = '/api/v1/studio/projects/p1/directing/chapters/ch1'

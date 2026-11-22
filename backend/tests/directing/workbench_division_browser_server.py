@@ -74,7 +74,7 @@ async def setup():
     """只写入隔离测试数据库的项目和文字模型配置。"""
     await prepare()
     async with sessions.begin() as db:
-        db.add(Provider(id='division-provider', name='openai', base_url='https://fixture.test/v1', api_key='fixture'))
+        db.add(Provider(id='division-provider', provider_key='openai', name='openai', base_url='https://fixture.test/v1', api_key='fixture'))
         await db.flush()
         db.add(Model(id='division-model', name='fixture-text', category='text', provider_id='division-provider', params={}))
         await db.flush()

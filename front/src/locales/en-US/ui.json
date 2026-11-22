@@ -1,4 +1,12 @@
 {
+  "请先为此配置填写 API Key": "Add an API Key to this configuration first",
+  "请先为此配置填写 API Secret": "Add an API Secret to this configuration first",
+  "配置名称": "Configuration name",
+  "切换供应商？": "Switch provider?",
+  "切换": "Switch",
+  "该供应商下已存在同名配置": "A configuration with this name already exists for this provider",
+  "调用时必需": "Required for requests",
+  "通用地址将使用新预设，图片和视频地址、API Key 和 API Secret 将清空。": "Switching applies the new base URL and clears the image and video URLs, API Key, and API Secret.",
   " / 共 {{total}}": " / {{total}} total",
   " · {{value1}}产物 {{value2}}：{{postStatus}}": " · {{value1}} output {{value2}}: {{postStatus}}",
   " · 主图": " · Primary",

@@ -43,7 +43,7 @@ async def test_object_extraction_uses_confirmed_source_and_preserves_candidates_
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
-            db.add(Provider(id='object-provider', name='openai', base_url='https://fixture.test/v1', api_key='fixture'))
+            db.add(Provider(id='object-provider', provider_key='openai', name='openai', base_url='https://fixture.test/v1', api_key='fixture'))
             await db.flush()
             db.add(Model(id='object-model', name='fixture-text', category='text', provider_id='object-provider', params={}))
             db.add_all([Character(id='front-asset', project_id='p1', name='前门角色', style='真人都市'),
@@ -247,7 +247,7 @@ async def test_first_object_result_survives_source_and_membership_changes(tmp_pa
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
-            db.add(Provider(id='object-provider', name='openai', base_url='https://fixture.test/v1', api_key='fixture'))
+            db.add(Provider(id='object-provider', provider_key='openai', name='openai', base_url='https://fixture.test/v1', api_key='fixture'))
             await db.flush()
             db.add(Model(id='object-model', name='fixture-text', category='text', provider_id='object-provider', params={}))
 

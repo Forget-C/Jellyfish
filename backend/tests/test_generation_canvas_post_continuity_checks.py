@@ -31,8 +31,8 @@ async def test_r05_endpoints_and_r06_occlusion_use_their_own_evidence(runtime, i
     async with runtime.sessions.begin() as db:
         model = await db.get(Model, runtime.model_id)
         model.category, model.name, model.params = 'video', 'doubao-seedance', {}
-        (await db.get(Provider, runtime.provider_id)).name = 'volcengine'
-        db.add(Provider(id='vision-provider', name='aliyun_bailian', api_key='vision-secret',
+        (await db.get(Provider, runtime.provider_id)).provider_key = 'volcengine'
+        db.add(Provider(id='vision-provider', provider_key='aliyun_bailian', name='aliyun_bailian', api_key='vision-secret',
                         base_url='https://vision.test/compatible-mode/v1'))
         await db.flush()
         db.add(Model(id='video-check', name='qwen3-vl-plus', provider_id='vision-provider', category='text'))

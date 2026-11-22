@@ -38,7 +38,7 @@ async def canvas_client(request, monkeypatch, canvas_file_store):
         from app.models.llm import Model, Provider
         from app.bootstrap import bootstrap_all_registries
         bootstrap_all_registries()
-        db.add(Provider(id='canvas-provider', name='openai', base_url='https://example.test'))
+        db.add(Provider(id='canvas-provider', provider_key='openai', name='openai', base_url='https://example.test'))
         await db.flush()
         db.add_all([Model(id=f'canvas-{kind}', name=f'canvas-{kind}', category=kind, provider_id='canvas-provider')
                     for kind in ('text', 'image', 'video')])
@@ -333,7 +333,7 @@ async def test_capability_declarations_match_real_dtos_and_video_adapter(canvas_
         dependency = canvas_client._transport.app.dependency_overrides[get_db]
         async for db in dependency():
             provider = await db.get(Provider, 'canvas-provider')
-            provider.name = 'vidu'
+            provider.provider_key = 'vidu'
             await db.commit()
         canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={})).json()['data']
         base = canvas_url(f"/canvases/p/{canvas['id']}")
@@ -704,7 +704,7 @@ async def test_video_usage_capability_keeps_canvas_policy(canvas_client, provide
         supports_subject_reference_with_frame_reference=True))
     try:
         async for db in canvas_client._transport.app.dependency_overrides[get_db]():
-            (await db.get(Provider, 'canvas-provider')).name = provider_name
+            (await db.get(Provider, 'canvas-provider')).provider_key = provider_name
             (await db.get(Model, 'canvas-video')).name = model_name
             await db.commit()
         canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={})).json()['data']

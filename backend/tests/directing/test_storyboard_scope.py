@@ -100,8 +100,8 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = SCRIPT
-            db.add_all([Provider(id='scope-openai', name='openai', base_url='https://fixture.test/v1', api_key='test'),
-                        Provider(id='scope-vidu', name='vidu', base_url='https://fixture.test/v1', api_key='test'),
+            db.add_all([Provider(id='scope-openai', provider_key='openai', name='openai', base_url='https://fixture.test/v1', api_key='test'),
+                        Provider(id='scope-vidu', provider_key='vidu', name='vidu', base_url='https://fixture.test/v1', api_key='test'),
                         Character(id='scope-character', project_id='p1', name='林舟', style='真人都市')])
             await db.flush()
             db.add_all([Model(id='scope-text', name='fixture-text', category='text', provider_id='scope-openai'),
@@ -269,8 +269,8 @@ async def test_parked_van_still_informs_the_offscreen_detail_shot(tmp_path, monk
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
-            db.add_all([Provider(id='rain-text', name='openai', base_url='https://fixture.test/v1', api_key='test'),
-                        Provider(id='rain-video', name='vidu', base_url='https://fixture.test/v1', api_key='test'),
+            db.add_all([Provider(id='rain-text', provider_key='openai', name='openai', base_url='https://fixture.test/v1', api_key='test'),
+                        Provider(id='rain-video', provider_key='vidu', name='vidu', base_url='https://fixture.test/v1', api_key='test'),
                         Prop(id='parked-van', project_id='p1', name='白色面包车', style='真人都市')])
             await db.flush()
             db.add_all([Model(id='rain-text-model', name='text', category='text', provider_id='rain-text'),

@@ -37,6 +37,7 @@ async def test_create_model_persists_without_config_revision() -> None:
             db,
             body=ProviderCreate(
                 id="p1",
+                provider_key='openai',
                 name="OpenAI",
                 base_url="https://api.openai.com/v1",
                 api_key="k",
@@ -60,7 +61,7 @@ async def test_create_model_persists_without_config_revision() -> None:
 async def test_update_model_allows_regular_field_updates() -> None:
     db, engine = await _build_session()
     async with db:
-        provider = Provider(id="p1", name="OpenAI", base_url="https://api.openai.com/v1", api_key="k")
+        provider = Provider(id="p1", provider_key='openai', name="OpenAI", base_url="https://api.openai.com/v1", api_key="k")
         db.add(provider)
         db.add(
             Model(
@@ -142,7 +143,7 @@ async def test_update_model_settings_preserves_other_modality_defaults() -> None
 async def test_list_models_paginated_returns_filtered_items() -> None:
     db, engine = await _build_session()
     async with db:
-        provider = Provider(id="p1", name="OpenAI", base_url="https://api.openai.com/v1", api_key="k")
+        provider = Provider(id="p1", provider_key='openai', name="OpenAI", base_url="https://api.openai.com/v1", api_key="k")
         db.add(provider)
         db.add_all(
             [
@@ -178,6 +179,7 @@ async def test_create_model_rejects_unsupported_category_for_provider() -> None:
             db,
             body=ProviderCreate(
                 id="p-bailian",
+                provider_key='aliyun_bailian',
                 name="阿里百炼",
                 base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
                 api_key="k",
@@ -207,6 +209,7 @@ async def test_update_model_rejects_switch_to_unsupported_provider_category_comb
             db,
             body=ProviderCreate(
                 id="p-openai",
+                provider_key='openai',
                 name="OpenAI",
                 base_url="https://api.openai.com/v1",
                 api_key="k",
@@ -216,6 +219,7 @@ async def test_update_model_rejects_switch_to_unsupported_provider_category_comb
             db,
             body=ProviderCreate(
                 id="p-bailian",
+                provider_key='aliyun_bailian',
                 name="阿里百炼",
                 base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
                 api_key="k",
@@ -250,6 +254,7 @@ async def test_get_image_generation_options_uses_default_image_model_capability(
             db,
             body=ProviderCreate(
                 id="p-volc",
+                provider_key='volcengine',
                 name="火山引擎",
                 base_url="https://ark.cn-beijing.volces.com/api/v3",
                 api_key="k",
@@ -288,6 +293,7 @@ async def test_import_provider_models_creates_and_skips_duplicates() -> None:
             db,
             body=ProviderCreate(
                 id="p-vidu",
+                provider_key='vidu',
                 name="Vidu",
                 base_url="https://api.vidu.cn",
                 api_key="k",
@@ -311,3 +317,44 @@ async def test_import_provider_models_creates_and_skips_duplicates() -> None:
             ("viduq2", ModelCategoryKey.video)
         ]
     await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_renamed_configs_use_their_own_models_endpoints_and_credentials(monkeypatch):
+    import httpx
+    from app.schemas.llm import ProviderUpdate
+    from app.services.llm.manage import get_provider_model_catalog, update_provider
+    from app.services.llm.provider_resolver import resolve_provider_config_by_model
+
+    requests = []
+    client_factory = httpx.AsyncClient
+
+    def serve(request):
+        requests.append((str(request.url), request.headers['authorization']))
+        return httpx.Response(200, json={'data': [{'id': 'test-model'}]})
+
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kw: client_factory(transport=httpx.MockTransport(serve), **kw))
+    db, engine = await _build_session()
+    try:
+        async with db:
+            for config in ('live', 'lab'):
+                await create_provider(db, body=ProviderCreate(
+                    id=config, provider_key='openai', name=config, base_url=f'https://{config}.test/v1',
+                    api_key=f'key-{config}',
+                ))
+                await create_model(db, body=ModelCreate(
+                    id=f'm-{config}', name='test-model', category=ModelCategoryKey.text, provider_id=config,
+                ))
+            await update_provider(db, provider_id='live', body=ProviderUpdate(name='主账号'))
+            for config in ('live', 'lab'):
+                catalog = await get_provider_model_catalog(db, provider_id=config)
+                assert catalog.models[0].name == 'test-model'
+                model = await db.get(Model, f'm-{config}')
+                resolved = await resolve_provider_config_by_model(db, model=model)
+                assert (resolved.provider_key, resolved.base_url, resolved.api_key) == (
+                    'openai', f'https://{config}.test/v1', f'key-{config}',
+                )
+            assert requests == [('https://live.test/v1/models', 'Bearer key-live'),
+                                ('https://lab.test/v1/models', 'Bearer key-lab')]
+    finally:
+        await engine.dispose()

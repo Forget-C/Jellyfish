@@ -45,7 +45,7 @@ async def test_script_worker_preserves_inputs_and_result_or_fails_missing_data(m
     worker = TaskWorker(sessions)
     try:
         async with sessions() as db:
-            db.add(Provider(id="provider", name="OpenAI", api_key="test", base_url="https://provider.invalid"))
+            db.add(Provider(id="provider", provider_key='openai', name="OpenAI", api_key="test", base_url="https://provider.invalid"))
             await db.flush()
             db.add(Model(id="model", provider_id="provider", category="text", name="text-model"))
             await db.flush()

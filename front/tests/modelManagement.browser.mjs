@@ -19,7 +19,7 @@ const model = {
   created_by: '验收创建人',
   params: { long_value: 'abcdefghijklmnopqrstuvwxyz'.repeat(35) },
 }
-const provider = { id: 'provider1', name: '验收供应商', base_url: 'https://example.invalid' }
+const provider = { provider_key: 'openai', id: 'provider1', name: '验收供应商', base_url: 'https://example.invalid' }
 const images = Array.from({ length: 105 }, (_, i) => ({
   id: `image${i + 1}`, name: `验收图片模型 ${i + 1}`, category: 'image', provider_id: 'provider1',
 }))
@@ -101,7 +101,7 @@ try {
         ...(omitTotal ? {} : { pagination: { total: matching.length } }),
       })
     }
-    if (pathname.endsWith('/supported')) return respond([])
+    if (pathname.endsWith('/supported')) return respond([{ key: 'openai', display_name: 'OpenAI', supported_categories: ['text', 'image', 'video'] }])
     if (pathname.endsWith('/model-settings')) {
       if (route.request().method() === 'PUT') {
         assert.deepEqual(route.request().postDataJSON(), { default_image_model_id: 'image105' })
@@ -248,7 +248,7 @@ try {
   await create.click()
   const add = page.getByRole('dialog', { name: '添加模型' })
   await add.getByRole('combobox', { name: '供应商', exact: true }).click()
-  await page.getByText(provider.name, { exact: true }).filter({ visible: true }).last().click()
+  await page.getByText('验收供应商（OpenAI）', { exact: true }).filter({ visible: true }).last().click()
   await add.getByRole('combobox', { name: '类别', exact: true }).click()
   await page.getByText('文本生成', { exact: true }).filter({ visible: true }).last().click()
   const modelNames = add.getByRole('combobox', { name: '模型名称', exact: true })

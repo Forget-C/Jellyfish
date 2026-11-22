@@ -44,7 +44,7 @@
 
 ## 供应商模型目录与导入
 
-- 模型管理页的“添加模型”采用供应商优先流程：先选择 Provider，再选择该 Provider 支持的模型类别，最后从目录多选模型名称或手动输入名称；编辑模型仍为单条编辑。
+- 模型管理页的“添加模型”采用供应商优先流程：先选择供应商配置，再按其 `provider_key` 选择供应商支持的模型类别，最后从目录多选模型名称或手动输入名称；编辑模型仍为单条编辑。
 - 目录模型和手动输入模型都通过 `POST /api/v1/llm/providers/{provider_id}/models/import` 批量导入，重复的 Provider + 类别 + 名称组合由后端幂等跳过。
 - 页面通过 `GET /api/v1/llm/providers/{provider_id}/models/catalog` 获取已配置 Provider 的可导入模型目录；目录查询由服务端使用供应商凭据。
 - OpenAI 兼容供应商（当前 OpenAI、火山引擎）从其配置 Base URL 的 `/models` 接口实时读取模型名，并按名称规则归类为 text、image 或 video。

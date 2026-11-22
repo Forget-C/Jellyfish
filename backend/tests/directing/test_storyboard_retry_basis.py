@@ -37,7 +37,7 @@ async def test_storyboard_retry_confirms_current_basis_and_recovers_same_canvas(
     monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
-            db.add(Provider(id='retry-provider', name='openai', base_url='https://story.test/v1', api_key='test'))
+            db.add(Provider(id='retry-provider', provider_key='openai', name='openai', base_url='https://story.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='retry-text', name='重试文本模型', category='text', provider_id='retry-provider'))
 

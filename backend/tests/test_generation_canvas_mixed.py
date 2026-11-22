@@ -14,7 +14,7 @@ from tests.test_generation_canvas_dag import save, run, drain
 @pytest.mark.asyncio
 async def test_fixed_model_image_and_named_performance_run_only_adopted_video(runtime, image_storage):
     async with runtime.sessions.begin() as db:
-        db.add(Provider(id='video-provider', name='volcengine', api_key='test', base_url='https://video.test/v1'))
+        db.add(Provider(id='video-provider', provider_key='volcengine', name='volcengine', api_key='test', base_url='https://video.test/v1'))
         await db.flush()
         db.add(Model(id='video-model', name='doubao-seedance', category='video', provider_id='video-provider'))
         model = await db.get(Model, runtime.model_id)

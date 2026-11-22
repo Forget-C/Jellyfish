@@ -59,8 +59,8 @@ async def test_storyboard_optional_empty_reference_and_explicit_media_admission(
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
-            db.add_all([Provider(id='image-provider', name='openai', base_url='https://image.test/v1', api_key='test'),
-                        Provider(id='video-provider', name='vidu', base_url='https://video.test', api_key='test')])
+            db.add_all([Provider(id='image-provider', provider_key='openai', name='openai', base_url='https://image.test/v1', api_key='test'),
+                        Provider(id='video-provider', provider_key='vidu', name='vidu', base_url='https://video.test', api_key='test')])
             await db.flush()
             db.add_all([Model(id='text', name='text', category='text', provider_id='image-provider'),
                         Model(id='image', name='image-model', category='image', provider_id='image-provider'),

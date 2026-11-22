@@ -43,8 +43,8 @@ async def test_post_visual_check_shares_real_media_preserves_evidence_and_leaves
         generation.name = 'image-model' if modality == 'image' else 'doubao-seedance'
         generation.params = {}
         if modality == 'video':
-            (await db.get(Provider, runtime.provider_id)).name = 'volcengine'
-        db.add(Provider(id='visual-provider', name='aliyun_bailian', api_key='visual-secret',
+            (await db.get(Provider, runtime.provider_id)).provider_key = 'volcengine'
+        db.add(Provider(id='visual-provider', provider_key='aliyun_bailian', name='aliyun_bailian', api_key='visual-secret',
                         base_url='https://vision.test/compatible-mode/v1'))
         await db.flush()
         db.add(Model(id='visual-model', name='qwen3-vl-plus', provider_id='visual-provider', category='text'))

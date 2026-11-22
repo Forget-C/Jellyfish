@@ -132,10 +132,10 @@ async def prepare():
         await connection.run_sync(Base.metadata.create_all)
     async with sessions.begin() as db:
         db.add(Project(id='canvas-project', name='图片画布项目', style='真人都市'))
-        db.add(Provider(id='canvas-video-provider', name='vidu', api_key='fixture-private', base_url='https://fixture.test'))
-        db.add(Provider(id='canvas-image-provider', name='openai', api_key='fixture-private', base_url='https://fixture.test/v1'))
+        db.add(Provider(id='canvas-video-provider', provider_key='vidu', name='vidu', api_key='fixture-private', base_url='https://fixture.test'))
+        db.add(Provider(id='canvas-image-provider', provider_key='openai', name='openai', api_key='fixture-private', base_url='https://fixture.test/v1'))
         if os.environ.get('CANVAS_BROWSER_AUTO_CHECKS'):
-            db.add(Provider(id='auto-vision-provider', name='aliyun_bailian', api_key='vision-fixture',
+            db.add(Provider(id='auto-vision-provider', provider_key='aliyun_bailian', name='aliyun_bailian', api_key='vision-fixture',
                             base_url='https://auto-vision.test/v1'))
         await db.flush()
         if os.environ.get('CANVAS_BROWSER_AUTO_CHECKS'):

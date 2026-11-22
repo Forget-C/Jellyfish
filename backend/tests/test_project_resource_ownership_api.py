@@ -33,7 +33,7 @@ async def test_project_created_resource_is_private_and_library_names_are_indepen
         await connection.run_sync(Base.metadata.create_all)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     async with sessions() as session:
-        session.add(Provider(id="test-provider", name="OpenAI", base_url="https://example.test/v1", api_key="test-key"))
+        session.add(Provider(id="test-provider", provider_key='openai', name="OpenAI", base_url="https://example.test/v1", api_key="test-key"))
         await session.flush()
         session.add(Model(id="test-image-model", name="gpt-image-1", provider_id="test-provider", category=ModelCategoryKey.image))
         await session.commit()

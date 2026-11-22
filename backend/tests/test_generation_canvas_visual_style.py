@@ -54,7 +54,7 @@ async def test_style_whole_output_reaches_real_worker_without_implicit_media(run
             model.name, model.category, model.params = ('image-model' if modality == 'image' else 'doubao-seedance'), modality, {}
         if modality == 'video':
             provider = await db.get(Provider, runtime.provider_id)
-            provider.name = 'volcengine'
+            provider.provider_key = 'volcengine'
     source = {'canvas_id': runtime.canvas_id, 'card_id': 'photo', 'port_id': 'text', 'position': 0}
     doc = runtime.document
     doc.update(cards=[{'id': 'photo', 'type': 'direction.style', 'fields': {'direction': {'state': 'proposal', 'text': '手绘水彩'}, 'materials': {'state': 'fact', 'text': '纸张颗粒'}}},

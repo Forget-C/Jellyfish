@@ -18,7 +18,7 @@ async def test_visual_candidate_has_design_source_without_auto_adoption(tmp_path
     """成功图片关联本项目和设计任务，旧设计与全局资产不被改写。"""
     async with database(tmp_path) as sessions:
         async with sessions.begin() as db:
-            db.add(Provider(id='provider', name='OpenAI', base_url='https://example.invalid/v1', api_key='test'))
+            db.add(Provider(id='provider', provider_key='openai', name='OpenAI', base_url='https://example.invalid/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='image-model', name='gpt-image-1', category='image', provider_id='provider'))
             await db.flush()

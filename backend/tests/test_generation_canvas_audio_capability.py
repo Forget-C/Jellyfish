@@ -9,8 +9,8 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 async def test_audio_declarations_do_not_open_unconnected_reference_input(canvas_client, canvas_file_store):
     async with canvas_file_store['sessions']() as db:
         db.add_all([
-            Provider(id='ark', name='volcengine', base_url='https://ark.example.test', api_key='test-key'),
-            Provider(id='vidu', name='vidu', base_url='https://vidu.example.test'),
+            Provider(id='ark', provider_key='volcengine', name='volcengine', base_url='https://ark.example.test', api_key='test-key'),
+            Provider(id='vidu', provider_key='vidu', name='vidu', base_url='https://vidu.example.test'),
         ])
         await db.flush()
         db.add_all([

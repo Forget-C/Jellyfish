@@ -262,7 +262,7 @@ async def test_expanding_retained_result_scope_rechecks_model_capability(runtime
         finally:
             worker.text_pool.shutdown(wait=False)
     async with runtime.sessions.begin() as db:
-        db.add(Provider(id='kling-provider', name='kling', api_key='test', base_url='https://test.invalid'))
+        db.add(Provider(id='kling-provider', provider_key='kling', name='kling', api_key='test', base_url='https://test.invalid'))
         await db.flush()
         db.add(Model(id='text-only-video', name='kling-3.0-turbo', category='video', provider_id='kling-provider', params={}))
 

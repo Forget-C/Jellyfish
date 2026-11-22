@@ -29,7 +29,7 @@ async def test_media_submission_records_project_for_history_filter():
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with sessions() as db:
-            db.add(Provider(id="provider", name="Vidu", base_url="https://example.invalid", api_key="test"))
+            db.add(Provider(id="provider", provider_key='vidu', name="Vidu", base_url="https://example.invalid", api_key="test"))
             db.add(Project(id="p1", name="project", style="realistic"))
             await db.flush()
             db.add(Model(id="model", name="viduq2", category="video", provider_id="provider"))
@@ -67,7 +67,7 @@ async def test_image_submission_accepts_direct_and_remote_providers(provider_nam
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with sessions() as db:
-            db.add(Provider(id="provider", name=provider_name, base_url="https://example.invalid",
+            db.add(Provider(id="provider", provider_key=provider_name.lower(), name=provider_name, base_url="https://example.invalid",
                             image_base_url="https://images.invalid", api_key="test-secret"))
             db.add(ExperimentSession(id="session", lab_type="image"))
             db.add(FileItem(id="input", type="image", name="reference", storage_key="input.png"))
@@ -168,7 +168,7 @@ async def test_script_submission_reuses_active_task_and_keeps_single_input():
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with sessions() as db:
-            db.add(Provider(id="provider", name="OpenAI", base_url="https://example.invalid", api_key="test-secret"))
+            db.add(Provider(id="provider", provider_key='openai', name="OpenAI", base_url="https://example.invalid", api_key="test-secret"))
             await db.flush()
             db.add(Model(id="text-model", name="text-model", category="text", provider_id="provider"))
             await db.flush()

@@ -368,11 +368,11 @@ async def prepare():
         await connection.run_sync(Base.metadata.create_all)
     async with sessions.begin() as db:
         db.add(Project(id=project_id, name='文本流画布项目', style='真人都市'))
-        db.add(Provider(id=provider_id, name='openai', api_key='fixture-private', base_url='https://fixture.test/v1'))
+        db.add(Provider(id=provider_id, provider_key='openai', name='openai', api_key='fixture-private', base_url='https://fixture.test/v1'))
         await db.flush()
         db.add(Model(id=model_id, name=model_id if database_url else 'controlled-text', provider_id=provider_id, category='text', params={'temperature': 0.2}))
         if storyboard_video_fixture or storyboard_design_stacks or os.environ.get('CANVAS_BROWSER_STORYBOARD_REEXTRACT') == '1':
-            db.add(Provider(id='story-video-provider', name='vidu', api_key='test', base_url='https://video.test'))
+            db.add(Provider(id='story-video-provider', provider_key='vidu', name='vidu', api_key='test', base_url='https://video.test'))
             await db.flush()
             db.add(Model(id='story-video-model', name='viduq2', category='video', provider_id='story-video-provider'))
         if os.environ.get('CANVAS_BROWSER_SCENE_OBJECTS') == '1':
@@ -386,7 +386,7 @@ async def prepare():
                 db.add(Model(id=image_model, name='分镜测试图片模型', provider_id=provider_id, category='image'))
                 await db.flush()
             if os.environ.get('CANVAS_BROWSER_STORYBOARD_SCOPE') == '1':
-                db.add(Provider(id='scope-browser-vidu', name='vidu', api_key='fixture', base_url='https://fixture.test/v1'))
+                db.add(Provider(id='scope-browser-vidu', provider_key='vidu', name='Scope video', api_key='fixture', base_url='https://fixture.test/v1'))
                 await db.flush()
                 db.add(Model(id='scope-browser-video', name='viduq2', provider_id='scope-browser-vidu', category='video'))
             db.add(ModelSettings(id=1, default_text_model_id=model_id, default_image_model_id=image_model))

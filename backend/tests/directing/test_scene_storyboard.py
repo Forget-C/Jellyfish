@@ -51,7 +51,7 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
-            db.add(Provider(id='story-provider', name='openai', base_url='https://story.test/v1', api_key='test'))
+            db.add(Provider(id='story-provider', provider_key='openai', name='openai', base_url='https://story.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='story-text', name='text', category='text', provider_id='story-provider'))
         base = '/api/v1/studio/projects/p1/directing/chapters/ch1'
@@ -239,7 +239,7 @@ async def test_storyboard_repairs_the_invalid_design_subject(tmp_path, monkeypat
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
-            db.add(Provider(id='story-subject-provider', name='openai', base_url='https://story.test/v1', api_key='test'))
+            db.add(Provider(id='story-subject-provider', provider_key='openai', name='openai', base_url='https://story.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='story-subject-text', name='text', category='text', provider_id='story-subject-provider'))
         base = '/api/v1/studio/projects/p1/directing/chapters/ch1'
@@ -311,7 +311,7 @@ async def test_default_complete_storyboard_keeps_proposals_distinct_from_source_
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
-            db.add(Provider(id='story-modes-provider', name='openai', base_url='https://story.test/v1', api_key='test'))
+            db.add(Provider(id='story-modes-provider', provider_key='openai', name='openai', base_url='https://story.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='story-modes-text', name='text', category='text', provider_id='story-modes-provider'))
         base = '/api/v1/studio/projects/p1/directing/chapters/ch1'
@@ -399,7 +399,7 @@ async def test_reextract_requires_confirmed_revised_scene_and_undo_restores_sour
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = old
-            db.add(Provider(id='story-provider', name='openai', base_url='https://story.test/v1', api_key='test'))
+            db.add(Provider(id='story-provider', provider_key='openai', name='openai', base_url='https://story.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='story-text', name='text', category='text', provider_id='story-provider'))
 

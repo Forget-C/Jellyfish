@@ -4,7 +4,6 @@ from app.core.contracts.video_generation import AudioCapability
 from app.core.integrations.image_capabilities import resolve_image_capability, DEFAULT_VIDEO_REFERENCE_RATIO_SIZE_MAP
 from app.core.integrations.video_capabilities import resolve_video_capability
 from app.core.integrations.video_adapter_usage import resolve_video_adapter_usage
-from app.services.llm.provider_registry import resolve_provider_key_from_name
 from app.models.llm import Model, Provider
 from app.schemas.generation_canvas import CanvasModelCapability, ModelCard
 from app.services.common import get_or_404
@@ -14,7 +13,7 @@ async def model_capability(db: AsyncSession, model_id: str) -> CanvasModelCapabi
     """选定模型的真实选项；文本 DTO 只接收文本，没有逐卡参数覆盖。"""
     model = await get_or_404(db, Model, model_id, detail='Model not found')
     provider = await get_or_404(db, Provider, model.provider_id, detail='Provider not found')
-    key = resolve_provider_key_from_name(provider.name)
+    key = provider.provider_key
     result = CanvasModelCapability(model_id=model.id, modality=model.category, input_ports=['text'])
     if model.category != 'video':
         result.native_audio_output = AudioCapability(declaration='unsupported')

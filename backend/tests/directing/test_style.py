@@ -98,7 +98,7 @@ async def test_style_rules_are_frozen_for_design_and_image_requests(tmp_path):
 
     async with database(tmp_path) as sessions:
         async with sessions.begin() as db:
-            db.add(Provider(id='style-provider', name='OpenAI', base_url='https://example.invalid/v1', api_key='test'))
+            db.add(Provider(id='style-provider', provider_key='openai', name='OpenAI', base_url='https://example.invalid/v1', api_key='test'))
             await db.flush()
             db.add_all([Model(id='text-style', name='qwen-test', category='text', provider_id='style-provider'),
                         Model(id='image-style', name='gpt-image-1', category='image', provider_id='style-provider')])

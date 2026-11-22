@@ -196,7 +196,7 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
 
         monkeypatch.setitem(app.dependency_overrides, get_db, test_db)
         async with sessions.begin() as db:
-            db.add(Provider(id="test-lab", name="Vidu" if modality == "video" else "OpenAI",
+            db.add(Provider(id="test-lab", provider_key="vidu" if modality == "video" else "openai", name="Vidu" if modality == "video" else "OpenAI",
                             base_url="https://example.invalid", api_key="private-key"))
             db.add(FileItem(id="input", type="image", name="参考图", storage_key="input.png"))
             await db.flush()

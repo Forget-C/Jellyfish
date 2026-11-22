@@ -72,7 +72,7 @@ async def test_dynamic_image_run_freezes_actual_file_after_selection_is_cleared(
             model = await db.get(Model, runtime.model_id)
             model.category, model.name, model.params = 'video', 'doubao-seedance', {}
             provider_config = await db.get(Provider, runtime.provider_id)
-            provider_config.name = 'volcengine'
+            provider_config.provider_key = 'volcengine'
         runtime.document['cards'][0].update(id='video', type='model.video', config={'ratio': '16:9', 'seconds': 5})
     async with runtime.sessions.begin() as db:
         db.add(Chapter(id='chapter', project_id=runtime.project_id, index=1, title='相遇'))

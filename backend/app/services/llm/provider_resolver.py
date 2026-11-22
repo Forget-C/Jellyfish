@@ -11,7 +11,6 @@ from app.services.llm.provider_bootstrap import bootstrap_builtin_providers
 from app.services.llm.provider_registry import (
     get_provider_spec,
     is_provider_category_supported,
-    resolve_provider_key_from_name,
 )
 
 
@@ -58,7 +57,7 @@ def resolve_provider_config_from_provider(
 ) -> ResolvedProviderConfig:
     bootstrap_builtin_providers()
     _validate_provider_status(provider)
-    provider_key = resolve_provider_key_from_name(provider.name)
+    provider_key = provider.provider_key
     if not is_provider_category_supported(provider_key, category):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -72,6 +71,9 @@ def resolve_provider_config_from_provider(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Provider api_key is empty for provider_id={provider.id}",
         )
+
+    if spec.requires_api_secret and not (provider.api_secret or "").strip():
+        raise HTTPException(503, f"Provider api_secret is empty for provider_id={provider.id}")
 
     base_url = resolve_effective_base_url(
         provider=provider,
@@ -93,7 +95,7 @@ def resolve_effective_base_url(
 ) -> str | None:
     """按类别解析 Provider 实际 base_url：类别覆盖 > 通用 > 内置默认。"""
     bootstrap_builtin_providers()
-    key = provider_key or resolve_provider_key_from_name(provider.name)
+    key = provider_key or provider.provider_key
     spec = get_provider_spec(key)
     common_base = (provider.base_url or "").strip()
     image_base = (provider.image_base_url or "").strip()

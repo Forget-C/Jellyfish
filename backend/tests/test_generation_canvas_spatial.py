@@ -135,7 +135,7 @@ async def test_actual_worker_receives_complete_spatial_design_with_explicit_ance
             model = await db.get(Model, runtime.model_id)
             model.name, model.category, model.params = 'doubao-seedance', 'video', {}
             provider = await db.get(Provider, runtime.provider_id)
-            provider.name = 'volcengine'
+            provider.provider_key = 'volcengine'
     source = lambda card, port, **extra: {'canvas_id': runtime.canvas_id, 'card_id': card, 'port_id': port, 'position': 0, **extra}
     doc = runtime.document
     doc.update(cards=[{'id': 'person', 'type': 'content.character', 'object_id': 'alice', 'name': '小雪', 'text': '秘密外貌描述'},

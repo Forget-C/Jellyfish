@@ -68,6 +68,7 @@ def _seed_provider(db: _FakeLlmDB, provider_id: str = "p-1") -> Provider:
     now = datetime.now(UTC)
     obj = Provider(
         id=provider_id,
+        provider_key='openai',
         name="OpenAI",
         base_url="https://api.openai.com/v1",
         api_key="secret",
@@ -84,7 +85,7 @@ def _seed_provider(db: _FakeLlmDB, provider_id: str = "p-1") -> Provider:
 
 def _seed_video_model(db: _FakeLlmDB, *, provider_id: str = "p-video", model_id: str = "m-video") -> None:
     provider = _seed_provider(db, provider_id)
-    provider.name = "OpenAI"
+    provider.provider_key = 'openai'
     db.models[model_id] = Model(
         id=model_id,
         name="sora-mini",
@@ -96,7 +97,7 @@ def _seed_video_model(db: _FakeLlmDB, *, provider_id: str = "p-video", model_id:
 
 def _seed_image_model(db: _FakeLlmDB, *, provider_id: str = "p-image", model_id: str = "m-image") -> None:
     provider = _seed_provider(db, provider_id)
-    provider.name = "火山引擎"
+    provider.provider_key = 'volcengine'
     db.models[model_id] = Model(
         id=model_id,
         name="seedream-4.0",
@@ -121,7 +122,8 @@ def test_create_provider_returns_created_envelope(client: TestClient) -> None:
             "/api/v1/llm/providers",
             json={
                 "id": "p-create",
-                "name": "OpenAI",
+                "provider_key": "openai",
+                "name": " Studio ",
                 "base_url": "https://api.openai.com/v1",
                 "api_key": "secret",
                 "api_secret": "",
@@ -138,7 +140,8 @@ def test_create_provider_returns_created_envelope(client: TestClient) -> None:
     assert body["code"] == 201
     assert body["message"] == "success"
     assert body["data"]["id"] == "p-create"
-    assert body["data"]["name"] == "OpenAI"
+    assert body["data"]["name"] == "Studio"
+    assert body["data"]["provider_key"] == "openai"
     assert body["data"]["base_url"] == "https://api.openai.com/v1"
     assert "api_key" not in body["data"]
 
@@ -249,7 +252,7 @@ def test_get_vidu_model_catalog_returns_importable_official_models(client: TestC
     """Vidu 目录端点应返回无需浏览器持有密钥的官方可导入模型清单。"""
     db = _FakeLlmDB()
     provider = _seed_provider(db, "p-vidu-catalog")
-    provider.name = "Vidu"
+    provider.provider_key = 'vidu'
     provider.base_url = "https://api.vidu.cn"
     llm_app.dependency_overrides[get_db] = _override_db(db)
     try:
@@ -304,3 +307,41 @@ def test_get_image_generation_options_returns_ratio_size_profiles(client: TestCl
     assert body["data"]["default_resolution_profile"] == "standard"
     assert body["data"]["ratio_size_profiles"]["16:9"]["standard"] == "2848x1600"
     assert body["data"]["ratio_size_profiles"]["16:9"]["high"] == "4096x2304"
+
+
+@pytest.mark.asyncio
+async def test_config_names_are_unique_per_provider_across_requests(tmp_path):
+    import asyncio
+
+    from httpx import ASGITransport, AsyncClient
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from app.core.db import Base
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'providers.db'}")
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def db_session():
+        async with sessions.begin() as session:
+            yield session
+
+    app = build_llm_only_app()
+    app.dependency_overrides[get_db] = db_session
+    path = '/api/v1/llm/providers'
+    base = dict(provider_key='openai', base_url='https://proxy.test/v1')
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as http:
+            results = await asyncio.gather(
+                http.post(path, json=dict(base, id='first', name='Prod')),
+                http.post(path, json=dict(base, id='second', name=' prod ')),
+            )
+            assert sorted(r.status_code for r in results) == [201, 409]
+            assert (await http.post(path, json=dict(base, id='third', name='Test'))).status_code == 201
+            assert (await http.patch(path + '/third', json={'name': 'PROD'})).status_code == 409
+            assert (await http.patch(path + '/third', json={'provider_key': 'vidu'})).status_code == 422
+            assert (await http.post(path, json=dict(base, id='other', name='Prod', provider_key='vidu'))).status_code == 201
+            for invalid in [{'name': ' '}, {'provider_key': 'unknown'}, {'base_url': 'invalid'}]:
+                assert (await http.post(path, json={**base, 'id': 'invalid', 'name': 'Test', **invalid})).status_code == 422
+    finally:
+        await engine.dispose()

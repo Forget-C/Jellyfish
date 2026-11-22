@@ -8,7 +8,7 @@ import type { ProviderStatus } from './ProviderStatus';
  */
 export type ProviderUpdate = {
     /**
-     * 供应商名称
+     * 配置名称
      */
     name?: (string | null);
     /**

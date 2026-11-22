@@ -41,7 +41,7 @@ async def test_storyboard_stack_changes_require_exact_review_and_restore_as_one_
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
-            db.add(Provider(id='story-provider', name='openai', base_url='https://story.test/v1', api_key='test'))
+            db.add(Provider(id='story-provider', provider_key='openai', name='openai', base_url='https://story.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='story-text', name='text', category='text', provider_id='story-provider'))
 

@@ -8,7 +8,11 @@ import type { ProviderStatus } from './ProviderStatus';
  */
 export type ProviderRead = {
     /**
-     * 供应商名称
+     * 供应商稳定键
+     */
+    provider_key: string;
+    /**
+     * 配置名称
      */
     name: string;
     /**

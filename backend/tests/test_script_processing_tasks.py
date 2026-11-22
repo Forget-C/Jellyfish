@@ -30,7 +30,7 @@ async def test_script_submission_keeps_single_input_and_reuses_only_active_task(
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with sessions() as db:
-            db.add(Provider(id="provider", name="OpenAI", api_key="test-secret", base_url="https://example.invalid"))
+            db.add(Provider(id="provider", provider_key='openai', name="OpenAI", api_key="test-secret", base_url="https://example.invalid"))
             db.add(Project(id="project-1", name="project", style="guoman", visual_style="anime"))
             await db.flush()
             db.add(Chapter(id="chapter-1", project_id="project-1", index=1, title="chapter"))

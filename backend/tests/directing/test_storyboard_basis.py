@@ -35,7 +35,7 @@ async def test_confirmed_storyboard_basis_is_rechecked_then_frozen(tmp_path, mon
     monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
-            db.add(Provider(id='basis-provider', name='openai', base_url='https://story.test/v1', api_key='test'))
+            db.add(Provider(id='basis-provider', provider_key='openai', name='openai', base_url='https://story.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='basis-model', name='text', category='text', provider_id='basis-provider'))
 

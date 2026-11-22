@@ -95,7 +95,7 @@ async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_
             model = await db.get(Model, runtime.model_id)
             model.name, model.category, model.params = 'doubao-seedance', 'video', {}
             provider = await db.get(Provider, runtime.provider_id)
-            provider.name = 'volcengine'
+            provider.provider_key = 'volcengine'
     source = lambda card, port, **extra: {'canvas_id': runtime.canvas_id, 'card_id': card, 'port_id': port, 'position': 0, **extra}
     doc = runtime.document
     doc.update(cards=[{'id': 'criterion', 'type': 'direction.criterion', 'criterion_id': 'hand', 'name': '手部验收', 'standard': {'state': 'fact', 'text': '提交时标准：手与钥匙清晰可见', 'authorship': 'model', 'source_locator': '原文提取定位'}},

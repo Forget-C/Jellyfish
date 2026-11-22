@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.utils import apply_keyword_filter, apply_order, paginate
@@ -37,7 +38,6 @@ from app.services.llm.provider_registry import (
     get_provider_spec,
     is_provider_category_supported,
     list_registered_providers,
-    resolve_provider_key_from_name,
 )
 from app.bootstrap import bootstrap_all_registries
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
@@ -97,21 +97,34 @@ async def create_provider(
         detail=entity_already_exists("Provider"),
         status_code=400,
     )
-    return await create_and_refresh(
-        db,
-        Provider(
-            id=body.id,
-            name=body.name,
-            base_url=body.base_url,
-            image_base_url=body.image_base_url,
-            video_base_url=body.video_base_url,
-            api_key=body.api_key,
-            api_secret=body.api_secret,
-            description=body.description,
-            status=body.status,
-            created_by=body.created_by,
-        ),
+    bootstrap_all_registries()
+    if body.provider_key not in {spec.key for spec in list_registered_providers()}:
+        raise HTTPException(422, "Unsupported provider_key")
+    provider = Provider(
+        provider_key=body.provider_key,
+        id=body.id,
+        name=body.name,
+        base_url=body.base_url,
+        image_base_url=body.image_base_url,
+        video_base_url=body.video_base_url,
+        api_key=body.api_key,
+        api_secret=body.api_secret,
+        description=body.description,
+        status=body.status,
+        created_by=body.created_by,
     )
+    db.add(provider)
+    return await _save_provider(db, provider)
+
+
+async def _save_provider(db: AsyncSession, provider: Provider) -> Provider:
+    try:
+        return await flush_and_refresh(db, provider)
+    except IntegrityError as exc:
+        reason = str(exc.orig)
+        if "uq_provider_config_name" in reason or "providers.provider_key, providers.name" in reason:
+            raise HTTPException(409, "Provider configuration name already exists") from exc
+        raise
 
 
 async def get_provider(
@@ -132,7 +145,7 @@ async def update_provider(
     """更新供应商。"""
     provider = await get_or_404(db, Provider, provider_id, detail=entity_not_found("Provider"))
     patch_model(provider, body.model_dump(exclude_unset=True))
-    return await flush_and_refresh(db, provider)
+    return await _save_provider(db, provider)
 
 
 async def delete_provider(
@@ -152,7 +165,7 @@ async def get_provider_model_catalog(
     """刷新指定 Provider 的可导入模型目录，密钥仅用于后端出站请求。"""
     provider = await get_or_404(db, Provider, provider_id, detail=entity_not_found("Provider"))
     bootstrap_all_registries()
-    provider_key = resolve_provider_key_from_name(provider.name)
+    provider_key = provider.provider_key
     spec = get_provider_spec(provider_key)
     # 使用一个已支持类别触发统一的状态和密钥校验；目录请求始终走通用 Base URL。
     resolved = resolve_provider_config_from_provider(
@@ -384,7 +397,7 @@ async def get_video_generation_options(
 
     model = await get_or_404(db, Model, resolved_model_id, detail=entity_not_found("Model"))
     provider = await get_or_404(db, Provider, model.provider_id, detail=entity_not_found("Provider"))
-    provider_key = resolve_provider_key_from_name(provider.name)
+    provider_key = provider.provider_key
     capability = resolve_video_capability(provider=provider_key, model=model.name)
     allowed_ratios = sorted(capability.allowed_ratios or {"16:9"})
     default_ratio = resolve_default_ratio(provider=provider_key, model=model.name) or allowed_ratios[0]
@@ -426,7 +439,7 @@ async def get_image_generation_options(
 
     model = await get_or_404(db, Model, model_id, detail=entity_not_found("Model"))
     provider = await get_or_404(db, Provider, model.provider_id, detail=entity_not_found("Provider"))
-    provider_key = resolve_provider_key_from_name(provider.name)
+    provider_key = provider.provider_key
     capability = resolve_image_capability(provider=provider_key, model=model.name)
     ratio_size_profiles = capability.ratio_size_profiles or DEFAULT_VIDEO_REFERENCE_RATIO_SIZE_MAP
     supported_ratios = sorted(capability.supported_ratios or ratio_size_profiles.keys())
@@ -467,7 +480,7 @@ def _ensure_provider_supports_category(*, provider: Provider, category: ModelCat
         if isinstance(category, ModelCategoryKey)
         else ModelCategoryKey((str(category or "")).strip().lower())
     )
-    provider_key = resolve_provider_key_from_name(provider.name)
+    provider_key = provider.provider_key
     if not is_provider_category_supported(provider_key, normalized_category):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

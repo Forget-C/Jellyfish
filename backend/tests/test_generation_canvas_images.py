@@ -205,11 +205,11 @@ async def test_remote_image_submission_and_every_poll_use_frozen_route_after_edi
     await image_card(runtime, 1)
     async with runtime.sessions.begin() as db:
         provider = await db.get(Provider, runtime.provider_id)
-        provider.name = 'vidu'
+        provider.provider_key = 'vidu'
     accepted, preview = await accept(runtime)
     async with runtime.sessions.begin() as db:
         provider = await db.get(Provider, runtime.provider_id)
-        provider.api_key, provider.base_url, provider.name = 'changed-secret', 'https://changed.test', 'openai'
+        provider.api_key, provider.base_url, provider.provider_key = 'changed-secret', 'https://changed.test', 'openai'
         model = await db.get(Model, runtime.model_id)
         model.name, model.params = 'changed-image', {'seed': 44}
     runtime.document['cards'][0]['config']['count'] = 2

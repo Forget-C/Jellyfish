@@ -34,7 +34,7 @@ async def test_scene_canvas_summaries_keep_pending_and_adopted_sources_separate(
     monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
-            db.add(Provider(id='summary-provider', name='openai', base_url='https://story.test/v1', api_key='test'))
+            db.add(Provider(id='summary-provider', provider_key='openai', name='openai', base_url='https://story.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='summary-text', name='text', category='text', provider_id='summary-provider'))
 
@@ -152,7 +152,7 @@ async def test_scene_canvas_and_task_order_with_same_second_admissions(tmp_path,
     monkeypatch.setattr('app.services.task_service.uuid4', lambda: SimpleNamespace(hex=next(task_ids)))
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
-            db.add(Provider(id='summary-order-provider', name='openai', base_url='https://story.test/v1', api_key='test'))
+            db.add(Provider(id='summary-order-provider', provider_key='openai', name='openai', base_url='https://story.test/v1', api_key='test'))
             await db.flush()
             db.add(Model(id='summary-order-text', name='text', category='text', provider_id='summary-order-provider'))
 

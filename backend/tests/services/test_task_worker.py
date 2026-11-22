@@ -51,7 +51,7 @@ async def test_worker_restart_polls_original_id_without_new_submission(monkeypat
     monkeypatch.setattr("app.services.generation.media_execution.storage.upload_file", upload)
     try:
         async with sessions() as db:
-            db.add(Provider(id="provider", name="Vidu", api_key="test", base_url="https://provider.invalid"))
+            db.add(Provider(id="provider", provider_key='vidu', name="Vidu", api_key="test", base_url="https://provider.invalid"))
             db.add(ExperimentSession(id="session", lab_type="video"))
             await db.flush()
             db.add(Model(id="model", provider_id="provider", category="video", name="viduq2"))
@@ -88,7 +88,7 @@ async def test_worker_restart_polls_original_id_without_new_submission(monkeypat
 async def _seed_text_task(sessions):
     """创建有完整供应商配置的文本任务，测试不会发起真实生成。"""
     async with sessions() as db:
-        db.add(Provider(id="text-provider", name="OpenAI", api_key="test", base_url="https://provider.invalid"))
+        db.add(Provider(id="text-provider", provider_key='openai', name="OpenAI", api_key="test", base_url="https://provider.invalid"))
         db.add(ExperimentSession(id="text-session", lab_type="text"))
         await db.flush()
         db.add(Model(id="text-model", provider_id="text-provider", category="text", name="text-model"))
