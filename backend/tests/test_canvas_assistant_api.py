@@ -187,3 +187,48 @@ async def test_can_stop_request_before_first_assistant_reply(canvas_client, monk
     assert len(history['turns']) == 1
     assert history['turns'][0]['stopped'] and not history['turns'][0]['reply']
     assert (await canvas_client.post(assistant, json=message)).json()['data'] == history['turns'][0]
+
+
+@pytest.mark.asyncio
+async def test_resending_interrupted_assistant_turn_continues_completed_tool_step(canvas_client, monkeypatch):
+    calls = []
+    real_send = httpx.AsyncClient.send
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await real_send(client, request, **kwargs)
+        body = json.loads(request.content)
+        called_tool = any(item['role'] == 'tool' for item in body['messages'])
+        calls.append(called_tool)
+        if not called_tool:
+            answer = {'role': 'assistant', 'tool_calls': [{
+                'id': 'read-context', 'type': 'function',
+                'function': {'name': 'read_canvas_context', 'arguments': '{}'},
+            }]}
+        elif len(calls) == 2:
+            raise RuntimeError('disconnected after completed tool step')
+        else:
+            answer = {'role': 'assistant', 'content': '已从中断处继续'}
+        return httpx.Response(200, request=request, json={
+            'id': 'result', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+            'choices': [{'index': 0, 'finish_reason': 'stop' if called_tool else 'tool_calls', 'message': answer}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    async with canvas_client.canvas_sessions.begin() as db:
+        provider = await db.get(Provider, 'canvas-provider')
+        provider.api_key = 'local-test-key'
+        model = await db.get(Model, 'canvas-text')
+        model.capability_profile = {'tool_calling': {'declaration': 'supported'}}
+        model.params = {**model.params, 'max_retries': 0}
+        db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
+
+    canvas = (await canvas_client.post('/canvases', json={'name': '自由画布'})).json()['data']
+    assistant = f"/canvases/{canvas['id']}/assistant"
+    command = {'request_id': 'resume-turn', 'text': '分析画布', 'context': {
+        'draft': canvas['document'], 'revision': canvas['revision'], 'scope': 'canvas',
+    }}
+    assert (await canvas_client.post(assistant, json=command)).status_code == 502
+    assert (await canvas_client.get(assistant)).json()['data']['turns'] == []
+    assert (await canvas_client.post(assistant, json=command)).json()['data']['reply'] == '已从中断处继续'
+    assert calls == [False, True, True]

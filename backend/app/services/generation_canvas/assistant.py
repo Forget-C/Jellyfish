@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from langchain.agents.middleware import wrap_model_call
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool
+from pydantic import ValidationError
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,7 +19,10 @@ from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.models.llm import ModelCategoryKey
 from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
                                           CanvasAssistantModelSelection, CanvasAssistantReadContext, CanvasAssistantSkillUse)
+from app.schemas.canvas_assistant_edit import CanvasAssistantProposal
+from app.schemas.canvas_assistant_layout import CanvasAssistantLayout
 from app.schemas.generation_canvas import CanvasDocument
+from app.services.generation_canvas.assistant_checkpoint import CanvasCheckpointer, CheckpointMediaUnavailable
 from app.services.generation_canvas.assistant_context import resolve_assistant_context
 from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
 from app.services.generation_canvas.assistant_approval import automatic_approval_allowed
@@ -218,7 +222,14 @@ class CanvasAssistant:
         now = datetime.now(UTC).replace(tzinfo=None)
         if session.pending_until is not None and session.pending_until > now:
             raise HTTPException(409, 'Canvas assistant is already replying')
-        model, provider, capability = await self._resolve_model(session.model_id, needs_context=context is not None)
+        request = command.model_dump(mode='json')
+        pending = session.pending_request
+        resuming = pending is not None and pending['command']['request_id'] == command.request_id
+        if resuming and (pending['command'] != request or pending['context'] != context):
+            raise HTTPException(409, 'Request already used for a different assistant message')
+        model, provider, capability = await self._resolve_model(
+            pending['model_id'] if resuming else session.model_id, needs_context=context is not None,
+        )
         model_id = model.id
         client = await self._model_client(model, provider, capability)
         messages = []
@@ -232,7 +243,10 @@ class CanvasAssistant:
         token = uuid4().hex
         session.pending_token = token
         session.pending_until = now + timedelta(seconds=TURN_LEASE_SECONDS)
-        session.pending_request = {'command': command.model_dump(mode='json'), 'model_id': model_id, 'context': context}
+        session.pending_request = {'command': request, 'model_id': model_id, 'context': context}
+        if not resuming:
+            session.pending_checkpoint = None
+        snapshot = session.pending_checkpoint
         # Keep database locks away from provider I/O. The short lease serializes
         # turns for this conversation and can expire after an interrupted process.
         await self.db.commit()
@@ -245,8 +259,10 @@ class CanvasAssistant:
                 client, messages, CanvasAssistantReadContext.model_validate(context) if context else None,
                 edit_draft, supports_tools=capability.tool_calling, structure_tool=structure_tool,
                 layout_draft=layout_draft,
+                checkpoint=CanvasCheckpointer(self.db, canvas_id, command.request_id, token, snapshot, content),
             )
         except HTTPException:
+            await self.db.rollback()
             await self.db.execute(update(CanvasAssistantSession).where(
                 CanvasAssistantSession.canvas_id == canvas_id, CanvasAssistantSession.pending_token == token,
             ).values(pending_token=None, pending_until=None))
@@ -332,6 +348,7 @@ class CanvasAssistant:
     async def _reply(client, messages, context: CanvasAssistantReadContext | None,
                      edit_draft: CanvasAssistantEditDraft | None, *, supports_tools: bool, structure_tool=None,
                      layout_draft: CanvasAssistantLayoutDraft | None = None,
+                     checkpoint: CanvasCheckpointer | None = None,
                      ) -> tuple[str, list[CanvasAssistantSkillUse]]:
         @tool
         def read_canvas_context() -> str:
@@ -367,12 +384,18 @@ class CanvasAssistant:
                          '等待用户确认和编辑器回执，禁止提议期间声称已完成。')
         agent = create_deep_agent(
             model=client, middleware=[canvas_tools_only({entry.name for entry in tools})], tools=tools,
+            checkpointer=checkpoint,
             system_prompt=('你是 Jellyfish 的画布助手。使用用户的语言回答影视创作问题。'
                            '生成由画布服务核对用户授权并显示真实状态，请以状态为准。') + guidance,
         )
         try:
             async with asyncio.timeout(MODEL_DEADLINE_SECONDS):
-                state = await agent.ainvoke({'messages': messages})
+                if checkpoint is None:
+                    state = await agent.ainvoke({'messages': messages})
+                else:
+                    state = await CanvasAssistant._resume_reply(
+                        agent, checkpoint, messages, used_skills, edit_draft, layout_draft,
+                    )
         except HTTPException:
             raise
         except Exception as exc:
@@ -386,3 +409,42 @@ class CanvasAssistant:
         if not reply:
             raise HTTPException(502, 'Canvas assistant model returned an empty response')
         return reply, list(used_skills.values())
+
+
+    @staticmethod
+    async def _resume_reply(agent, checkpoint, messages, skills, edits, layout):
+        config = checkpoint.config
+        try:
+            prior = await agent.aget_state(config)
+        except CheckpointMediaUnavailable:
+            # The current request still has its own scoped inputs. Never carry a
+            # previous media observation across a changed or missing attachment.
+            checkpoint.delete_thread(config['configurable']['thread_id'])
+            prior = await agent.aget_state(config)
+        if prior.values:
+            _restore_tool_receipts(prior.values.get('messages', ()), skills, edits, layout)
+        if prior.values and not prior.next:
+            state = prior.values
+        else:
+            state = await agent.ainvoke(None if prior.values else {'messages': messages}, config, durability='sync')
+        _restore_tool_receipts(state['messages'], skills, edits, layout)
+        return state
+
+
+def _restore_tool_receipts(messages, skills, edits, layout):
+    """Recreate in-memory tool receipts when resuming a completed read-only step."""
+    for message in messages:
+        if not isinstance(message, ToolMessage) or message.status != 'success' or not isinstance(message.content, str):
+            continue
+        try:
+            if message.name == 'load_canvas_skill':
+                skill = CanvasAssistantSkillUse.model_validate_json(message.content)
+                skills[skill.id] = skill
+            elif edits and message.name in {
+                'propose_canvas_edit', 'propose_canvas_edit_groups', 'propose_canvas_structure', 'propose_canvas_removal',
+            }:
+                edits.proposal = CanvasAssistantProposal.model_validate_json(message.content)
+            elif layout and message.name == 'propose_canvas_layout':
+                layout.proposal = CanvasAssistantLayout.model_validate_json(message.content)
+        except ValidationError:
+            continue
