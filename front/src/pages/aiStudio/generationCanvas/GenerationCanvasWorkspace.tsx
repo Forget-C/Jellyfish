@@ -99,6 +99,8 @@ export function GenerationCanvasWorkspace({
   targetRun, targetNode, targetCheck: checkCardId, targetReport: checkReportId, onCloseRunHistory, layoutPolicy,
 }: GenerationCanvasWorkspaceProps) {
   const uiText = useUiText()
+  const [assistantHistoryTarget, setAssistantHistoryTarget] = useState<{ canvasId: string, runId: string }>()
+  const assistantRun = assistantHistoryTarget?.canvasId === canvasId ? assistantHistoryTarget?.runId : undefined
   const toolbar = useRef<HTMLElement>(null)
   useEffect(() => {
     const element = toolbar.current
@@ -219,7 +221,8 @@ export function GenerationCanvasWorkspace({
         {renderSceneActions?.({ ...management, document, prepareReview: editor.prepareReview,
           applyReview: editor.applyReviewedCandidate, reloadReview: editor.reload,
           editable: management.editable && !editor.recovery && !editor.conflict && !editor.initialApplying })}
-        {document && <RunHistory onClose={() => onCloseRunHistory?.()} key={document.id} runs={runtime.snapshot.runs} targetRun={targetRun} targetNode={targetNode}
+        {document && <RunHistory onClose={() => { setAssistantHistoryTarget(undefined); onCloseRunHistory?.() }}
+          key={document.id} runs={runtime.snapshot.runs} targetRun={assistantRun ?? targetRun} targetNode={assistantRun ? undefined : targetNode}
           disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onSelectVideoFrame={selectVideoFrame} onCancel={runtime.cancel} cancelling={runtime.cancelling} />}
         <CanvasAppearancePicker compact />
         <TaskCenter workbench />
@@ -273,6 +276,7 @@ export function GenerationCanvasWorkspace({
           disabled: uncreated || runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => { if (!promptEditors.size) void runtime.precheck(cardId) } }} /></PromptEditingActiveContext.Provider></PromptDraftContext.Provider></PromptEditingContext.Provider>
       {canvasId && current.id === canvasId && !uncreated &&
         <CanvasAssistant key={scope} canvasId={canvasId} projectId={projectId}
+          openRun={runId => setAssistantHistoryTarget({ canvasId, runId })}
           approvalDisabled={!!promptEditors.size || !ownership.editable || !!editor.recovery || editor.conflict}
           approve={async sourceId => {
             if (promptEditors.size || !ownership.canEdit()) return false

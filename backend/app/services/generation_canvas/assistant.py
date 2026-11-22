@@ -21,6 +21,9 @@ from app.schemas.canvas_assistant import (CanvasAssistantExchange, CanvasAssista
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.assistant_context import resolve_assistant_context
 from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
+from app.services.generation_canvas.assistant_generation import (
+    freeze_generation_basis, generation_authorization, read_generation, update_generation_for_decision,
+)
 from app.services.generation_canvas.assistant_media import (
     describe_assistant_media, resolve_assistant_media, retain_assistant_media,
 )
@@ -63,9 +66,14 @@ class CanvasAssistant:
         await self.store.get(canvas_id)
         session = await self.db.get(CanvasAssistantSession, canvas_id)
         return CanvasAssistantHistory(
-            turns=[CanvasAssistantExchange.model_validate(turn) for turn in await self._turns(canvas_id)],
+            turns=[await self._exchange(turn) for turn in await self._turns(canvas_id)],
             model_id=session.model_id if session else None,
         )
+
+    async def _exchange(self, turn: CanvasAssistantTurn) -> CanvasAssistantExchange:
+        exchange = CanvasAssistantExchange.model_validate(turn)
+        exchange.generation = await read_generation(self.db, turn.canvas_id, turn.request_id)
+        return exchange
 
     async def set_model(self, canvas_id: str, choice: CanvasAssistantModelSelection) -> CanvasAssistantModelSelection:
         """Persist a conversation-only model choice after checking its text capability."""
@@ -126,7 +134,7 @@ class CanvasAssistant:
             if (previous.text != command.text or previous.context != context
                     or previous.revises != command.revises or attached_ids != command.attachment_file_ids):
                 raise HTTPException(409, 'Request already used for a different assistant message')
-            return CanvasAssistantExchange.model_validate(previous)
+            return await self._exchange(previous)
 
         revised_proposal = await self._revised_proposal(canvas_id, command.revises, edit_draft)
         now = datetime.now(UTC).replace(tzinfo=None)
@@ -176,6 +184,7 @@ class CanvasAssistant:
                 await self.db.commit()
                 raise
             revised_proposal.proposal = {**revised_proposal.proposal, 'state': 'superseded'}
+            await update_generation_for_decision(self.db, canvas_id, command.revises, 'superseded')
         session.sequence += 1
         await retain_assistant_media(self.db, self.store.project_id, canvas_id, sources)
         turn = CanvasAssistantTurn(
@@ -186,7 +195,15 @@ class CanvasAssistant:
         )
         self.db.add(turn)
         await self.db.flush()
-        return CanvasAssistantExchange.model_validate(turn)
+        if context:
+            canvas = await self.store.get(canvas_id)
+            authorization = generation_authorization(turn, CanvasDocument.model_validate(canvas.document), canvas.revision)
+            if authorization is not None:
+                self.db.add(authorization)
+                await self.db.flush()
+                if authorization.state == 'queued':
+                    await freeze_generation_basis(self.db, self.store.project_id, authorization)
+        return await self._exchange(turn)
 
     async def _revised_proposal(self, canvas_id, source_id, edit_draft, *, lock=False):
         if source_id is None:
@@ -219,7 +236,8 @@ class CanvasAssistant:
                          '仅询问创作方法时只给建议。工具只预览，需用户确认，禁止声称已写入。')
         agent = create_deep_agent(
             model=client, middleware=[canvas_tools_only({entry.name for entry in tools})], tools=tools,
-            system_prompt='你是 Jellyfish 的画布助手。使用用户的语言回答影视创作问题。' + guidance,
+            system_prompt=('你是 Jellyfish 的画布助手。使用用户的语言回答影视创作问题。'
+                           '生成由画布服务核对用户授权并显示真实状态，请以状态为准。') + guidance,
         )
         try:
             async with asyncio.timeout(MODEL_DEADLINE_SECONDS):

@@ -169,6 +169,8 @@ export type { CameraShot_Output } from './models/CameraShot_Output';
 export type { CanvasAssistantAttachment } from './models/CanvasAssistantAttachment';
 export type { CanvasAssistantDraftContext } from './models/CanvasAssistantDraftContext';
 export type { CanvasAssistantExchange } from './models/CanvasAssistantExchange';
+export type { CanvasAssistantGenerationRead } from './models/CanvasAssistantGenerationRead';
+export type { CanvasAssistantGenerationVersion } from './models/CanvasAssistantGenerationVersion';
 export type { CanvasAssistantHistory } from './models/CanvasAssistantHistory';
 export type { CanvasAssistantMessage } from './models/CanvasAssistantMessage';
 export type { CanvasAssistantModelSelection } from './models/CanvasAssistantModelSelection';
