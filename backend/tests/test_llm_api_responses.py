@@ -398,6 +398,7 @@ def test_provider_call_once(client, monkeypatch, status, payload, outcome):
     ("kling", "image", "/v1/images/generations", {"data": {"task_id": "job"}}, "accepted"),
     ("kling", "video", "/text-to-video/custom", {"code": 400, "data": {"task_id": "job"}}, "rejected"),
     ("kling", "video", "/text-to-video/custom", {"id": "outer", "data": {"task_status": "FAIL"}}, "rejected"),
+    ("vidu", "video", "/ent/v2/text2video", {"task_id": "job", "state": "failure"}, "rejected"),
     ("openai", "image", "/images/generations", {"data": [{"b64_json": "T0s="}]}, "unverified"),
     ("openai", "video", "/videos", None, "unknown"),
 ])

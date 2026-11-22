@@ -98,7 +98,7 @@ def _output_outcome(key, category, data):
         if key == "kling":
             containers.extend([data.get("data"), data.get("task")])
         tasks = [item for item in containers if isinstance(item, dict)]
-        failure_states = {"failed", "fail", "error", "cancelled", "canceled", "expired"}
+        failure_states = {"failed", "fail", "failure", "error", "cancelled", "canceled", "expired"}
         if any(str(task.get(field, "")).strip().lower() in failure_states
                for task in tasks for field in ("status", "state", "task_status")):
             return "rejected"
