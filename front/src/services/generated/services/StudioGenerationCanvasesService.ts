@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ApiResponse_CanvasAssistantExchange_ } from '../models/ApiResponse_CanvasAssistantExchange_';
+import type { ApiResponse_CanvasAssistantHistory_ } from '../models/ApiResponse_CanvasAssistantHistory_';
 import type { ApiResponse_CanvasCardOutputs_ } from '../models/ApiResponse_CanvasCardOutputs_';
 import type { ApiResponse_CanvasCatalog_ } from '../models/ApiResponse_CanvasCatalog_';
 import type { ApiResponse_CanvasCheckPreview_ } from '../models/ApiResponse_CanvasCheckPreview_';
@@ -22,6 +24,7 @@ import type { ApiResponse_list_CanvasCheckReportRead__ } from '../models/ApiResp
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_CanvasSummary__ } from '../models/ApiResponse_PaginatedData_CanvasSummary__';
 import type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from '../models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
+import type { CanvasAssistantMessage } from '../models/CanvasAssistantMessage';
 import type { CanvasCheckRecheckRequest } from '../models/CanvasCheckRecheckRequest';
 import type { CanvasCheckRequest } from '../models/CanvasCheckRequest';
 import type { CanvasCreate } from '../models/CanvasCreate';
@@ -246,6 +249,64 @@ export class StudioGenerationCanvasesService {
             },
             errors: {
                 409: `Conflict`,
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Assistant History
+     * Read the saved conversation for the requested canvas.
+     * @returns ApiResponse_CanvasAssistantHistory_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantHistory({
+        canvasId,
+        projectId = '',
+    }: {
+        canvasId: string,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantHistory_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant',
+            path: {
+                'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Send Assistant Message
+     * Send a turn, replaying the receipt when the request already succeeded.
+     * @returns ApiResponse_CanvasAssistantExchange_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantSend({
+        canvasId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        requestBody: CanvasAssistantMessage,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantExchange_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant',
+            path: {
+                'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
                 422: `Validation Error`,
             },
         });

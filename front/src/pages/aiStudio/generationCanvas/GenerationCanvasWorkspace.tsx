@@ -12,6 +12,7 @@ import type { GenerationCanvasLayoutPolicy } from './generationLayout'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
 import { RunPreview } from './RunPreview'
 import { RunHistory } from './RunHistory'
+import { CanvasAssistant } from './CanvasAssistant'
 import { SaveVideoFrameDialog, type VideoFrameSource } from './SaveVideoFrameDialog'
 import { CanvasAppearancePicker } from '../../../components/workbench/CanvasAppearancePicker'
 import { WorkbenchTheme } from '../../../components/workbench/WorkbenchTheme'
@@ -264,6 +265,8 @@ export function GenerationCanvasWorkspace({
         }))}
         runtime={{ outputs: runtime.snapshot.current_outputs, outputsVerified: runtime.outputsVerified, runs: runtime.snapshot.runs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
           disabled: uncreated || runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => { if (!promptEditors.size) void runtime.precheck(cardId) } }} /></PromptEditingActiveContext.Provider></PromptEditingContext.Provider>
+      {canvasId && current.id === canvasId && !uncreated &&
+        <CanvasAssistant key={scope} canvasId={canvasId} projectId={projectId} />}
     </div>}
   </section></WorkbenchDetailsProvider></WorkbenchTheme>
 }

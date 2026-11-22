@@ -1,0 +1,73 @@
+.canvas-assistant-dock {
+  position: absolute;
+  z-index: 45;
+  inset-block-start: 50%;
+  inset-inline-end: 12px;
+  display: flex;
+  align-items: center;
+  transform: translateY(-50%);
+}
+
+.canvas-assistant-panel {
+  position: absolute;
+  inset-inline-end: calc(100% + 8px);
+  inline-size: min(340px, calc(100vw - 70px));
+  block-size: min(540px, max(220px, calc(100dvh - 175px)));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--wb-text);
+  background: var(--wb-surface);
+  border: 1px solid var(--wb-border);
+  border-radius: var(--wb-radius);
+  box-shadow: 0 8px 24px var(--wb-light-shadow, #0005);
+}
+
+.canvas-assistant-header,
+.canvas-assistant-composer {
+  padding: 8px 12px;
+}
+
+.canvas-assistant-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-block-end: 1px solid var(--wb-border);
+}
+
+.canvas-assistant-history {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding-inline: 12px;
+}
+
+.canvas-assistant-turn {
+  display: grid;
+  gap: 8px;
+  margin-block-end: 12px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.canvas-assistant-question {
+  padding: 8px;
+  border-radius: var(--wb-radius);
+  background: var(--wb-raised);
+}
+
+.canvas-assistant-composer {
+  display: grid;
+  gap: 8px;
+  border-block-start: 1px solid var(--wb-border);
+}
+
+.canvas-assistant-composer .wb-action {
+  justify-self: end;
+}
+
+@media (max-width: 540px) {
+  .canvas-assistant-panel {
+    inline-size: calc(100vw - 122px);
+  }
+}
