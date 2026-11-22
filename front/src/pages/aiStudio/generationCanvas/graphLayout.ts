@@ -2,7 +2,7 @@ import type { CanvasPoint, CanvasTransform } from '../../../components/canvas/ge
 
 export type GraphSize = { width: number; height: number }
 export type GraphLayoutNode = { id: string; group?: string; size?: GraphSize }
-export type GraphView = { transform: CanvasTransform; positions: Record<string, CanvasPoint>; sizes: Record<string, GraphSize>; layoutVersion?: number; manuallyPlaced?: string[] }
+export type GraphView = { transform: CanvasTransform; positions: Record<string, CanvasPoint>; sizes: Record<string, GraphSize>; layoutVersion?: number; manuallyPlaced?: string[]; assistantReceipts?: string[] }
 export type GraphArrange = (nodes: GraphLayoutNode[], sizes: Record<string, GraphSize>, viewportWidth: number,
   anchor: string, retained?: Record<string, CanvasPoint>, previousSizes?: Record<string, GraphSize>) => Record<string, CanvasPoint>
 
@@ -16,7 +16,8 @@ export function readGraphView(raw: string | null): GraphView | undefined {
     if (!Object.values(value.sizes).every((size: any) => size && Number.isFinite(size.width) && size.width >= 32 && size.width <= 4000 && Number.isFinite(size.height) && size.height >= 32 && size.height <= 4000)) return
     return { transform: value.transform, positions: value.positions, sizes: value.sizes,
       layoutVersion: Number.isInteger(value.layoutVersion) && value.layoutVersion > 0 ? value.layoutVersion : undefined,
-      manuallyPlaced: Array.isArray(value.manuallyPlaced) ? value.manuallyPlaced.filter((id: unknown) => typeof id === 'string') : [] }
+      manuallyPlaced: Array.isArray(value.manuallyPlaced) ? value.manuallyPlaced.filter((id: unknown) => typeof id === 'string') : [],
+      assistantReceipts: Array.isArray(value.assistantReceipts) ? value.assistantReceipts.filter((id: unknown) => typeof id === 'string') : undefined }
   } catch { return }
 }
 

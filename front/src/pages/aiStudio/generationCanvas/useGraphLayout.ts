@@ -115,6 +115,25 @@ export function useGraphLayout(scope: GraphLayoutScope | undefined, nodes: Graph
     return view ? { ...previous, undo: previous.view, view, ready: true } : previous
   })
   const applyArrangement = (view: GraphView) => setState(previous => ({ ...previous, view, undo: undefined, ready: true }))
+  // The local receipt and its coordinates land in one write before the server can mark the command complete.
+  const applyAssistantView = (id: string, view: GraphView): boolean => {
+    const current = latest.current
+    if (current.key !== key || !current.ready) return false
+    const assistantReceipts = [...new Set([...(current.view.assistantReceipts || []), id])]
+    const next = pruneGraphView({ ...view, assistantReceipts }, new Set(latestScope.current?.validIds))
+    try { localStorage.setItem(key, JSON.stringify({ schema: 1, ...next })) } catch {
+      latestScope.current?.onStorageError?.('浏览器存储不可用，布局仅在本次会话保留')
+      return false
+    }
+    memory.set(key, next)
+    const updated = { ...current, view: next, ready: true, undo: undefined }
+    latest.current = updated
+    setState(updated)
+    return true
+  }
+  const restoreAssistantView = (view: GraphView) => setView(previous => ({
+    ...previous, positions: view.positions, manuallyPlaced: view.manuallyPlaced,
+  }))
   const undo = () => setState(previous => previous.undo ? { ...previous, view: pruneGraphView(previous.undo, new Set(scope?.validIds)), undo: undefined } : previous)
-  return { view: state.view, ready: state.ready && state.key === key, setView, move, arrangedView, applyArrangement, rearrange, undo, canUndo: !!state.undo }
+  return { view: state.view, ready: state.ready && state.key === key, setView, move, arrangedView, applyArrangement, applyAssistantView, restoreAssistantView, rearrange, undo, canUndo: !!state.undo }
 }

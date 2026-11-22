@@ -13,6 +13,8 @@ from app.services.generation_canvas.store import CanvasStore
 from app.services.generation_canvas.capabilities import model_capability
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposalDecision, CanvasAssistantProposalResult
 from app.services.generation_canvas.assistant import CanvasAssistant
+from app.schemas.canvas_assistant_layout import CanvasAssistantLayout, CanvasAssistantLayoutDecision
+from app.services.generation_canvas.assistant_layout import decide_assistant_layout
 from app.services.generation_canvas.assistant_generation import decide_assistant_generation_edit
 
 router = APIRouter()
@@ -95,6 +97,14 @@ async def decide_assistant_proposal(canvas_id: str, source_id: str, body: Canvas
                                     project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """Approve a saved preview through the existing canvas save transaction, or reject it."""
     return success_response(await decide_assistant_generation_edit(db, project_id, canvas_id, source_id, body))
+
+
+@router.post('/{canvas_id}/assistant/layout/{source_id}', response_model=ApiResponse[CanvasAssistantLayout],
+             operation_id='canvas_assistant_decide_layout')
+async def decide_layout(canvas_id: str, source_id: str, body: CanvasAssistantLayoutDecision,
+                        project_id: str = '', db: AsyncSession = Depends(get_db)):
+    """Approve a local layout or record the editing browser's result."""
+    return success_response(await decide_assistant_layout(db, project_id, canvas_id, source_id, body.action))
 
 
 @router.put('/{canvas_id}', response_model=ApiResponse[CanvasSaved], operation_id='canvas_save',

@@ -35,4 +35,6 @@ def resolve_assistant_context(canvas: GenerationCanvas, request: CanvasAssistant
     return CanvasAssistantReadContext(
         revision=request.revision, scope=request.scope, target_card_ids=targets,
         cards=[cards[card_id].model_dump(mode='json') for card_id in adopted],
+        layout_positions={card_id: request.layout_positions[card_id] for card_id in targets
+                          if card_id in request.layout_positions} if request.layout_positions is not None else None,
     )
