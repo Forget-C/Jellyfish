@@ -32,6 +32,7 @@ const settings = {
   id: 1, default_text_model_id: model.id, default_image_model_id: null, default_video_model_id: null,
 }
 let defaultSaveFails = true
+let defaultOptionsFail = false
 let editFails = true
 let deleteFails = true
 let deleteRequests = 0
@@ -94,7 +95,7 @@ try {
       await initialLoad
       const query = Object.fromEntries(searchParams)
       loadedQueries.push(query)
-      if (listFails) return route.fulfill({ status: 500, json: { message: '读取失败' } })
+      if (listFails || defaultOptionsFail) return route.fulfill({ status: 500, json: { message: '读取失败' } })
       const matching = rows.filter(row =>
         (!query.category || row.category === query.category) && (!query.q || row.name.includes(query.q)))
       const start = (Number(query.page) - 1) * Number(query.page_size)
@@ -106,9 +107,10 @@ try {
     if (pathname.endsWith('/supported')) return respond([{ key: 'openai', display_name: 'OpenAI', supported_categories: ['text', 'image', 'video'] }])
     if (pathname.endsWith('/model-settings')) {
       if (route.request().method() === 'PUT') {
-        assert.deepEqual(route.request().postDataJSON(), { default_image_model_id: 'image105' })
+        const body = route.request().postDataJSON()
+        assert.deepEqual(body, { default_image_model_id: settings.default_image_model_id === 'image105' ? null : 'image105' })
         if (defaultSaveFails) return route.fulfill({ status: 500, json: { message: '保存失败' } })
-        settings.default_image_model_id = 'image105'
+        settings.default_image_model_id = body.default_image_model_id
       }
       return respond(settings)
     }
@@ -191,27 +193,66 @@ try {
   omitTotal = false
 
   const defaults = page.getByRole('button', { name: '默认模型', exact: true })
+  defaultOptionsFail = true
   await defaults.click()
-  const defaultDrawer = page.getByRole('dialog').filter({ hasText: '全局默认模型' })
-  const imageDefault = defaultDrawer.getByRole('combobox', { name: '默认图片生成' })
+  const defaultModal = page.getByRole('dialog', { name: '全局默认模型' })
+  const checkDefaultModalLayout = async (viewportWidth, viewportHeight) => {
+    await defaultModal.waitFor()
+    await defaultModal.evaluate(async dialog => {
+      await Promise.all(dialog.getAnimations().map(animation => animation.finished))
+    })
+    const box = await defaultModal.boundingBox()
+    const width = Math.min(viewportWidth - 32, 480)
+    assert.ok(Math.abs(box.width - width) <= 1, JSON.stringify(box))
+    assert.ok(Math.abs(box.x - (viewportWidth - width) / 2) <= 1, JSON.stringify(box))
+    assert.ok(Math.abs(box.y + box.height / 2 - viewportHeight / 2) <= 2, JSON.stringify(box))
+  }
+  await checkDefaultModalLayout(1440, 900)
+  const imageChoice = { name: '图片生成' }
+  const imageDefault = defaultModal.getByRole('combobox', imageChoice)
+  const optionsError = defaultModal.getByRole('alert').filter({ hasText: '默认模型选项读取失败' })
+  await optionsError.waitFor()
+  assert.ok(await imageDefault.isDisabled())
+  defaultOptionsFail = false
+  await optionsError.getByRole('button', { name: /重\s*试/ }).click()
+  await optionsError.waitFor({ state: 'hidden' })
   const targetOption = page.getByText('验收图片模型 105 · 验收供应商（OpenAI）', { exact: true })
+  await imageDefault.fill('验收图片模型 105')
+  await targetOption.waitFor()
+  await page.keyboard.press('Escape')
+  await targetOption.waitFor({ state: 'hidden' })
+  await defaultModal.waitFor()
   await imageDefault.fill('验收图片模型 105')
   await targetOption.click()
   await page.getByText('更新默认模型失败').waitFor()
   assert.equal(settings.default_image_model_id, null)
-  await defaultDrawer.getByText('选择默认图片生成', { exact: true }).waitFor()
+  await defaultModal.getByText('选择图片生成', { exact: true }).waitFor()
   defaultSaveFails = false
   await imageDefault.fill('验收图片模型 105')
   await targetOption.click()
-  await defaultDrawer.getByTitle('验收图片模型 105 · 验收供应商（OpenAI）', { exact: true }).waitFor()
-  await defaultDrawer.getByRole('button', { name: 'Close' }).focus()
+  await defaultModal.getByTitle('验收图片模型 105 · 验收供应商（OpenAI）', { exact: true }).waitFor()
+  await defaultModal.getByRole('button', { name: 'Close' }).focus()
   await page.keyboard.press('Escape')
-  await defaultDrawer.waitFor({ state: 'hidden' })
+  await defaultModal.waitFor({ state: 'hidden' })
   await defaults.and(page.locator(':focus')).waitFor()
   assert.equal(await search.inputValue(), '供应商未找到')
   await search.fill('验收图片模型 105')
   const defaultRow = page.getByRole('row').filter({ hasText: '验收图片模型 105' })
   await defaultRow.getByText('默认', { exact: true }).waitFor()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await defaults.click()
+  await checkDefaultModalLayout(390, 844)
+  await defaultModal.getByTitle('验收图片模型 105 · 验收供应商（OpenAI）', { exact: true }).waitFor()
+  const imageSelect = defaultModal.locator('.ant-select').filter({ has: page.getByRole('combobox', imageChoice) })
+  await imageSelect.hover()
+  await imageSelect.locator('.ant-select-clear').click()
+  await defaultModal.getByText('选择图片生成', { exact: true }).waitFor()
+  assert.equal(settings.default_image_model_id, null)
+  await page.mouse.click(4, 4)
+  await defaultModal.waitFor({ state: 'hidden' })
+  await defaults.and(page.locator(':focus')).waitFor()
+  await defaultRow.getByText('默认', { exact: true }).waitFor({ state: 'hidden' })
+  await page.setViewportSize({ width: 1440, height: 900 })
 
   omitTotal = false
   await search.fill('验收文本模型')

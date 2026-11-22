@@ -14,7 +14,7 @@ import {
   Typography,
   Tree,
   Dropdown,
-  Drawer,
+  ConfigProvider,
   Modal,
   Form,
   Select,
@@ -53,6 +53,7 @@ import {
 
 const PAGE_SIZE = 20
 const OPTIONS_PAGE_SIZE = 100
+const defaultModelTheme = { components: { Select: { controlHeight: 36 } } }
 const DEFAULT_MODEL_FIELD_BY_CATEGORY = {
   text: 'default_text_model_id',
   image: 'default_image_model_id',
@@ -102,7 +103,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
   const defaultSaveInFlight = useRef(false)
   const defaultTrigger = useRef<HTMLButtonElement | null>(null)
   const [savingDefaultCategory, setSavingDefaultCategory] = useState<ModelCategoryKey | null>(null)
-  const [defaultModelsDrawerOpen, setDefaultModelsDrawerOpen] = useState(false)
+  const [defaultModelsModalOpen, setDefaultModelsModalOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'updated' | 'name' | 'category'>('updated')
@@ -215,7 +216,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
   }, [modelSettingsRevision])
 
   useEffect(() => {
-    if (!defaultModelsDrawerOpen) return
+    if (!defaultModelsModalOpen) return
     let active = true
     setDefaultOptionsLoading(true)
     setDefaultOptionsFailed(false)
@@ -228,7 +229,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
         if (active) setDefaultOptionsLoading(false)
       })
     return () => { active = false }
-  }, [defaultModelsDrawerOpen, defaultOptionsRevision])
+  }, [defaultModelsModalOpen, defaultOptionsRevision])
 
 
   const renderDefaultModel = (model: ModelRead) => {
@@ -521,9 +522,9 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
           }}>
             <Button icon={<DownOutlined />}>{uiText("排序：{{label}}", { label: uiText(SORT_OPTIONS.find(option => option.value === sortBy)?.label ?? '') })}</Button>
           </Dropdown>
-          <Button ref={defaultTrigger} aria-label={uiText("默认模型")} icon={<SettingOutlined />} onClick={() => {
+          <Button ref={defaultTrigger} aria-label={uiText("默认模型")} aria-haspopup="dialog" icon={<SettingOutlined />} onClick={() => {
             setDefaultOptionsLoading(true)
-            setDefaultModelsDrawerOpen(true)
+            setDefaultModelsModalOpen(true)
           }}>{uiText("默认模型")}</Button>
           {result && <span className="management-count">
             {result.total === undefined ? uiText("已加载 {{length}} 个模型", { length: result.models.length }) : uiText("共 {{total}} 个模型", { total: result.total })}
@@ -575,28 +576,26 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
         </div>}
       </WorkspaceScrollPanel>
 
-      <Drawer
-        className="app-detail-drawer"
-        title={<h2 className="m-0 text-base font-semibold">{uiText("全局默认模型")}</h2>}
-        placement="right"
-        open={defaultModelsDrawerOpen}
+      <Modal
+        title={uiText("全局默认模型")}
+        centered
+        footer={null}
+        focusTriggerAfterClose={false}
+        open={defaultModelsModalOpen}
         keyboard={savingDefaultCategory === null}
         maskClosable={savingDefaultCategory === null}
         closable={savingDefaultCategory === null}
-        onClose={() => {
-          if (!defaultSaveInFlight.current) setDefaultModelsDrawerOpen(false)
+        onCancel={() => {
+          if (!defaultSaveInFlight.current) setDefaultModelsModalOpen(false)
         }}
         afterOpenChange={open => {
           if (!open) requestAnimationFrame(() => defaultTrigger.current?.focus({ preventScroll: true }))
         }}
-        width="min(100vw, 400px)"
+        width="min(480px, calc(100vw - 32px))"
       >
-        <Alert
-          type="info"
-          showIcon
-          className="mb-5"
-          message={uiText("默认模型用于未显式指定模型的生成请求；修改会立即生效。")}
-        />
+        <Typography.Paragraph type="secondary" className="text-[13px]">
+          {uiText("生成时未指定模型，将使用以下默认值。修改后立即生效。")}
+        </Typography.Paragraph>
         <div className="space-y-4">
           {modelSettingsFailed && <Alert
             type="error"
@@ -612,7 +611,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
           />}
           {MODEL_CATEGORIES.map(category => {
             const defaultId = modelSettings?.[DEFAULT_MODEL_FIELD_BY_CATEGORY[category.key]]
-            const label = uiText("默认{{label}}", { label: uiText(category.label) })
+            const label = uiText(category.label)
             const options = defaultOptions.filter(model => model.category === category.key).map(model => ({
               label: `${model.name} · ${getProviderName(model.provider_id)}`,
               value: model.id,
@@ -622,25 +621,27 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
             }
             return (
               <div key={category.key}>
-                <div className="mb-1.5 text-sm font-medium text-gray-700">{label}</div>
-                <Select<string | null>
-                  aria-label={label}
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  className="w-full"
-                  value={defaultId ?? null}
-                  placeholder={defaultId === undefined ? uiText("未知") : uiText("选择{{label}}", { label })}
-                  loading={modelSettingsLoading || defaultOptionsLoading || savingDefaultCategory === category.key}
-                  disabled={modelSettingsLoading || defaultOptionsLoading || modelSettingsFailed || defaultOptionsFailed || savingDefaultCategory !== null}
-                  options={options}
-                  onChange={modelId => void updateDefaultModel(category.key, modelId ?? undefined)}
-                />
+                <div className="mb-1.5 text-[13px] font-medium">{label}</div>
+                <ConfigProvider theme={defaultModelTheme}>
+                  <Select<string | null>
+                    aria-label={label}
+                    allowClear
+                    showSearch
+                    optionFilterProp="label"
+                    className="w-full"
+                    value={defaultId ?? null}
+                    placeholder={defaultId === undefined ? uiText("未知") : uiText("选择{{label}}", { label })}
+                    loading={modelSettingsLoading || defaultOptionsLoading || savingDefaultCategory === category.key}
+                    disabled={modelSettingsLoading || defaultOptionsLoading || modelSettingsFailed || defaultOptionsFailed || savingDefaultCategory !== null}
+                    options={options}
+                    onChange={modelId => void updateDefaultModel(category.key, modelId ?? undefined)}
+                  />
+                </ConfigProvider>
               </div>
             )
           })}
         </div>
-      </Drawer>
+      </Modal>
 
       {modelEditorOpen && <ResourceEditorFrame id="model-editor-drawer" className="settings-create-drawer" open drawer drawerWidth={720}
         title={modelEditing ? uiText("编辑模型") : uiText("添加模型")} backLabel={uiText("返回")} onClose={requestClose}

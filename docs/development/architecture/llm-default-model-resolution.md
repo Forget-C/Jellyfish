@@ -19,7 +19,7 @@
 
 ## 管理入口
 
-- 默认模型仍仅通过 `LLM Model Settings` 接口维护（`/api/v1/llm/model-settings`），管理 UI 通过“模型”页的“默认模型”按钮打开“全局默认模型”抽屉。
+- 默认模型仍仅通过 `LLM Model Settings` 接口维护（`/api/v1/llm/model-settings`），管理 UI 通过“模型”页的“默认模型”按钮打开“全局默认模型”弹窗。
 - 模型页按 text / image / video 展示可选模型，并可独立更新各类别的默认模型；这不会修改模型实体本身。
 - “运行设置”页仅维护 API 超时与日志级别，避免将全局运行参数混入单个模型配置。
 
