@@ -88,3 +88,31 @@
     inline-size: calc(100vw - 122px);
   }
 }
+
+.canvas-assistant-proposal {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  margin-top: 8px;
+  border: 1px solid var(--wb-border);
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+
+.canvas-assistant-proposal dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 8px;
+  margin: 0;
+}
+
+.canvas-assistant-proposal dd {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.canvas-assistant-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}

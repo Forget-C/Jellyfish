@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CanvasAssistantProposal } from './CanvasAssistantProposal';
 import type { CanvasAssistantReadContext } from './CanvasAssistantReadContext';
 /**
  * A completed turn in the order visible to the user.
@@ -13,4 +14,6 @@ export type CanvasAssistantExchange = {
     sequence: number;
     model_id: string;
     reply: string;
+    proposal?: (CanvasAssistantProposal | null);
+    revises?: (string | null);
 };

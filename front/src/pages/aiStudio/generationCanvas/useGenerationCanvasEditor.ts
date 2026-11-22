@@ -12,7 +12,7 @@ export const canvasRecoveryKey = (projectId: string, canvasId: string | null) =>
 
 export type StoryboardScope = { chapterId: string; sequenceId: string; taskId: string }
 type SceneChange = StoryboardScope & ({ action: 'apply'; choices: StoryboardApplication } | { action: 'undo' | 'redo' })
-export type PendingSave = CanvasSave & { scene?: SceneChange }
+export type PendingSave = CanvasSave & { scene?: SceneChange; assistantProposalId?: string }
 type StoryboardApplicationReceipt = { taskId: string; before: CanvasDocument }
 export type StoryboardReviewPreparation = { revision: number; appliedTaskId?: string }
 export type CanvasSettingsChanges = Partial<Pick<CanvasDocument, 'name' | 'cover_file_id'>>
@@ -192,6 +192,14 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     s.document = cleaner.current!(next.document); setDocument(s.document); persist(); return 'document' as const
   }
   const send = async (canvas: CanvasRead, command: PendingSave): Promise<CanvasRead> => {
+    if (command.assistantProposalId) {
+      const { data } = await Canvases.canvasAssistantDecideProposal({
+        projectId, canvasId: canvas.id, sourceId: command.assistantProposalId,
+        requestBody: { action: 'approve', expected_revision: command.expected_revision },
+      })
+      if (!data?.canvas || !data.receipt || data.receipt.canvas_id !== canvas.id) throw new Error('invalid assistant edit receipt')
+      return data.canvas
+    }
     const scene = command.scene
     if (scene) {
       if (!sceneSave) throw new Error(uiText("当前画布不支持场次操作"))
@@ -216,7 +224,12 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
           const committed = await send(s.current!, command)
           if (s !== state.current) return false
           if (s.initialBefore) {
-            recordConfirmedSave(command, s.initialBefore, committed.document)
+            if (!command.assistantProposalId || committed.revision === command.expected_revision + 1) {
+              recordConfirmedSave(command, s.initialBefore, committed.document)
+            } else {
+              // An approval replay can return a newer canvas after other edits.
+              history.current = { scope: key, past: [], future: [] }
+            }
             s.document = committed.document
             s.initialBefore = undefined
             setDocument(s.document); setInitialApplying(false)
@@ -257,7 +270,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       let baseline = saved.baseline
       let recovered = saved.document
       const command = saved.pending
-      let staged = !!command && (renameSave(command.request_id) || settingsSave(command.request_id) || initialStoryboardSave(command.request_id) || visualContinuitySave(command.request_id) || !!command.scene)
+      let staged = !!command && (renameSave(command.request_id) || settingsSave(command.request_id) || initialStoryboardSave(command.request_id) || visualContinuitySave(command.request_id) || !!command.scene || !!command.assistantProposalId)
       let recoveredSettings: CanvasSettingsChanges | undefined
       if (command) {
         try {
@@ -443,6 +456,18 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     setInitialApplying(true); persist()
     return save()
   }
+  const commitAssistantProposal = async (sourceId: string) => {
+    const s = state.current
+    if (s.pending?.assistantProposalId === sourceId) return save()
+    const before = await prepareCommittedEdit()
+    if (!before || s !== state.current || !s.document || !ownership.canEdit() || s.pending || s.recovery ||
+      s.conflict || s.scope !== key || inFlight.current || !same(s.document, before.document)) return false
+    s.initialBefore = s.document
+    s.pending = { request_id: crypto.randomUUID(), expected_revision: before.revision, document: s.document,
+      assistantProposalId: sourceId }
+    setInitialApplying(true); persist()
+    return save()
+  }
   const requestLeave = async () => {
     const s = state.current
     if (s.recovery) return false
@@ -477,6 +502,6 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   }
   const past = history.current.past
   const lastChange = history.current.scope === key ? past[past.length - 1] : undefined
-  return { handoffStoryboardApplication, canUndoArrangement: !!lastChange && 'document' in lastChange && !!lastChange.arrangement, saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, storyboardApplication, applyInitialCandidate, applyReviewedCandidate, prepareReview, prepareCommittedEdit, commitVisualContinuity, dirty, error: error === '此画布已不可用' ? uiText(error) : error, storageError: storageError === '本地恢复记录无法读取；未覆盖服务器内容' ? uiText(storageError) : storageError, recovery, conflict, restore, reload, ownership, requestLeave, needsLeaveProtection, renameSceneCanvas, pendingRename, commitSettings, pendingSettings, settingsDraft, clearSettingsDraft: () => setSettingsDraft(undefined),
+  return { handoffStoryboardApplication, canUndoArrangement: !!lastChange && 'document' in lastChange && !!lastChange.arrangement, saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, storyboardApplication, applyInitialCandidate, applyReviewedCandidate, prepareReview, prepareCommittedEdit, commitVisualContinuity, commitAssistantProposal, dirty, error: error === '此画布已不可用' ? uiText(error) : error, storageError: storageError === '本地恢复记录无法读取；未覆盖服务器内容' ? uiText(storageError) : storageError, recovery, conflict, restore, reload, ownership, requestLeave, needsLeaveProtection, renameSceneCanvas, pendingRename, commitSettings, pendingSettings, settingsDraft, clearSettingsDraft: () => setSettingsDraft(undefined),
     undo: () => travel('past'), redo: () => travel('future'), canUndo: history.current.scope === key && !!history.current.past.length, canRedo: history.current.scope === key && !!history.current.future.length }
 }

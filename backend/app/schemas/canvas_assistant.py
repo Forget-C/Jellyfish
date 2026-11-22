@@ -4,6 +4,9 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from app.schemas.canvas_assistant_edit import CanvasAssistantProposal
+
+
 class CanvasAssistantDraftContext(BaseModel):
     """Current visible canvas document and the scope locked at send time."""
 
@@ -40,6 +43,7 @@ class CanvasAssistantMessage(BaseModel):
     request_id: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')]
     text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16000)]
     context: CanvasAssistantDraftContext | None = None
+    revises: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')] | None = None
 
 
 class CanvasAssistantExchange(BaseModel):
@@ -53,6 +57,8 @@ class CanvasAssistantExchange(BaseModel):
     sequence: int
     model_id: str
     reply: str
+    proposal: CanvasAssistantProposal | None = None
+    revises: str | None = None
 
 
 class CanvasAssistantHistory(BaseModel):

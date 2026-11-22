@@ -5,6 +5,7 @@
 import type { ApiResponse_CanvasAssistantExchange_ } from '../models/ApiResponse_CanvasAssistantExchange_';
 import type { ApiResponse_CanvasAssistantHistory_ } from '../models/ApiResponse_CanvasAssistantHistory_';
 import type { ApiResponse_CanvasAssistantModelSelection_ } from '../models/ApiResponse_CanvasAssistantModelSelection_';
+import type { ApiResponse_CanvasAssistantProposalResult_ } from '../models/ApiResponse_CanvasAssistantProposalResult_';
 import type { ApiResponse_CanvasCardOutputs_ } from '../models/ApiResponse_CanvasCardOutputs_';
 import type { ApiResponse_CanvasCatalog_ } from '../models/ApiResponse_CanvasCatalog_';
 import type { ApiResponse_CanvasCheckPreview_ } from '../models/ApiResponse_CanvasCheckPreview_';
@@ -27,6 +28,7 @@ import type { ApiResponse_PaginatedData_CanvasSummary__ } from '../models/ApiRes
 import type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from '../models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
 import type { CanvasAssistantMessage } from '../models/CanvasAssistantMessage';
 import type { CanvasAssistantModelSelection } from '../models/CanvasAssistantModelSelection';
+import type { CanvasAssistantProposalDecision } from '../models/CanvasAssistantProposalDecision';
 import type { CanvasCheckRecheckRequest } from '../models/CanvasCheckRecheckRequest';
 import type { CanvasCheckRequest } from '../models/CanvasCheckRequest';
 import type { CanvasCreate } from '../models/CanvasCreate';
@@ -333,6 +335,40 @@ export class StudioGenerationCanvasesService {
             url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/model',
             path: {
                 'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Decide Assistant Proposal
+     * Approve a saved preview through the existing canvas save transaction, or reject it.
+     * @returns ApiResponse_CanvasAssistantProposalResult_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantDecideProposal({
+        canvasId,
+        sourceId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        requestBody: CanvasAssistantProposalDecision,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantProposalResult_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/proposals/{source_id}',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
             },
             query: {
                 'project_id': projectId,
