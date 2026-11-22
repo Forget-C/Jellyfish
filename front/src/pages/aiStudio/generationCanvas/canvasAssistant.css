@@ -1,6 +1,6 @@
 .canvas-assistant-dock {
   position: absolute;
-  z-index: 45;
+  z-index: 910;
   inset-block-start: 50%;
   inset-inline-end: 12px;
   display: flex;
@@ -24,8 +24,25 @@
 }
 
 .canvas-assistant-header,
+.canvas-assistant-options,
 .canvas-assistant-composer {
   padding: 8px 12px;
+}
+
+.canvas-assistant-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.canvas-assistant-options [role="alert"] {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 540px) {
+  .canvas-assistant-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .canvas-assistant-header {

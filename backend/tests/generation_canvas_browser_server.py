@@ -38,6 +38,9 @@ async def prepare():
             await db.flush()
             db.add(Model(id='browser-assistant-model', name='browser-assistant-model', category='text',
                          provider_id='browser-assistant-provider'))
+            db.add(Model(id='browser-tool-model', name='browser-tool-model', category='text',
+                         provider_id='browser-assistant-provider',
+                         capability_profile={'tool_calling': {'declaration': 'supported'}}))
             await db.flush()
             db.add(ModelSettings(id=1, default_text_model_id='browser-assistant-model'))
 

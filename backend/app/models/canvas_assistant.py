@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,6 +20,7 @@ class CanvasAssistantSession(Base):
     sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     pending_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
     pending_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    model_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class CanvasAssistantTurn(Base):
@@ -38,3 +39,4 @@ class CanvasAssistantTurn(Base):
     model_id: Mapped[str] = mapped_column(String(64), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     reply: Mapped[str] = mapped_column(Text().with_variant(MEDIUMTEXT(), 'mysql'), nullable=False)
+    context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
