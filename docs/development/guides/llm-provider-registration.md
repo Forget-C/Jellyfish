@@ -12,11 +12,11 @@
 ## 与数据库里配置的 Provider 的关系
 
 - **内置注册表**：定义「系统认识哪些供应商 key、类别、默认 URL」，不替代数据库中的 `Provider` 实例（API Key、环境特定 base_url 等仍存 DB）。
-- **用户/运维在 UI 创建的 Provider**：通常应选用 `supported` 列表中的 key或与别名解析一致的名称，以便 `resolve_provider_key_from_name` 能落到统一 key；任务执行时再按 key 查找已注册的适配器。
+- **供应商配置**保存从支持清单选定的 `provider_key`、自定义配置名称、地址和凭据。模型通过配置 ID 绑定，执行时按 `provider_key` 选择适配器。每个供应商可以添加多份配置，同一供应商内的配置名称忽略首尾空格和英文大小写判重。
 
 ### 配置 Vidu
 
-在模型管理中创建 Provider 时，名称填写 `Vidu`（或 `vidu`），`base_url` 填 `https://api.vidu.cn`，并将 Vidu API Key 填入 `api_key`。随后分别创建图片、视频模型并关联该 Provider：
+在模型管理中创建 Provider 时，选择供应商 Vidu，将配置命名为「视频生产」等便于识别的名称，确认预填的 `base_url` 为 `https://api.vidu.cn`，并将 Vidu API Key 填入 `api_key`。随后分别创建图片、视频模型并关联该 Provider：
 
 - 图片：使用 Vidu 文档支持的图片模型名，例如 `viduq2` 或 `viduq1`；`viduq2` 支持纯提示词和 0–7 张参考图。
 - 视频：填写所选 Vidu 视频模型名，例如 `viduq2`、`viduq3` 系列。运行时会按输入选择 `text2video`、`img2video`、`start-end2video` 或 `reference2video`，无需在模型参数中填写端点。
@@ -24,7 +24,7 @@
 
 ### 配置可灵 AI
 
-在模型管理中创建 Provider 时，名称填写“可灵 AI”或 `kling`，并将 API Key 填入 `api_key`；默认 Base URL 为 `https://api-beijing.klingai.com`，通常无需覆盖。可灵当前只登记图片与视频模型：
+在模型管理中创建 Provider 时，选择供应商「可灵 AI」，填写配置名称，并将 API Key 填入 `api_key`；默认 Base URL 为 `https://api-beijing.klingai.com`，通常无需覆盖。可灵当前只登记图片与视频模型：
 
 - 视频：`kling-3.0-turbo`（仅文生视频）或 `kling-3.0`（文生、首帧与首尾帧图生视频）。
 - 图片：`kling-v3`（Kling Image 3.0 Omni）。
