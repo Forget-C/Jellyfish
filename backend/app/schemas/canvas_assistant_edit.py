@@ -26,7 +26,7 @@ class MovementFieldEdit(BaseModel):
 CanvasAssistantEditTarget = Annotated[VideoPromptSegmentEdit | MovementFieldEdit, Field(discriminator='kind')]
 
 
-class CanvasAssistantProposal(BaseModel):
+class CanvasAssistantChange(BaseModel):
     """Preview of one typed change associated with its originating turn."""
 
     card_id: str
@@ -34,7 +34,23 @@ class CanvasAssistantProposal(BaseModel):
     target: CanvasAssistantEditTarget
     before: str
     after: str
-    state: Literal['pending', 'rejected', 'applied', 'superseded'] = 'pending'
+ProposalState = Literal['pending', 'rejected', 'applied', 'superseded']
+
+
+class CanvasAssistantEditGroup(BaseModel):
+    """One selectable group of changes which share an approval decision."""
+
+    id: str
+    title: str
+    edits: list[CanvasAssistantChange]
+    state: ProposalState = 'pending'
+
+
+class CanvasAssistantProposal(CanvasAssistantChange):
+    """A legacy single change or a set of independently selectable groups."""
+
+    state: ProposalState = 'pending'
+    groups: list[CanvasAssistantEditGroup] | None = None
 
 
 class CanvasAssistantProposalDecision(BaseModel):
@@ -43,6 +59,16 @@ class CanvasAssistantProposalDecision(BaseModel):
     model_config = ConfigDict(extra='forbid')
     action: Literal['approve', 'reject']
     expected_revision: int = Field(ge=0)
+    group_ids: list[str] | None = Field(None, min_length=1, max_length=8)
+
+
+class CanvasAssistantEditConflict(BaseModel):
+    """Current field value which prevents a group from being applied."""
+
+    group_id: str
+    card_id: str
+    target: CanvasAssistantEditTarget
+    current: str | None
 
 
 class CanvasAssistantProposalResult(BaseModel):
@@ -51,6 +77,24 @@ class CanvasAssistantProposalResult(BaseModel):
     proposal: CanvasAssistantProposal
     receipt: CanvasSaved | None = None
     canvas: CanvasRead | None = None
+    conflicts: list[CanvasAssistantEditConflict] = Field(default_factory=list)
 
 
 CanvasAssistantEditText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16000)]
+
+
+class ProposedFieldEdit(BaseModel):
+    """Model request to preview one existing field."""
+
+    model_config = ConfigDict(extra='forbid')
+    card_id: str
+    target: CanvasAssistantEditTarget
+    text: CanvasAssistantEditText
+
+
+class ProposedEditGroup(BaseModel):
+    """Model-supplied description of changes which must be applied together."""
+
+    model_config = ConfigDict(extra='forbid')
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    edits: list[ProposedFieldEdit] = Field(min_length=1, max_length=8)

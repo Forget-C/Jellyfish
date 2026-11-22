@@ -274,9 +274,9 @@ export function GenerationCanvasWorkspace({
       {canvasId && current.id === canvasId && !uncreated &&
         <CanvasAssistant key={scope} canvasId={canvasId} projectId={projectId}
           approvalDisabled={!!promptEditors.size || !ownership.editable || !!editor.recovery || editor.conflict}
-          approve={async sourceId => {
+          approve={async (sourceId, groupIds) => {
             if (promptEditors.size || !ownership.canEdit()) return false
-            const saved = await editor.commitAssistantProposal(sourceId)
+            const saved = await editor.commitAssistantProposal(sourceId, groupIds)
             if (saved) runtime.invalidate()
             return saved
           }}

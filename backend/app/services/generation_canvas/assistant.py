@@ -118,7 +118,7 @@ class CanvasAssistant:
             canvas = await self.store.get(canvas_id)
             scoped = resolve_assistant_context(canvas, command.context)
             context = scoped.model_dump(mode='json')
-            if scoped.scope == 'selection' and len(scoped.target_card_ids) == 1:
+            if scoped.target_card_ids:
                 edit_draft = CanvasAssistantEditDraft(scoped, CanvasDocument.model_validate(canvas.document))
         previous = await self.db.get(CanvasAssistantTurn, (canvas_id, command.request_id))
         if previous is not None:
@@ -175,7 +175,11 @@ class CanvasAssistant:
             except HTTPException:
                 await self.db.commit()
                 raise
-            revised_proposal.proposal = {**revised_proposal.proposal, 'state': 'superseded'}
+            superseded = {**revised_proposal.proposal, 'state': 'superseded'}
+            if superseded.get('groups'):
+                superseded['groups'] = [{**group, 'state': 'superseded'} if group['state'] == 'pending'
+                                        else group for group in superseded['groups']]
+            revised_proposal.proposal = superseded
         session.sequence += 1
         await retain_assistant_media(self.db, self.store.project_id, canvas_id, sources)
         turn = CanvasAssistantTurn(
@@ -193,7 +197,10 @@ class CanvasAssistant:
             return None
         turn = await self.db.get(CanvasAssistantTurn, (canvas_id, source_id), with_for_update=lock, populate_existing=lock)
         proposal = turn.proposal if turn else None
-        if not (proposal and proposal['state'] == 'pending' and edit_draft and proposal['card_id'] == edit_draft.card['id']):
+        groups = proposal.get('groups') if proposal else None
+        pending_cards = ({edit['card_id'] for group in groups if group['state'] == 'pending' for edit in group['edits']}
+                         if groups else {proposal['card_id']} if proposal else set())
+        if not (proposal and proposal['state'] == 'pending' and edit_draft and pending_cards.intersection(edit_draft.cards)):
             raise HTTPException(409, 'The assistant proposal can no longer be revised')
         return turn
 
@@ -214,8 +221,10 @@ class CanvasAssistant:
             tools.extend(skill_tools(used_skills))
             guidance += skill_guidance()
         if edit_draft and edit_draft.available:
-            tools.append(edit_draft.tool())
-            guidance += ('只有当前用户明确要求修改或修订建议时，才用 propose_canvas_edit 提出变更。'
+            if len(edit_draft.cards) == 1:
+                tools.append(edit_draft.tool())
+            tools.append(edit_draft.groups_tool())
+            guidance += ('只有当前用户明确要求修改或修订建议时，才用 propose_canvas_edit 或 propose_canvas_edit_groups 提出变更。依赖的改动同组，独立改动分组。'
                          '仅询问创作方法时只给建议。工具只预览，需用户确认，禁止声称已写入。')
         agent = create_deep_agent(
             model=client, middleware=[canvas_tools_only({entry.name for entry in tools})], tools=tools,

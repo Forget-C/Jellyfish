@@ -2,10 +2,11 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CanvasAssistantEditGroup } from './CanvasAssistantEditGroup';
 import type { MovementFieldEdit } from './MovementFieldEdit';
 import type { VideoPromptSegmentEdit } from './VideoPromptSegmentEdit';
 /**
- * Preview of one typed change associated with its originating turn.
+ * A legacy single change or a set of independently selectable groups.
  */
 export type CanvasAssistantProposal = {
     card_id: string;
@@ -14,4 +15,5 @@ export type CanvasAssistantProposal = {
     before: string;
     after: string;
     state?: 'pending' | 'rejected' | 'applied' | 'superseded';
+    groups?: (Array<CanvasAssistantEditGroup> | null);
 };

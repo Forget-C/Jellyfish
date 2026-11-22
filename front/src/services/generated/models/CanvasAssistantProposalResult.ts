@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CanvasAssistantEditConflict } from './CanvasAssistantEditConflict';
 import type { CanvasAssistantProposal } from './CanvasAssistantProposal';
 import type { CanvasRead } from './CanvasRead';
 import type { CanvasSaved } from './CanvasSaved';
@@ -12,4 +13,5 @@ export type CanvasAssistantProposalResult = {
     proposal: CanvasAssistantProposal;
     receipt?: (CanvasSaved | null);
     canvas?: (CanvasRead | null);
+    conflicts?: Array<CanvasAssistantEditConflict>;
 };

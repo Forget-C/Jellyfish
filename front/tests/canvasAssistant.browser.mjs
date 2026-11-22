@@ -50,10 +50,16 @@ const provider = createHttpServer(async (request, response) => {
       const target = card.type === 'direction.movement'
         ? { kind: 'movement_field', field: 'movement_speed' }
         : { kind: 'video_prompt_segment', segment_id: 'text' }
-      answer = { role: 'assistant', tool_calls: [{
-        id: 'proposal', type: 'function', function: { name: 'propose_canvas_edit',
-          arguments: JSON.stringify({ card_id: card.id, target, text: '缓慢推近' }) },
-      }] }
+      const edit = { card_id: card.id, target, text: '缓慢推近' }
+      const operation = card.type === 'direction.movement' ? {
+        name: 'propose_canvas_edit_groups', arguments: JSON.stringify({ groups: [
+          { title: '推进轨迹', edits: [edit, { card_id: card.id,
+            target: { kind: 'movement_field', field: 'movement_path' }, text: '直线' }] },
+          { title: '起点', edits: [{ card_id: card.id,
+            target: { kind: 'movement_field', field: 'movement_start' }, text: '走廊入口' }] },
+        ] }),
+      } : { name: 'propose_canvas_edit', arguments: JSON.stringify(edit) }
+      answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: operation }] }
     } else if (!requestEdit) {
       observed.push(draft)
     }
@@ -220,14 +226,23 @@ try {
       return canvas.project_id ? edited.fields.movement_speed.text : edited.prompt.segments[0].text
     }
     assert.equal(await storedText(), original)
+    if (canvas.project_id) await proposal.getByRole('checkbox', { name: '推进轨迹' }).check()
     await proposal.getByRole('button', { name: '确认写入', exact: true }).click()
     await proposal.getByText('已写入画布', { exact: true }).waitFor()
     assert.equal(await storedText(), '缓慢推近')
+    const storedMovement = async () => (await (await fetch(url)).json()).data.document.cards
+      .find(item => item.id === target).fields
+    if (canvas.project_id) {
+      const fields = await storedMovement()
+      assert.equal(fields.movement_path.text, '直线')
+      assert.notEqual(fields.movement_start.text, '走廊入口')
+    }
     await page.screenshot({ path: join(output, canvas.project_id ? 'assistant-scene-edit.png' : 'assistant-free-edit.png') })
     await panel.getByRole('button', { name: '关闭画布助手' }).click()
     await page.getByRole('button', { name: '撤销操作', exact: true }).click()
     for (let attempt = 0; attempt < 40 && await storedText() !== original; attempt++) await delay(150)
     assert.equal(await storedText(), original, 'one undo restores the saved field')
+    if (canvas.project_id) assert.notEqual((await storedMovement()).movement_path.text, '直线')
   }
   assert.equal(observed.length, 4)
   console.log('Assistant conversation persisted independently on both real canvas entries.')
