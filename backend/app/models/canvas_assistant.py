@@ -48,6 +48,7 @@ class CanvasAssistantTurn(Base):
     attachments: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     approval_audit: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     stopped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    layout: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class CanvasAssistantGeneration(Base):

@@ -2,7 +2,7 @@
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 
 class AddTextCard(BaseModel):
@@ -45,8 +45,24 @@ class ReplaceFirstFrame(AdoptFirstFrame):
     kind: Literal['replace_first_frame'] = Field(json_schema_extra={'enum': ['replace_first_frame']})
 
 
+MovementFieldName = Literal[
+    'movement_type', 'movement_start', 'movement_trigger', 'movement_path', 'movement_speed', 'end_frame'
+]
+
+
+class AdjustShotMovement(BaseModel):
+    """Find and edit the movement design actually adopted by a video card."""
+
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['adjust_shot_movement'] = Field(json_schema_extra={'enum': ['adjust_shot_movement']})
+    card_id: str
+    field: MovementFieldName
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16000)]
+
+
 ProposedStructure = Annotated[
-    AddTextCard | AddModelCard | AddMovementCard | AdoptFirstFrame | ReplaceFirstFrame, Field(discriminator='kind')
+    AddTextCard | AddModelCard | AddMovementCard | AdoptFirstFrame | ReplaceFirstFrame | AdjustShotMovement,
+    Field(discriminator='kind')
 ]
 
 
@@ -69,3 +85,18 @@ class AdoptFirstFrameTarget(BaseModel):
     edge_id: str
     basis: str
     replaces_binding_id: str | None = None
+
+
+
+class AdjustShotMovementTarget(BaseModel):
+    """Approval basis and identities for an edit limited to one shot."""
+
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['adjust_shot_movement'] = Field(json_schema_extra={'enum': ['adjust_shot_movement']})
+    movement_field: MovementFieldName
+    movement_card_id: str
+    binding_id: str
+    connection_id: str
+    basis: str
+    other_consumer_ids: list[str]
+    copy_card_id: str | None = None

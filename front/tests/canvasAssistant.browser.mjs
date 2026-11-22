@@ -44,10 +44,13 @@ const provider = createHttpServer(async (request, response) => {
     const draftText = Array.isArray(turns.at(-1)) ? turns.at(-1)[0]?.text : turns.at(-1)
     const requestDraftCard = draftText?.startsWith('新增潮水文本卡')
     const requestEdit = turns.at(-1) === '把这张卡的推近放慢'
+    const requestLocalMovement = turns.at(-1) === '只把镜头三的推近放慢'
     const reference = Array.isArray(turns.at(-1)) && turns.at(-1).find(block => block.text?.startsWith('参考素材 1 '))
+    const layoutRequest = typeof turns.at(-1) === 'string' && turns.at(-1).startsWith('把布局卡')
     const useSkill = turns.at(-1) === '只从摄影角度看'
     const loaded = messages.some(message => message.role === 'tool' && message.tool_call_id === 'load_canvas_skill')
     const proposed = messages.some(message => message.role === 'tool' && message.tool_call_id === 'proposal')
+    const proposedLayout = messages.some(message => message.role === 'tool' && message.tool_call_id === 'layout')
     let answer = { role: 'assistant', content: requestEdit ? '已给出修改建议' : useSkill ? '建议保持景别，再选择机位。' : '找到原先的草稿' }
     if (!result) {
       answer = { role: 'assistant', tool_calls: [{
@@ -57,6 +60,17 @@ const provider = createHttpServer(async (request, response) => {
       answer = { role: 'assistant', tool_calls: [{
         id: 'load_canvas_skill', type: 'function', function: { name: 'load_canvas_skill',
           arguments: JSON.stringify({ skill_id: 'shot-staging' }) },
+      }] }
+    } else if (layoutRequest && !proposedLayout) {
+      assert.ok(names.includes('propose_canvas_layout'))
+      const card_ids = ['layout-left', 'layout-right']
+      const positions = Object.fromEntries(card_ids.map(id => [id, {
+        x: draft.layout_positions[id].x + 70, y: draft.layout_positions[id].y,
+      }]))
+      answer = { role: 'assistant', tool_calls: [{
+        id: 'layout', type: 'function', function: { name: 'propose_canvas_layout',
+          arguments: JSON.stringify({ card_ids, group_name: turns.at(-1).includes('分组') ? '片头' : undefined,
+            placement: turns.at(-1).includes('整理') ? { kind: 'arrange' } : { kind: 'move', positions } }) },
       }] }
     } else if (requestEdit && !proposed) {
       const card = draft.cards.find(item => item.id === draft.target_card_ids[0])
@@ -77,6 +91,12 @@ const provider = createHttpServer(async (request, response) => {
       answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: {
         name: 'propose_canvas_structure', arguments: JSON.stringify({ change: { kind: 'add_text_card', text: '潮水涌入' } }),
       } }] }
+    } else if (requestLocalMovement && !proposed) {
+      answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: {
+        name: 'propose_canvas_structure', arguments: JSON.stringify({
+          change: { kind: 'adjust_shot_movement', card_id: draft.target_card_ids[0], field: 'movement_speed', text: '缓慢推近' },
+        }),
+      } }] }
     } else if (reference && !proposed) {
       const file = JSON.parse(reference.text.slice('参考素材 1 '.length))
       answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: {
@@ -84,7 +104,7 @@ const provider = createHttpServer(async (request, response) => {
           change: { kind: 'adopt_first_frame', card_id: draft.target_card_ids[0], file_id: file.file_id },
         }),
       } }] }
-    } else if (!requestEdit && !reference) {
+    } else if (!requestEdit && !requestLocalMovement && !reference && !layoutRequest) {
       observed.push(draft)
     }
     response.writeHead(200, { 'Content-Type': 'application/json' })
@@ -196,6 +216,14 @@ try {
       card('target', '已保存正文', true), card('other', '另一个同名模型卡'),
       ...(canvas.project_id ? [{ id: 'camera-movement', type: 'direction.movement',
         fields: { movement_speed: { text: '快速推近' } } }] : [])] }
+    if (canvas.project_id) {
+      for (const shot of ['target', 'other']) {
+        const edgeId = 'shared-movement-' + shot
+        document.edges.push({ id: edgeId, source_card: 'camera-movement', source_port: 'text',
+          target_card: shot, target_port: 'text' })
+        document.input_order[shot] = { text: [edgeId] }
+      }
+    }
     const seeded = await fetch(url, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ request_id: 'scope-fixture', expected_revision: saved.revision, document }),
@@ -267,8 +295,32 @@ try {
     await page.getByRole('button', { name: '撤销操作', exact: true }).click()
     for (let attempt = 0; attempt < 40 && await storedText() !== original; attempt++) await delay(150)
     assert.equal(await storedText(), original, 'one undo restores the saved field')
-    if (canvas.project_id) assert.notEqual((await storedMovement()).movement_path.text, '直线')
-    else {
+    if (canvas.project_id) {
+      assert.notEqual((await storedMovement()).movement_path.text, '直线')
+      await page.locator('[data-card-id="target"]').click()
+      await open()
+      await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('只把镜头三的推近放慢')
+      await panel.getByRole('button', { name: '发送消息' }).click()
+      const isolated = panel.getByRole('region', { name: '修改建议' }).last()
+      await isolated.getByText('新建专属运镜', { exact: true }).waitFor()
+      await isolated.getByText('保留原运镜的卡片', { exact: true }).waitFor()
+      await isolated.getByText('other', { exact: true }).waitFor()
+      await isolated.getByRole('checkbox', { name: '只修改所选镜头的运镜' }).check()
+      await isolated.getByRole('button', { name: '确认写入', exact: true }).click()
+      await isolated.getByText('已写入画布', { exact: true }).waitFor()
+      const shotBindings = async () => {
+        const current = (await (await fetch(url)).json()).data.document
+        return ['target', 'other'].map(id => current.cards.find(card => card.id === id).input_bindings[0].source.card_id)
+      }
+      const [selectedMovement, otherMovement] = await shotBindings()
+      assert.notEqual(selectedMovement, 'camera-movement')
+      assert.equal(otherMovement, 'camera-movement')
+      await page.screenshot({ path: join(output, 'assistant-shared-movement.png') })
+      await panel.getByRole('button', { name: '关闭画布助手' }).click()
+      await page.getByRole('button', { name: '撤销操作', exact: true }).click()
+      for (let attempt = 0; attempt < 40 && (await shotBindings())[0] !== 'camera-movement'; attempt++) await delay(150)
+      assert.deepEqual(await shotBindings(), ['camera-movement', 'camera-movement'])
+    } else {
       await open()
       const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAIAAADZF8uwAAAAF0lEQVR4nGP8z0AYMBGhhmFUEQOdgwAAz+ABFyTybdUAAAAASUVORK5CYII=', 'base64')
       await panel.getByLabel('上传对话参考素材').setInputFiles({ name: '首帧红船.png', mimeType: 'image/png', buffer: png })
@@ -320,6 +372,95 @@ try {
     }
   }
   assert.equal(observed.length, 4)
+  const layoutCanvas = (await (await fetch(canvasApi, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '布局回执' }),
+  })).json()).data
+  const layoutUrl = canvasApi + '/' + layoutCanvas.id
+  const layoutSeed = await fetch(layoutUrl, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request_id: 'layout-fixture', expected_revision: layoutCanvas.revision,
+      document: { ...layoutCanvas.document, cards: [
+        { id: 'layout-left', type: 'content.text' }, { id: 'layout-right', type: 'content.text' },
+      ] } }),
+  })
+  assert.ok(layoutSeed.ok, await layoutSeed.clone().text())
+  const selectLayoutModel = await fetch(layoutUrl + '/assistant/model', {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model_id: 'browser-tool-model' }),
+  })
+  assert.ok(selectLayoutModel.ok, await selectLayoutModel.clone().text())
+  const layoutPath = base + '/canvases/' + layoutCanvas.id
+  await page.goto(layoutPath)
+  const leftCard = page.locator('[data-card-id="layout-left"]')
+  await leftCard.waitFor()
+  const left = async () => Number.parseFloat(await leftCard.evaluate(el => el.style.left))
+  const beforeLayout = await left()
+  assert.ok(Number.isFinite(beforeLayout))
+  await open()
+  const requestLayout = async text => {
+    if (!await panel.getByTitle('审看整张画布', { exact: true }).count()) {
+      await panel.getByTitle('仅对话', { exact: true }).click()
+      await page.locator('.ant-select-item-option').getByText('审看整张画布', { exact: true }).click()
+    }
+    await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill(text)
+    await panel.getByRole('button', { name: '发送消息' }).click()
+    const proposal = panel.getByRole('region', { name: '布局建议' }).last()
+    await proposal.getByRole('button', { name: '确认布局' }).waitFor()
+    return proposal
+  }
+  const groupLayout = await requestLayout('把布局卡分组并向右移')
+  await groupLayout.getByRole('button', { name: '确认布局' }).click()
+  await groupLayout.getByText('布局已执行', { exact: true }).waitFor()
+  assert.equal(await left(), beforeLayout + 70)
+  const readLayoutGroups = async () => (await (await fetch(layoutUrl)).json()).data.document.groups
+  assert.deepEqual((await readLayoutGroups())[0].card_ids, ['layout-left', 'layout-right'])
+  await panel.getByRole('button', { name: '关闭画布助手' }).click()
+  await page.getByRole('button', { name: '撤销操作', exact: true }).click()
+  assert.equal(await left(), beforeLayout)
+  for (let attempt = 0; attempt < 40 && (await readLayoutGroups()).length; attempt++) await delay(150)
+  assert.equal((await readLayoutGroups()).length, 0)
+  await open()
+  const delayed = await requestLayout('把布局卡再向右移')
+  await page.route('**/assistant/layout/**', async route => {
+    const committed = await route.fetch()
+    assert.equal((await committed.json()).data.state, 'waiting')
+    await route.abort()
+  }, { times: 1 })
+  await delayed.getByRole('button', { name: '确认布局' }).click()
+  await delayed.getByText('布局决定提交失败', { exact: true }).waitFor()
+  assert.equal(await left(), beforeLayout)
+  await page.reload()
+  await open()
+  await panel.getByRole('region', { name: '布局建议' }).last().getByText('布局已执行', { exact: true }).waitFor()
+  assert.equal(await left(), beforeLayout + 70)
+  await page.reload()
+  await leftCard.waitFor()
+  assert.equal(await left(), beforeLayout + 70)
+  await open()
+  const stale = await requestLayout('把布局卡最后向右移')
+  await panel.getByRole('button', { name: '关闭画布助手' }).click()
+  await leftCard.focus()
+  await page.keyboard.press('ArrowRight')
+  const handMoved = await left()
+  assert.notEqual(handMoved, beforeLayout + 70)
+  await open()
+  await stale.getByRole('button', { name: '确认布局' }).click()
+  await stale.getByText('布局未执行，请核对当前卡片和位置', { exact: true }).waitFor()
+  assert.equal(await left(), handMoved)
+  const arranged = await requestLayout('把布局卡整理整齐')
+  let droppedReceipt = false
+  await page.route('**/assistant/layout/**', async route => {
+    if (!droppedReceipt && route.request().postDataJSON()?.action === 'applied') {
+      const committed = await route.fetch()
+      assert.equal((await committed.json()).data.state, 'applied')
+      droppedReceipt = true
+      await route.abort()
+    } else await route.continue()
+  })
+  await arranged.getByRole('button', { name: '确认布局' }).click()
+  await arranged.getByText('布局已执行', { exact: true }).waitFor()
+  assert.equal(droppedReceipt, true)
+  assert.notEqual(await left(), handMoved)
+  await page.unroute('**/assistant/layout/**')
   const freeUrl = canvasApi + '/' + free.id
   const current = (await (await fetch(freeUrl)).json()).data
   const withVoiceover = {

@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CanvasAssistantPoint } from './CanvasAssistantPoint';
 /**
  * Current visible canvas document and the scope locked at send time.
  */
@@ -13,4 +14,5 @@ export type CanvasAssistantDraftContext = {
     revision: number;
     scope: 'selection' | 'canvas';
     card_ids?: Array<string>;
+    layout_positions?: (Record<string, CanvasAssistantPoint> | null);
 };

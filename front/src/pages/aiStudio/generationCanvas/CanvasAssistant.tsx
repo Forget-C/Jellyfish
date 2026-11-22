@@ -3,8 +3,10 @@ import { CommentOutlined, CloseOutlined } from '@ant-design/icons'
 import { Alert, Checkbox, Input, Select, Spin } from 'antd'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantMessage, FileRead, ModelRead } from '../../../services/generated'
+import type { CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantLayout, CanvasAssistantMessage, FileRead, ModelRead } from '../../../services/generated'
 import { AssistantEditGroups, AssistantProposal } from './AssistantProposal'
+import { AssistantLayout } from './AssistantLayout'
+import type { AssistantLayoutOutcome } from './assistantLayoutEditor'
 import { AssistantGeneration } from './AssistantGeneration'
 import { useUiText } from '../../../uiText'
 import { CanvasAssistantAttachments, CanvasAssistantEvidence } from './CanvasAssistantAttachments'
@@ -14,7 +16,7 @@ import './canvasAssistant.css'
 type AssistantScope = NonNullable<CanvasAssistantMessage['context']>['scope'] | 'text'
 
 /** Nonmodal conversation for one saved canvas. Closing it keeps the draft and in-flight reply. */
-export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromoting, selectedCards, readDraft, approve, approvalDisabled, openRun }: {
+export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromoting, selectedCards, readDraft, approve, approvalDisabled, applyLayout, openRun }: {
   canvasId: string
   projectId: string
   localDraft?: boolean
@@ -22,8 +24,9 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
   selectedCards: string[]
   approve: (sourceId: string, groupIds?: string[], automatic?: boolean) => Promise<boolean>
   approvalDisabled: boolean
+  applyLayout: (sourceId: string, proposal: CanvasAssistantLayout) => Promise<AssistantLayoutOutcome>
   openRun: (runId: string) => void
-  readDraft: () => Pick<CanvasAssistantDraftContext, 'draft' | 'revision'>
+  readDraft: () => Pick<CanvasAssistantDraftContext, 'draft' | 'revision' | 'layout_positions'>
 }) {
   const uiText = useUiText()
   const trigger = useRef<HTMLElement>(null)
@@ -62,6 +65,32 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
     || ['waiting', 'reviewing'].includes(generation.review?.state ?? '')
     || generation.versions?.some(version => ['queued', 'running'].includes(version.state))
   ))
+  const waitingLayout = turns?.find(turn => !turn.stopped && turn.layout?.state === 'waiting')
+  const layoutEditor = useRef(applyLayout)
+  layoutEditor.current = applyLayout
+
+  useEffect(() => {
+    if (!waitingLayout?.layout || approvalDisabled) return
+    const { layout, request_id: sourceId } = waitingLayout
+    let active = true
+    let busy = false
+    const execute = async () => {
+      if (!active || busy) return
+      busy = true
+      try {
+        const outcome = await layoutEditor.current(sourceId, layout)
+        if (!active || outcome === 'deferred') return
+        const { data } = await Canvases.canvasAssistantDecideLayout({
+          projectId, canvasId, sourceId, requestBody: { action: outcome },
+        })
+        if (active && data) setTurns(previous => previous?.map(turn =>
+          turn.request_id === sourceId ? { ...turn, layout: data } : turn))
+      } catch { /* Retry pending work and reuse the browser receipt when delivery fails. */ }
+      finally { busy = false }
+    }
+    const timer = window.setInterval(() => void execute(), 500)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [waitingLayout, approvalDisabled, canvasId, projectId])
 
   useEffect(() => {
     if (!open || !activeGeneration) return
@@ -84,8 +113,8 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
   }, [open, activeGeneration, canvasId, projectId])
 
   useEffect(() => {
-    if (!open) return
     if (localDraft) {
+      if (!open) return
       const saved = readDraftAssistant(canvasId)
       setTurns(saved.turns)
       setModelId(saved.modelId)
@@ -330,6 +359,7 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
           {turn.stopped && <small>{uiText("助手已停止")}</small>}
           {!turn.stopped && (
             turn.proposal?.state === 'pending'
+            || ['proposed', 'waiting'].includes(turn.layout?.state ?? '')
             || (turn.generation && ['queued', 'waiting_approval'].includes(turn.generation.state))
             || (turn.generation && (turn.generation.versions?.length ?? 0) < turn.generation.requested_count
               && turn.generation.state === 'running')
@@ -337,6 +367,14 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
           ) && <WorkbenchButton variant="quiet" disabled={Boolean(stopping)}
             loading={stopping === turn.request_id}
             onClick={() => { void stopTurn(turn.request_id) }}>{uiText("停止助手")}</WorkbenchButton>}
+          {turn.layout && <AssistantLayout layout={turn.layout} disabled={approvalDisabled || sending}
+            decide={async action => {
+              const { data } = await Canvases.canvasAssistantDecideLayout({
+                projectId, canvasId, sourceId: turn.request_id, requestBody: { action },
+              })
+              if (!data) throw new Error('missing assistant layout decision')
+              setTurns(previous => previous?.map(entry => entry.request_id === turn.request_id ? { ...entry, layout: data } : entry))
+            }} />}
           {turn.proposal?.groups?.length ? <AssistantEditGroups groups={turn.proposal.groups}
             current={() => readDraft().draft}
             editDisabled={approvalDisabled || sending}

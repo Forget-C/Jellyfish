@@ -17,7 +17,7 @@ from app.schemas.canvas_assistant_edit import (
     CanvasAssistantRemovalTarget, DeleteCardEdit, MovementFieldEdit, ProposedEditGroup, ReleaseBindingEdit,
     VideoPromptSegmentEdit,
 )
-from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, AdoptFirstFrameTarget
+from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget
 from app.schemas.generation_canvas import CanvasDocument, CanvasSave, MovementCard, PromptText, VideoModelCard
 from app.services.generation_canvas.catalog import CARD_TITLES
 from app.services.generation_canvas.assistant_approval import automatic_approval_allowed
@@ -268,7 +268,7 @@ async def _apply_group(store, canvas, document, group):
     conflicts = []
     for change in group.edits:
         current = None
-        if isinstance(change.target, (AddCanvasCardTarget, AdoptFirstFrameTarget)):
+        if isinstance(change.target, (AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget)):
             if await apply_structural_change(store, canvas, document, change):
                 continue
         elif isinstance(change.target, (DeleteCardEdit, ReleaseBindingEdit)):

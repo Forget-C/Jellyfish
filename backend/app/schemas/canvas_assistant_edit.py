@@ -5,7 +5,9 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationRead
-from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, AdoptFirstFrameTarget
+from app.schemas.canvas_assistant_structure import (
+    AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, MovementFieldName,
+)
 from app.schemas.generation_canvas import CanvasRead, CanvasSaved
 
 
@@ -22,7 +24,7 @@ class MovementFieldEdit(BaseModel):
 
     model_config = ConfigDict(extra='forbid')
     kind: Literal['movement_field']
-    field: Literal['movement_type', 'movement_start', 'movement_trigger', 'movement_path', 'movement_speed', 'end_frame']
+    field: MovementFieldName
 
 
 class DeleteCardEdit(BaseModel):
@@ -43,7 +45,8 @@ class ReleaseBindingEdit(BaseModel):
 CanvasAssistantFieldTarget = Annotated[VideoPromptSegmentEdit | MovementFieldEdit, Field(discriminator='kind')]
 CanvasAssistantRemovalTarget = Annotated[DeleteCardEdit | ReleaseBindingEdit, Field(discriminator='kind')]
 CanvasAssistantEditTarget = Annotated[
-    VideoPromptSegmentEdit | MovementFieldEdit | DeleteCardEdit | ReleaseBindingEdit | AddCanvasCardTarget | AdoptFirstFrameTarget,
+    VideoPromptSegmentEdit | MovementFieldEdit | DeleteCardEdit | ReleaseBindingEdit | AddCanvasCardTarget | AdoptFirstFrameTarget
+    | AdjustShotMovementTarget,
     Field(discriminator='kind'),
 ]
 
