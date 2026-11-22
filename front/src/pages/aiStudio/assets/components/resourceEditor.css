@@ -75,5 +75,15 @@
   .resource-editor-page-heading > .ant-btn, .resource-editor-page-actions .ant-btn { min-height: 36px; }
 }
 
+.drawer-discard-dialog .ant-modal-content { padding: 16px 20px; }
+.drawer-discard-dialog .ant-modal-header { margin-bottom: 4px; }
+.drawer-discard-dialog .ant-modal-title { font-size: 14px; line-height: 20px; font-weight: 600; }
+.drawer-discard-dialog .ant-modal-body .ant-typography { font-size: 13px; line-height: 20px; color: #536174; }
+.drawer-discard-dialog .ant-modal-footer { margin-top: 14px; }
+.drawer-discard-dialog .ant-modal-footer .ant-btn { height: 28px; padding-inline: 10px; font-size: 12px; border-radius: 6px; box-shadow: none; }
+.drawer-discard-dialog .ant-btn-dangerous:not(:hover, :active) { color: #a83c38; border-color: #e5c8c6; }
+@media (max-width: 767px) {
+  .drawer-discard-dialog .ant-modal-footer .ant-btn { height: 32px; }
+}
 .drawer-discard-dialog .ant-btn-primary:not(:disabled) { background: var(--app-accent, #245fc5); }
 .drawer-discard-dialog .ant-btn-primary:not(:disabled):hover { background: #1d50aa; }
