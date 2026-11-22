@@ -12,7 +12,7 @@ export const canvasRecoveryKey = (projectId: string, canvasId: string | null) =>
 
 export type StoryboardScope = { chapterId: string; sequenceId: string; taskId: string }
 type SceneChange = StoryboardScope & ({ action: 'apply'; choices: StoryboardApplication } | { action: 'undo' | 'redo' })
-export type PendingSave = CanvasSave & { scene?: SceneChange; assistantProposalId?: string }
+export type PendingSave = CanvasSave & { scene?: SceneChange; assistantProposalId?: string; assistantGroupIds?: string[] }
 type StoryboardApplicationReceipt = { taskId: string; before: CanvasDocument }
 export type StoryboardReviewPreparation = { revision: number; appliedTaskId?: string }
 export type CanvasSettingsChanges = Partial<Pick<CanvasDocument, 'name' | 'cover_file_id'>>
@@ -195,9 +195,9 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     if (command.assistantProposalId) {
       const { data } = await Canvases.canvasAssistantDecideProposal({
         projectId, canvasId: canvas.id, sourceId: command.assistantProposalId,
-        requestBody: { action: 'approve', expected_revision: command.expected_revision },
+        requestBody: { action: 'approve', expected_revision: command.expected_revision, group_ids: command.assistantGroupIds },
       })
-      if (!data?.canvas || !data.receipt || data.receipt.canvas_id !== canvas.id) throw new Error('invalid assistant edit receipt')
+      if (!data?.canvas || (data.receipt ? data.receipt.canvas_id !== canvas.id : !data.conflicts?.length)) throw new Error('invalid assistant edit receipt')
       return data.canvas
     }
     const scene = command.scene
@@ -226,7 +226,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
           if (s.initialBefore) {
             if (!command.assistantProposalId || committed.revision === command.expected_revision + 1) {
               recordConfirmedSave(command, s.initialBefore, committed.document)
-            } else {
+            } else if (committed.revision !== s.current?.revision) {
               // An approval replay can return a newer canvas after other edits.
               history.current = { scope: key, past: [], future: [] }
             }
@@ -456,15 +456,17 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     setInitialApplying(true); persist()
     return save()
   }
-  const commitAssistantProposal = async (sourceId: string) => {
+  const commitAssistantProposal = async (sourceId: string, groupIds?: string[]) => {
     const s = state.current
-    if (s.pending?.assistantProposalId === sourceId) return save()
+    if (s.pending?.assistantProposalId === sourceId) {
+      return same(s.pending.assistantGroupIds, groupIds) ? save() : false
+    }
     const before = await prepareCommittedEdit()
     if (!before || s !== state.current || !s.document || !ownership.canEdit() || s.pending || s.recovery ||
       s.conflict || s.scope !== key || inFlight.current || !same(s.document, before.document)) return false
     s.initialBefore = s.document
     s.pending = { request_id: crypto.randomUUID(), expected_revision: before.revision, document: s.document,
-      assistantProposalId: sourceId }
+      assistantProposalId: sourceId, assistantGroupIds: groupIds }
     setInitialApplying(true); persist()
     return save()
   }

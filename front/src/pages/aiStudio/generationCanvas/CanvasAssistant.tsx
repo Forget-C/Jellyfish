@@ -4,7 +4,7 @@ import { Alert, Input, Select, Spin } from 'antd'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantMessage, FileRead, ModelRead } from '../../../services/generated'
-import { AssistantProposal } from './AssistantProposal'
+import { AssistantEditGroups, AssistantProposal } from './AssistantProposal'
 import { useUiText } from '../../../uiText'
 import { CanvasAssistantAttachments, CanvasAssistantEvidence } from './CanvasAssistantAttachments'
 import './canvasAssistant.css'
@@ -16,7 +16,7 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
   canvasId: string
   projectId: string
   selectedCards: string[]
-  approve: (sourceId: string) => Promise<boolean>
+  approve: (sourceId: string, groupIds?: string[]) => Promise<boolean>
   approvalDisabled: boolean
   readDraft: () => Pick<CanvasAssistantDraftContext, 'draft' | 'revision'>
 }) {
@@ -105,7 +105,10 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
           attachment_file_ids: referenceFiles.map(file => file.id),
           revises: revising?.request_id,
           context: revising?.proposal ? {
-            ...readDraft(), scope: 'selection', card_ids: [revising.proposal.card_id],
+            ...readDraft(), scope: 'selection', card_ids: revising.proposal.groups
+              ? [...new Set(revising.proposal.groups.filter(group => group.state === 'pending')
+                .flatMap(group => group.edits.map(edit => edit.card_id)))]
+              : [revising.proposal.card_id],
           } : effectiveScope === 'text' ? undefined : {
             ...readDraft(), scope: effectiveScope, card_ids: effectiveScope === 'selection' ? selectedCards : [],
           },
@@ -119,7 +122,9 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
       if (!turn) throw new Error('missing assistant reply')
       setTurns(current => current?.some(existing => existing.request_id === turn.request_id)
         ? current : [...(current || []).map(existing => turn.proposal && turn.revises === existing.request_id && existing.proposal
-          ? { ...existing, proposal: { ...existing.proposal, state: 'superseded' as const } } : existing), turn])
+          ? { ...existing, proposal: { ...existing.proposal, state: 'superseded' as const,
+            groups: existing.proposal.groups?.map(group => (group.state ?? 'pending') === 'pending'
+              ? { ...group, state: 'superseded' as const } : group) } } : existing), turn])
       setRevising(undefined)
       setDraft('')
       setReferenceFiles([])
@@ -206,7 +211,31 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
           <div className="canvas-assistant-question">{turn.text}</div>
           {!!turn.attachments?.length && <CanvasAssistantEvidence attachments={turn.attachments} />}
           <div>{turn.reply}</div>
-          {turn.proposal && <AssistantProposal proposal={turn.proposal} editDisabled={approvalDisabled || sending}
+          {turn.proposal?.groups?.length ? <AssistantEditGroups groups={turn.proposal.groups}
+            current={() => readDraft().draft}
+            editDisabled={approvalDisabled || sending}
+            revise={() => {
+              setRevising(turn); pending.current = undefined; setSendError(undefined)
+              composer.current?.querySelector('textarea')?.focus()
+            }}
+            decide={async (action, groupIds) => {
+              if (action === 'approve' && !await approve(turn.request_id, groupIds)) return false
+              if (action === 'reject') {
+                const { data } = await Canvases.canvasAssistantDecideProposal({
+                  canvasId, projectId, sourceId: turn.request_id,
+                  requestBody: { action, expected_revision: readDraft().revision, group_ids: groupIds },
+                })
+                if (!data) return false
+              }
+              const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId })
+              if (!data) return false
+              setTurns(data.turns)
+              if (revising?.request_id === turn.request_id) {
+                pending.current = undefined
+                setRevising(undefined)
+              }
+              return true
+            }} /> : turn.proposal && <AssistantProposal proposal={turn.proposal} current={() => readDraft().draft} editDisabled={approvalDisabled || sending}
             revise={() => {
               setRevising(turn); pending.current = undefined; setSendError(undefined)
               composer.current?.querySelector('textarea')?.focus()
