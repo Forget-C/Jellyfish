@@ -1,4 +1,5 @@
 {
+  "请检查供应商配置、模型名称和调用类型，本次未提交。": "Check the configuration, model name, and request type. The call was not submitted.",
   "测试调用": "Test call",
   "开始付费测试": "Start paid test",
   "远端模型": "Remote model",

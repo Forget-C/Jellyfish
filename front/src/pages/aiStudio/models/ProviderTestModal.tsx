@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, AutoComplete, Form, Input, Modal, Select, Typography } from 'antd'
 import { LlmService } from '../../../services/generated/services/LlmService'
+import { ApiError } from '../../../services/generated'
 import type { ModelCategoryKey, ProviderRead, ProviderSupportedRead, ProviderTestResult } from '../../../services/generated'
 import { uiText } from '../../../uiText'
 
@@ -54,8 +55,13 @@ export function ProviderTestModal({ provider, spec, endpointLabel, onClose }: {
         providerId: provider.id, requestBody: { category, model: model.trim() },
       })
       setResult(response.data ?? { outcome: 'unknown' })
-    } catch {
-      setFailure('测试请求未完成，请检查供应商配置和网络。再次测试可能重复计费。')
+    } catch (error) {
+      const detail = error instanceof ApiError ? String(error.body?.message ?? '') : ''
+      if (detail.startsWith('Provider api_key is empty')) setFailure('请先为此配置填写 API Key')
+      else if (detail.startsWith('Provider api_secret is empty')) setFailure('请先为此配置填写 API Secret')
+      else if (detail.startsWith('Provider is disabled')) setFailure('供应商配置已禁用')
+      else if (error instanceof ApiError && [400, 404, 422].includes(error.status)) setFailure('请检查供应商配置、模型名称和调用类型，本次未提交。')
+      else setFailure('测试请求未完成，请检查供应商配置和网络。再次测试可能重复计费。')
     } finally {
       inFlight.current = false
       setBusy(false)
@@ -64,7 +70,8 @@ export function ProviderTestModal({ provider, spec, endpointLabel, onClose }: {
 
   const override = category === 'image' ? provider.image_base_url : category === 'video' ? provider.video_base_url : ''
   return <Modal open title={uiText('测试调用')} cancelText={uiText('关闭')} okText={uiText('开始付费测试')}
-    onCancel={onClose} onOk={() => void submit()} confirmLoading={busy}
+    closable={!busy} keyboard={!busy} cancelButtonProps={{ disabled: busy }}
+    onCancel={() => { if (!inFlight.current) onClose() }} onOk={() => void submit()} confirmLoading={busy}
     okButtonProps={{ disabled: !category || !model.trim() }} maskClosable={!busy}>
     <Form layout="vertical">
       <Typography.Paragraph>{uiText('配置名称')} · {provider.name}</Typography.Paragraph>

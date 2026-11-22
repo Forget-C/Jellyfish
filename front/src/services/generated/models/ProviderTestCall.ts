@@ -7,4 +7,3 @@ export type ProviderTestCall = {
     model: string;
     category: ModelCategoryKey;
 };
-

@@ -2,14 +2,15 @@
 
 from base64 import b64decode
 from binascii import Error as Base64Error
+from io import BytesIO
 from urllib.parse import quote, urlsplit
 
 import httpx
 from fastapi import HTTPException
-
-from app.models.llm import Provider
+from PIL import Image
 
 from app.core.integrations.volcengine.images import build_volcengine_image_generations_url
+from app.models.llm import Provider
 from app.schemas.llm import ProviderTestCall, ProviderTestResult
 from app.services.llm.provider_resolver import ResolvedProviderConfig, resolve_provider_config_from_provider
 
@@ -83,8 +84,10 @@ def _has_image(item):
     value = item.get("b64_json")
     if _nonempty(value):
         try:
-            return bool(b64decode(value, validate=True))
-        except (ValueError, Base64Error):
+            with Image.open(BytesIO(b64decode(value, validate=True))) as image:
+                image.verify()
+            return True
+        except (ValueError, OSError, SyntaxError, Base64Error, Image.DecompressionBombError):
             pass
     return False
 
@@ -94,14 +97,14 @@ def _output_outcome(key, category, data):
         containers = [data]
         if key == "kling":
             containers.extend([data.get("data"), data.get("task")])
-        for item in containers:
-            if not isinstance(item, dict):
-                continue
-            if any(item.get(k) in ("failed", "error", "cancelled") for k in ("status", "state", "task_status")):
-                return "rejected"
-            fields = ("task_id",) if key == "vidu" else ("id", "task_id", "taskId")
-            if any(_nonempty(item.get(field)) for field in fields):
-                return "accepted"
+        tasks = [item for item in containers if isinstance(item, dict)]
+        failure_states = {"failed", "fail", "error", "cancelled", "canceled", "expired"}
+        if any(str(task.get(field, "")).strip().lower() in failure_states
+               for task in tasks for field in ("status", "state", "task_status")):
+            return "rejected"
+        fields = ("task_id",) if key == "vidu" else ("id", "task_id", "taskId")
+        if any(_nonempty(task.get(field)) for task in tasks for field in fields):
+            return "accepted"
     else:
         items = data.get("choices" if category == "text" else "data")
         for item in items if isinstance(items, list) else []:
@@ -115,11 +118,15 @@ def _output_outcome(key, category, data):
     return "unverified"
 
 
-async def submit_test_call(provider: Provider, call: ProviderTestCall) -> ProviderTestResult:
-    """发送一个固定文本，不重定向、不重试、不轮询或回显供应商内容。"""
+def resolve_test_config(provider: Provider, call: ProviderTestCall) -> ResolvedProviderConfig:
+    """读取付费提交使用的配置快照，允许在出站前释放数据库连接。"""
     if call.category not in PATHS.get(provider.provider_key, {}):
         raise HTTPException(400, "当前供应商不支持该类型的测试调用")
-    cfg = resolve_provider_config_from_provider(provider=provider, category=call.category)
+    return resolve_provider_config_from_provider(provider=provider, category=call.category)
+
+
+async def submit_test_call(cfg: ResolvedProviderConfig, call: ProviderTestCall) -> ProviderTestResult:
+    """发送一个固定文本，不重定向、不重试、不轮询或回显供应商内容。"""
     try:
         url, body = _submission(cfg, call)
         scheme = "Token" if cfg.provider_key == "vidu" else "Bearer"

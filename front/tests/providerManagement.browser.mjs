@@ -24,6 +24,7 @@ let listFails = false
 let saveFails = true
 let credentialsReads = 0
 let paidCalls = 0
+let releaseSubmission
 let deleteRequests = 0
 let lastSearch = ''
 let providerExists = true
@@ -64,6 +65,8 @@ try {
     if (pathname.endsWith('/test-call')) {
       paidCalls++
       assert.deepEqual(route.request().postDataJSON(), { model: 'manual', category: 'text' })
+      if (paidCalls === 2) return route.fulfill({ status: 503, json: { message: 'Provider api_key is empty for provider_id=provider1' } })
+      await new Promise(resolve => { releaseSubmission = resolve })
       return respond({ outcome: 'success', http_status: 200 })
     }
     if (pathname.endsWith('/catalog')) return respond({ models: [{ name: 'remote-model', category: 'text' }] })
@@ -141,12 +144,22 @@ try {
   await model.fill('manual')
   await model.press('Tab')
   assert.equal(paidCalls, 0)
+  const submitting = page.waitForRequest(request => request.url().endsWith('/test-call'))
   await probe.getByRole('button', { name: '开始付费测试' }).click()
+  await submitting
+  assert.equal(await probe.getByRole('button', { name: /关\s*闭/ }).isDisabled(), true)
+  await page.keyboard.press('Escape')
+  assert.equal(await probe.isVisible(), true)
+  assert.equal(typeof releaseSubmission, 'function')
+  releaseSubmission()
   await probe.getByText('调用成功，已收到有效输出。').waitFor()
   assert.equal(paidCalls, 1)
   await probe.getByRole('button', { name: /关\s*闭/ }).click()
   await testButton.click()
   assert.equal(await model.inputValue(), '')
+  await model.fill('manual')
+  await probe.getByRole('button', { name: '开始付费测试' }).click()
+  await probe.getByText('请先为此配置填写 API Key').waitFor()
   await probe.getByRole('button', { name: /关\s*闭/ }).click()
 
   await page.getByRole('button', { name: `编辑 ${provider.name}`, exact: true }).click()

@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.llm.provider_test_call import submit_test_call
+from app.services.llm.provider_test_call import resolve_test_config, submit_test_call
 from app.dependencies import get_db
 from app.models.llm import ModelCategoryKey
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, success_response
@@ -114,7 +114,9 @@ async def get_provider_model_catalog(
              summary="发起一次可能产生费用的供应商测试调用")
 async def test_provider_call(provider_id: str, body: ProviderTestCall, db: AsyncSession = Depends(get_db)):
     provider = await get_provider_service(db, provider_id=provider_id)
-    return success_response(await submit_test_call(provider, body))
+    cfg = resolve_test_config(provider, body)
+    await db.rollback()  # 只读事务在付费网络请求前结束。
+    return success_response(await submit_test_call(cfg, body))
 
 
 @router.post(

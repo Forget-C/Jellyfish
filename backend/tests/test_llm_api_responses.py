@@ -51,6 +51,9 @@ class _FakeLlmDB:
             return
         raise TypeError(f"Unsupported object type: {type(obj)!r}")
 
+    async def rollback(self) -> None:
+        return None
+
     async def flush(self) -> None:
         return None
 
@@ -394,6 +397,8 @@ def test_provider_call_once(client, monkeypatch, status, payload, outcome):
     ("vidu", "video", "/ent/v2/text2video", {"task_id": "job", "state": "failed"}, "rejected"),
     ("kling", "image", "/v1/images/generations", {"data": {"task_id": "job"}}, "accepted"),
     ("kling", "video", "/text-to-video/custom", {"code": 400, "data": {"task_id": "job"}}, "rejected"),
+    ("kling", "video", "/text-to-video/custom", {"id": "outer", "data": {"task_status": "FAIL"}}, "rejected"),
+    ("openai", "image", "/images/generations", {"data": [{"b64_json": "T0s="}]}, "unverified"),
     ("openai", "video", "/videos", None, "unknown"),
 ])
 def test_provider_call_protocol(client, monkeypatch, key, category, path, payload, outcome):

@@ -6,4 +6,3 @@ export type ProviderTestResult = {
     outcome: 'success' | 'accepted' | 'unauthorized' | 'forbidden' | 'limited' | 'rejected' | 'remote_error' | 'unverified' | 'unknown';
     http_status?: (number | null);
 };
-
