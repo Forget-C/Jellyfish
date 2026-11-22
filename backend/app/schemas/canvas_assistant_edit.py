@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationRead
 from app.schemas.canvas_assistant_structure import (
-    AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, MovementFieldName,
+    AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCardsTarget, MovementFieldName,
 )
 from app.schemas.generation_canvas import CanvasRead, CanvasSaved
 
@@ -17,6 +17,27 @@ class VideoPromptSegmentEdit(BaseModel):
     model_config = ConfigDict(extra='forbid')
     kind: Literal['video_prompt_segment']
     segment_id: str = Field(min_length=1, max_length=128)
+
+
+class ModelPromptSegmentEdit(VideoPromptSegmentEdit):
+    """Replace an existing plain-text prompt segment on any model card."""
+
+    kind: Literal['model_prompt_segment']
+
+
+class CardTextEdit(BaseModel):
+    """Replace the plain-text body of a content card."""
+
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['card_text']
+
+
+class DesignTextFieldEdit(BaseModel):
+    """Replace a plain-text parameter exposed in the design card catalog."""
+
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['design_text_field']
+    field_name: str = Field(min_length=1, max_length=64)
 
 
 class MovementFieldEdit(BaseModel):
@@ -42,11 +63,15 @@ class ReleaseBindingEdit(BaseModel):
     binding_id: str = Field(min_length=1, max_length=128)
 
 
-CanvasAssistantFieldTarget = Annotated[VideoPromptSegmentEdit | MovementFieldEdit, Field(discriminator='kind')]
+CanvasAssistantFieldTarget = Annotated[
+    VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit,
+    Field(discriminator='kind'),
+]
 CanvasAssistantRemovalTarget = Annotated[DeleteCardEdit | ReleaseBindingEdit, Field(discriminator='kind')]
 CanvasAssistantEditTarget = Annotated[
-    VideoPromptSegmentEdit | MovementFieldEdit | DeleteCardEdit | ReleaseBindingEdit | AddCanvasCardTarget | AdoptFirstFrameTarget
-    | AdjustShotMovementTarget,
+    VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit
+    | DeleteCardEdit | ReleaseBindingEdit | AddCanvasCardTarget | AdoptFirstFrameTarget
+    | AdjustShotMovementTarget | ConnectCardsTarget,
     Field(discriminator='kind'),
 ]
 

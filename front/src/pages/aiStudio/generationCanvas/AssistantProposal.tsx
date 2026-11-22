@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Alert, Checkbox } from 'antd'
 import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
-import type { CanvasAssistantChange, CanvasAssistantEditGroup, CanvasAssistantProposal, CanvasDocument, MovementCard, VideoModelCard } from '../../../services/generated'
+import type { CanvasAssistantChange, CanvasAssistantEditGroup, CanvasAssistantProposal, CanvasDocument } from '../../../services/generated'
 import { useUiText } from '../../../uiText'
 
 type Decision = 'approve' | 'reject'
@@ -35,8 +35,7 @@ export function AssistantProposal({ proposal, current, editDisabled, revise, dec
     }
   }
   const latest = currentText(current(), proposal)
-  const field = 'field' in proposal.target
-    ? uiText(movementFields[proposal.target.field]) : uiText('视频提示词')
+  const field = fieldLabel(proposal.target, uiText)
 
   return <section className="canvas-assistant-proposal" aria-label={uiText('修改建议')}>
     <strong>{uiText('修改建议')} · {uiText(proposal.card_name)} · <span title={proposal.card_id}>{proposal.card_id.slice(0, 8)}</span> · {field}</strong>
@@ -115,6 +114,10 @@ export function AssistantEditGroups({ groups, current, editDisabled, revise, dec
           <dt>{uiText('采用用途')}</dt><dd>{uiText('首帧')}</dd>
           {edit.before && <><dt>{uiText('原参考卡')}</dt><dd title={edit.before}>{edit.before.slice(0, 8)}</dd></>}
         </dl>
+        if ('source_card' in target) return <dl key={target.connection_id}>
+          <dt>{uiText('连接卡片')}</dt>
+          <dd>{target.source_card} · {target.source_port} → {target.target_card} · {target.target_port}</dd>
+        </dl>
         if ('card' in target) return <dl key={edit.card_id}>
           <dt>{uiText('新建卡片')}</dt><dd>{uiText(edit.card_name)} · {edit.card_id.slice(0, 8)}</dd>
           {edit.after && <><dt>{uiText('拟议值')}</dt><dd>{edit.after}</dd></>}
@@ -145,15 +148,24 @@ export function AssistantEditGroups({ groups, current, editDisabled, revise, dec
   </section>
 }
 
+function fieldLabel(target: CanvasAssistantChange['target'], uiText: ReturnType<typeof useUiText>) {
+  if ('field' in target) return uiText(movementFields[target.field])
+  if ('field_name' in target) return target.field_name
+  return target.kind === 'card_text' ? uiText('文本内容') : uiText('提示词')
+}
+
 function currentText(draft: Record<string, unknown>, edit: CanvasAssistantChange) {
   const { target } = edit
   const document = draft as CanvasDocument
   const card = document.cards?.find(item => item.id === edit.card_id)
-  if ('field' in target && card?.type === 'direction.movement') {
-    return (card as MovementCard).fields?.[target.field]?.text
+  if (target.kind === 'card_text') return card && 'text' in card ? card.text : undefined
+  if ('field' in target || 'field_name' in target) {
+    if (!card) return undefined
+    const fields = ('fields' in card ? card.fields : card) as Record<string, { text?: string }> | undefined
+    return fields?.['field' in target ? target.field : target.field_name]?.text
   }
-  if ('segment_id' in target && card?.type === 'model.video') {
-    const part = (card as VideoModelCard).prompt?.segments?.find(item => 'id' in item && item.id === target.segment_id)
+  if ('segment_id' in target && card && 'prompt' in card) {
+    const part = card.prompt?.segments?.find(item => 'id' in item && item.id === target.segment_id)
     return part && 'text' in part ? part.text : undefined
   }
 }

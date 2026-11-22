@@ -30,6 +30,14 @@ class AddMovementCard(BaseModel):
     movement_speed: str = Field(default='', max_length=16000)
 
 
+class AddCatalogCard(BaseModel):
+    """Add an empty card of a currently supported catalog type."""
+
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['add_catalog_card'] = Field(json_schema_extra={'enum': ['add_catalog_card']})
+    card_type: str = Field(min_length=1, max_length=64)
+
+
 class AdoptFirstFrame(BaseModel):
     """Use an image attached to the current request for a scoped video card."""
 
@@ -60,8 +68,26 @@ class AdjustShotMovement(BaseModel):
     text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16000)]
 
 
+class ConnectCards(BaseModel):
+    """Connect two in-scope cards with compatible candidate ports."""
+
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['connect_cards'] = Field(json_schema_extra={'enum': ['connect_cards']})
+    source_card: str
+    source_port: str
+    target_card: str
+    target_port: str
+
+
+class ConnectCardsTarget(ConnectCards):
+    """Freeze the identity and endpoints of a candidate connection."""
+
+    connection_id: str
+
+
 ProposedStructure = Annotated[
-    AddTextCard | AddModelCard | AddMovementCard | AdoptFirstFrame | ReplaceFirstFrame | AdjustShotMovement,
+    AddTextCard | AddModelCard | AddMovementCard | AddCatalogCard | AdoptFirstFrame | ReplaceFirstFrame
+    | AdjustShotMovement | ConnectCards,
     Field(discriminator='kind')
 ]
 
@@ -71,7 +97,7 @@ class AddCanvasCardTarget(BaseModel):
 
     model_config = ConfigDict(extra='forbid')
     kind: Literal['add_canvas_card'] = Field(json_schema_extra={'enum': ['add_canvas_card']})
-    card: Annotated[AddTextCard | AddModelCard | AddMovementCard, Field(discriminator='kind')]
+    card: Annotated[AddTextCard | AddModelCard | AddMovementCard | AddCatalogCard, Field(discriminator='kind')]
 
 
 class AdoptFirstFrameTarget(BaseModel):

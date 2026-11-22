@@ -60,6 +60,35 @@ async def approve_structure(client, url, canvas, proposal):
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures('assistant_edit_model')
+async def test_assistant_adds_candidate_connection_without_adopting(canvas_client, monkeypatch):
+    canvas = (await canvas_client.post('/canvases', json={'name': '画布'})).json()['data']
+    url = f"/canvases/{canvas['id']}"
+    document = {**canvas['document'], 'cards': [
+        {'id': 'notes', 'type': 'content.text', 'text': '参考正文'}, {'id': 'target', 'type': 'model.text'},
+    ]}
+    saved = await canvas_client.put(url, json={
+        'request_id': 'setup', 'expected_revision': canvas['revision'], 'document': document,
+    })
+    assert saved.status_code == 200, saved.text
+    canvas = (await canvas_client.get(url)).json()['data']
+    mock_structure_reply(monkeypatch, {'kind': 'connect_cards', 'source_card': 'notes', 'source_port': 'text',
+                                       'target_card': 'target', 'target_port': 'text'})
+    exchange = await send_structure(canvas_client, url, canvas, '把笔记连到文本模型')
+    assert exchange['proposal']['target']['kind'] == 'connect_cards'
+    assert (await canvas_client.get(url)).json()['data']['document'].get('edges', []) == []
+    approved = await approve_structure(canvas_client, url, canvas, exchange['proposal'])
+    assert approved.status_code == 200, approved.text
+    current = (await canvas_client.get(url)).json()['data']['document']
+    edge, = current['edges']
+    assert (edge['source_card'], edge['source_port'], edge['target_card'], edge['target_port']) == (
+        'notes', 'text', 'target', 'text',
+    )
+    assert current['input_order']['target']['text'] == [edge['id']]
+    assert current['cards'][1].get('input_bindings', []) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures('assistant_edit_model')
 @pytest.mark.parametrize('target_change', [None, 'removed', 'changed_model', 'replace'])
 async def test_approve_reference_as_first_frame(recorded_media_storage, monkeypatch, target_change):
     client = recorded_media_storage
@@ -133,6 +162,8 @@ async def test_approve_reference_as_first_frame(recorded_media_storage, monkeypa
     (False, {'kind': 'add_model_card', 'modality': 'image', 'prompt': '安静湖面'}, 'model.image'),
     (False, {'kind': 'add_movement_card', 'movement_speed': '慢推'}, None),
     (True, {'kind': 'add_movement_card', 'movement_speed': '慢推'}, 'direction.movement'),
+    (False, {'kind': 'add_catalog_card', 'card_type': 'direction.camera'}, None),
+    (True, {'kind': 'add_catalog_card', 'card_type': 'direction.camera'}, 'direction.camera'),
 ])
 async def test_catalog_limits_assistant_card_creation(canvas_client, monkeypatch, scene, change, expected):
     if scene:
@@ -147,12 +178,13 @@ async def test_catalog_limits_assistant_card_creation(canvas_client, monkeypatch
     proposal = exchange['proposal']
     if expected is None:
         assert proposal is None
-        assert exchange['reply'] == '当前画布不允许创建 运镜卡'
+        name = '机位与视角卡' if change['kind'] == 'add_catalog_card' else '运镜卡'
+        assert exchange['reply'] == f'当前画布不允许创建 {name}'
         return
     approval = await approve_structure(canvas_client, url, canvas, proposal)
     assert approval.status_code == 200, approval.text
     current = (await canvas_client.get(url)).json()['data']
     created = next(card for card in current['document']['cards'] if card['id'] == proposal['card_id'])
     assert created['type'] == expected
-    if scene:
+    if expected == 'direction.movement':
         assert created['fields']['movement_speed']['text'] == '慢推'

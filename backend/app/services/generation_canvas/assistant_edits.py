@@ -8,31 +8,51 @@ from langchain_core.tools import ToolException, tool
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.contracts.generation_canvas import DesignField
 from app.models.canvas_assistant import CanvasAssistantSession, CanvasAssistantTurn
 from app.schemas.canvas_assistant import CanvasAssistantReadContext
 from app.schemas.canvas_assistant_edit import (
     CanvasAssistantChange, CanvasAssistantEditConflict, CanvasAssistantEditGroup,
     CanvasAssistantApprovalAudit, CanvasAssistantEditTarget, CanvasAssistantEditText, CanvasAssistantFieldTarget,
     CanvasAssistantProposal, CanvasAssistantProposalDecision, CanvasAssistantProposalResult,
-    CanvasAssistantRemovalTarget, DeleteCardEdit, MovementFieldEdit, ProposedEditGroup, ReleaseBindingEdit,
+    CanvasAssistantRemovalTarget, CardTextEdit, DeleteCardEdit, DesignTextFieldEdit, ModelPromptSegmentEdit,
+    MovementFieldEdit, ProposedEditGroup, ReleaseBindingEdit,
     VideoPromptSegmentEdit,
 )
-from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget
-from app.schemas.generation_canvas import CanvasDocument, CanvasSave, MovementCard, PromptText, VideoModelCard
-from app.services.generation_canvas.catalog import CARD_TITLES
+from app.schemas.canvas_assistant_structure import (
+    AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCardsTarget,
+)
+from app.schemas.generation_canvas import (
+    CanvasDocument, CanvasSave, CreativeBasisCard, ModelCard, MovementCard, ObjectDescriptionCard, PromptText,
+    TextContentCard, VideoModelCard,
+)
+from app.services.generation_canvas.catalog import CARD_TITLES, design_fields
 from app.services.generation_canvas.assistant_approval import automatic_approval_allowed
 from app.services.generation_canvas.assistant_removals import apply_removal, removal_impact
 from app.services.generation_canvas.assistant_structure import apply_structural_change
 from app.services.generation_canvas.store import CanvasStore
 
 
+_TEXT_CONTENT = (TextContentCard, CreativeBasisCard, ObjectDescriptionCard)
+
+
 def _editable_text(card, target: CanvasAssistantEditTarget):
+    if isinstance(target, CardTextEdit) and isinstance(card, _TEXT_CONTENT):
+        return card
     if isinstance(target, MovementFieldEdit) and isinstance(card, MovementCard):
         field = getattr(card.fields, target.field)
         # A structured field can own references. This operation only edits plain text.
         if field.document is None:
             return field
-    elif isinstance(card, VideoModelCard) and isinstance(target, VideoPromptSegmentEdit):
+    if isinstance(target, DesignTextFieldEdit) and card is not None:
+        if any(definition.id == target.field_name for definition in design_fields(type(card))):
+            field = getattr(getattr(card, 'fields', card), target.field_name, None)
+            if isinstance(field, DesignField) and getattr(field, 'document', None) is None and not hasattr(field, 'size'):
+                return field
+    if isinstance(card, ModelCard) and (
+        isinstance(target, ModelPromptSegmentEdit)
+        or isinstance(card, VideoModelCard) and isinstance(target, VideoPromptSegmentEdit)
+    ):
         return next((part for part in card.prompt.segments
                      if isinstance(part, PromptText) and part.id == target.segment_id), None)
     return None
@@ -51,7 +71,8 @@ class CanvasAssistantEditDraft:
     @property
     def available(self) -> bool:
         """Only an existing editable card can get a proposal tool."""
-        return any(isinstance(card, (VideoModelCard, MovementCard)) and self.cards[card.id]['type'] == card.type
+        return any((isinstance(card, (ModelCard, *_TEXT_CONTENT)) or design_fields(type(card)))
+                   and self.cards[card.id]['type'] == card.type
                    for card in self.saved_cards.values())
 
     def _preview(self, card_id: str, target: CanvasAssistantEditTarget, text: str) -> CanvasAssistantChange:
@@ -191,7 +212,7 @@ async def resolve_assistant_proposal(
 
 def _apply_text(card, field, change: CanvasAssistantChange) -> None:
     field.text = change.after
-    if isinstance(change.target, MovementFieldEdit):
+    if isinstance(field, DesignField):
         field.authorship = 'user'
         field.extraction_context = None
         field.extraction_reason = None
@@ -269,7 +290,7 @@ async def _apply_group(store, canvas, document, group):
     conflicts = []
     for change in group.edits:
         current = None
-        if isinstance(change.target, (AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget)):
+        if isinstance(change.target, (AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCardsTarget)):
             if await apply_structural_change(store, canvas, document, change):
                 continue
         elif isinstance(change.target, (DeleteCardEdit, ReleaseBindingEdit)):

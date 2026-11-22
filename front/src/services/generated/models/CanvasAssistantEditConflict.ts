@@ -5,7 +5,11 @@
 import type { AddCanvasCardTarget } from './AddCanvasCardTarget';
 import type { AdjustShotMovementTarget } from './AdjustShotMovementTarget';
 import type { AdoptFirstFrameTarget } from './AdoptFirstFrameTarget';
+import type { CardTextEdit } from './CardTextEdit';
+import type { ConnectCardsTarget } from './ConnectCardsTarget';
 import type { DeleteCardEdit } from './DeleteCardEdit';
+import type { DesignTextFieldEdit } from './DesignTextFieldEdit';
+import type { ModelPromptSegmentEdit } from './ModelPromptSegmentEdit';
 import type { MovementFieldEdit } from './MovementFieldEdit';
 import type { ReleaseBindingEdit } from './ReleaseBindingEdit';
 import type { VideoPromptSegmentEdit } from './VideoPromptSegmentEdit';
@@ -15,6 +19,6 @@ import type { VideoPromptSegmentEdit } from './VideoPromptSegmentEdit';
 export type CanvasAssistantEditConflict = {
     group_id: string;
     card_id: string;
-    target: (VideoPromptSegmentEdit | MovementFieldEdit | DeleteCardEdit | ReleaseBindingEdit | AddCanvasCardTarget | AdoptFirstFrameTarget | AdjustShotMovementTarget);
+    target: (VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit | DeleteCardEdit | ReleaseBindingEdit | AddCanvasCardTarget | AdoptFirstFrameTarget | AdjustShotMovementTarget | ConnectCardsTarget);
     current: (string | null);
 };

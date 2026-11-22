@@ -44,6 +44,69 @@ async def assistant_edit_model(canvas_client):
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures('assistant_edit_model')
+@pytest.mark.parametrize(('card', 'target', 'path'), [
+    ({'id': 'target', 'type': 'content.text', 'text': '旧正文'}, {'kind': 'card_text'}, ('text',)),
+    ({'id': 'target', 'type': 'model.image', 'prompt': {'segments': [
+        {'kind': 'text', 'id': 'prompt', 'text': '旧正文'},
+    ]}}, {'kind': 'model_prompt_segment', 'segment_id': 'prompt'}, ('prompt', 'segments', 0, 'text')),
+    ({'id': 'target', 'type': 'direction.camera', 'fields': {'position': {'text': '旧正文'}}},
+     {'kind': 'design_text_field', 'field_name': 'position'}, ('fields', 'position', 'text')),
+])
+async def test_assistant_edits_catalog_text_fields(canvas_client, monkeypatch, card, target, path):
+    if card['type'].startswith('direction.'):
+        canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '分镜画布'})).json()['data']
+        url = canvas_url(f"/canvases/p/{canvas['id']}")
+    else:
+        canvas = (await canvas_client.post('/canvases', json={'name': 'Editable'})).json()['data']
+        url = f"/canvases/{canvas['id']}"
+    assistant = append_canvas_path(url, '/assistant')
+    draft = {**canvas['document'], 'cards': [*canvas['document'].get('cards', []), card]}
+    saved = (await canvas_client.put(url, json={
+        'request_id': 'initial', 'expected_revision': canvas['revision'], 'document': draft,
+    })).json()['data']
+    original_send = httpx.AsyncClient.send
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original_send(client, request, **kwargs)
+        body = json.loads(request.content)
+        result_count = sum(message['role'] == 'tool' for message in body['messages'])
+        tool_call = result_count < 2
+        message = {'role': 'assistant', 'content': '已给出修改建议'}
+        if tool_call:
+            name = 'propose_canvas_edit' if result_count else 'read_canvas_context'
+            arguments = {'card_id': 'target', 'target': target, 'text': '新正文'} if result_count else {}
+            message['tool_calls'] = [{
+                'id': name, 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(arguments)},
+            }]
+        return httpx.Response(200, request=request, json={
+            'id': 'answer', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+            'choices': [{'index': 0, 'finish_reason': 'tool_calls' if tool_call else 'stop', 'message': message}],
+        })
+
+    def value(document):
+        result = next(item for item in document['cards'] if item['id'] == 'target')
+        for key in path:
+            result = result[key]
+        return result
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    response = await canvas_client.post(assistant, json={
+        'request_id': 'edit-text', 'text': '把所选卡的文字改为新正文',
+        'context': {'draft': draft, 'revision': saved['revision'], 'scope': 'selection', 'card_ids': ['target']},
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()['data']['proposal']['before'] == '旧正文'
+    assert value((await canvas_client.get(url)).json()['data']['document']) == '旧正文'
+    decided = await canvas_client.post(append_canvas_path(url, '/assistant/proposals/edit-text'), json={
+        'action': 'approve', 'expected_revision': saved['revision'],
+    })
+    assert decided.status_code == 200, decided.text
+    assert value((await canvas_client.get(url)).json()['data']['document']) == '新正文'
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures('assistant_edit_model')
 @pytest.mark.parametrize('scene_owned,canvas_client', [
     (False, 'sqlite'), (True, 'sqlite'), ('groups', 'sqlite'), ('restart', 'mysql'),
 ], indirect=['canvas_client'])

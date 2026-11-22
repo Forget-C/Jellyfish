@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AddCatalogCard } from './AddCatalogCard';
 import type { AddModelCard } from './AddModelCard';
 import type { AddMovementCard } from './AddMovementCard';
 import type { AddTextCard } from './AddTextCard';
@@ -10,5 +11,5 @@ import type { AddTextCard } from './AddTextCard';
  */
 export type AddCanvasCardTarget = {
     kind: 'add_canvas_card';
-    card: (AddTextCard | AddModelCard | AddMovementCard);
+    card: (AddTextCard | AddModelCard | AddMovementCard | AddCatalogCard);
 };

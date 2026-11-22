@@ -10,9 +10,9 @@ from langchain_core.tools import ToolException, tool
 from app.core.contracts.generation_canvas import InputBinding, MovementDesignFields, OutputIdentity, ReferenceDesignField
 from app.schemas.canvas_assistant_edit import CanvasAssistantChange, CanvasAssistantEditGroup, CanvasAssistantProposal
 from app.schemas.canvas_assistant_structure import (
-    AddCanvasCardTarget, AddModelCard, AddMovementCard, AddTextCard, AdoptFirstFrame, AdoptFirstFrameTarget,
+    AddCanvasCardTarget, AddCatalogCard, AddModelCard, AddMovementCard, AddTextCard, AdoptFirstFrame, AdoptFirstFrameTarget,
     AdjustShotMovement, AdjustShotMovementTarget,
-    ProposedStructure, ReplaceFirstFrame,
+    ConnectCards, ConnectCardsTarget, ProposedStructure, ReplaceFirstFrame,
 )
 from app.schemas.generation_canvas import (
     CanvasDocument, GenerationCanvasEdge, ImageContentCard, ImageModelCard, MovementCard, PromptDocument,
@@ -22,10 +22,16 @@ from app.services.generation_canvas.assistant_media import resolve_assistant_med
 from app.services.generation_canvas.assistant_movement import apply_shot_movement, preview_shot_movement
 from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
 from app.services.generation_canvas.capabilities import model_capability
-from app.services.generation_canvas.catalog import CARD_TITLES
+from app.services.generation_canvas.catalog import CARD_TITLES, canvas_card_models
+from app.services.generation_canvas.connection_policy import connection_policy
 
 
 def _card_configuration(operation, card_id):
+    if isinstance(operation, AddCatalogCard):
+        card_model = canvas_card_models().get(operation.card_type)
+        if card_model:
+            return card_model(id=card_id, type=operation.card_type), ''
+        raise ValueError('Unknown canvas card type')
     if isinstance(operation, AddTextCard):
         return TextContentCard(id=card_id, text=operation.text), operation.text
     if isinstance(operation, AddMovementCard):
@@ -76,7 +82,7 @@ def structural_preview_tool(draft, kind: str, sources):
     """Expose one read-only preview over the catalog and attached reference files."""
     @tool
     def propose_canvas_structure(change: ProposedStructure) -> str:
-        """Preview explicit card creation or first-frame use. Choose replace_first_frame only when explicitly requested."""
+        """Preview card creation, a candidate connection or first-frame use explicitly requested by the user."""
         if draft.proposal:
             raise ToolException('A preview has already been prepared for this turn')
         if isinstance(change, AdjustShotMovement):
@@ -84,6 +90,9 @@ def structural_preview_tool(draft, kind: str, sources):
                 raise ToolException('当前画布不允许修改设计卡')
             preview = preview_shot_movement(draft, change)
             title = '只修改所选镜头的运镜'
+        elif isinstance(change, ConnectCards):
+            preview = _preview_connection(draft, change)
+            title = '连接卡片'
         elif isinstance(change, AdoptFirstFrame):
             media = sources.get(change.file_id)
             if media is None or media.file_type != 'image':
@@ -108,7 +117,10 @@ def structural_preview_tool(draft, kind: str, sources):
             )
             title = '建卡、连线并更换首帧' if replaced else '建卡、连线并采用首帧'
         else:
-            card, text = _card_configuration(change, uuid4().hex)
+            try:
+                card, text = _card_configuration(change, uuid4().hex)
+            except ValueError as exc:
+                raise ToolException('Choose a catalog card that can be created with its default values') from exc
             if kind == 'free' and card.type not in FREE_CARD_TYPES:
                 raise ToolException(f'当前画布不允许创建 {CARD_TITLES[card.type]}')
             preview = CanvasAssistantChange(
@@ -132,12 +144,24 @@ async def apply_structural_change(store, canvas, document: CanvasDocument, edit:
     if isinstance(change, AdjustShotMovementTarget):
         return apply_shot_movement(canvas, document, edit, change)
     existing = {card.id: card for card in document.cards}
+    if isinstance(change, ConnectCardsTarget):
+        edge = _candidate_edge(change, change.connection_id, document, existing)
+        if not edge:
+            return False
+        document.edges.append(edge)
+        document.input_order.setdefault(edge.target_card, {}).setdefault(edge.target_port, []).append(edge.id)
+        return True
     if isinstance(change, AddCanvasCardTarget):
         card, _ = _card_configuration(change.card, edit.card_id)
         if card.id in existing or card.id in canvas.card_types:
             return False
         document.cards.append(card)
         return True
+    return await _apply_frame_change(store, canvas, document, existing, edit)
+
+
+async def _apply_frame_change(store, canvas, document, existing, edit):
+    change = edit.target
     video = existing.get(edit.card_id)
     if (not isinstance(change, AdoptFirstFrameTarget) or not isinstance(video, VideoModelCard)
             or change.reference_card_id in existing or change.reference_card_id in canvas.card_types
@@ -149,6 +173,34 @@ async def apply_structural_change(store, canvas, document: CanvasDocument, edit:
         return False
     _bind_first_frame(document, video, change)
     return True
+
+
+def _preview_connection(draft, change: ConnectCards) -> CanvasAssistantChange:
+    identity = uuid4().hex
+    edge = _candidate_edge(change, identity, draft.visible_document, draft.saved_cards)
+    if edge is None:
+        raise ToolException('Choose two in-scope cards and compatible candidate ports')
+    source, target = (draft.saved_cards[id_] for id_ in (edge.source_card, edge.target_card))
+    return CanvasAssistantChange(
+        card_id=target.id, card_name=CARD_TITLES[target.type], before='',
+        after=f'{CARD_TITLES[source.type]} · {edge.source_port} → {edge.target_port}',
+        target=ConnectCardsTarget(**change.model_dump(), connection_id=identity),
+    )
+
+
+def _candidate_edge(change: ConnectCards, identity: str, document: CanvasDocument, cards):
+    if change.source_card == change.target_card:
+        return None
+    edge = GenerationCanvasEdge(id=identity, source_card=change.source_card, source_port=change.source_port,
+                                target_card=change.target_card, target_port=change.target_port)
+    policy = connection_policy(edge, cards)
+    if not policy or policy.connect != 'candidate':
+        return None
+    if any(current.id == edge.id or (
+        current.source_card, current.source_port, current.target_card, current.target_port
+    ) == (edge.source_card, edge.source_port, edge.target_card, edge.target_port) for current in document.edges):
+        return None
+    return edge
 
 
 async def _first_frame_matches(store, video: VideoModelCard, change: AdoptFirstFrameTarget) -> bool:
