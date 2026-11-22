@@ -7,5 +7,6 @@
 **/.venv
 **/__pycache__
 **/.codegraph
+front/test-results
 .git
 **/.env
