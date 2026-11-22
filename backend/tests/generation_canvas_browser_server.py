@@ -58,24 +58,36 @@ async def prepare():
             db.add(ModelSettings(id=1, default_text_model_id='browser-assistant-model'))
 
 
-if __name__ == '__main__':
+def configure_media_storage():
+    "Share an isolated on-disk object fixture across API and real Worker processes."
     if os.environ.get('CANVAS_BROWSER_MEDIA_STORAGE'):
+        from hashlib import sha256
         from types import SimpleNamespace
+        from botocore.exceptions import ClientError
         from app.core import storage
         media_dir = Path(os.environ['CANVAS_BROWSER_MEDIA_STORAGE'])
         media_dir.mkdir(parents=True, exist_ok=True)
-        media_types = {}
+        def file_path(key):
+            return media_dir / sha256(key.encode()).hexdigest()
         async def upload_file(*, key, data, **kwargs):
             """只替换外部对象存储 I/O，保留真实文件路由及服务。"""
-            (media_dir / Path(key).name).write_bytes(data.read())
-            media_types[key] = kwargs.get('content_type')
+            path = file_path(key)
+            path.write_bytes(data.read())
+            path.with_suffix('.mime').write_text(kwargs.get('content_type') or 'application/octet-stream')
         async def download_file(*, key):
-            return (media_dir / Path(key).name).read_bytes()
+            return file_path(key).read_bytes()
         async def get_file_info(*, key):
-            return SimpleNamespace(size=(media_dir / Path(key).name).stat().st_size, content_type=media_types.get(key))
+            path = file_path(key)
+            if not path.is_file():
+                raise ClientError({'Error': {'Code': 'NoSuchKey'}}, 'HeadObject')
+            return SimpleNamespace(size=path.stat().st_size, content_type=path.with_suffix('.mime').read_text(), extra={})
         storage.upload_file = upload_file
         storage.download_file = download_file
         storage.get_file_info = get_file_info
+
+
+if __name__ == '__main__':
+    configure_media_storage()
     asyncio.run(prepare())
     app.dependency_overrides[get_db] = database
     # A proxied canvas event stream can outlive the browser during test teardown.
