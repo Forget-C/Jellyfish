@@ -12,7 +12,7 @@ const kinds=[['actor','actors','演员'],['scene','scenes','场景'],['prop','pr
 try {
  await server.listen()
  browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL})
- const page=await browser.newPage({viewport:{width:1440,height:900},reducedMotion:'reduce'})
+ const page=await browser.newPage({viewport:{width:1366,height:768},reducedMotion:'reduce'})
  await page.addInitScript(()=>{window.__ENV={BACKEND_URL:location.origin}})
  page.setDefaultTimeout(7000)
  const errors=[];page.on('pageerror',error=>errors.push(error.message))
@@ -77,18 +77,22 @@ try {
   await create.click();await page.getByRole('button',{name:/^上传图片/}).click()
   const form=page.getByRole('dialog',{name:'上传图片创建',exact:true})
   await form.waitFor()
-  assert.ok((await form.boundingBox()).width<=600,'upload form uses a compact drawer')
-  await form.getByText('点击选择或将图片拖到这里',{exact:true}).waitFor()
+  const uploadPrompt=form.getByText('点击选择或将图片拖到这里',{exact:true})
+  await uploadPrompt.waitFor()
+  assert.ok(Math.abs((await form.boundingBox()).width-720)<=1,'upload form uses the standard drawer')
+  assert.equal(await uploadPrompt.evaluate(node=>getComputedStyle(node).fontSize),'14px')
+  assert.equal((await form.getByRole('textbox',{name:'名称',exact:true}).boundingBox()).height,36)
   assert.equal(await form.getByRole('button',{name:'创建',exact:true}).isDisabled(),true)
   if(kind==='actor')await page.screenshot({path:output+'/upload-empty-desktop.png',animations:'disabled'})
   await form.getByRole('textbox',{name:'名称',exact:true}).fill(`上传${label}`)
   if(kind==='actor'){await form.getByRole('button',{name:'返回',exact:true}).click();const guard=page.getByRole('dialog',{name:'离开资产详情',exact:true});await guard.getByRole('button',{name:'继续编辑',exact:true}).click();await guard.waitFor({state:'hidden'});assert.equal(await form.getByRole('textbox',{name:'名称',exact:true}).inputValue(),'上传演员')}
+  const secondFilename=kind==='actor' ? 'reference-'.repeat(18)+'side.png' : 'second.png'
   if(kind==='actor') {
    await form.locator('input[type=file]').setInputFiles({name:'invalid.txt',mimeType:'text/plain',buffer:Buffer.from('invalid')})
    await page.getByText('仅支持上传图片文件',{exact:true}).waitFor()
    assert.equal(await form.locator('.resource-upload-item').count(),0)
    const [chooser]=await Promise.all([page.waitForEvent('filechooser'),form.locator('.ant-upload-drag .ant-upload-btn').press('Enter')])
-   await chooser.setFiles([{name:'first.png',mimeType:'image/png',buffer:Buffer.from('one')},{name:'second.png',mimeType:'image/png',buffer:Buffer.from('two')}])
+   await chooser.setFiles([{name:'first.png',mimeType:'image/png',buffer:Buffer.from('one')},{name:secondFilename,mimeType:'image/png',buffer:Buffer.from('two')}])
   } else if(kind==='scene') {
    const files=await page.evaluateHandle(()=>{const data=new DataTransfer();data.items.add(new File(['one'],'first.png',{type:'image/png'}));data.items.add(new File(['two'],'second.png',{type:'image/png'}));return data})
    await form.locator('.ant-upload-drag .ant-upload-btn').dispatchEvent('drop',{dataTransfer:files})
@@ -98,7 +102,7 @@ try {
   }
   if(kind==='actor')await form.getByRole('button',{name:'重试上传',exact:true}).click()
   await form.getByRole('img',{name:'first.png',exact:true}).waitFor()
-  await form.getByRole('img',{name:'second.png',exact:true}).waitFor()
+  await form.getByRole('img',{name:secondFilename,exact:true}).waitFor()
   if(kind==='actor') {
    await form.getByRole('img',{name:'first.png',exact:true}).click()
    await page.locator('.ant-image-preview-wrap').waitFor({state:'visible'})
@@ -110,15 +114,26 @@ try {
    await form.locator('.resource-upload-item').filter({hasText:'remove.png'}).getByRole('button',{name:'移除',exact:true}).click()
    await form.getByRole('img',{name:'remove.png',exact:true}).waitFor({state:'hidden'})
    assert.equal(await form.locator('.resource-upload-item').count(),2)
+   const longFilename=form.getByText(secondFilename,{exact:true})
+   assert.equal(await form.getByText('主图',{exact:true}).evaluate(node=>getComputedStyle(node).fontSize),'12px')
+   const checkFileLayout=async()=>{
+    const box=await form.boundingBox()
+    const filename=await longFilename.boundingBox()
+    assert.ok(filename.x>=box.x && filename.x+filename.width<=box.x+box.width)
+    assert.equal(await form.locator('.ant-drawer-body').evaluate(node=>node.scrollWidth>node.clientWidth),false)
+    const createBox=await form.getByRole('button',{name:'创建',exact:true}).boundingBox()
+    assert.ok(createBox.y>=0 && createBox.y+createBox.height<=page.viewportSize().height)
+   }
+   await checkFileLayout()
    await page.screenshot({path:output+'/upload-files-desktop.png',animations:'disabled'})
-   await page.setViewportSize({width:375,height:812})
+   await page.setViewportSize({width:390,height:844})
    await page.waitForFunction(()=>document.documentElement.scrollWidth<=innerWidth+1)
    await page.waitForFunction(()=>{const panel=document.querySelector('[role="dialog"][aria-label="上传图片创建"]').getBoundingClientRect();return panel.left>=0 && panel.right<=innerWidth+1})
    const panel=await form.boundingBox()
-   assert.ok(panel.x>=0 && panel.x+panel.width<=375,'upload drawer fits the mobile viewport')
-   assert.equal(await form.evaluate(node=>node.scrollWidth>node.clientWidth),false)
+   assert.ok(panel.x>=0 && panel.x+panel.width<=390,'upload drawer fits the mobile viewport')
+   await checkFileLayout()
    await page.screenshot({path:output+'/upload-files-mobile.png',animations:'disabled'})
-   await page.setViewportSize({width:1440,height:900})
+   await page.setViewportSize({width:1366,height:768})
   }
   await form.getByRole('combobox',{name:'图片1视角',exact:true}).press('ArrowDown')
   await page.getByText('侧面',{exact:true}).last().click()
@@ -177,6 +192,7 @@ try {
   assert.equal(await modal.getByRole('img').count()>0,true,'opened uploads keep main image as default reference')
   await modal.getByRole('button',{name:'取消',exact:true}).click();await modal.waitFor({state:'hidden'})
  }
+ await page.setViewportSize({width:1440,height:900})
  for(const[kind,tab,label]of [...kinds.map(([kind,plural,label])=>[kind,plural,label]),['character','roles','角色']]) {
   importMode=false
   await page.goto(`http://127.0.0.1:4933/projects/p?tab=${tab}`)

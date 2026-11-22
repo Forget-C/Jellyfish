@@ -50,7 +50,7 @@ try {
   server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4304, strictPort: true, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
-  page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
+  page = await browser.newPage({ viewport: { width: 1366, height: 768 } })
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   page.setDefaultTimeout(12000)
   const management = `http://127.0.0.1:4304/projects/${project}/chapters/${chapter}/workbench-management?sequence=${sequence.id}&step=objects`
@@ -69,6 +69,9 @@ try {
     const form = page.getByRole('dialog', { name: '上传图片创建', exact: true })
     await form.waitFor()
     await page.waitForFunction(() => { const node = document.querySelector('[role="dialog"][aria-label="上传图片创建"]'); if (!node) return false; const box = node.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth + 1 })
+    const drawerWidth = (await form.boundingBox()).width
+    assert.ok(Math.abs(drawerWidth - Math.min(page.viewportSize().width, 720)) <= 1)
+    assert.equal(await form.getByText('点击选择或将图片拖到这里', { exact: true }).evaluate(node => getComputedStyle(node).fontSize), '14px')
     assert.equal(await form.getByRole('textbox', { name: '名称', exact: true }).inputValue(), storyName)
     assert.equal(await form.getByRole('button', { name: '创建', exact: true }).isDisabled(), true)
     await form.getByRole('textbox', { name: '名称', exact: true }).fill(resourceName)
