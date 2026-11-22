@@ -22,8 +22,16 @@ const slowReplyAllowed = new Promise(resolve => { acceptSlowReply = resolve })
 const provider = createHttpServer(async (request, response) => {
   const chunks = []
   for await (const chunk of request) chunks.push(chunk)
-  const { model, messages, tools } = JSON.parse(Buffer.concat(chunks).toString())
+  const { model, messages, tools, stream } = JSON.parse(Buffer.concat(chunks).toString())
   const turns = messages.filter(message => message.role === 'user').map(message => message.content)
+  if (stream) {
+    assert.equal(turns.at(-1), '准备两版短片旁白')
+    response.writeHead(200, { 'Content-Type': 'text/event-stream' })
+    response.end('data: ' + JSON.stringify({ choices: [{
+      index: 0, delta: { role: 'assistant', content: '旁白生成完成' }, finish_reason: null,
+    }] }) + '\n\ndata: [DONE]\n\n')
+    return
+  }
   if (model === 'browser-tool-model') {
     const names = tools.map(tool => tool.function.name)
     assert.ok(names.includes('read_canvas_context'))
@@ -92,7 +100,7 @@ const backend = spawn(python || 'uv', [...(python ? [] : ['run', '--no-sync', 'p
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 captureBackend(backend, output)
-let server, browser
+let server, browser, worker
 const cleanup = browserCleanup(() => ({ browser, server, backend }))
 try {
   let ready = false
@@ -245,9 +253,41 @@ try {
     if (canvas.project_id) assert.notEqual((await storedMovement()).movement_path.text, '直线')
   }
   assert.equal(observed.length, 4)
+  const freeUrl = canvasApi + '/' + free.id
+  const current = (await (await fetch(freeUrl)).json()).data
+  const withVoiceover = {
+    ...current.document,
+    cards: [...current.document.cards, {
+      id: 'voiceover', type: 'model.text', model_id: 'browser-assistant-model',
+      prompt: { segments: [{ id: 'text', kind: 'text', text: '准备两版短片旁白' }] },
+    }],
+  }
+  const voiceoverSave = await fetch(freeUrl, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request_id: 'add-voiceover', expected_revision: current.revision, document: withVoiceover }),
+  })
+  assert.ok(voiceoverSave.ok, await voiceoverSave.clone().text())
+  await page.goto(base + '/canvases/' + free.id)
+  await page.locator('[data-card-id="voiceover"]').click()
+  await open()
+  await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('生成两版')
+  await panel.getByRole('button', { name: '发送消息' }).click()
+  await panel.getByText('已授权生成版本数 2 · 已排队，等待提交', { exact: true }).waitFor()
+  worker = spawn(python || 'uv', [...(python ? [] : ['run', '--no-sync', 'python']), '-m', 'app.task_worker'], {
+    cwd: join(root, '../backend'),
+    env: { ...process.env, DATABASE_URL: 'sqlite+aiosqlite:///' + join(output, 'browser.sqlite') },
+    stdio: 'ignore',
+  })
+  await panel.getByText('已授权生成版本数 2 · 已生成', { exact: true }).waitFor({ timeout: 15_000 })
+  assert.equal(await panel.getByRole('button', { name: '查看运行', exact: true }).count(), 2)
+  await page.screenshot({ path: join(output, 'assistant-generation.png') })
+  await panel.getByRole('button', { name: '查看运行', exact: true }).last().click()
+  await page.getByRole('region', { name: '画布运行历史' }).locator('details[data-history-run][open]')
+    .getByText('旁白生成完成', { exact: true }).waitFor()
   console.log('Assistant conversation persisted independently on both real canvas entries.')
 } finally {
   acceptSlowReply()
+  if (worker && worker.exitCode === null) worker.kill()
   await cleanup()
   provider.close()
 }

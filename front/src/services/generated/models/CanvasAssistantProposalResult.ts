@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { CanvasAssistantEditConflict } from './CanvasAssistantEditConflict';
+import type { CanvasAssistantGenerationRead } from './CanvasAssistantGenerationRead';
 import type { CanvasAssistantProposal } from './CanvasAssistantProposal';
 import type { CanvasRead } from './CanvasRead';
 import type { CanvasSaved } from './CanvasSaved';
@@ -14,4 +15,5 @@ export type CanvasAssistantProposalResult = {
     receipt?: (CanvasSaved | null);
     canvas?: (CanvasRead | null);
     conflicts?: Array<CanvasAssistantEditConflict>;
+    generation?: (CanvasAssistantGenerationRead | null);
 };
