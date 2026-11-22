@@ -5,10 +5,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
+from app.schemas.canvas_assistant import CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage
 from app.schemas.common import PaginatedData, paginated_response, ApiResponse, created_response, empty_response, success_response
 from app.schemas.generation_canvas import CanvasRename, CanvasSummary, CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError, CanvasModelCapability, CanvasCompiledInput
 from app.services.generation_canvas.store import CanvasStore
 from app.services.generation_canvas.capabilities import model_capability
+from app.services.generation_canvas.assistant import CanvasAssistant
 
 router = APIRouter()
 
@@ -50,6 +52,22 @@ async def rename_canvas(canvas_id: str, body: CanvasRename, db: AsyncSession = D
 async def get_canvas(canvas_id: str, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """读取当前文档。"""
     return success_response(await CanvasStore(db, project_id).read(canvas_id))
+
+
+@router.get('/{canvas_id}/assistant', response_model=ApiResponse[CanvasAssistantHistory],
+            operation_id='canvas_assistant_history')
+async def get_assistant_history(canvas_id: str, project_id: str = '',
+                                db: AsyncSession = Depends(get_db, scope='function')):
+    """Read the saved conversation for the requested canvas."""
+    return success_response(await CanvasAssistant(db, project_id).history(canvas_id))
+
+
+@router.post('/{canvas_id}/assistant', response_model=ApiResponse[CanvasAssistantExchange],
+             operation_id='canvas_assistant_send')
+async def send_assistant_message(canvas_id: str, body: CanvasAssistantMessage, project_id: str = '',
+                                 db: AsyncSession = Depends(get_db, scope='function')):
+    """Send a turn, replaying the receipt when the request already succeeded."""
+    return success_response(await CanvasAssistant(db, project_id).send(canvas_id, body))
 
 
 @router.put('/{canvas_id}', response_model=ApiResponse[CanvasSaved], operation_id='canvas_save',

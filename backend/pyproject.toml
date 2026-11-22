@@ -24,6 +24,7 @@ dependencies = [
     "python-multipart>=0.0.5",
     "jinja2",
     "pillow>=12",
+    "deepagents==0.7.41",
 ]
 
 [project.optional-dependencies]
