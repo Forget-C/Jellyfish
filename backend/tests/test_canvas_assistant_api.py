@@ -1,4 +1,6 @@
 """Canvas-scoped assistant conversations through the shared HTTP API."""
+import asyncio
+
 import json
 
 import httpx
@@ -146,3 +148,42 @@ async def test_assistant_switches_model_without_losing_visible_card_scope(canvas
     assert (await canvas_client.post(assistant, json=whole_canvas)).status_code == 200
     assert (await canvas_client.get(url)).json()['data']['document'] == canvas['document']
     assert (await canvas_client.get(append_canvas_path(url, '/runtime'))).json()['data']['runs'] == []
+
+
+@pytest.mark.asyncio
+async def test_can_stop_request_before_first_assistant_reply(canvas_client, monkeypatch):
+    replying, proceed = asyncio.Event(), asyncio.Event()
+    real_send = httpx.AsyncClient.send
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await real_send(client, request, **kwargs)
+        replying.set()
+        await proceed.wait()
+        return httpx.Response(200, request=request, json={
+            'id': 'result', 'object': 'chat.completion', 'created': 1, 'model': 'canvas-text',
+            'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': '过期回复'}}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    async with canvas_client.canvas_sessions.begin() as db:
+        provider = await db.get(Provider, 'canvas-provider')
+        provider.api_key = 'local-test-key'
+        db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
+
+    canvas = (await canvas_client.post('/canvases', json={'name': '自由画布'})).json()['data']
+    assistant = f"/canvases/{canvas['id']}/assistant"
+    message = {'request_id': 'running-turn', 'text': '正在回复时停止'}
+    reply = asyncio.create_task(canvas_client.post(assistant, json=message))
+    try:
+        await asyncio.wait_for(replying.wait(), 5)
+        stopped = await canvas_client.post(assistant + '/turns/running-turn/stop')
+        assert stopped.status_code == 200, stopped.text
+        assert stopped.json()['data']['stopped']
+    finally:
+        proceed.set()
+        await reply
+    history = (await canvas_client.get(assistant)).json()['data']
+    assert len(history['turns']) == 1
+    assert history['turns'][0]['stopped'] and not history['turns'][0]['reply']
+    assert (await canvas_client.post(assistant, json=message)).json()['data'] == history['turns'][0]

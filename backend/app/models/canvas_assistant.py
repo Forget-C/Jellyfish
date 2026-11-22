@@ -2,8 +2,8 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, ForeignKeyConstraint, Index, Integer, JSON, String, Text, UniqueConstraint
-from sqlalchemy.dialects.mysql import MEDIUMTEXT
+from sqlalchemy import Boolean, DateTime, ForeignKey, ForeignKeyConstraint, Index, Integer, JSON, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy.dialects.mysql import MEDIUMBLOB, MEDIUMTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -20,6 +20,10 @@ class CanvasAssistantSession(Base):
     sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     pending_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
     pending_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    pending_request: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    pending_checkpoint: Mapped[bytes | None] = mapped_column(
+        LargeBinary().with_variant(MEDIUMBLOB(), 'mysql'), nullable=True,
+    )
     model_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     approval_mode: Mapped[str] = mapped_column(String(12), nullable=False, server_default='manual')
 

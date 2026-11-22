@@ -54,6 +54,9 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
   const [scope, setScope] = useState<AssistantScope>()
   const pending = useRef<CanvasAssistantMessage>()
   const sendingNow = useRef(false)
+  const [activeRequestId, setActiveRequestId] = useState<string>()
+  const activeRequest = useRef<ReturnType<typeof Canvases.canvasAssistantSend>>()
+  const stoppedRequest = useRef<string>()
   const lastTurn = useRef<HTMLDivElement>(null)
   const panelId = 'canvas-assistant-' + canvasId
   const inputId = panelId + '-input'
@@ -177,7 +180,16 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
     try {
       const { data } = await Canvases.canvasAssistantStop({ canvasId, projectId, sourceId })
       if (!data) throw new Error('missing assistant stop receipt')
-      setTurns(current => current?.map(turn => turn.request_id === sourceId ? data : turn))
+      setTurns(current => current?.some(turn => turn.request_id === sourceId)
+        ? current.map(turn => turn.request_id === sourceId ? data : turn) : [...(current || []), data])
+      if (activeRequestId === sourceId) {
+        stoppedRequest.current = sourceId
+        activeRequest.current?.cancel()
+        pending.current = undefined
+        setDraft('')
+        setReferenceFiles([])
+        setRevising(undefined)
+      }
       if (revising?.request_id === sourceId) {
         setRevising(undefined)
         pending.current = undefined
@@ -224,11 +236,16 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
     setSendError(undefined)
     if (localDraft) draftingAssistantReply.add(canvasId)
     try {
-      const { data: turn } = localDraft
-        ? await Canvases.canvasDraftAssistantSend({ canvasId, requestBody: {
+      const request = localDraft
+        ? Canvases.canvasDraftAssistantSend({ canvasId, requestBody: {
           ...requestBody, turns: readDraftAssistant(canvasId).turns, model_id: modelId,
         } })
-        : await Canvases.canvasAssistantSend({ canvasId, projectId, requestBody })
+        : Canvases.canvasAssistantSend({ canvasId, projectId, requestBody })
+      if (!localDraft) {
+        setActiveRequestId(requestBody.request_id)
+        activeRequest.current = request
+      }
+      const { data: turn } = await request
       if (!turn) throw new Error('missing assistant reply')
       const appendTurn = (current: CanvasAssistantExchange[]) => current.some(existing => existing.request_id === turn.request_id)
         ? current : [...current.map(existing => turn.proposal && turn.revises === existing.request_id && existing.proposal
@@ -255,12 +272,15 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
         }
       }
     } catch (error) {
+      if (stoppedRequest.current === requestBody.request_id) return
       const detail = error instanceof ApiError ? error.body?.message ?? error.body?.detail : undefined
       setSendError(detail === 'ASSISTANT_TOOL_CALLING_REQUIRED' ? 'tools'
         : detail === 'ASSISTANT_TEXT_CAPABILITY_REQUIRED' ? 'text' : 'reply')
     } finally {
       draftingAssistantReply.delete(canvasId)
       sendingNow.current = false
+      activeRequest.current = undefined
+      setActiveRequestId(undefined)
       setSending(false)
     }
   }
@@ -449,6 +469,8 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
           </small>}
         </article>)}
         {sending && <p role="status">{uiText("助手正在回复")}</p>}
+        {activeRequestId && <WorkbenchButton variant="quiet" loading={stopping === activeRequestId}
+          onClick={() => { void stopTurn(activeRequestId) }}>{uiText("停止助手")}</WorkbenchButton>}
         <div ref={lastTurn} />
       </div>
       <form className="canvas-assistant-composer" ref={composer} onSubmit={event => { event.preventDefault(); void send() }}>

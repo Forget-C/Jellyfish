@@ -95,9 +95,10 @@ class CanvasAssistant:
     async def stop(self, canvas_id: str, source_id: str) -> CanvasAssistantExchange:
         """Withdraw pending edits and follow-up work at the canvas transaction boundary."""
         await self.store.get(canvas_id, lock=True)
+        session = await self._lock_session(canvas_id)
         turn = await self.db.get(CanvasAssistantTurn, (canvas_id, source_id), with_for_update=True, populate_existing=True)
         if turn is None:
-            raise HTTPException(404, 'Canvas assistant turn not found')
+            return await self._stop_pending(session, source_id)
         if not turn.stopped:
             turn.stopped = True
             if turn.proposal and turn.proposal['state'] == 'pending':
@@ -118,6 +119,23 @@ class CanvasAssistant:
                 if entry.review_state in ('waiting', 'reviewing'):
                     entry.review_state, entry.review_token, entry.review_lease_until = 'stopped', None, None
             await self.db.flush()
+        return await self._exchange(turn)
+
+    async def _stop_pending(self, session: CanvasAssistantSession, source_id: str) -> CanvasAssistantExchange:
+        pending = session.pending_request
+        if pending is None or pending['command']['request_id'] != source_id:
+            raise HTTPException(404, 'Canvas assistant turn not found')
+        command = pending['command']
+        session.sequence += 1
+        turn = CanvasAssistantTurn(
+            canvas_id=session.canvas_id, request_id=source_id, sequence=session.sequence, text=command['text'],
+            model_id=pending['model_id'], reply='', stopped=True, context=pending['context'], revises=command['revises'],
+            attachments=[{'file_id': file_id, 'observation': 'unavailable'} for file_id in command['attachment_file_ids']],
+        )
+        session.pending_token = session.pending_until = None
+        session.pending_request = session.pending_checkpoint = None
+        self.db.add(turn)
+        await self.db.flush()
         return await self._exchange(turn)
 
     async def set_model(self, canvas_id: str, choice: CanvasAssistantModelSelection) -> CanvasAssistantModelSelection:
@@ -214,6 +232,7 @@ class CanvasAssistant:
         token = uuid4().hex
         session.pending_token = token
         session.pending_until = now + timedelta(seconds=TURN_LEASE_SECONDS)
+        session.pending_request = {'command': command.model_dump(mode='json'), 'model_id': model_id, 'context': context}
         # Keep database locks away from provider I/O. The short lease serializes
         # turns for this conversation and can expire after an interrupted process.
         await self.db.commit()
@@ -232,12 +251,20 @@ class CanvasAssistant:
                 CanvasAssistantSession.canvas_id == canvas_id, CanvasAssistantSession.pending_token == token,
             ).values(pending_token=None, pending_until=None))
             await self.db.commit()
+            stopped = await self._stopped_exchange(canvas_id, command.request_id)
+            if stopped is not None:
+                return stopped
             raise
 
+        await self.store.get(canvas_id, lock=True)
         session = await self._lock_session(canvas_id)
         if session.pending_token != token:
+            stopped = await self._stopped_exchange(canvas_id, command.request_id)
+            if stopped is not None:
+                return stopped
             raise HTTPException(409, 'Canvas assistant reply lease expired')
         session.pending_token = session.pending_until = None
+        session.pending_request = session.pending_checkpoint = None
         proposal = edit_draft.proposal if edit_draft else None
         if proposal and command.revises:
             try:
@@ -271,6 +298,10 @@ class CanvasAssistant:
                 if authorization.state == 'queued':
                     await freeze_generation_basis(self.db, self.store.project_id, authorization)
         return await self._exchange(turn, session.approval_mode)
+
+    async def _stopped_exchange(self, canvas_id, request_id):
+        turn = await self.db.get(CanvasAssistantTurn, (canvas_id, request_id), populate_existing=True)
+        return await self._exchange(turn) if turn is not None and turn.stopped else None
 
     async def _revised_proposal(self, canvas_id, source_id, edit_draft, *, lock=False):
         if source_id is None:
