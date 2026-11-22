@@ -18,6 +18,7 @@ const model = {
   description: '完整说明' + '，用于验证长文本的浏览和换行'.repeat(20),
   created_by: '验收创建人',
   params: { long_value: 'abcdefghijklmnopqrstuvwxyz'.repeat(35) },
+  storyboard_inspection_capabilities: { image_inputs: true, video_inputs: false },
 }
 const provider = { provider_key: 'openai', id: 'provider1', name: '验收供应商', base_url: 'https://example.invalid' }
 const images = Array.from({ length: 105 }, (_, i) => ({
@@ -83,7 +84,13 @@ try {
     if (pathname.endsWith('/providers/provider1/models/import') && route.request().method() === 'POST') {
       createRequests += 1
       const { models } = route.request().postDataJSON()
-      assert.deepEqual(models, [{ name: '新增验收模型', category: 'text', params: {} }])
+      assert.equal(models.length, 1)
+      assert.equal(models[0].name, '新增验收模型')
+      assert.equal(models[0].category, 'text')
+      assert.deepEqual(models[0].params, {})
+      assert.deepEqual(models[0].capability_profile.tool_calling, {
+        declaration: 'supported', source: '验收依据',
+      })
       const created = { ...models[0], id: 'new-model', provider_id: provider.id }
       rows.push(created)
       return respond({ created: [created], skipped: [] })
@@ -132,6 +139,8 @@ try {
   await details.getByText(model.description, { exact: true }).waitFor()
   await assertDetailDrawerLayout(details)
   await details.getByText(model.created_by, { exact: true }).waitFor()
+  await details.getByRole('table', { name: '模型能力' }).getByText('未知', { exact: true }).first().waitFor()
+  await details.getByText('分镜检查可读取图片和视频静帧，当前接入无法读取连续视频。').waitFor()
   const parameters = details.getByLabel('完整参数 JSON')
   assert.match(await parameters.innerText(), /abcdefghijklmnopqrstuvwxyz/)
   const codeGeometry = await parameters.evaluate(element => ({
@@ -254,13 +263,27 @@ try {
   const modelNames = add.getByRole('combobox', { name: '模型名称', exact: true })
   await modelNames.fill('新增验收模型')
   await modelNames.press('Enter')
+  await add.getByRole('combobox', { name: '工具调用' }).click()
+  await page.getByText('支持', { exact: true }).filter({ visible: true }).last().click()
+  await add.getByRole('textbox', { name: '工具调用来源' }).fill('验收依据')
   await add.getByRole('button', { name: /确\s*定/ }).click()
   await add.waitFor({ state: 'hidden' })
   assert.equal(createRequests, 1)
   await search.fill('新增验收模型')
   const created = page.getByRole('button', { name: '新增验收模型', exact: true })
   await created.waitFor()
+  await created.click()
+  const toolRow = details.getByRole('row').filter({ hasText: '工具调用' })
+  await toolRow.getByText('支持', { exact: true }).waitFor()
+  await toolRow.getByText('验收依据', { exact: true }).waitFor()
+  await page.keyboard.press('Escape')
+  await details.waitFor({ state: 'hidden' })
   const addedRow = page.getByRole('row').filter({ has: created })
+  await addedRow.getByRole('button', { name: '编辑 新增验收模型', exact: true }).click()
+  const reopened = page.getByRole('dialog', { name: '编辑模型' })
+  assert.equal(await reopened.getByRole('textbox', { name: '工具调用来源' }).inputValue(), '验收依据')
+  await reopened.getByRole('button', { name: /取\s*消/ }).click()
+  await reopened.waitFor({ state: 'hidden' })
   await addedRow.getByRole('button', { name: '新增验收模型的更多操作' }).click()
   await page.getByRole('menuitem', { name: /复制/ }).click()
   await add.getByText('新增验收模型-复制', { exact: true }).waitFor()

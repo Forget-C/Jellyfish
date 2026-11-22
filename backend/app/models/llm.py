@@ -119,6 +119,7 @@ class Model(Base, TimestampMixin):
         comment="所属供应商 ID",
     )
     params: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, comment="模型参数（JSON）")
+    capability_profile: Mapped[dict[str, Any] | None] = mapped_column(JSON(none_as_null=True))
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="说明")
     created_by: Mapped[str] = mapped_column(String(64), nullable=False, default="", comment="创建人")
     provider: Mapped["Provider"] = relationship(back_populates="models")

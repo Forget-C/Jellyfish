@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { EffectiveModelCapabilities } from './EffectiveModelCapabilities';
+import type { ModelCapabilityProfile } from './ModelCapabilityProfile';
 import type { ModelCategoryKey } from './ModelCategoryKey';
 /**
  * 对外返回的模型信息。
@@ -35,5 +37,8 @@ export type ModelRead = {
      * 模型 ID
      */
     id: string;
+    capability_profile?: ModelCapabilityProfile;
+    effective_capabilities?: EffectiveModelCapabilities;
+    storyboard_inspection_capabilities?: EffectiveModelCapabilities;
 };
 

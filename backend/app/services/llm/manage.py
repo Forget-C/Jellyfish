@@ -8,6 +8,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.utils import apply_keyword_filter, apply_order, paginate
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider
@@ -38,6 +39,10 @@ from app.services.llm.provider_registry import (
     get_provider_spec,
     is_provider_category_supported,
     list_registered_providers,
+)
+from app.services.llm.model_capabilities import (
+    effective_chat_capabilities,
+    effective_storyboard_inspection_capabilities,
 )
 from app.bootstrap import bootstrap_all_registries
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
@@ -213,13 +218,14 @@ async def import_provider_models(
             category=candidate.category,
             provider_id=provider.id,
             params=candidate.params,
+            capability_profile=candidate.capability_profile.model_dump() if candidate.capability_profile else None,
             description=candidate.description,
             created_by="model_catalog",
         )
         db.add(model)
         await db.flush()
         await db.refresh(model)
-        created.append(ModelRead.model_validate(model))
+        created.append(_model_read(model, provider))
         existing.add((candidate.name, category_value))
     return ProviderModelImportResult(created=created, skipped=skipped)
 
@@ -237,7 +243,7 @@ async def list_models_paginated(
     allow_fields: set[str],
 ) -> ApiResponse[PaginatedData[ModelRead]]:
     """分页查询模型。"""
-    stmt = select(Model)
+    stmt = select(Model).options(selectinload(Model.provider))
     if provider_id is not None:
         stmt = stmt.where(Model.provider_id == provider_id)
     if category is not None:
@@ -253,7 +259,7 @@ async def list_models_paginated(
     )
     items, total = await paginate(db, stmt=stmt, page=page, page_size=page_size)
     return paginated_response(
-        [ModelRead.model_validate(x) for x in items],
+        [_model_read(model, model.provider) for model in items],
         page=page,
         page_size=page_size,
         total=total,
@@ -287,6 +293,7 @@ async def create_model(
         category=body.category,
         provider_id=body.provider_id,
         params=body.params,
+        capability_profile=body.capability_profile.model_dump() if body.capability_profile else None,
         description=body.description,
         created_by=body.created_by,
     )
@@ -301,6 +308,21 @@ async def get_model(
 ) -> Model:
     """获取模型。"""
     return await get_or_404(db, Model, model_id, detail=entity_not_found("Model"))
+
+
+async def read_model(db: AsyncSession, model: Model) -> ModelRead:
+    """Return model management data using the current provider configuration."""
+    provider = await get_or_404(db, Provider, model.provider_id, detail=entity_not_found("Provider"))
+    return _model_read(model, provider)
+
+
+def _model_read(model: Model, provider: Provider) -> ModelRead:
+    data = ModelRead.model_validate(model)
+    data.effective_capabilities = effective_chat_capabilities(model, provider, data.capability_profile)
+    data.storyboard_inspection_capabilities = effective_storyboard_inspection_capabilities(
+        model, provider, data.capability_profile,
+    )
+    return data
 
 
 async def update_model(

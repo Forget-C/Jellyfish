@@ -39,6 +39,7 @@ from app.services.llm.manage import (
     list_supported_providers as list_supported_providers_service,
     list_models_paginated,
     list_providers_paginated,
+    read_model,
     update_model as update_model_service,
     update_model_settings as update_model_settings_service,
     update_provider as update_provider_service,
@@ -260,7 +261,7 @@ async def create_model(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ModelRead]:
     model = await create_model_service(db, body=body)
-    return created_response(ModelRead.model_validate(model))
+    return created_response(await read_model(db, model))
 
 
 @router.get(
@@ -273,7 +274,7 @@ async def get_model(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ModelRead]:
     model = await get_model_service(db, model_id=model_id)
-    return success_response(ModelRead.model_validate(model))
+    return success_response(await read_model(db, model))
 
 
 @router.patch(
@@ -287,7 +288,7 @@ async def update_model(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ModelRead]:
     model = await update_model_service(db, model_id=model_id, body=body)
-    return success_response(ModelRead.model_validate(model))
+    return success_response(await read_model(db, model))
 
 
 @router.delete(

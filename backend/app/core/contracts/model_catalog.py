@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.models.llm import ModelCategoryKey
 
 ModelCatalogSource = Literal["provider_api", "provider_catalog"]
@@ -20,6 +21,7 @@ class ProviderModelCandidate(BaseModel):
     category: ModelCategoryKey = Field(..., description="模型类别")
     description: str = Field("", description="供应商能力说明")
     params: dict[str, object] = Field(default_factory=dict, description="建议写入模型配置的默认参数")
+    capability_profile: ModelCapabilityProfile | None = None
 
 
 class ProviderModelCatalog(BaseModel):

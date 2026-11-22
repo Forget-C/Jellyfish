@@ -9,14 +9,21 @@ _VIDEO_MODELS = frozenset({'qwen3-vl-plus', _OMNI_CHECK_MODEL})
 _IMAGE_MODELS = _VIDEO_MODELS | {'qwen3-vl-flash'}
 
 
+def check_media_support(provider_key: str, model_name: str) -> tuple[bool, bool]:
+    """Return still-image and continuous-video availability for the check adapter."""
+    if provider_key != 'aliyun_bailian':
+        return False, False
+    return model_name in _IMAGE_MODELS, model_name in _VIDEO_MODELS
+
+
 def supports_check_image(model: FrozenGenerationConfig | None) -> bool:
     """Only the explicit Bailian Chat Completions image routes are connected."""
-    return bool(model and model.provider_key == 'aliyun_bailian' and model.model_name in _IMAGE_MODELS)
+    return bool(model and check_media_support(model.provider_key, model.model_name)[0])
 
 
 def supports_check_video(model: FrozenGenerationConfig | None) -> bool:
     """Only the connected Bailian video-file routes may inspect continuous video."""
-    return bool(model and model.provider_key == 'aliyun_bailian' and model.model_name in _VIDEO_MODELS)
+    return bool(model and check_media_support(model.provider_key, model.model_name)[1])
 
 
 def check_model_parameters(model: FrozenGenerationConfig, *, multimodal: bool = False) -> dict[str, Any]:
