@@ -11,6 +11,7 @@ import {
   Button,
   Table,
   Tag,
+  Space,
   Typography,
   Tree,
   Dropdown,
@@ -26,7 +27,6 @@ import type { TableColumnsType } from 'antd'
 import {
   PlusOutlined,
   DeleteOutlined,
-  CopyOutlined,
   MoreOutlined,
   SearchOutlined,
   DownOutlined,
@@ -465,23 +465,23 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
     { title: uiText("默认标记"), key: 'default', width: 86, render: (_, model) => renderDefaultModel(model) },
     { title: uiText("简述"), dataIndex: 'description', key: 'description', ellipsis: true, render: (description?: string) => description || '—' },
     {
-      title: uiText("操作"), key: 'action', width: 76,
+      title: uiText("操作"), key: 'action', width: 108,
       render: (_, record) => (
-        <Dropdown trigger={['click']} menu={{ items: [
-          { key: 'copy', label: uiText("复制"), icon: <CopyOutlined />, onClick: () => {
-            document.getElementById(`model-actions-${record.id}`)?.focus()
+        <Space size={4}>
+          <Button type="text" size="small" aria-haspopup="dialog" onClick={event => {
+            event.currentTarget.focus()
             openModelEditor(record, true)
-          } },
-          {
+          }}>{uiText("复制")}</Button>
+          <Dropdown trigger={['click']} menu={{ items: [{
             key: 'delete', label: uiText("删除"), danger: true, icon: <DeleteOutlined />,
             onClick: () => {
               setDeleteError('')
               setModelToDelete(record)
             },
-          },
-        ] }}>
-          <Button id={`model-actions-${record.id}`} type="text" size="small" icon={<MoreOutlined />} aria-label={uiText("{{name}}的更多操作", { name: record.name })} />
-        </Dropdown>
+          }] }}>
+            <Button type="text" size="small" icon={<MoreOutlined />} aria-label={uiText("{{name}}的更多操作", { name: record.name })} />
+          </Dropdown>
+        </Space>
       ),
     },
   ]
