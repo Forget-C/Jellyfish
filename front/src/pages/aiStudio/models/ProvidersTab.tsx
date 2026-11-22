@@ -17,6 +17,7 @@ import {
   Table,
   Tag,
   Typography,
+  Tooltip,
   message,
 } from 'antd'
 import type { TableColumnsType } from 'antd'
@@ -26,6 +27,8 @@ import { LlmService } from '../../../services/generated/services/LlmService'
 import { ApiError } from '../../../services/generated'
 import type { ProviderRead, ProviderSupportedRead } from '../../../services/generated'
 import { PROVIDER_STATUS_MAP, SORT_OPTIONS, maskUrl } from './constants'
+
+import { ProviderTestModal } from './ProviderTestModal'
 
 const PAGE_SIZE = 20
 
@@ -52,6 +55,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
   const [page, setPage] = useState(1)
   const [supportedSpecs, setSupportedSpecs] = useState<ProviderSupportedRead[]>([])
   const [supportedLoading, setSupportedLoading] = useState(true)
+  const [testing, setTesting] = useState<{ provider: ProviderRead; spec: ProviderSupportedRead } | null>(null)
   const [selectedProvider, setSelectedProvider] = useState<ProviderRead | null>(null)
   const [detailPanelOpen, setDetailPanelOpen] = useState(false)
   const detailTrigger = useRef<HTMLElement | null>(null)
@@ -318,10 +322,15 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
     },
     {
       title: uiText("操作"), key: 'action', width: 224,
-      render: (_, record) => (
-        <Space size={4}>
+      render: (_, record) => {
+        const spec = supportedSpecs.find(item => item.key === record.provider_key)
+        const reason = record.status === 'disabled' ? '供应商配置已禁用'
+          : !Object.keys(spec?.test_prompts ?? {}).length ? '该供应商暂不支持测试调用' : ''
+        return <Space size={4}>
           <Button type="text" size="small" aria-label={uiText("编辑 {{name}}", { name: record.name })} onClick={() => void openProviderModal(record)}>{uiText("编辑")}</Button>
-          <Button type="text" size="small" disabled>{uiText("测试（暂未接入）")}</Button>
+          {reason ? <Tooltip title={uiText(reason)} trigger={['hover', 'focus', 'click']}>
+            <span tabIndex={0} aria-label={uiText(reason)}><Button disabled type="text" size="small">{uiText('测试调用')}</Button></span>
+          </Tooltip> : <Button type="text" size="small" onClick={() => spec && setTesting({ provider: record, spec })}>{uiText('测试调用')}</Button>}
           <Dropdown trigger={['click']} menu={{ items: [{
             key: 'delete', label: uiText("删除"), danger: true, icon: <DeleteOutlined />,
             disabled: confirmingDelete,
@@ -330,13 +339,14 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
             <Button type="text" size="small" icon={<MoreOutlined />} aria-label={uiText("{{name}}的更多操作", { name: record.name })} />
           </Dropdown>
         </Space>
-      ),
+      },
     },
   ]
 
   return (
     <>
       {header}
+      {testing && <ProviderTestModal {...testing} endpointLabel={endpointLabel} onClose={() => setTesting(null)} />}
       <PageToolbar className="management-toolbar">
         <div className="management-tools">
           <Input

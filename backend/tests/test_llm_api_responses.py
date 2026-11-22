@@ -348,3 +348,81 @@ async def test_config_names_are_unique_per_provider_across_requests(tmp_path):
                 assert (await http.post(path, json={**base, 'id': 'invalid', 'name': 'Test', **invalid})).status_code == 422
     finally:
         await engine.dispose()
+
+
+@pytest.mark.parametrize(("status", "payload", "outcome"), [
+    (202, {"id": "job-1"}, "accepted"),
+    (200, {"id": []}, "unverified"),
+    (200, {"error": {"code": "invalid_api_key"}}, "unauthorized"),
+    (302, {}, "unverified"),
+    (403, {}, "forbidden"),
+    (404, {}, "rejected"),
+    (429, {}, "limited"),
+    (503, {}, "remote_error"),
+])
+def test_provider_call_once(client, monkeypatch, status, payload, outcome):
+    import httpx
+
+    calls = []
+    async def send(_, request):
+        calls.append(request)
+        return httpx.Response(status, json=payload, headers={"location": "https://other.invalid"})
+
+    db = _FakeLlmDB()
+    provider = _seed_provider(db)
+    provider.video_base_url = "https://video.invalid/v1"
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", send)
+    llm_app.dependency_overrides[get_db] = _override_db(db)
+    try:
+        response = client.post("/api/v1/llm/providers/p-1/test-call", json={"model": "custom", "category": "video"})
+        assert response.status_code == 200
+        assert response.json()["data"]["outcome"] == outcome
+        assert [str(call.url) for call in calls] == ["https://video.invalid/v1/videos"]
+        assert calls[0].headers["authorization"] == "Bearer secret"
+        assert b'"model":"custom"' in calls[0].content
+    finally:
+        llm_app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize(("key", "category", "path", "payload", "outcome"), [
+    ("openai", "text", "/chat/completions", {"choices": [{"message": {"content": "OK"}}]}, "success"),
+    ("aliyun_bailian", "text", "/chat/completions", {"choices": []}, "unverified"),
+    ("openai", "image", "/images/generations", {"data": [{"url": "https://output.invalid/image"}]}, "success"),
+    ("volcengine", "image", "/images/generations", {"data": [{"url": "invalid"}]}, "unverified"),
+    ("volcengine", "video", "/contents/generations/tasks", {"task_id": "job"}, "accepted"),
+    ("vidu", "image", "/ent/v2/reference2image", {"task_id": "job"}, "accepted"),
+    ("vidu", "video", "/ent/v2/text2video", {"task_id": "job", "state": "failed"}, "rejected"),
+    ("kling", "image", "/v1/images/generations", {"data": {"task_id": "job"}}, "accepted"),
+    ("kling", "video", "/text-to-video/custom", {"code": 400, "data": {"task_id": "job"}}, "rejected"),
+    ("openai", "video", "/videos", None, "unknown"),
+])
+def test_provider_call_protocol(client, monkeypatch, key, category, path, payload, outcome):
+    import json
+    import httpx
+
+    calls = []
+    async def send(_, request):
+        calls.append(request)
+        if payload is None:
+            raise httpx.ReadTimeout("private transport detail")
+        return httpx.Response(200, json=payload)
+
+    provider_db = _FakeLlmDB()
+    provider = _seed_provider(provider_db)
+    provider.provider_key = key
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", send)
+    llm_app.dependency_overrides[get_db] = _override_db(provider_db)
+    try:
+        response = client.post("/api/v1/llm/providers/p-1/test-call", json={"model": "custom", "category": category})
+        assert response.json()["data"]["outcome"] == outcome
+        assert len(calls) == 1
+        request = calls[0]
+        assert request.method == "POST"
+        assert request.url.path == "/v1" + path
+        assert request.headers["authorization"] == ("Token secret" if key == "vidu" else "Bearer secret")
+        body = json.loads(request.content)
+        if key == "vidu" and category == "image":
+            assert body["images"] == []
+        assert "private transport detail" not in response.text
+    finally:
+        llm_app.dependency_overrides.clear()

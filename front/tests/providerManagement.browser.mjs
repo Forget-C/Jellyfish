@@ -23,6 +23,7 @@ let browser
 let listFails = false
 let saveFails = true
 let credentialsReads = 0
+let paidCalls = 0
 let deleteRequests = 0
 let lastSearch = ''
 let providerExists = true
@@ -60,9 +61,15 @@ try {
       providerExists = false
       return respond(null)
     }
+    if (pathname.endsWith('/test-call')) {
+      paidCalls++
+      assert.deepEqual(route.request().postDataJSON(), { model: 'manual', category: 'text' })
+      return respond({ outcome: 'success', http_status: 200 })
+    }
+    if (pathname.endsWith('/catalog')) return respond({ models: [{ name: 'remote-model', category: 'text' }] })
     if (pathname.endsWith('/models')) return respond({ items: [], pagination: { total: 2 } })
     if (pathname.endsWith('/supported')) return respond([
-      { key: 'openai', display_name: 'OpenAI', default_base_url: 'https://one.example/v1', requires_api_key: true, requires_api_secret: true },
+      { key: 'openai', test_prompts: { text: '回复 OK' }, live_model_catalog: true, display_name: 'OpenAI', default_base_url: 'https://one.example/v1', requires_api_key: true, requires_api_secret: true },
       { key: 'vidu', display_name: 'Vidu', default_base_url: 'https://two.example/v1' },
     ])
     return respond({ items: [], next_cursor: null })
@@ -125,7 +132,22 @@ try {
   await details.waitFor({ state: 'hidden' })
   await name.and(page.locator(':focus')).waitFor()
   assert.equal(credentialsReads, 0, '只读详情不得请求真实凭据')
-  assert.equal(await page.getByRole('button', { name: /测试.*暂未接入/ }).isDisabled(), true)
+  const testButton = page.getByRole('button', { name: '测试调用', exact: true })
+  await testButton.click()
+  const probe = page.getByRole('dialog', { name: '测试调用' })
+  const model = probe.getByRole('combobox', { name: '远端模型' })
+  await model.click()
+  await page.getByText('remote-model', { exact: true }).last().click()
+  await model.fill('manual')
+  await model.press('Tab')
+  assert.equal(paidCalls, 0)
+  await probe.getByRole('button', { name: '开始付费测试' }).click()
+  await probe.getByText('调用成功，已收到有效输出。').waitFor()
+  assert.equal(paidCalls, 1)
+  await probe.getByRole('button', { name: /关\s*闭/ }).click()
+  await testButton.click()
+  assert.equal(await model.inputValue(), '')
+  await probe.getByRole('button', { name: /关\s*闭/ }).click()
 
   await page.getByRole('button', { name: `编辑 ${provider.name}`, exact: true }).click()
   const edit = page.getByRole('dialog', { name: '编辑供应商' })

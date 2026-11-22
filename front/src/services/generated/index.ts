@@ -101,6 +101,7 @@ export type { ApiResponse_ProviderCredentialsRead_ } from './models/ApiResponse_
 export type { ApiResponse_ProviderModelCatalogRead_ } from './models/ApiResponse_ProviderModelCatalogRead_';
 export type { ApiResponse_ProviderModelImportResult_ } from './models/ApiResponse_ProviderModelImportResult_';
 export type { ApiResponse_ProviderRead_ } from './models/ApiResponse_ProviderRead_';
+export type { ApiResponse_ProviderTestResult_ } from './models/ApiResponse_ProviderTestResult_';
 export type { ApiResponse_RenderedPromptSnapshot_ } from './models/ApiResponse_RenderedPromptSnapshot_';
 export type { ApiResponse_ReviewRevisionApplication_ } from './models/ApiResponse_ReviewRevisionApplication_';
 export type { ApiResponse_SceneCanvasesRead_ } from './models/ApiResponse_SceneCanvasesRead_';
@@ -481,6 +482,8 @@ export type { ProviderModelImportResult } from './models/ProviderModelImportResu
 export type { ProviderRead } from './models/ProviderRead';
 export type { ProviderStatus } from './models/ProviderStatus';
 export type { ProviderSupportedRead } from './models/ProviderSupportedRead';
+export type { ProviderTestCall } from './models/ProviderTestCall';
+export type { ProviderTestResult } from './models/ProviderTestResult';
 export type { ProviderUpdate } from './models/ProviderUpdate';
 export type { ReferenceBinding_Input } from './models/ReferenceBinding_Input';
 export type { ReferenceBinding_Output } from './models/ReferenceBinding_Output';

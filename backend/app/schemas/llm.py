@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, HttpUrl, field_validator
@@ -91,11 +91,26 @@ class ProviderCredentialsRead(BaseModel):
     api_secret: str = Field("", description="API Secret")
 
 
+class ProviderTestCall(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model: ConfigName
+    category: ModelCategoryKey
+
+
+class ProviderTestResult(BaseModel):
+    outcome: Literal["success", "accepted", "unauthorized", "forbidden", "limited", "rejected",
+                     "remote_error", "unverified", "unknown"]
+    http_status: int | None = None
+
+
 class ProviderSupportedRead(BaseModel):
     """系统支持的供应商能力清单。"""
 
     key: str = Field(..., description="供应商稳定键")
     display_name: str = Field(..., description="供应商展示名")
+    test_prompts: dict[ModelCategoryKey, str] = Field(default_factory=dict)
+    live_model_catalog: bool = False
     aliases: list[str] = Field(default_factory=list, description="可识别别名")
     supported_categories: list[ModelCategoryKey] = Field(
         default_factory=list,
