@@ -50,6 +50,7 @@ class DraftCanvasAssistant(CanvasAssistant):
         messages.append(HumanMessage(content=content))
         reply, skills = await self._reply(
             client, messages, context, edit_draft, supports_tools=capability.tool_calling, structure_tool=structure_tool,
+            max_input_tokens=capability.max_input_tokens,
         )
         return CanvasAssistantExchange(request_id=command.request_id, text=command.text, context=context,
             sequence=len(command.turns) + 1, model_id=model_id, reply=reply, attachments=attachments,

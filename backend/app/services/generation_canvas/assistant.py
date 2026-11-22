@@ -22,6 +22,7 @@ from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, Canvas
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposal
 from app.schemas.canvas_assistant_layout import CanvasAssistantLayout
 from app.schemas.generation_canvas import CanvasDocument
+from app.services.generation_canvas.assistant_budget import messages_within_budget, revision_subject
 from app.services.generation_canvas.assistant_checkpoint import CanvasCheckpointer, CheckpointMediaUnavailable
 from app.services.generation_canvas.assistant_context import resolve_assistant_context
 from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
@@ -45,12 +46,13 @@ MODEL_DEADLINE_SECONDS = 90
 TURN_LEASE_SECONDS = 120
 
 
-def canvas_tools_only(allowed: set[str]):
+def canvas_tools_only(allowed: set[str], max_input_tokens: int | None = None):
     """Expose explicitly selected turn tools and reject unbound calls."""
     @wrap_model_call
     async def restrict_canvas_tools(request, handler):
         tools = [entry for entry in request.tools if getattr(entry, 'name', '') in allowed]
-        response = await handler(request.override(tools=tools, tool_choice=None))
+        messages = messages_within_budget(request.messages, request.system_message, tools, max_input_tokens)
+        response = await handler(request.override(tools=tools, tool_choice=None, messages=messages))
         if any(call['name'] not in allowed for message in response.result for call in message.tool_calls):
             raise HTTPException(502, 'Canvas assistant model returned an unexpected tool call')
         return response
@@ -149,6 +151,10 @@ class CanvasAssistant:
         if choice.model_id is not None:
             await self._resolve_model(choice.model_id, needs_context=False)
         session = await self._lock_session(canvas_id)
+        if (session.model_id != choice.model_id and session.pending_request
+                and (session.pending_until is None or session.pending_until <= datetime.now(UTC).replace(tzinfo=None))):
+            session.pending_request = {**session.pending_request, 'reselect_model': True}
+            session.pending_checkpoint = None
         session.model_id = choice.model_id
         await self.db.flush()
         return choice
@@ -229,7 +235,8 @@ class CanvasAssistant:
         if resuming and (pending['command'] != request or pending['context'] != context):
             raise HTTPException(409, 'Request already used for a different assistant message')
         model, provider, capability = await self._resolve_model(
-            pending['model_id'] if resuming else session.model_id, needs_context=context is not None,
+            pending['model_id'] if resuming and not pending.get('reselect_model') else session.model_id,
+            needs_context=context is not None,
         )
         model_id = model.id
         client = await self._model_client(model, provider, capability)
@@ -237,7 +244,7 @@ class CanvasAssistant:
         for turn in await self._turns(canvas_id):
             messages.extend([HumanMessage(content=turn.text), AIMessage(content=turn.reply)])
         if revised_proposal:
-            messages.append(AIMessage(content='正在修改这条待审批建议：' + str(revised_proposal.proposal)))
+            messages.append(revision_subject(revised_proposal.proposal))
         sources = await resolve_assistant_media(self.db, self.store.project_id, command.attachment_file_ids)
         structure_tool = structural_preview_tool(edit_draft, canvas.kind, sources) if edit_draft else None
 
@@ -261,6 +268,7 @@ class CanvasAssistant:
                 edit_draft, supports_tools=capability.tool_calling, structure_tool=structure_tool,
                 layout_draft=layout_draft,
                 checkpoint=CanvasCheckpointer(self.db, canvas_id, command.request_id, token, snapshot, content),
+                max_input_tokens=capability.max_input_tokens,
             )
         except HTTPException:
             await self.db.rollback()
@@ -341,15 +349,17 @@ class CanvasAssistant:
         return await self._model_client(model, provider, capability), capability
 
     @classmethod
-    async def review_evidence(cls, client, content, *, supports_tools: bool) -> tuple[str, list[CanvasAssistantSkillUse]]:
+    async def review_evidence(cls, client, content, *, supports_tools: bool,
+                              max_input_tokens: int | None = None) -> tuple[str, list[CanvasAssistantSkillUse]]:
         """Review only the supplied immutable result without write or generation tools."""
-        return await cls._reply(client, [HumanMessage(content=content)], None, None, supports_tools=supports_tools)
+        return await cls._reply(client, [HumanMessage(content=content)], None, None, supports_tools=supports_tools,
+                                max_input_tokens=max_input_tokens)
 
     @staticmethod
     async def _reply(client, messages, context: CanvasAssistantReadContext | None,
                      edit_draft: CanvasAssistantEditDraft | None, *, supports_tools: bool, structure_tool=None,
                      layout_draft: CanvasAssistantLayoutDraft | None = None,
-                     checkpoint: CanvasCheckpointer | None = None,
+                     checkpoint: CanvasCheckpointer | None = None, max_input_tokens: int | None = None,
                      ) -> tuple[str, list[CanvasAssistantSkillUse]]:
         @tool
         def read_canvas_context() -> str:
@@ -384,7 +394,7 @@ class CanvasAssistant:
                          '读出本次目标坐标，仅用锁定卡片。分组和移动可在同一建议提供。'
                          '等待用户确认和编辑器回执，禁止提议期间声称已完成。')
         agent = create_deep_agent(
-            model=client, middleware=[canvas_tools_only({entry.name for entry in tools})], tools=tools,
+            model=client, middleware=[canvas_tools_only({entry.name for entry in tools}, max_input_tokens)], tools=tools,
             checkpointer=checkpoint,
             system_prompt=('你是 Jellyfish 的画布助手。使用用户的语言回答影视创作问题。'
                            '生成由画布服务核对用户授权并显示真实状态，请以状态为准。') + guidance,

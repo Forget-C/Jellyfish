@@ -1437,6 +1437,7 @@
   "连接卡片": "Connect cards",
   "发送消息": "Send message",
   "继续回复": "Continue response",
+  "内容超出当前模型的上下文上限，请缩小分析范围或切换助手模型。": "The request exceeds the current model’s context limit. Narrow the scope or switch assistant models.",
   "停止助手": "Stop assistant",
   "助手已停止": "Assistant stopped",
   "暂时无法停止助手": "Could not stop the assistant",

@@ -236,3 +236,46 @@ async def test_resending_interrupted_assistant_turn_continues_completed_tool_ste
     assert (await canvas_client.post(assistant, json=history['pending_request'])).json()['data']['reply'] == '已从中断处继续'
     assert (await canvas_client.get(assistant)).json()['data']['pending_request'] is None
     assert calls == [False, True, True]
+
+
+@pytest.mark.asyncio
+async def test_assistant_model_context_limit_keeps_current_request_and_drops_old_exchange(canvas_client, monkeypatch):
+    prompts = []
+    real_send = httpx.AsyncClient.send
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await real_send(client, request, **kwargs)
+        body = json.loads(request.content)
+        prompts.append([item['content'] for item in body['messages'] if item['role'] == 'user'])
+        return httpx.Response(200, request=request, json={
+            'id': 'result', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+            'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': '答复'}}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    async with canvas_client.canvas_sessions.begin() as db:
+        provider = await db.get(Provider, 'canvas-provider')
+        provider.api_key = 'local-test-key'
+        db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
+    canvas = (await canvas_client.post('/canvases', json={'name': '自由画布'})).json()['data']
+    assistant = f"/canvases/{canvas['id']}/assistant"
+    long_text = '长旧消息' * 3500
+    assert (await canvas_client.post(assistant, json={'request_id': 'long', 'text': long_text})).status_code == 200
+    async with canvas_client.canvas_sessions.begin() as db:
+        model = await db.get(Model, 'canvas-text')
+        model.capability_profile = {'max_input_tokens': 4096}
+
+    response = await canvas_client.post(assistant, json={'request_id': 'short', 'text': '新问题'})
+    assert response.status_code == 200, response.text
+    assert prompts[-1] == ['新问题']
+    too_large = await canvas_client.post(assistant, json={'request_id': 'long2', 'text': long_text})
+    assert too_large.status_code == 422 and too_large.json()['detail'] == 'ASSISTANT_CONTEXT_LIMIT_EXCEEDED'
+    assert prompts == [[long_text], ['新问题']]
+    history = (await canvas_client.get(assistant)).json()['data']
+    assert len(history['turns']) == 2
+    async with canvas_client.canvas_sessions.begin() as db:
+        db.add(Model(id='large-window', name='large-window', category='text', provider_id='canvas-provider'))
+    assert (await canvas_client.patch(assistant + '/model', json={'model_id': 'large-window'})).status_code == 200
+    retried = (await canvas_client.post(assistant, json=history['pending_request'])).json()['data']
+    assert retried['request_id'] == 'long2' and retried['model_id'] == 'large-window'

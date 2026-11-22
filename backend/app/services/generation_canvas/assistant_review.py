@@ -57,7 +57,7 @@ async def _choose_review(sessions):
                 ).order_by(*generation_key).limit(16)
         page = query
         while candidates := (await db.execute(page)).all():
-            for created_at, canvas_id, source_id, question, results, project_id, model_id in candidates:
+            for _, canvas_id, source_id, question, results, project_id, model_id in candidates:
                 generation = await read_generation(db, canvas_id, source_id)
                 if generation is None or any(version.state not in _TERMINAL_VERSION_STATES
                                              for version in generation.versions):
@@ -70,7 +70,7 @@ async def _choose_review(sessions):
                 if changed.rowcount:
                     await db.commit()
                     return canvas_id, source_id, question, project_id, model_id, token, generation.versions, results or []
-            page = query.where(tuple_(*generation_key) > tuple_(created_at, canvas_id, source_id))
+            page = query.where(tuple_(*generation_key) > tuple_(*candidates[-1][:3]))
     return None
 
 
@@ -119,7 +119,7 @@ async def _review_version(sessions, identity, item, question, project_id, model_
             return None
     try:
         result.reply, result.skills = await CanvasAssistant.review_evidence(
-            model, content, supports_tools=capability.tool_calling)
+            model, content, supports_tools=capability.tool_calling, max_input_tokens=capability.max_input_tokens)
     except HTTPException:
         result.reply = '未收到本次生成结果的审看回复。'
     return result

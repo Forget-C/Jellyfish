@@ -13,6 +13,7 @@ from sqlalchemy import update
 from app.models.canvas_assistant import CanvasAssistantSession
 
 CHECKPOINT_LIMIT = 8 * 1024 * 1024
+CHECKPOINT_DATA_LIMIT = 32 * 1024 * 1024
 MEDIA_KEY = '__jellyfish_canvas_checkpoint_media__'
 
 
@@ -80,6 +81,8 @@ class CanvasCheckpointer(InMemorySaver):
     async def _flush(self):
         payload = (self.storage, [(key, list(inner.items())) for key, inner in self.writes.items()], list(self.blobs.items()))
         codec, data = self._serialize.dumps_typed(payload)
+        if len(data) > CHECKPOINT_DATA_LIMIT:
+            raise HTTPException(422, 'Canvas assistant checkpoint exceeds the turn limit')
         snapshot = codec.encode() + b'\0' + compress(data, 1)
         if len(snapshot) > CHECKPOINT_LIMIT:
             raise HTTPException(422, 'Canvas assistant checkpoint exceeds the turn limit')

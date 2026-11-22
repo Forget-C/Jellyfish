@@ -39,7 +39,7 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
   const [uploadingReference, setUploadingReference] = useState(false)
   const [revising, setRevising] = useState<CanvasAssistantExchange>()
   const composer = useRef<HTMLFormElement>(null)
-  const [sendError, setSendError] = useState<'text' | 'tools' | 'reply'>()
+  const [sendError, setSendError] = useState<'text' | 'tools' | 'reply' | 'context-limit'>()
   const [sending, setSending] = useState(false)
   const [stopping, setStopping] = useState<string>()
   const [stopError, setStopError] = useState(false)
@@ -283,7 +283,8 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
       }
       const detail = error instanceof ApiError ? error.body?.message ?? error.body?.detail : undefined
       setSendError(detail === 'ASSISTANT_TOOL_CALLING_REQUIRED' ? 'tools'
-        : detail === 'ASSISTANT_TEXT_CAPABILITY_REQUIRED' ? 'text' : 'reply')
+        : detail === 'ASSISTANT_TEXT_CAPABILITY_REQUIRED' ? 'text'
+        : detail === 'ASSISTANT_CONTEXT_LIMIT_EXCEEDED' ? 'context-limit' : 'reply')
     } finally {
       draftingAssistantReply.delete(canvasId)
       sendingNow.current = false
@@ -496,6 +497,7 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
         {sendError && <Alert type="error" message={sendError === 'tools'
           ? uiText("当前模型无法调用画布工具。切换可读画布的模型后，发送同一消息即可接续。")
           : sendError === 'text' ? uiText("当前模型无法进行文字对话，请切换助手模型。")
+          : sendError === 'context-limit' ? uiText("内容超出当前模型的上下文上限，请缩小分析范围或切换助手模型。")
             : uiText("未收到助手回复，请检查助手模型后重试")} />}
         <Input.TextArea id={inputId} aria-label={uiText("给画布助手发消息")} value={draft} maxLength={16000}
           autoSize={{ minRows: 2, maxRows: 5 }} disabled={sending}
