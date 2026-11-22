@@ -26,6 +26,11 @@ def supports_check_video(model: FrozenGenerationConfig | None) -> bool:
     return bool(model and check_media_support(model.provider_key, model.model_name)[1])
 
 
+def supports_synchronized_video_audio(provider_key: str, model_name: str) -> bool:
+    """Whether the connected chat endpoint can observe the audio track inside a video."""
+    return provider_key == 'aliyun_bailian' and model_name == _OMNI_CHECK_MODEL
+
+
 def check_model_parameters(model: FrozenGenerationConfig, *, multimodal: bool = False) -> dict[str, Any]:
     """准备检查专用参数，不修改冻结配置；连接资源与超时仍由 Worker 注入。"""
     params = dict(model.model_params)

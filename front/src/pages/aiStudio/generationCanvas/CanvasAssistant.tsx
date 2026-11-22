@@ -145,6 +145,9 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft 
     const modes = [
       ...(capability?.tool_calling ? [uiText("可读画布")] : []),
       ...(capability?.image_inputs ? [uiText("可读图片与视频静帧")] : []),
+      ...(capability?.video_inputs
+        ? [capability.audio_inputs ? uiText("可读连续画面及音轨") : uiText("可读连续画面")]
+        : []),
     ]
     return [model.name, ...(modes.length ? modes : [uiText("仅文字对话")])].join(' · ')
   }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { createServer as createHttpServer } from 'node:http'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -17,8 +17,21 @@ const observed = []
 const provider = createHttpServer(async (request, response) => {
   const chunks = []
   for await (const chunk of request) chunks.push(chunk)
-  const { model, messages } = JSON.parse(Buffer.concat(chunks))
-  observed.push(messages.filter(message => message.role === 'user').at(-1).content)
+  const { model, messages, stream } = JSON.parse(Buffer.concat(chunks))
+  const hasSkill = messages.some(message => message.role === 'tool')
+  if (!hasSkill) observed.push(messages.filter(message => message.role === 'user').at(-1).content)
+  if (stream) {
+    const delta = hasSkill
+      ? { role: 'assistant', content: '看过连续画面和音轨。建议保留现有节奏。' }
+      : { role: 'assistant', tool_calls: [{ index: 0, id: 'review', type: 'function',
+        function: { name: 'load_canvas_skill', arguments: '{"skill_id":"footage-review"}' } }] }
+    response.writeHead(200, { 'Content-Type': 'text/event-stream' })
+    response.end('data: ' + JSON.stringify({
+      id: 'review-reply', object: 'chat.completion.chunk', created: 1, model,
+      choices: [{ index: 0, finish_reason: hasSkill ? 'stop' : 'tool_calls', delta }],
+    }) + '\n\ndata: [DONE]\n\n')
+    return
+  }
   response.writeHead(200, { 'Content-Type': 'application/json' })
   response.end(JSON.stringify({
     id: 'media-reply', object: 'chat.completion', created: 1, model,
@@ -32,7 +45,7 @@ const backend = spawn(python || 'uv', [...(python ? [] : ['run', '--no-sync', 'p
   cwd: join(root, '../backend'),
   env: { ...process.env, CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8464',
     CANVAS_BROWSER_ASSISTANT_PROVIDER: 'http://127.0.0.1:' + provider.address().port,
-    CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media') },
+    CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_ASSISTANT_REVIEW: '1' },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 captureBackend(backend, output)
@@ -90,10 +103,24 @@ try {
   await history.getByRole('link', { name: '本地参考' }).waitFor()
   await history.getByRole('link', { name: '文件库参考' }).waitFor()
   assert.equal(await history.getByText('已读取图片', { exact: true }).count(), 2)
+  await panel.getByTitle('默认模型 · browser-assistant-model · 可读图片与视频静帧', { exact: true }).click()
+  await page.getByTitle('qwen3.8-omni-flash · 可读画布 · 可读连续画面及音轨', { exact: true }).click()
+  const clip = execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=128x128:r=10:d=3',
+    '-f', 'lavfi', '-i', 'sine=frequency=600:sample_rate=16000:duration=3',
+    '-c:v', 'libx264', '-bf', '0', '-threads', '1', '-c:a', 'aac',
+    '-movflags', 'frag_keyframe+empty_moov', '-f', 'mp4', 'pipe:1'])
+  await panel.getByLabel('上传对话参考素材').setInputFiles({ name: '声画样片.mp4', mimeType: 'video/mp4', buffer: clip })
+  await panel.getByRole('button', { name: '移除 声画样片', exact: true }).waitFor()
+  await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('请审看声画是否同步')
+  await panel.getByRole('button', { name: '发送消息' }).click()
+  await history.getByText('看过连续画面和音轨。建议保留现有节奏。', { exact: true }).waitFor()
+  await history.getByText(/已读取连续画面和音轨.*声画重合时段/).waitFor()
+  await history.getByText(/成片审看/).waitFor()
+  assert.ok(observed.at(-1).some(item => item.type === 'video_url'))
   await panel.locator('.canvas-assistant-reference-toolbar button:enabled').first().waitFor()
   await page.setViewportSize({ width: 390, height: 844 })
   await page.screenshot({ path: join(output, 'reference-history-narrow.png') })
-  console.log('Assistant uploads and selects media; saved history retains both without changing canvas content.')
+  console.log('Assistant retains image references and displays the observed video and synchronized audio interval.')
 } finally {
   await cleanup()
   provider.close()

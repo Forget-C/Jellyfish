@@ -3863,6 +3863,11 @@
   "对话参考素材": "Conversation references",
   "素材不可用": "Media unavailable",
   "已读取视频静帧": "Video still loaded",
+  "可读连续画面": "Reads continuous video",
+  "可读连续画面及音轨": "Reads continuous video and audio track",
+  "已读取连续无声画面": "Continuous video loaded without audio",
+  "已读取连续画面和音轨": "Continuous video and audio track loaded",
+  "声画重合时段": "Overlapping picture and audio",
   "本次未读取": "Not read for this reply",
   "可读图片与视频静帧": "Reads images and video stills"
 }

@@ -23,6 +23,7 @@ from app.services.generation_canvas.assistant_media import (
     describe_assistant_media, resolve_assistant_media, retain_assistant_media,
 )
 from app.services.generation_canvas.assistant_skills import skill_guidance, skill_tools
+from app.services.generation_canvas.check_models import supports_synchronized_video_audio
 from app.services.generation_canvas.store import CanvasStore
 from app.services.llm.model_capabilities import effective_chat_capabilities
 from app.services.llm.resolver import build_text_chat_model, get_model_by_category, get_provider_by_model_or_id
@@ -86,7 +87,7 @@ class CanvasAssistant:
             raise HTTPException(422, 'ASSISTANT_TEXT_CAPABILITY_REQUIRED')
         if needs_context and not capability.tool_calling:
             raise HTTPException(422, 'ASSISTANT_TOOL_CALLING_REQUIRED')
-        return model, capability
+        return model, provider, capability
 
     async def _ensure_session(self, canvas_id: str) -> None:
         await self.store.get(canvas_id)
@@ -123,9 +124,16 @@ class CanvasAssistant:
         now = datetime.now(UTC).replace(tzinfo=None)
         if session.pending_until is not None and session.pending_until > now:
             raise HTTPException(409, 'Canvas assistant is already replying')
-        model, capability = await self._resolve_model(session.model_id, needs_context=context is not None)
+        model, provider, capability = await self._resolve_model(session.model_id, needs_context=context is not None)
         model_id = model.id
         client = await build_text_chat_model(self.db, model_id=model_id, thinking=False)
+        if supports_synchronized_video_audio(provider.provider_key, model.name):
+            extra_body = dict(client.extra_body or {})
+            extra_body.pop('enable_thinking', None)
+            extra_body.update(modalities=['text'], reasoning_effort='none')
+            client = client.model_copy(update={'streaming': True, 'use_responses_api': False, 'extra_body': extra_body})
+        elif capability.video_inputs:
+            client = client.model_copy(update={'use_responses_api': False})
         messages = []
         for turn in await self._turns(canvas_id):
             messages.extend([HumanMessage(content=turn.text), AIMessage(content=turn.reply)])
@@ -139,7 +147,7 @@ class CanvasAssistant:
         await self.db.commit()
         try:
             content, attachments = await describe_assistant_media(
-                command.text, command.attachment_file_ids, sources, enabled=capability.image_inputs,
+                command.text, command.attachment_file_ids, sources, capability=capability,
             )
             messages.append(HumanMessage(content=content))
             reply, skills = await self._reply(

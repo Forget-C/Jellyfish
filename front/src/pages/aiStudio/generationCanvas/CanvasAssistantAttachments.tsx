@@ -120,15 +120,24 @@ export function CanvasAssistantAttachments({ projectId, files, onChange, disable
 /** Display the attachment and the actual evidence accompanying a completed turn. */
 export function CanvasAssistantEvidence({ attachments }: { attachments: CanvasAssistantAttachment[] }) {
   const uiText = useUiText()
+  const seconds = (value?: number | null) => ((value ?? 0) / 1000).toFixed(3)
+  const interval = (start?: number | null, end?: number | null) => seconds(start) + '–' + seconds(end) + ' s'
+  function observation(attachment: CanvasAssistantAttachment) {
+    switch (attachment.observation) {
+      case 'image': return uiText("已读取图片")
+      case 'video_frame': return uiText("已读取视频静帧") + ' · ' + seconds(attachment.at_ms) + ' s'
+      case 'video_sequence': return uiText("已读取连续无声画面") + ' · ' + interval(attachment.start_ms, attachment.end_ms)
+      case 'video_with_audio': return uiText("已读取连续画面和音轨") + ' · ' + interval(attachment.start_ms, attachment.end_ms)
+        + ' · ' + uiText("声画重合时段") + ' ' + interval(attachment.audio_start_ms, attachment.audio_end_ms)
+      default: return uiText("本次未读取")
+    }
+  }
   return <ol className="canvas-assistant-reference-list" aria-label={uiText("对话参考素材")}>
     {attachments.map(attachment => <li key={attachment.file_id}>
       {attachment.name
         ? <a href={buildFileDownloadUrl(attachment.file_id)}>{attachment.name}</a>
         : <span>{uiText("素材不可用")}</span>}
-      <small>{attachment.observation === 'image' ? uiText("已读取图片")
-        : attachment.observation === 'video_frame'
-          ? uiText("已读取视频静帧") + ' · ' + ((attachment.at_ms ?? 0) / 1000).toFixed(3) + ' s'
-          : uiText("本次未读取")}</small>
+      <small>{observation(attachment)}</small>
     </li>)}
   </ol>
 }

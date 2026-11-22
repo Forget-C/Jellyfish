@@ -43,6 +43,15 @@ async def prepare():
             db.add(Model(id='browser-tool-model', name='browser-tool-model', category='text',
                          provider_id='browser-assistant-provider',
                          capability_profile={'tool_calling': {'declaration': 'supported'}}))
+            if os.environ.get('CANVAS_BROWSER_ASSISTANT_REVIEW'):
+                db.add(Provider(id='browser-review-provider', provider_key='aliyun_bailian', name='审看测试',
+                                base_url=provider_url, api_key='browser-test-key'))
+                await db.flush()
+                db.add(Model(id='browser-review-model', name='qwen3.8-omni-flash', category='text',
+                             provider_id='browser-review-provider', capability_profile={
+                                 field: {'declaration': 'supported'} for field in
+                                 ('video_inputs', 'audio_inputs', 'tool_calling')
+                             }))
             await db.flush()
             db.add(ModelSettings(id=1, default_text_model_id='browser-assistant-model'))
 
