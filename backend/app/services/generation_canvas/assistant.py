@@ -18,7 +18,9 @@ from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.models.llm import ModelCategoryKey
 from app.schemas.canvas_assistant import (CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
                                           CanvasAssistantModelSelection, CanvasAssistantReadContext, CanvasAssistantSkillUse)
+from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.assistant_context import resolve_assistant_context
+from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
 from app.services.generation_canvas.assistant_media import (
     describe_assistant_media, resolve_assistant_media, retain_assistant_media,
 )
@@ -111,15 +113,22 @@ class CanvasAssistant:
         await self._ensure_session(canvas_id)
         session = await self._lock_session(canvas_id)
         context = None
+        edit_draft = None
         if command.context:
-            context = resolve_assistant_context(await self.store.get(canvas_id), command.context).model_dump(mode='json')
+            canvas = await self.store.get(canvas_id)
+            scoped = resolve_assistant_context(canvas, command.context)
+            context = scoped.model_dump(mode='json')
+            if scoped.scope == 'selection' and len(scoped.target_card_ids) == 1:
+                edit_draft = CanvasAssistantEditDraft(scoped, CanvasDocument.model_validate(canvas.document))
         previous = await self.db.get(CanvasAssistantTurn, (canvas_id, command.request_id))
         if previous is not None:
             attached_ids = [attachment['file_id'] for attachment in (previous.attachments or [])]
-            if previous.text != command.text or previous.context != context or attached_ids != command.attachment_file_ids:
+            if (previous.text != command.text or previous.context != context
+                    or previous.revises != command.revises or attached_ids != command.attachment_file_ids):
                 raise HTTPException(409, 'Request already used for a different assistant message')
             return CanvasAssistantExchange.model_validate(previous)
 
+        revised_proposal = await self._revised_proposal(canvas_id, command.revises, edit_draft)
         now = datetime.now(UTC).replace(tzinfo=None)
         if session.pending_until is not None and session.pending_until > now:
             raise HTTPException(409, 'Canvas assistant is already replying')
@@ -129,6 +138,8 @@ class CanvasAssistant:
         messages = []
         for turn in await self._turns(canvas_id):
             messages.extend([HumanMessage(content=turn.text), AIMessage(content=turn.reply)])
+        if revised_proposal:
+            messages.append(AIMessage(content='正在修改这条待审批建议：' + str(revised_proposal.proposal)))
         sources = await resolve_assistant_media(self.db, self.store.project_id, command.attachment_file_ids)
 
         token = uuid4().hex
@@ -144,7 +155,7 @@ class CanvasAssistant:
             messages.append(HumanMessage(content=content))
             reply, skills = await self._reply(
                 client, messages, CanvasAssistantReadContext.model_validate(context) if context else None,
-                supports_tools=capability.tool_calling,
+                edit_draft, supports_tools=capability.tool_calling,
             )
         except HTTPException:
             await self.db.execute(update(CanvasAssistantSession).where(
@@ -157,21 +168,39 @@ class CanvasAssistant:
         if session.pending_token != token:
             raise HTTPException(409, 'Canvas assistant reply lease expired')
         session.pending_token = session.pending_until = None
+        proposal = edit_draft.proposal if edit_draft else None
+        if proposal and command.revises:
+            try:
+                revised_proposal = await self._revised_proposal(canvas_id, command.revises, edit_draft, lock=True)
+            except HTTPException:
+                await self.db.commit()
+                raise
+            revised_proposal.proposal = {**revised_proposal.proposal, 'state': 'superseded'}
         session.sequence += 1
         await retain_assistant_media(self.db, self.store.project_id, canvas_id, sources)
         turn = CanvasAssistantTurn(
             canvas_id=canvas_id, sequence=session.sequence, request_id=command.request_id,
             model_id=model_id, text=command.text, reply=reply, context=context, attachments=attachments,
             skills=[skill.model_dump() for skill in skills],
+            proposal=proposal.model_dump(mode='json') if proposal else None, revises=command.revises,
         )
         self.db.add(turn)
         await self.db.flush()
         return CanvasAssistantExchange.model_validate(turn)
 
+    async def _revised_proposal(self, canvas_id, source_id, edit_draft, *, lock=False):
+        if source_id is None:
+            return None
+        turn = await self.db.get(CanvasAssistantTurn, (canvas_id, source_id), with_for_update=lock, populate_existing=lock)
+        proposal = turn.proposal if turn else None
+        if not (proposal and proposal['state'] == 'pending' and edit_draft and proposal['card_id'] == edit_draft.card['id']):
+            raise HTTPException(409, 'The assistant proposal can no longer be revised')
+        return turn
+
     @staticmethod
-    async def _reply(
-        client, messages, context: CanvasAssistantReadContext | None, *, supports_tools: bool,
-    ) -> tuple[str, list[CanvasAssistantSkillUse]]:
+    async def _reply(client, messages, context: CanvasAssistantReadContext | None,
+                     edit_draft: CanvasAssistantEditDraft | None, *, supports_tools: bool
+                     ) -> tuple[str, list[CanvasAssistantSkillUse]]:
         @tool
         def read_canvas_context() -> str:
             """Read the current request's locked canvas targets and actual adopted input cards."""
@@ -184,6 +213,10 @@ class CanvasAssistant:
         if supports_tools:
             tools.extend(skill_tools(used_skills))
             guidance += skill_guidance()
+        if edit_draft and edit_draft.available:
+            tools.append(edit_draft.tool())
+            guidance += ('只有当前用户明确要求修改或修订建议时，才用 propose_canvas_edit 提出变更。'
+                         '仅询问创作方法时只给建议。工具只预览，需用户确认，禁止声称已写入。')
         agent = create_deep_agent(
             model=client, middleware=[canvas_tools_only({entry.name for entry in tools})], tools=tools,
             system_prompt='你是 Jellyfish 的画布助手。使用用户的语言回答影视创作问题。' + guidance,

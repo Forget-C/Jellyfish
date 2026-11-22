@@ -273,6 +273,13 @@ export function GenerationCanvasWorkspace({
           disabled: uncreated || runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => { if (!promptEditors.size) void runtime.precheck(cardId) } }} /></PromptEditingActiveContext.Provider></PromptDraftContext.Provider></PromptEditingContext.Provider>
       {canvasId && current.id === canvasId && !uncreated &&
         <CanvasAssistant key={scope} canvasId={canvasId} projectId={projectId}
+          approvalDisabled={!!promptEditors.size || !ownership.editable || !!editor.recovery || editor.conflict}
+          approve={async sourceId => {
+            if (promptEditors.size || !ownership.canEdit()) return false
+            const saved = await editor.commitAssistantProposal(sourceId)
+            if (saved) runtime.invalidate()
+            return saved
+          }}
           selectedCards={selectedCards.filter(id => document.cards?.some(card => card.id === id))}
           readDraft={() => {
             const active = new Map([...activePromptDrafts.current.values()].map(read => {
