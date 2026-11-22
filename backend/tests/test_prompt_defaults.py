@@ -62,7 +62,7 @@ async def test_seeded_template_reaches_image_provider(baseline_client, image_sto
     project = uuid4().hex
     await data(client.post(STUDIO + '/projects', json={'id': project, 'name': '模板验收', 'style': '真人都市'}), 201)
     model = uuid4().hex
-    await data(client.post(LLM + '/providers', json={'id': model, 'name': 'openai',
+    await data(client.post(LLM + '/providers', json={'id': model, 'provider_key': 'openai', 'name': model,
         'base_url': 'https://image.test/v1', 'api_key': 'stub', 'status': 'active'}), 201)
     await data(client.post(LLM + '/models', json={'id': model, 'name': 'image-' + model,
         'category': 'image', 'provider_id': model}), 201)

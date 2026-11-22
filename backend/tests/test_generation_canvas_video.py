@@ -108,7 +108,7 @@ async def setup_video(runtime, provider='volcengine', segments=None, can_run=Tru
         model = await db.get(Model, runtime.model_id)
         model.category, model.name, model.params = 'video', 'viduq2-pro' if provider == 'vidu' else 'doubao-seedance', {}
         selected = await db.get(Provider, runtime.provider_id)
-        selected.name = provider
+        selected.provider_key = provider
     doc = runtime.document
     doc['cards'] = [{'id': source, 'type': 'content.' + kind, 'file_id': file} for source, kind, file in zip(['a', 'b', 'clip'], ['image', 'image', 'video'], files)] + [
         {'id': 'v', 'type': 'model.video', 'model_id': runtime.model_id, 'config': {'ratio': '16:9', 'seconds': 5, 'seed': 7}, 'prompt': {'segments': segments or [instruction('首帧参考', ['a']), instruction('尾帧参考', ['b']), instruction('关键帧参考', ['b', 'a'])]}}]
@@ -178,7 +178,7 @@ async def test_actual_worker_video_frame_fields_and_every_poll_keep_frozen_route
         await asyncio.sleep(0)
         async with runtime.sessions.begin() as db:
             selected = await db.get(Provider, runtime.provider_id)
-            selected.name, selected.base_url, selected.api_key = 'openai', 'https://changed.test', 'changed'
+            selected.provider_key, selected.base_url, selected.api_key = 'openai', 'https://changed.test', 'changed'
             model = await db.get(Model, runtime.model_id)
             model.name = 'changed'
         clock[0] += timedelta(seconds=1)

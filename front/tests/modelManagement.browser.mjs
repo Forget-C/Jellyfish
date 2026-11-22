@@ -188,7 +188,7 @@ try {
   await defaults.click()
   const defaultDrawer = page.getByRole('dialog').filter({ hasText: '全局默认模型' })
   const imageDefault = defaultDrawer.getByRole('combobox', { name: '默认图片生成' })
-  const targetOption = page.getByText('验收图片模型 105 · 验收供应商', { exact: true })
+  const targetOption = page.getByText('验收图片模型 105 · 验收供应商（OpenAI）', { exact: true })
   await imageDefault.fill('验收图片模型 105')
   await targetOption.click()
   await page.getByText('更新默认模型失败').waitFor()
@@ -197,7 +197,7 @@ try {
   defaultSaveFails = false
   await imageDefault.fill('验收图片模型 105')
   await targetOption.click()
-  await defaultDrawer.getByTitle('验收图片模型 105 · 验收供应商', { exact: true }).waitFor()
+  await defaultDrawer.getByTitle('验收图片模型 105 · 验收供应商（OpenAI）', { exact: true }).waitFor()
   await defaultDrawer.getByRole('button', { name: 'Close' }).focus()
   await page.keyboard.press('Escape')
   await defaultDrawer.waitFor({ state: 'hidden' })

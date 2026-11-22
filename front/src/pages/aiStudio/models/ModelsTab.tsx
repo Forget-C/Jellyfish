@@ -226,7 +226,6 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
     return () => { active = false }
   }, [defaultModelsDrawerOpen, defaultOptionsRevision])
 
-  const getProviderName = (id: string) => providers.find((p) => p.id === id)?.name || uiText("未知")
 
   const renderDefaultModel = (model: ModelRead) => {
     const field = DEFAULT_MODEL_FIELD_BY_CATEGORY[model.category]
@@ -261,6 +260,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
     () => providers.map(provider => ({ label: `${provider.name}（${supportedProviders.find(spec => spec.key === provider.provider_key)?.display_name ?? provider.provider_key}）`, value: provider.id })),
     [providers, supportedProviders],
   )
+  const getProviderName = (id: string) => providerSelectOptions.find(option => option.value === id)?.label ?? uiText("未知")
   const selectedFormProvider = providers.find(provider => provider.id === selectedFormProviderId)
   const selectedProviderSpec = selectedFormProvider && supportedProviders.find(
     spec => spec.key === selectedFormProvider.provider_key,

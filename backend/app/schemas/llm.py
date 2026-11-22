@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from typing import Annotated, Any
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, HttpUrl, field_validator
+
+from pydantic.json_schema import SkipJsonSchema
 
 from app.core.contracts.model_catalog import ModelCatalogSource, ProviderModelCandidate
 from app.models.llm import LogLevel, ModelCategoryKey, ProviderStatus
@@ -14,8 +17,11 @@ ConfigName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=
 
 
 def _valid_endpoint(value: str) -> str:
+    value = value.strip()
+    if len(value) > 1024 or not urlsplit(value).hostname or "\\" in value:
+        raise ValueError("expected an absolute HTTP(S) URL of at most 1024 characters")
     HttpUrl(value)
-    return value.strip()
+    return value
 
 
 class ProviderBase(BaseModel):
@@ -57,8 +63,8 @@ class ProviderUpdate(BaseModel):
             raise ValueError("field cannot be null")
         return value
 
-    name: ConfigName | None = Field(None, description="配置名称")
-    base_url: str | None = Field(None, description="文本/通用 API Base URL")
+    name: ConfigName | SkipJsonSchema[None] = Field(None, description="配置名称")
+    base_url: str | SkipJsonSchema[None] = Field(None, description="文本/通用 API Base URL")
     image_base_url: str | None = Field(None, description="图片能力 API Base URL（可选覆盖）")
     video_base_url: str | None = Field(None, description="视频能力 API Base URL（可选覆盖）")
     description: str | None = Field(None, description="说明")

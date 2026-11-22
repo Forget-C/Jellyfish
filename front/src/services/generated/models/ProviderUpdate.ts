@@ -10,11 +10,11 @@ export type ProviderUpdate = {
     /**
      * 配置名称
      */
-    name?: (string | null);
+    name?: string;
     /**
      * 文本/通用 API Base URL
      */
-    base_url?: (string | null);
+    base_url?: string;
     /**
      * 图片能力 API Base URL（可选覆盖）
      */

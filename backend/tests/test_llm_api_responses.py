@@ -341,7 +341,10 @@ async def test_config_names_are_unique_per_provider_across_requests(tmp_path):
             assert (await http.patch(path + '/third', json={'name': 'PROD'})).status_code == 409
             assert (await http.patch(path + '/third', json={'provider_key': 'vidu'})).status_code == 422
             assert (await http.post(path, json=dict(base, id='other', name='Prod', provider_key='vidu'))).status_code == 201
-            for invalid in [{'name': ' '}, {'provider_key': 'unknown'}, {'base_url': 'invalid'}]:
+            for url in ('invalid', 'https:example.com', 'http:///test', 'https://host.test/' + 'x' * 1024):
+                assert (await http.patch(path + '/third', json={'base_url': url})).status_code == 422
+                assert (await http.post(path, json=dict(base, id='invalid', name='Other', base_url=url))).status_code == 422
+            for invalid in [{'name': ' '}, {'provider_key': 'unknown'}]:
                 assert (await http.post(path, json={**base, 'id': 'invalid', 'name': 'Test', **invalid})).status_code == 422
     finally:
         await engine.dispose()

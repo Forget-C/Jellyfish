@@ -232,7 +232,7 @@ async def test_new_project_reads_current_canvas_assets_and_production(baseline_c
     text_id, image_id, video_id = ('text-' + suffix, 'image-' + suffix, 'video-' + suffix)
     for provider_id, name, host in ((image_id, 'openai', 'image.test'), (video_id, 'volcengine', 'video.test')):
         await data(client.post(LLM + '/providers', json={
-            'id': provider_id, 'name': name, 'base_url': f'https://{host}/v1', 'api_key': 'stub', 'status': 'active',
+            'id': provider_id, 'provider_key': name, 'name': provider_id, 'base_url': f'https://{host}/v1', 'api_key': 'stub', 'status': 'active',
         }), 201)
     for model_id, name, category, provider_id in (
         (text_id, 'baseline-text', 'text', image_id),
