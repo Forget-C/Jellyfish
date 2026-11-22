@@ -368,7 +368,7 @@ async def prepare():
         await connection.run_sync(Base.metadata.create_all)
     async with sessions.begin() as db:
         db.add(Project(id=project_id, name='文本流画布项目', style='真人都市'))
-        db.add(Provider(id=provider_id, provider_key='openai', name='openai', api_key='fixture-private', base_url='https://fixture.test/v1'))
+        db.add(Provider(id=provider_id, provider_key='openai', name=provider_id, api_key='fixture-private', base_url='https://fixture.test/v1'))
         await db.flush()
         db.add(Model(id=model_id, name=model_id if database_url else 'controlled-text', provider_id=provider_id, category='text', params={'temperature': 0.2}))
         if storyboard_video_fixture or storyboard_design_stacks or os.environ.get('CANVAS_BROWSER_STORYBOARD_REEXTRACT') == '1':
