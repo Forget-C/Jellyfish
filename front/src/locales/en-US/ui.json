@@ -424,6 +424,7 @@
   "保存未完整完成，请处理页面提示后重试。": "Save incomplete. Resolve the issues on this page and retry.",
   "保存本章划分": "Save chapter division",
   "保存画布": "Save canvas",
+  "请等待助手回复后再保存画布": "Wait for the assistant reply before saving the canvas",
   "保存结果尚未确认。草稿与请求身份已保留，核对后才能继续编辑或离开。": "Save status is unknown. Your draft and request ID are retained. Check the result before editing or leaving.",
   "保存结果尚未确认，请再次点击保存以核对同一提交。": "Save status unknown. Click Save again to verify the same submission.",
   "保存结果待核实，请刷新对象准备": "Save status unknown. Refresh object preparation.",

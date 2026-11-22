@@ -41,6 +41,8 @@ const provider = createHttpServer(async (request, response) => {
     assert.ok(!names.includes('write_file'))
     const result = messages.find(message => message.role === 'tool' && message.tool_call_id === 'context')
     const draft = result && JSON.parse(result.content)
+    const draftText = Array.isArray(turns.at(-1)) ? turns.at(-1)[0]?.text : turns.at(-1)
+    const requestDraftCard = draftText?.startsWith('新增潮水文本卡')
     const requestEdit = turns.at(-1) === '把这张卡的推近放慢'
     const reference = Array.isArray(turns.at(-1)) && turns.at(-1).find(block => block.text?.startsWith('参考素材 1 '))
     const useSkill = turns.at(-1) === '只从摄影角度看'
@@ -71,6 +73,10 @@ const provider = createHttpServer(async (request, response) => {
         ] }),
       } : { name: 'propose_canvas_edit', arguments: JSON.stringify(edit) }
       answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: operation }] }
+    } else if (requestDraftCard && !proposed) {
+      answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: {
+        name: 'propose_canvas_structure', arguments: JSON.stringify({ change: { kind: 'add_text_card', text: '潮水涌入' } }),
+      } }] }
     } else if (reference && !proposed) {
       const file = JSON.parse(reference.text.slice('参考素材 1 '.length))
       answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: {
@@ -357,6 +363,56 @@ try {
   await panel.getByRole('button', { name: '查看审看的运行', exact: true }).click()
   await page.getByRole('region', { name: '画布运行历史' }).locator('details[data-history-run][open]')
     .getByText('旁白生成完成', { exact: true }).waitFor()
+  const totalCanvases = async () => (await (await fetch(canvasApi)).json()).data.pagination.total
+  const beforeDrafts = await totalCanvases()
+  const newDraft = async () => {
+    await page.goto(base + '/canvases')
+    await page.getByRole('button', { name: /新建画布/ }).click()
+    await page.getByText('尚未创建', { exact: true }).waitFor()
+    return new URL(page.url()).pathname.split('/').at(-1)
+  }
+  const conversationDraft = await newDraft()
+  await open()
+  await ask('草稿里先聊')
+  await page.reload()
+  await open()
+  await panel.getByText('答复 草稿里先聊', { exact: true }).waitFor()
+  assert.equal(await totalCanvases(), beforeDrafts)
+  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await page.getByText('已保存', { exact: true }).waitFor()
+  assert.equal(await totalCanvases(), beforeDrafts + 1)
+  assert.equal((await (await fetch(canvasApi + '/' + conversationDraft + '/assistant')).json()).data.turns.length, 1)
+
+  const cardDraft = await newDraft()
+  await open()
+  assert.equal(await panel.getByText('答复 草稿里先聊', { exact: true }).count(), 0)
+  await panel.getByTitle(/默认模型 · browser-assistant-model/).click()
+  await page.locator('.ant-select-item-option').getByText('browser-tool-model · 可读画布', { exact: true }).click()
+  await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('新增潮水文本卡')
+  await panel.getByRole('button', { name: '发送消息' }).click()
+  const draftProposal = panel.getByRole('region', { name: '修改建议' })
+  await draftProposal.getByText('潮水涌入', { exact: true }).last().waitFor()
+  assert.equal(await totalCanvases(), beforeDrafts + 1)
+  const draftSave = '**/generation-canvases/drafts/' + cardDraft
+  let lostSave = false
+  await page.route(draftSave, async route => {
+    if (route.request().method() !== 'PUT' || lostSave) {
+      return route.continue()
+    }
+    const saved = await route.fetch()
+    assert.ok(saved.ok(), await saved.text())
+    lostSave = true
+    await route.abort()
+  })
+  await draftProposal.getByRole('checkbox', { name: '新建文本', exact: false }).check()
+  await draftProposal.getByRole('button', { name: '确认写入', exact: true }).click()
+  await page.getByText('请求结果未知，请重试核实原请求', { exact: true }).waitFor()
+  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await page.getByText('已保存', { exact: true }).waitFor()
+  await draftProposal.getByText('已写入画布', { exact: true }).waitFor()
+  const storedDraft = (await (await fetch(canvasApi + '/' + cardDraft)).json()).data
+  assert.equal(storedDraft.document.cards.filter(card => card.text === '潮水涌入').length, 1)
+  assert.equal(await totalCanvases(), beforeDrafts + 2)
   console.log('Assistant conversation persisted independently on both real canvas entries.')
 } finally {
   acceptSlowReply()

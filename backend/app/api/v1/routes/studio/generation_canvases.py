@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
 from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
                                           CanvasAssistantModelSelection)
+from app.schemas.canvas_assistant_draft import CanvasDraftSave, CanvasDraftSaved, DraftAssistantMessage
+from app.services.generation_canvas.assistant_draft import DraftCanvasAssistant
 from app.schemas.common import PaginatedData, paginated_response, ApiResponse, created_response, empty_response, success_response
 from app.schemas.generation_canvas import CanvasRename, CanvasSummary, CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError, CanvasModelCapability, CanvasCompiledInput
 from app.services.generation_canvas.store import CanvasStore
@@ -38,11 +40,19 @@ async def read_free_draft(canvas_id: UUID, db: AsyncSession = Depends(get_db, sc
     return success_response(await CanvasStore(db, None).read_free_draft(str(canvas_id)))
 
 
-@router.put('/drafts/{canvas_id}', response_model=ApiResponse[CanvasSaved], operation_id='canvas_draft_save',
+@router.put('/drafts/{canvas_id}', response_model=ApiResponse[CanvasDraftSaved], operation_id='canvas_draft_save',
             responses={409: {'model': CanvasError}, 422: {'model': CanvasError}})
-async def save_free_draft(canvas_id: UUID, body: CanvasSave, db: AsyncSession = Depends(get_db, scope='function')):
+async def save_free_draft(canvas_id: UUID, body: CanvasDraftSave, db: AsyncSession = Depends(get_db, scope='function')):
     """原子创建并保存首份有效内容；未知结果可重放原请求。"""
     return success_response(await CanvasStore(db, None).save_free_draft(str(canvas_id), body))
+
+
+@router.post('/drafts/{canvas_id}/assistant', response_model=ApiResponse[CanvasAssistantExchange],
+             operation_id='canvas_draft_assistant_send')
+async def send_draft_assistant_message(canvas_id: UUID, body: DraftAssistantMessage,
+                                       db: AsyncSession = Depends(get_db, scope='function')):
+    """Reply to a browser-owned free canvas conversation without saving it."""
+    return success_response(await DraftCanvasAssistant(db, '').reply_to_draft(str(canvas_id), body))
 
 
 @router.patch('/{canvas_id}/name', response_model=ApiResponse[CanvasRead], operation_id='canvas_rename')

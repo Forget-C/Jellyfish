@@ -12,6 +12,7 @@ import type { ApiResponse_CanvasCatalog_ } from '../models/ApiResponse_CanvasCat
 import type { ApiResponse_CanvasCheckPreview_ } from '../models/ApiResponse_CanvasCheckPreview_';
 import type { ApiResponse_CanvasCheckReportRead_ } from '../models/ApiResponse_CanvasCheckReportRead_';
 import type { ApiResponse_CanvasCompiledInput_ } from '../models/ApiResponse_CanvasCompiledInput_';
+import type { ApiResponse_CanvasDraftSaved_ } from '../models/ApiResponse_CanvasDraftSaved_';
 import type { ApiResponse_CanvasModelCapability_ } from '../models/ApiResponse_CanvasModelCapability_';
 import type { ApiResponse_CanvasPostCheckPreview_ } from '../models/ApiResponse_CanvasPostCheckPreview_';
 import type { ApiResponse_CanvasPrecheck_ } from '../models/ApiResponse_CanvasPrecheck_';
@@ -34,6 +35,7 @@ import type { CanvasAssistantProposalDecision } from '../models/CanvasAssistantP
 import type { CanvasCheckRecheckRequest } from '../models/CanvasCheckRecheckRequest';
 import type { CanvasCheckRequest } from '../models/CanvasCheckRequest';
 import type { CanvasCreate } from '../models/CanvasCreate';
+import type { CanvasDraftSave } from '../models/CanvasDraftSave';
 import type { CanvasPostCheckRequest } from '../models/CanvasPostCheckRequest';
 import type { CanvasPrecheckRequest } from '../models/CanvasPrecheckRequest';
 import type { CanvasRename } from '../models/CanvasRename';
@@ -41,6 +43,7 @@ import type { CanvasRunSubmit } from '../models/CanvasRunSubmit';
 import type { CanvasRuntimeEvent } from '../models/CanvasRuntimeEvent';
 import type { CanvasSave } from '../models/CanvasSave';
 import type { CanvasVideoFrameRequest } from '../models/CanvasVideoFrameRequest';
+import type { DraftAssistantMessage } from '../models/DraftAssistantMessage';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -119,7 +122,7 @@ export class StudioGenerationCanvasesService {
     /**
      * Save Free Draft
      * 原子创建并保存首份有效内容；未知结果可重放原请求。
-     * @returns ApiResponse_CanvasSaved_ Successful Response
+     * @returns ApiResponse_CanvasDraftSaved_ Successful Response
      * @throws ApiError
      */
     public static canvasDraftSave({
@@ -127,8 +130,8 @@ export class StudioGenerationCanvasesService {
         requestBody,
     }: {
         canvasId: string,
-        requestBody: CanvasSave,
-    }): CancelablePromise<ApiResponse_CanvasSaved_> {
+        requestBody: CanvasDraftSave,
+    }): CancelablePromise<ApiResponse_CanvasDraftSaved_> {
         return __request(OpenAPI, {
             method: 'PUT',
             url: '/api/v1/studio/generation-canvases/drafts/{canvas_id}',
@@ -140,6 +143,32 @@ export class StudioGenerationCanvasesService {
             errors: {
                 409: `Conflict`,
                 422: `Unprocessable Entity`,
+            },
+        });
+    }
+    /**
+     * Send Draft Assistant Message
+     * Reply to a browser-owned free canvas conversation without saving it.
+     * @returns ApiResponse_CanvasAssistantExchange_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasDraftAssistantSend({
+        canvasId,
+        requestBody,
+    }: {
+        canvasId: string,
+        requestBody: DraftAssistantMessage,
+    }): CancelablePromise<ApiResponse_CanvasAssistantExchange_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/drafts/{canvas_id}/assistant',
+            path: {
+                'canvas_id': canvasId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
             },
         });
     }

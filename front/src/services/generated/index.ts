@@ -37,6 +37,7 @@ export type { ApiResponse_CanvasCatalog_ } from './models/ApiResponse_CanvasCata
 export type { ApiResponse_CanvasCheckPreview_ } from './models/ApiResponse_CanvasCheckPreview_';
 export type { ApiResponse_CanvasCheckReportRead_ } from './models/ApiResponse_CanvasCheckReportRead_';
 export type { ApiResponse_CanvasCompiledInput_ } from './models/ApiResponse_CanvasCompiledInput_';
+export type { ApiResponse_CanvasDraftSaved_ } from './models/ApiResponse_CanvasDraftSaved_';
 export type { ApiResponse_CanvasModelCapability_ } from './models/ApiResponse_CanvasModelCapability_';
 export type { ApiResponse_CanvasPostCheckPreview_ } from './models/ApiResponse_CanvasPostCheckPreview_';
 export type { ApiResponse_CanvasPrecheck_ } from './models/ApiResponse_CanvasPrecheck_';
@@ -223,6 +224,8 @@ export type { CanvasDesignFieldDefinition } from './models/CanvasDesignFieldDefi
 export type { CanvasDetachedResult } from './models/CanvasDetachedResult';
 export type { CanvasDiagnostic } from './models/CanvasDiagnostic';
 export type { CanvasDocument } from './models/CanvasDocument';
+export type { CanvasDraftSave } from './models/CanvasDraftSave';
+export type { CanvasDraftSaved } from './models/CanvasDraftSaved';
 export type { CanvasError } from './models/CanvasError';
 export type { CanvasFixedSource } from './models/CanvasFixedSource';
 export type { CanvasInputPortDefinition } from './models/CanvasInputPortDefinition';
@@ -352,6 +355,9 @@ export type { DivisionSuggestion } from './models/DivisionSuggestion';
 export type { DivisionVersionDetail } from './models/DivisionVersionDetail';
 export type { DivisionVersionRef } from './models/DivisionVersionRef';
 export type { DraftAssetPromptRenderBody } from './models/DraftAssetPromptRenderBody';
+export type { DraftAssistantApproval } from './models/DraftAssistantApproval';
+export type { DraftAssistantConversation } from './models/DraftAssistantConversation';
+export type { DraftAssistantMessage } from './models/DraftAssistantMessage';
 export type { EditableRevisionField } from './models/EditableRevisionField';
 export type { EditableRevisionFields } from './models/EditableRevisionFields';
 export type { EffectiveModelCapabilities } from './models/EffectiveModelCapabilities';
