@@ -30,11 +30,28 @@
 
 AI ショートドラマの制作ワークスペースです。章の本文をシーンに分け、参考素材をそろえ、絵コンテのキャンバスで候補画像を生成します。画面の表示言語は中国語（初期設定）と英語です。
 
+[クイックスタート](#-docker-compose) · [ローカル開発](development/guides/local-development.md)
+
 ## 📷 スクリーンショット
 
-| シーン分割 | シーンの参考素材 | 絵コンテのキャンバス |
+<a href="../site/static/images/screenshots/home/storyboard.webp"><img src="../site/static/images/screenshots/home/storyboard.webp" alt="このカットを絵コンテのキャンバスで見る" width="720" /></a>
+
+**このカットができるまで**　海辺の駅のシーンでは、絵コンテ上でカットの説明と人物・ホーム・封筒の参考画像を画像モデルにつなぎました。生成された候補から最初のフレームを選び、ゆっくりと寄るカットを試し撮りしています。
+
+[選んだ最初のフレーム](../site/static/images/docs/labs/letter-frame.jpg) · [▶ 3 秒間の試し撮り（ローカルデモ）](../site/static/images/sea-letter/letter-push-in.mp4)
+
+<details>
+<summary>シーンの参考素材と画面例</summary>
+
+| 林夏 | 海辺の駅のホーム | 古い封筒 |
 | --- | --- | --- |
-| <a href="../site/static/images/screenshots/home/scene-division.webp"><img src="../site/static/images/screenshots/home/scene-division.webp" alt="シーン分割" width="320" /></a> | <a href="../site/static/images/screenshots/home/object-references.webp"><img src="../site/static/images/screenshots/home/object-references.webp" alt="シーンの参考素材" width="320" /></a> | <a href="../site/static/images/screenshots/home/storyboard.webp"><img src="../site/static/images/screenshots/home/storyboard.webp" alt="絵コンテのキャンバス" width="320" /></a> |
+| <a href="../site/static/images/docs/assets/samples/character.jpg"><img src="../site/static/images/docs/assets/samples/character.jpg" alt="林夏" width="180" /></a> | <a href="../site/static/images/docs/assets/samples/scene.jpg"><img src="../site/static/images/docs/assets/samples/scene.jpg" alt="海辺の駅のホーム" width="180" /></a> | <a href="../site/static/images/docs/assets/samples/prop.jpg"><img src="../site/static/images/docs/assets/samples/prop.jpg" alt="古い封筒" width="180" /></a> |
+
+| シーン分割 | シーンの参考素材 |
+| --- | --- |
+| <a href="../site/static/images/screenshots/home/scene-division.webp"><img src="../site/static/images/screenshots/home/scene-division.webp" alt="シーン分割" width="320" /></a> | <a href="../site/static/images/screenshots/home/object-references.webp"><img src="../site/static/images/screenshots/home/object-references.webp" alt="シーンの参考素材" width="320" /></a> |
+
+</details>
 
 ## ✨ 主な特長
 

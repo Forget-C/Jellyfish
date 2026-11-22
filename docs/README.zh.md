@@ -30,11 +30,28 @@
 
 面向 AI 短剧创作的制作工作台。从章节原文划分场次，准备视觉参考，再到分镜画布生成候选画面。界面支持中文和英文，默认中文。
 
+[快速启动](#-docker-compose) · [本地开发](development/guides/local-development.md)
+
 ## 📷 项目截图
 
-| 章节划分 | 场次参考 | 分镜画布 |
+<a href="../site/static/images/screenshots/home/storyboard.webp"><img src="../site/static/images/screenshots/home/storyboard.webp" alt="在分镜画布中查看这一镜" width="720" /></a>
+
+**这一镜是怎样生成的**　《雾海来信》的分镜画布把镜头描述和人物、站台、旧信封三张参考图接入图片模型。创作者从候选画面中选定首帧，试拍了一段慢推镜。
+
+[查看选定首帧](../site/static/images/docs/labs/letter-frame.jpg) · [▶ 观看 3 秒试拍（本地演示）](../site/static/images/sea-letter/letter-push-in.mp4)
+
+<details>
+<summary>场次参考与工作台截图</summary>
+
+| 林夏 | 海边站台 | 旧信封 |
 | --- | --- | --- |
-| <a href="../site/static/images/screenshots/home/scene-division.webp"><img src="../site/static/images/screenshots/home/scene-division.webp" alt="章节划分" width="320" /></a> | <a href="../site/static/images/screenshots/home/object-references.webp"><img src="../site/static/images/screenshots/home/object-references.webp" alt="场次参考" width="320" /></a> | <a href="../site/static/images/screenshots/home/storyboard.webp"><img src="../site/static/images/screenshots/home/storyboard.webp" alt="分镜画布" width="320" /></a> |
+| <a href="../site/static/images/docs/assets/samples/character.jpg"><img src="../site/static/images/docs/assets/samples/character.jpg" alt="林夏" width="180" /></a> | <a href="../site/static/images/docs/assets/samples/scene.jpg"><img src="../site/static/images/docs/assets/samples/scene.jpg" alt="海边站台" width="180" /></a> | <a href="../site/static/images/docs/assets/samples/prop.jpg"><img src="../site/static/images/docs/assets/samples/prop.jpg" alt="旧信封" width="180" /></a> |
+
+| 章节划分 | 场次参考 |
+| --- | --- |
+| <a href="../site/static/images/screenshots/home/scene-division.webp"><img src="../site/static/images/screenshots/home/scene-division.webp" alt="章节划分" width="320" /></a> | <a href="../site/static/images/screenshots/home/object-references.webp"><img src="../site/static/images/screenshots/home/object-references.webp" alt="场次参考" width="320" /></a> |
+
+</details>
 
 ## ✨ 核心价值
 

@@ -30,11 +30,28 @@
 
 A production workspace for AI short dramas. Divide a chapter into scenes, prepare visual references and generate candidate frames on a storyboard canvas. The interface supports Chinese (default) and English.
 
+[Quick start](#-docker-compose) · [Local development](docs/development/guides/local-development.md)
+
 ## 📷 Screenshots
 
-| Scene division | Scene references | Storyboard canvas |
+<a href="site/static/images/screenshots/home/storyboard.webp"><img src="site/static/images/screenshots/home/storyboard.webp" alt="View this shot on the storyboard canvas" width="720" /></a>
+
+**How this shot was made**　The storyboard for a seaside station scene connects the shot description and three visual references to an image model. The creator picked a frame from its outputs for a slow push-in.
+
+[Selected first frame](site/static/images/docs/labs/letter-frame.jpg) · [▶ 3-second camera test (local demo)](site/static/images/sea-letter/letter-push-in.mp4)
+
+<details>
+<summary>Scene references and screenshots</summary>
+
+| Lin Xia | Seaside platform | Old envelope |
 | --- | --- | --- |
-| <a href="site/static/images/screenshots/home/scene-division.webp"><img src="site/static/images/screenshots/home/scene-division.webp" alt="Scene division" width="320" /></a> | <a href="site/static/images/screenshots/home/object-references.webp"><img src="site/static/images/screenshots/home/object-references.webp" alt="Scene references" width="320" /></a> | <a href="site/static/images/screenshots/home/storyboard.webp"><img src="site/static/images/screenshots/home/storyboard.webp" alt="Storyboard canvas" width="320" /></a> |
+| <a href="site/static/images/docs/assets/samples/character.jpg"><img src="site/static/images/docs/assets/samples/character.jpg" alt="Lin Xia" width="180" /></a> | <a href="site/static/images/docs/assets/samples/scene.jpg"><img src="site/static/images/docs/assets/samples/scene.jpg" alt="Seaside platform" width="180" /></a> | <a href="site/static/images/docs/assets/samples/prop.jpg"><img src="site/static/images/docs/assets/samples/prop.jpg" alt="Old envelope" width="180" /></a> |
+
+| Scene division | Scene references |
+| --- | --- |
+| <a href="site/static/images/screenshots/home/scene-division.webp"><img src="site/static/images/screenshots/home/scene-division.webp" alt="Scene division" width="320" /></a> | <a href="site/static/images/screenshots/home/object-references.webp"><img src="site/static/images/screenshots/home/object-references.webp" alt="Scene references" width="320" /></a> |
+
+</details>
 
 ## ✨ Core Value
 
