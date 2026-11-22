@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, ForeignKeyConstraint, Index, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, ForeignKeyConstraint, Index, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -45,6 +45,7 @@ class CanvasAssistantTurn(Base):
     revises: Mapped[str | None] = mapped_column(String(64), nullable=True)
     skills: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     attachments: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    stopped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 class CanvasAssistantGeneration(Base):
@@ -55,6 +56,7 @@ class CanvasAssistantGeneration(Base):
         ForeignKeyConstraint(('canvas_id', 'source_id'),
             ('canvas_assistant_turns.canvas_id', 'canvas_assistant_turns.request_id'), ondelete='CASCADE'),
         Index('ix_canvas_assistant_generation_queue', 'state', 'created_at'),
+        Index('ix_canvas_assistant_generation_review', 'review_state', 'created_at'),
     )
 
     canvas_id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -66,3 +68,8 @@ class CanvasAssistantGeneration(Base):
     basis_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    review_request: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_state: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    review_results: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    review_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    review_lease_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

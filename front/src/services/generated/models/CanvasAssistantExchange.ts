@@ -22,4 +22,5 @@ export type CanvasAssistantExchange = {
     revises?: (string | null);
     skills?: (Array<CanvasAssistantSkillUse> | null);
     generation?: (CanvasAssistantGenerationRead | null);
+    stopped?: boolean;
 };

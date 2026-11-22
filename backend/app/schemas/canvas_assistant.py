@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_vali
 
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposal
 from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationRead
+from app.schemas.canvas_assistant_media import CanvasAssistantAttachment
 
 
 class CanvasAssistantDraftContext(BaseModel):
@@ -36,20 +37,6 @@ class CanvasAssistantModelSelection(BaseModel):
     """A null selection follows the configured default text model."""
 
     model_id: str | None
-
-
-class CanvasAssistantAttachment(BaseModel):
-    """A selected file and the evidence actually sent for this turn."""
-
-    file_id: str
-    name: str | None = None
-    file_type: Literal['image', 'video'] | None = None
-    observation: Literal['image', 'video_frame', 'video_sequence', 'video_with_audio', 'unavailable']
-    at_ms: int | None = None
-    start_ms: int | None = Field(default=None, exclude_if=lambda value: value is None)
-    end_ms: int | None = Field(default=None, exclude_if=lambda value: value is None)
-    audio_start_ms: int | None = Field(default=None, exclude_if=lambda value: value is None)
-    audio_end_ms: int | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class CanvasAssistantMessage(BaseModel):
@@ -94,6 +81,7 @@ class CanvasAssistantExchange(BaseModel):
     revises: str | None = None
     skills: list[CanvasAssistantSkillUse] | None = None
     generation: CanvasAssistantGenerationRead | None = None
+    stopped: bool = False
 
 
 class CanvasAssistantHistory(BaseModel):

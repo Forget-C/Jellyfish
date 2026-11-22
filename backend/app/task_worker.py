@@ -41,6 +41,7 @@ from app.schemas.generation_canvas import CanvasDocument
 from app.services.directing.store import DirectingStore, ContinuityNotReady, RevisionConflict
 from app.services.generation.media_execution import build_media_input, deliver_media, load_media_inputs, restore_media_config, store_media_output
 from app.services.generation_canvas.assistant_generation import advance_assistant_generations
+from app.services.generation_canvas.assistant_review import advance_assistant_reviews
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.script_processing_worker import generate_script_result
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
@@ -98,6 +99,7 @@ class TaskWorker:
         self.stopping = asyncio.Event()
         self.cleaner = FileCleaner(self.sessions)
         self.maintenance: asyncio.Task | None = None
+        self.assistant_review: asyncio.Task | None = None
         self.next_cleanup_at = 0.0
 
     async def run(self) -> None:
@@ -114,6 +116,7 @@ class TaskWorker:
                 try:
                     await self.tick()
                     self._schedule_cleanup()
+                    self._schedule_assistant_review()
                 except Exception as error:
                     logger.error("task scheduler iteration failed: %s", type(error).__name__)
                 try:
@@ -127,6 +130,9 @@ class TaskWorker:
             if self.maintenance is not None:
                 self.maintenance.cancel()
                 await asyncio.gather(self.maintenance, return_exceptions=True)
+            if self.assistant_review is not None:
+                self.assistant_review.cancel()
+                await asyncio.gather(self.assistant_review, return_exceptions=True)
             self.text_pool.shutdown(wait=False, cancel_futures=True)
             if owns_client:
                 await self.client.aclose()
@@ -146,6 +152,19 @@ class TaskWorker:
                 logger.warning("file maintenance failed: %s", type(error).__name__)
 
         self.maintenance = asyncio.create_task(clean())
+
+    def _schedule_assistant_review(self) -> None:
+        """Keep model review outside the scheduling loop for existing generation tasks."""
+        if self.assistant_review is not None and not self.assistant_review.done():
+            return
+
+        async def review():
+            try:
+                await advance_assistant_reviews(self.sessions)
+            except Exception as error:
+                logger.warning("canvas assistant review failed: %s", type(error).__name__)
+
+        self.assistant_review = asyncio.create_task(review())
 
     async def tick(self) -> None:
         """只在资源有空位时领取任务；远端任务只读取状态，不重新入队。"""

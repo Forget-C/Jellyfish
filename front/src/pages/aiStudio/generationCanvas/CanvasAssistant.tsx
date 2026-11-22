@@ -35,6 +35,8 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
   const composer = useRef<HTMLFormElement>(null)
   const [sendError, setSendError] = useState<'text' | 'tools' | 'reply'>()
   const [sending, setSending] = useState(false)
+  const [stopping, setStopping] = useState<string>()
+  const [stopError, setStopError] = useState(false)
   const [modelId, setModelId] = useState<string | null>(null)
   const [defaultModelId, setDefaultModelId] = useState<string | null>(null)
   const [models, setModels] = useState<ModelRead[]>([])
@@ -47,7 +49,11 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
   const panelId = 'canvas-assistant-' + canvasId
   const inputId = panelId + '-input'
   const effectiveScope = scope ?? (selectedCards.length ? 'selection' : 'text')
-  const activeGeneration = turns?.some(turn => turn.generation?.state === 'queued' || turn.generation?.state === 'running')
+  const activeGeneration = turns?.some(({ generation }) => generation && (
+    ['queued', 'running'].includes(generation.state)
+    || ['waiting', 'reviewing'].includes(generation.review?.state ?? '')
+    || generation.versions?.some(version => ['queued', 'running'].includes(version.state))
+  ))
 
   useEffect(() => {
     if (!open || !activeGeneration) return
@@ -111,6 +117,27 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
   useEffect(() => {
     if (open) lastTurn.current?.scrollIntoView({ block: 'nearest' })
   }, [open, turns])
+
+  const stopTurn = async (sourceId: string) => {
+    setStopping(sourceId)
+    setStopError(false)
+    try {
+      const { data } = await Canvases.canvasAssistantStop({ canvasId, projectId, sourceId })
+      if (!data) throw new Error('missing assistant stop receipt')
+      setTurns(current => current?.map(turn => turn.request_id === sourceId ? data : turn))
+      if (revising?.request_id === sourceId) {
+        setRevising(undefined)
+        pending.current = undefined
+      }
+    } catch { setStopError(true) }
+    finally { setStopping(undefined) }
+  }
+
+  const cancelRun = async (runId: string) => {
+    await Canvases.canvasCancelRun({ canvasId, projectId, runId })
+    const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId })
+    if (data) setTurns(data.turns)
+  }
 
   const close = () => {
     setOpen(false)
@@ -229,13 +256,24 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
       <div className="canvas-assistant-history" role="log" aria-live="polite">
         {historyError && <Alert type="error" message={uiText("暂时无法读取助手对话")}
           action={<WorkbenchButton onClick={() => { setHistoryError(false); setRetryLoad(value => value + 1) }}>{uiText("重试")}</WorkbenchButton>} />}
+        {stopError && <Alert type="error" message={uiText("暂时无法停止助手")} />}
         {!turns && !historyError && <Spin aria-label={uiText("正在读取助手对话")} />}
         {turns?.map(turn => <article className="canvas-assistant-turn" key={turn.request_id}>
           <div className="canvas-assistant-question">{turn.text}</div>
           {!!turn.attachments?.length && <CanvasAssistantEvidence attachments={turn.attachments} />}
           <div>{turn.reply}</div>
           {turn.generation && <AssistantGeneration generation={turn.generation}
-            openRun={runId => { close(); openRun(runId) }} />}
+            openRun={runId => { close(); openRun(runId) }} cancelRun={cancelRun} />}
+          {turn.stopped && <small>{uiText("助手已停止")}</small>}
+          {!turn.stopped && (
+            turn.proposal?.state === 'pending'
+            || (turn.generation && ['queued', 'waiting_approval'].includes(turn.generation.state))
+            || (turn.generation && (turn.generation.versions?.length ?? 0) < turn.generation.requested_count
+              && turn.generation.state === 'running')
+            || ['waiting', 'reviewing'].includes(turn.generation?.review?.state ?? '')
+          ) && <WorkbenchButton variant="quiet" disabled={Boolean(stopping)}
+            loading={stopping === turn.request_id}
+            onClick={() => { void stopTurn(turn.request_id) }}>{uiText("停止助手")}</WorkbenchButton>}
           {turn.proposal?.groups?.length ? <AssistantEditGroups groups={turn.proposal.groups}
             current={() => readDraft().draft}
             editDisabled={approvalDisabled || sending}
