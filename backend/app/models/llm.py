@@ -129,6 +129,23 @@ class Model(Base, TimestampMixin):
     )
 
 
+class ModelCapabilityVerification(Base, TimestampMixin):
+    """A probe outcome tied to the resolved connection at the time of the test."""
+
+    __tablename__ = "model_capability_verifications"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    model_id: Mapped[str] = mapped_column(ForeignKey("models.id", ondelete="CASCADE"), index=True)
+    configuration_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False)
+    capability: Mapped[str] = mapped_column(String(32), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    reason: Mapped[str] = mapped_column(String(32), nullable=False)
+
+
 class ModelSettings(Base):
     """模型管理全局设置（单例表）。
 

@@ -42,6 +42,7 @@ let releaseInitialLoad
 const initialLoad = new Promise(resolve => { releaseInitialLoad = resolve })
 let deleteGate
 let createRequests = 0
+let capabilityVerifications = []
 let omitTotal = false
 const loadedQueries = []
 let browser
@@ -56,6 +57,20 @@ try {
   await page.route('**/api/**', async route => {
     const { pathname, searchParams } = new URL(route.request().url())
     const respond = data => route.fulfill({ json: { code: 200, data } })
+    if (pathname.endsWith('/models/model1/capability-verifications')) {
+      if (route.request().method() === 'POST') {
+        assert.deepEqual(route.request().postDataJSON(), { capability: 'video_inputs' })
+        const item = {
+          id: 'verification1', provider_id: provider.id, provider_name: provider.name,
+          model_name: '此前保存的型号', endpoint: 'https://example.invalid/chat/completions',
+          capability: 'video_inputs', outcome: 'failed', reason: 'expected_observation_missing',
+          tested_at: '2026-11-22T08:00:00Z', current: true,
+        }
+        capabilityVerifications.push(item)
+        return respond(item)
+      }
+      return respond(capabilityVerifications)
+    }
     if (pathname.endsWith('/models/model1') && route.request().method() === 'PATCH') {
       const body = route.request().postDataJSON()
       assert.equal(body.description, '更新后的完整描述')
@@ -141,6 +156,12 @@ try {
   await details.getByText(model.created_by, { exact: true }).waitFor()
   await details.getByRole('table', { name: '模型能力' }).getByText('未知', { exact: true }).first().waitFor()
   await details.getByText('分镜检查可读取图片和视频静帧，当前接入无法读取连续视频。').waitFor()
+  assert.equal(capabilityVerifications.length, 0)
+  await details.getByRole('button', { name: '验证连续视频输入', exact: true }).click()
+  await details.getByText('未确认模型读取到该项内容').waitFor()
+  await details.getByText('此前保存的型号').waitFor()
+  await details.getByText('https://example.invalid/chat/completions').waitFor()
+  await details.getByText('当前配置', { exact: true }).waitFor()
   const parameters = details.getByLabel('完整参数 JSON')
   assert.match(await parameters.innerText(), /abcdefghijklmnopqrstuvwxyz/)
   const codeGeometry = await parameters.evaluate(element => ({

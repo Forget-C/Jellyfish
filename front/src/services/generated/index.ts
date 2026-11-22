@@ -72,6 +72,7 @@ export type { ApiResponse_list_ExperimentMessageRead__ } from './models/ApiRespo
 export type { ApiResponse_list_ExperimentSessionRead__ } from './models/ApiResponse_list_ExperimentSessionRead__';
 export type { ApiResponse_list_HomeRecentAsset__ } from './models/ApiResponse_list_HomeRecentAsset__';
 export type { ApiResponse_list_HomeRecentCanvas__ } from './models/ApiResponse_list_HomeRecentCanvas__';
+export type { ApiResponse_list_ModelCapabilityVerificationRead__ } from './models/ApiResponse_list_ModelCapabilityVerificationRead__';
 export type { ApiResponse_list_ProjectStyleRevision__ } from './models/ApiResponse_list_ProjectStyleRevision__';
 export type { ApiResponse_list_PromptCategoryOptionRead__ } from './models/ApiResponse_list_PromptCategoryOptionRead__';
 export type { ApiResponse_list_ProviderSupportedRead__ } from './models/ApiResponse_list_ProviderSupportedRead__';
@@ -79,6 +80,7 @@ export type { ApiResponse_list_SequenceRead__ } from './models/ApiResponse_list_
 export type { ApiResponse_list_SourceRead__ } from './models/ApiResponse_list_SourceRead__';
 export type { ApiResponse_list_StoryboardTaskSummary__ } from './models/ApiResponse_list_StoryboardTaskSummary__';
 export type { ApiResponse_MediaRead_ } from './models/ApiResponse_MediaRead_';
+export type { ApiResponse_ModelCapabilityVerificationRead_ } from './models/ApiResponse_ModelCapabilityVerificationRead_';
 export type { ApiResponse_ModelRead_ } from './models/ApiResponse_ModelRead_';
 export type { ApiResponse_ModelSettingsRead_ } from './models/ApiResponse_ModelSettingsRead_';
 export type { ApiResponse_NoneType_ } from './models/ApiResponse_NoneType_';
@@ -398,6 +400,8 @@ export type { MediaReference } from './models/MediaReference';
 export type { ModelCapability_Input } from './models/ModelCapability_Input';
 export type { ModelCapability_Output } from './models/ModelCapability_Output';
 export type { ModelCapabilityProfile } from './models/ModelCapabilityProfile';
+export type { ModelCapabilityVerificationRead } from './models/ModelCapabilityVerificationRead';
+export type { ModelCapabilityVerificationRequest } from './models/ModelCapabilityVerificationRequest';
 export type { ModelCategoryKey } from './models/ModelCategoryKey';
 export type { ModelCreate } from './models/ModelCreate';
 export type { ModelRead } from './models/ModelRead';

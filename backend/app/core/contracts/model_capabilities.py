@@ -1,5 +1,6 @@
 """Capability declarations for an individual provider and model configuration."""
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -38,3 +39,33 @@ class EffectiveModelCapabilities(BaseModel):
     text_outputs: bool = False
     tool_calling: bool = False
     max_input_tokens: int | None = None
+
+
+VerifiedModelCapability = Literal["tool_calling", "image_inputs", "video_inputs", "audio_inputs"]
+VerificationReason = Literal[
+    "verified", "tool_not_called", "tool_result_not_used", "expected_observation_missing",
+    "provider_unavailable", "request_failed", "probe_unavailable",
+]
+
+
+class ModelCapabilityVerificationRequest(BaseModel):
+    """One explicitly selected live capability check."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    capability: VerifiedModelCapability
+
+
+class ModelCapabilityVerificationRead(BaseModel):
+    """Safe historical verification metadata without upstream credentials or content."""
+
+    id: str
+    provider_id: str
+    provider_name: str
+    model_name: str
+    endpoint: str
+    capability: VerifiedModelCapability
+    outcome: Literal["passed", "failed"]
+    reason: VerificationReason
+    tested_at: datetime
+    current: bool

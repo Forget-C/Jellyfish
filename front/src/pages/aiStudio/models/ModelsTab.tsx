@@ -32,6 +32,7 @@ import {
 } from '@ant-design/icons'
 import { PageToolbar, WorkspaceScrollPanel } from '../../../components'
 import { ApiError, LlmService } from '../../../services/generated'
+import { ModelCapabilityVerifications } from './ModelCapabilityVerifications'
 import type {
   ModelRead,
   ModelCapabilityProfile,
@@ -700,6 +701,10 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
           { key: 'description', label: uiText("完整描述"), children: <span className="whitespace-pre-wrap">{selectedModel.description || '—'}</span> },
           { key: 'created', label: uiText("创建人"), children: selectedModel.created_by || '—' },
           { key: 'capabilities', label: uiText('模型能力'), children: <ModelCapabilities model={selectedModel} /> },
+          { key: 'verification', label: uiText('模型能力验证'), children: (
+            <ModelCapabilityVerifications key={selectedModel.id} modelId={selectedModel.id}
+              canVerify={selectedModel.category === 'text'} />
+          ) },
           { key: 'params', label: uiText("参数（JSON）"), children: (selectedModel.params === undefined || selectedModel.params === null) ? '—' : (
             <pre className="w-full min-w-0 max-w-full overflow-x-auto whitespace-pre rounded-md bg-slate-50 p-3 text-xs" tabIndex={0} aria-label={uiText("完整参数 JSON")}>{JSON.stringify(selectedModel.params, null, 2)}</pre>
           ) },
