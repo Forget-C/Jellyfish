@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
-from app.schemas.canvas_assistant import (CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
+from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
                                           CanvasAssistantModelSelection)
 from app.schemas.common import PaginatedData, paginated_response, ApiResponse, created_response, empty_response, success_response
 from app.schemas.generation_canvas import CanvasRename, CanvasSummary, CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError, CanvasModelCapability, CanvasCompiledInput
@@ -79,6 +79,14 @@ async def set_assistant_model(canvas_id: str, body: CanvasAssistantModelSelectio
                               db: AsyncSession = Depends(get_db, scope='function')):
     """Set the assistant model for this canvas independently of card generation."""
     return success_response(await CanvasAssistant(db, project_id).set_model(canvas_id, body))
+
+
+@router.patch('/{canvas_id}/assistant/approval', response_model=ApiResponse[CanvasAssistantApprovalSetting],
+              operation_id='canvas_assistant_set_approval')
+async def set_assistant_approval(canvas_id: str, body: CanvasAssistantApprovalSetting, project_id: str = '',
+                                 db: AsyncSession = Depends(get_db, scope='function')):
+    """Set the assistant approval mode for this canvas."""
+    return success_response(await CanvasAssistant(db, project_id).set_approval(canvas_id, body))
 
 
 @router.post('/{canvas_id}/assistant/proposals/{source_id}', response_model=ApiResponse[CanvasAssistantProposalResult],

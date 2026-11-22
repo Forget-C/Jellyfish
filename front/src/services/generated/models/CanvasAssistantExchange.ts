@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CanvasAssistantApprovalAudit } from './CanvasAssistantApprovalAudit';
 import type { CanvasAssistantAttachment } from './CanvasAssistantAttachment';
 import type { CanvasAssistantProposal } from './CanvasAssistantProposal';
 import type { CanvasAssistantReadContext } from './CanvasAssistantReadContext';
@@ -20,4 +21,6 @@ export type CanvasAssistantExchange = {
     proposal?: (CanvasAssistantProposal | null);
     revises?: (string | null);
     skills?: (Array<CanvasAssistantSkillUse> | null);
+    automatic_approval?: boolean;
+    approval_audit?: (Array<CanvasAssistantApprovalAudit> | null);
 };

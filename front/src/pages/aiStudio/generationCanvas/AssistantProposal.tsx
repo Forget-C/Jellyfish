@@ -97,13 +97,14 @@ export function AssistantEditGroups({ groups, current, editDisabled, revise, dec
       </Checkbox>
       {group.edits.map(edit => {
         const currentValue = currentText(currentDraft, edit)
-        const changed = pending.includes(group) && currentValue !== edit.before
+        const removal = edit.target.kind === 'delete_card' || edit.target.kind === 'release_binding'
+        const changed = !removal && pending.includes(group) && currentValue !== edit.before
         return <dl key={edit.card_id + JSON.stringify(edit.target)}>
-          <dt>{uiText(edit.card_name)} · {edit.card_id.slice(0, 8)} · {'field' in edit.target
-            ? uiText(movementFields[edit.target.field]) : uiText('视频提示词')}</dt>
-          <dt>{uiText('原值')}</dt><dd>{edit.before || '—'}</dd>
+          <dt>{uiText(edit.card_name)} · {edit.card_id.slice(0, 8)} · {removal ? uiText(edit.after)
+            : 'field' in edit.target ? uiText(movementFields[edit.target.field]) : uiText('视频提示词')}</dt>
+          <dt>{uiText(removal ? '影响范围' : '原值')}</dt><dd>{edit.before || '—'}</dd>
           {changed && <><dt>{uiText('当前值')}</dt><dd>{currentValue ?? '—'}</dd></>}
-          <dt>{uiText('拟议值')}</dt><dd>{edit.after}</dd>
+          {!removal && <><dt>{uiText('拟议值')}</dt><dd>{edit.after}</dd></>}
         </dl>
       })}
       {group.state === 'applied' && <small>{uiText('已写入画布')}</small>}

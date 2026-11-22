@@ -2,7 +2,9 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { DeleteCardEdit } from './DeleteCardEdit';
 import type { MovementFieldEdit } from './MovementFieldEdit';
+import type { ReleaseBindingEdit } from './ReleaseBindingEdit';
 import type { VideoPromptSegmentEdit } from './VideoPromptSegmentEdit';
 /**
  * Current field value which prevents a group from being applied.
@@ -10,6 +12,6 @@ import type { VideoPromptSegmentEdit } from './VideoPromptSegmentEdit';
 export type CanvasAssistantEditConflict = {
     group_id: string;
     card_id: string;
-    target: (VideoPromptSegmentEdit | MovementFieldEdit);
+    target: (VideoPromptSegmentEdit | MovementFieldEdit | DeleteCardEdit | ReleaseBindingEdit);
     current: (string | null);
 };

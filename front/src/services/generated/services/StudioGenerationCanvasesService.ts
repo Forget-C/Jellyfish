@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ApiResponse_CanvasAssistantApprovalSetting_ } from '../models/ApiResponse_CanvasAssistantApprovalSetting_';
 import type { ApiResponse_CanvasAssistantExchange_ } from '../models/ApiResponse_CanvasAssistantExchange_';
 import type { ApiResponse_CanvasAssistantHistory_ } from '../models/ApiResponse_CanvasAssistantHistory_';
 import type { ApiResponse_CanvasAssistantModelSelection_ } from '../models/ApiResponse_CanvasAssistantModelSelection_';
@@ -26,6 +27,7 @@ import type { ApiResponse_list_CanvasCheckReportRead__ } from '../models/ApiResp
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_CanvasSummary__ } from '../models/ApiResponse_PaginatedData_CanvasSummary__';
 import type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from '../models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
+import type { CanvasAssistantApprovalSetting } from '../models/CanvasAssistantApprovalSetting';
 import type { CanvasAssistantMessage } from '../models/CanvasAssistantMessage';
 import type { CanvasAssistantModelSelection } from '../models/CanvasAssistantModelSelection';
 import type { CanvasAssistantProposalDecision } from '../models/CanvasAssistantProposalDecision';
@@ -333,6 +335,37 @@ export class StudioGenerationCanvasesService {
         return __request(OpenAPI, {
             method: 'PATCH',
             url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/model',
+            path: {
+                'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Set Assistant Approval
+     * Set the assistant approval mode for this canvas.
+     * @returns ApiResponse_CanvasAssistantApprovalSetting_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantSetApproval({
+        canvasId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        requestBody: CanvasAssistantApprovalSetting,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantApprovalSetting_> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/approval',
             path: {
                 'canvas_id': canvasId,
             },

@@ -8,15 +8,18 @@ from langchain_core.tools import ToolException, tool
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.canvas_assistant import CanvasAssistantTurn
+from app.models.canvas_assistant import CanvasAssistantSession, CanvasAssistantTurn
 from app.schemas.canvas_assistant import CanvasAssistantReadContext
 from app.schemas.canvas_assistant_edit import (
     CanvasAssistantChange, CanvasAssistantEditConflict, CanvasAssistantEditGroup,
-    CanvasAssistantEditTarget, CanvasAssistantEditText, CanvasAssistantProposal,
-    CanvasAssistantProposalDecision, CanvasAssistantProposalResult, MovementFieldEdit, ProposedEditGroup,
+    CanvasAssistantApprovalAudit, CanvasAssistantEditTarget, CanvasAssistantEditText, CanvasAssistantFieldTarget,
+    CanvasAssistantProposal, CanvasAssistantProposalDecision, CanvasAssistantProposalResult,
+    CanvasAssistantRemovalTarget, DeleteCardEdit, MovementFieldEdit, ProposedEditGroup, ReleaseBindingEdit,
 )
 from app.schemas.generation_canvas import CanvasDocument, CanvasSave, MovementCard, PromptText, VideoModelCard
 from app.services.generation_canvas.catalog import CARD_TITLES
+from app.services.generation_canvas.assistant_approval import automatic_approval_allowed
+from app.services.generation_canvas.assistant_removals import apply_removal, removal_impact
 from app.services.generation_canvas.store import CanvasStore
 
 
@@ -26,7 +29,7 @@ def _editable_text(card, target: CanvasAssistantEditTarget):
         # A structured field can own references. This operation only edits plain text.
         if field.document is None:
             return field
-    elif isinstance(card, VideoModelCard) and not isinstance(target, MovementFieldEdit):
+    elif isinstance(card, VideoModelCard) and hasattr(target, 'segment_id'):
         return next((part for part in card.prompt.segments
                      if isinstance(part, PromptText) and part.id == target.segment_id), None)
     return None
@@ -35,10 +38,11 @@ def _editable_text(card, target: CanvasAssistantEditTarget):
 class CanvasAssistantEditDraft:
     """Build one in-memory preview from the chosen saved cards."""
 
-    def __init__(self, context: CanvasAssistantReadContext, saved_document: CanvasDocument):
+    def __init__(self, context: CanvasAssistantReadContext, saved_document: CanvasDocument, visible_document=None):
         target_ids = set(context.target_card_ids)
         self.cards = {card['id']: card for card in context.cards if card['id'] in target_ids}
         self.saved_cards = {card.id: card for card in saved_document.cards if card.id in self.cards}
+        self.visible_document = visible_document or saved_document
         self.proposal: CanvasAssistantProposal | None = None
 
     @property
@@ -62,7 +66,7 @@ class CanvasAssistantEditDraft:
     def tool(self):
         """Expose a preview operation with no document writes or generation."""
         @tool
-        async def propose_canvas_edit(card_id: str, target: CanvasAssistantEditTarget, text: CanvasAssistantEditText) -> str:
+        async def propose_canvas_edit(card_id: str, target: CanvasAssistantFieldTarget, text: CanvasAssistantEditText) -> str:
             """Preview a clearly requested change to one existing video prompt segment or movement field."""
             if self.proposal or len(self.cards) != 1:
                 raise ToolException('Choose grouping for multiple cards or changes')
@@ -98,6 +102,31 @@ class CanvasAssistantEditDraft:
         propose_canvas_edit_groups.handle_validation_error = True
         return propose_canvas_edit_groups
 
+    def removal_tool(self):
+        """Preview a single explicit or inferred removal without changing the document."""
+        @tool
+        async def propose_canvas_removal(card_id: str, target: CanvasAssistantRemovalTarget) -> str:
+            """Preview deletion of one card or release of one adopted input binding."""
+            if self.proposal or card_id not in self.saved_cards:
+                raise ToolException('Choose one existing card in the locked scope')
+            impact = removal_impact(self.visible_document, card_id, target)
+            if impact is None:
+                raise ToolException('The removal has no valid target or would remove protected adopted content')
+            card = self.saved_cards[card_id]
+            title = '删除卡片' if isinstance(target, DeleteCardEdit) else '解除已采用引用'
+            change = CanvasAssistantChange(
+                card_id=card_id, card_name=getattr(card, 'name', '') or CARD_TITLES[card.type], target=target,
+                before=impact[0], after=title, impact_fingerprint=impact[1],
+            )
+            self.proposal = CanvasAssistantProposal(
+                **change.model_dump(), groups=[CanvasAssistantEditGroup(id='1', title=title, edits=[change])],
+            )
+            return self.proposal.model_dump_json()
+
+        propose_canvas_removal.handle_tool_error = True
+        propose_canvas_removal.handle_validation_error = True
+        return propose_canvas_removal
+
 
 async def resolve_assistant_proposal(
     db: AsyncSession, project_id: str, canvas_id: str, source_id: str, decision: CanvasAssistantProposalDecision,
@@ -109,6 +138,11 @@ async def resolve_assistant_proposal(
     if turn is None or turn.proposal is None:
         raise HTTPException(404, 'Canvas assistant proposal not found')
     proposal = CanvasAssistantProposal.model_validate(turn.proposal)
+    if decision.approval_mode == 'automatic':
+        session = await db.get(CanvasAssistantSession, canvas_id, populate_existing=True)
+        if (decision.action != 'approve' or session is None or session.approval_mode != 'automatic'
+                or not automatic_approval_allowed(turn.text, turn.context, proposal, decision.group_ids)):
+            raise HTTPException(409, 'Automatic approval requires an explicit user request for this change')
     if decision.expected_revision > canvas.revision:
         raise HTTPException(409, 'Canvas revision does not exist')
     if proposal.groups:
@@ -125,12 +159,19 @@ async def resolve_assistant_proposal(
     if decision.action == 'reject':
         proposal.state = 'rejected'
         turn.proposal = proposal.model_dump(mode='json')
+        _record_decision(turn, decision, 'rejected')
         return CanvasAssistantProposalResult(proposal=proposal)
 
     document = CanvasDocument.model_validate(canvas.document)
     card = next((item for item in document.cards if item.id == proposal.card_id), None)
     field = _editable_text(card, proposal.target)
     if field is None or field.text != proposal.before:
+        if decision.approval_mode == 'automatic':
+            _record_decision(turn, decision, 'conflict')
+            return CanvasAssistantProposalResult(proposal=proposal, canvas=await store.read(canvas_id), conflicts=[
+                CanvasAssistantEditConflict(group_id='', card_id=proposal.card_id, target=proposal.target,
+                                            current=field.text if field is not None else None),
+            ])
         raise HTTPException(409, 'Canvas assistant proposal needs a new preview')
     _apply_text(card, field, proposal)
     request_id = 'assistant:' + hashlib.sha256(source_id.encode()).hexdigest()[:48]
@@ -140,6 +181,7 @@ async def resolve_assistant_proposal(
     proposal.state = 'applied'
     turn.proposal = proposal.model_dump(mode='json')
     turn.proposal_receipt = receipt
+    _record_decision(turn, decision, 'applied')
     return CanvasAssistantProposalResult(proposal=proposal, receipt=receipt, canvas=await store.read(canvas_id))
 
 
@@ -183,10 +225,21 @@ async def _resolve_groups(store, canvas, turn, proposal, decision) -> CanvasAssi
         turn.proposal_receipt = {
             **receipts, digest: {'receipt': receipt, 'conflicts': [item.model_dump(mode='json') for item in conflicts]},
         }
+    _record_decision(turn, decision, 'rejected' if decision.action == 'reject'
+                     else 'partial' if receipt and conflicts else 'applied' if receipt else 'conflict')
     return CanvasAssistantProposalResult(
         proposal=proposal, receipt=receipt, conflicts=conflicts,
         canvas=await store.read(canvas.id) if receipt or conflicts else None,
     )
+
+
+def _record_decision(turn, decision, outcome):
+    audit = CanvasAssistantApprovalAudit(source_id=turn.request_id, mode=decision.approval_mode,
+                                       action=decision.action, outcome=outcome, group_ids=decision.group_ids)
+    entry = audit.model_dump(mode='json')
+    previous = turn.approval_audit or []
+    if entry not in previous:
+        turn.approval_audit = [*previous, entry]
 
 
 async def _apply_groups(store, canvas, groups, digest):
@@ -198,6 +251,14 @@ async def _apply_groups(store, canvas, groups, digest):
         writes = []
         stale = []
         for change in group.edits:
+            if isinstance(change.target, (DeleteCardEdit, ReleaseBindingEdit)):
+                impact = removal_impact(document, change.card_id, change.target)
+                if impact and impact[1] == change.impact_fingerprint:
+                    writes.append((None, None, change))
+                else:
+                    stale.append(CanvasAssistantEditConflict(group_id=group.id, card_id=change.card_id,
+                                 target=change.target, current=impact[0] if impact else None))
+                continue
             card = cards.get(change.card_id)
             field = _editable_text(card, change.target)
             if field is None or field.text != change.before:
@@ -211,7 +272,10 @@ async def _apply_groups(store, canvas, groups, digest):
             conflicts.extend(stale)
             continue
         for card, field, change in writes:
-            _apply_text(card, field, change)
+            if card is None:
+                apply_removal(document, change.card_id, change.target)
+            else:
+                _apply_text(card, field, change)
         group.state = 'applied'
         edited = True
     receipt = await store.save(canvas.id, CanvasSave(

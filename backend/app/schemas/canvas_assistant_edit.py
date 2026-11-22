@@ -23,7 +23,25 @@ class MovementFieldEdit(BaseModel):
     field: Literal['movement_type', 'movement_start', 'movement_trigger', 'movement_path', 'movement_speed', 'end_frame']
 
 
-CanvasAssistantEditTarget = Annotated[VideoPromptSegmentEdit | MovementFieldEdit, Field(discriminator='kind')]
+class DeleteCardEdit(BaseModel):
+    """Remove one saved card and its incidental connections."""
+
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['delete_card']
+
+
+class ReleaseBindingEdit(BaseModel):
+    """Release one adopted input binding on the target card."""
+
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['release_binding']
+    binding_id: str = Field(min_length=1, max_length=128)
+
+
+CanvasAssistantFieldTarget = Annotated[VideoPromptSegmentEdit | MovementFieldEdit, Field(discriminator='kind')]
+CanvasAssistantRemovalTarget = Annotated[DeleteCardEdit | ReleaseBindingEdit, Field(discriminator='kind')]
+CanvasAssistantEditTarget = Annotated[VideoPromptSegmentEdit | MovementFieldEdit | DeleteCardEdit | ReleaseBindingEdit,
+                                      Field(discriminator='kind')]
 
 
 class CanvasAssistantChange(BaseModel):
@@ -34,7 +52,18 @@ class CanvasAssistantChange(BaseModel):
     target: CanvasAssistantEditTarget
     before: str
     after: str
+    impact_fingerprint: str | None = Field(default=None, exclude_if=lambda value: value is None)
 ProposalState = Literal['pending', 'rejected', 'applied', 'superseded']
+
+
+class CanvasAssistantApprovalAudit(BaseModel):
+    """A decision associated with the message on which it was taken."""
+
+    source_id: str
+    mode: Literal['manual', 'automatic']
+    action: Literal['approve', 'reject']
+    outcome: Literal['applied', 'rejected', 'partial', 'conflict']
+    group_ids: list[str] | None = None
 
 
 class CanvasAssistantEditGroup(BaseModel):
@@ -60,6 +89,7 @@ class CanvasAssistantProposalDecision(BaseModel):
     action: Literal['approve', 'reject']
     expected_revision: int = Field(ge=0)
     group_ids: list[str] | None = Field(None, min_length=1, max_length=8)
+    approval_mode: Literal['manual', 'automatic'] = 'manual'
 
 
 class CanvasAssistantEditConflict(BaseModel):
@@ -88,7 +118,7 @@ class ProposedFieldEdit(BaseModel):
 
     model_config = ConfigDict(extra='forbid')
     card_id: str
-    target: CanvasAssistantEditTarget
+    target: CanvasAssistantFieldTarget
     text: CanvasAssistantEditText
 
 

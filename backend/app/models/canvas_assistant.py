@@ -21,6 +21,7 @@ class CanvasAssistantSession(Base):
     pending_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
     pending_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     model_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    approval_mode: Mapped[str] = mapped_column(String(12), nullable=False, server_default='manual')
 
 
 class CanvasAssistantTurn(Base):
@@ -45,3 +46,4 @@ class CanvasAssistantTurn(Base):
     revises: Mapped[str | None] = mapped_column(String(64), nullable=True)
     skills: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     attachments: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    approval_audit: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)

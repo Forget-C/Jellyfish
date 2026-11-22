@@ -11,7 +11,9 @@ import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath } fro
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-canvas-assistant-')
-const api = 'http://127.0.0.1:8462'
+const apiPort = Number(process.env.CANVAS_ASSISTANT_TEST_API_PORT || 8462)
+const webPort = Number(process.env.CANVAS_ASSISTANT_TEST_WEB_PORT || 4462)
+const api = 'http://127.0.0.1:' + apiPort
 const canvasApi = api + '/api/v1/studio/generation-canvases'
 const prompts = []
 const observed = []
@@ -87,7 +89,7 @@ await new Promise((resolve, reject) => provider.once('error', reject).listen(0, 
 const python = process.env.CANVAS_BROWSER_PYTHON
 const backend = spawn(python || 'uv', [...(python ? [] : ['run', '--no-sync', 'python']), '-m', 'tests.generation_canvas_browser_server'], {
   cwd: join(root, '../backend'),
-  env: { ...process.env, CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8462',
+  env: { ...process.env, CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: String(apiPort),
     CANVAS_BROWSER_ASSISTANT_PROVIDER: 'http://127.0.0.1:' + provider.address().port },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -109,14 +111,14 @@ try {
   const free = (await creation.json()).data
   const scene = await createStoryboardCanvas(canvasApi, '分镜对话')
   server = await createViteServer({
-    root, server: { host: '127.0.0.1', port: 4462, strictPort: true, open: false, proxy: { '/api': api } },
+    root, server: { host: '127.0.0.1', port: webPort, strictPort: true, open: false, proxy: { '/api': api } },
   })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   page.setDefaultTimeout(8000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const base = 'http://127.0.0.1:4462'
+  const base = 'http://127.0.0.1:' + webPort
   const panel = page.getByRole('complementary', { name: '画布助手' })
   const open = async () => {
     await page.getByRole('button', { name: '打开画布助手', exact: true }).click()
@@ -243,6 +245,29 @@ try {
     for (let attempt = 0; attempt < 40 && await storedText() !== original; attempt++) await delay(150)
     assert.equal(await storedText(), original, 'one undo restores the saved field')
     if (canvas.project_id) assert.notEqual((await storedMovement()).movement_path.text, '直线')
+    if (!canvas.project_id) {
+      await open()
+      const automatic = panel.getByRole('checkbox', { name: '自动审批明确请求' })
+      await automatic.click()
+      await panel.locator('input[type="checkbox"]:checked').and(automatic).waitFor()
+      await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('把这张卡的推近放慢')
+      await panel.getByRole('button', { name: '发送消息' }).click()
+      await panel.getByText('自动审批明确请求 · 已写入画布', { exact: true }).waitFor()
+      assert.equal(await storedText(), '缓慢推近')
+      await panel.getByRole('button', { name: '关闭画布助手' }).click()
+      await page.getByRole('button', { name: '撤销操作', exact: true }).click()
+      for (let attempt = 0; attempt < 40 && await storedText() !== original; attempt++) await delay(150)
+      assert.equal(await storedText(), original)
+      await page.reload()
+      await open()
+      await panel.getByText('自动审批明确请求 · 已写入画布', { exact: true }).waitFor()
+      assert.ok(await automatic.isChecked())
+      await automatic.click()
+      await panel.locator('input[type="checkbox"]:not(:checked)').and(automatic).waitFor()
+    } else {
+      await open()
+      assert.equal(await panel.getByRole('checkbox', { name: '自动审批明确请求' }).isChecked(), false)
+    }
   }
   assert.equal(observed.length, 4)
   console.log('Assistant conversation persisted independently on both real canvas entries.')

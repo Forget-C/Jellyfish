@@ -12,7 +12,7 @@ export const canvasRecoveryKey = (projectId: string, canvasId: string | null) =>
 
 export type StoryboardScope = { chapterId: string; sequenceId: string; taskId: string }
 type SceneChange = StoryboardScope & ({ action: 'apply'; choices: StoryboardApplication } | { action: 'undo' | 'redo' })
-export type PendingSave = CanvasSave & { scene?: SceneChange; assistantProposalId?: string; assistantGroupIds?: string[] }
+export type PendingSave = CanvasSave & { scene?: SceneChange; assistantProposalId?: string; assistantGroupIds?: string[]; assistantAutomatic?: boolean }
 type StoryboardApplicationReceipt = { taskId: string; before: CanvasDocument }
 export type StoryboardReviewPreparation = { revision: number; appliedTaskId?: string }
 export type CanvasSettingsChanges = Partial<Pick<CanvasDocument, 'name' | 'cover_file_id'>>
@@ -195,7 +195,8 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     if (command.assistantProposalId) {
       const { data } = await Canvases.canvasAssistantDecideProposal({
         projectId, canvasId: canvas.id, sourceId: command.assistantProposalId,
-        requestBody: { action: 'approve', expected_revision: command.expected_revision, group_ids: command.assistantGroupIds },
+        requestBody: { action: 'approve', expected_revision: command.expected_revision, group_ids: command.assistantGroupIds,
+          approval_mode: command.assistantAutomatic ? 'automatic' : 'manual' },
       })
       if (!data?.canvas || (data.receipt ? data.receipt.canvas_id !== canvas.id : !data.conflicts?.length)) throw new Error('invalid assistant edit receipt')
       return data.canvas
@@ -456,7 +457,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     setInitialApplying(true); persist()
     return save()
   }
-  const commitAssistantProposal = async (sourceId: string, groupIds?: string[]) => {
+  const commitAssistantProposal = async (sourceId: string, groupIds?: string[], automatic?: boolean) => {
     const s = state.current
     if (s.pending?.assistantProposalId === sourceId) {
       return same(s.pending.assistantGroupIds, groupIds) ? save() : false
@@ -466,7 +467,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       s.conflict || s.scope !== key || inFlight.current || !same(s.document, before.document)) return false
     s.initialBefore = s.document
     s.pending = { request_id: crypto.randomUUID(), expected_revision: before.revision, document: s.document,
-      assistantProposalId: sourceId, assistantGroupIds: groupIds }
+      assistantProposalId: sourceId, assistantGroupIds: groupIds, assistantAutomatic: automatic }
     setInitialApplying(true); persist()
     return save()
   }

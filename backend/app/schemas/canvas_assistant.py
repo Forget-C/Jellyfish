@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-from app.schemas.canvas_assistant_edit import CanvasAssistantProposal
+from app.schemas.canvas_assistant_edit import CanvasAssistantApprovalAudit, CanvasAssistantProposal
 
 
 class CanvasAssistantDraftContext(BaseModel):
@@ -35,6 +35,12 @@ class CanvasAssistantModelSelection(BaseModel):
     """A null selection follows the configured default text model."""
 
     model_id: str | None
+
+
+class CanvasAssistantApprovalSetting(BaseModel):
+    """Control automatic approval on the current canvas."""
+
+    approval_mode: Literal['manual', 'automatic']
 
 
 class CanvasAssistantAttachment(BaseModel):
@@ -92,6 +98,8 @@ class CanvasAssistantExchange(BaseModel):
     proposal: CanvasAssistantProposal | None = None
     revises: str | None = None
     skills: list[CanvasAssistantSkillUse] | None = None
+    automatic_approval: bool = False
+    approval_audit: list[CanvasAssistantApprovalAudit] | None = None
 
 
 class CanvasAssistantHistory(BaseModel):
@@ -99,3 +107,4 @@ class CanvasAssistantHistory(BaseModel):
 
     turns: list[CanvasAssistantExchange]
     model_id: str | None = None
+    approval_mode: Literal['manual', 'automatic'] = 'manual'
