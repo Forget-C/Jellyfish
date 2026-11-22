@@ -28,6 +28,9 @@ export function ProjectCreateDrawer({ styleOptions, onClose }: {
   }))
   const [modal, modalContext] = Modal.useModal()
   const pending = useRef(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [createdId, setCreatedId] = useState('')
 
   function requestClose() {
     if (pending.current) return
@@ -37,9 +40,6 @@ export function ProjectCreateDrawer({ styleOptions, onClose }: {
     if (!changed) onClose()
     else modal.confirm({ title: uiText("有未保存的修改"), cancelText: uiText("继续编辑"), okText: uiText("放弃修改"), onOk: onClose })
   }
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [createdId, setCreatedId] = useState('')
 
   async function create(values: Fields) {
     if (pending.current) return
