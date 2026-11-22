@@ -182,6 +182,7 @@ export type { CanvasAssistantEditConflict } from './models/CanvasAssistantEditCo
 export type { CanvasAssistantEditGroup } from './models/CanvasAssistantEditGroup';
 export type { CanvasAssistantExchange } from './models/CanvasAssistantExchange';
 export type { CanvasAssistantGenerationRead } from './models/CanvasAssistantGenerationRead';
+export type { CanvasAssistantGenerationReview } from './models/CanvasAssistantGenerationReview';
 export type { CanvasAssistantGenerationVersion } from './models/CanvasAssistantGenerationVersion';
 export type { CanvasAssistantHistory } from './models/CanvasAssistantHistory';
 export type { CanvasAssistantMessage } from './models/CanvasAssistantMessage';
@@ -190,6 +191,7 @@ export type { CanvasAssistantProposal } from './models/CanvasAssistantProposal';
 export type { CanvasAssistantProposalDecision } from './models/CanvasAssistantProposalDecision';
 export type { CanvasAssistantProposalResult } from './models/CanvasAssistantProposalResult';
 export type { CanvasAssistantReadContext } from './models/CanvasAssistantReadContext';
+export type { CanvasAssistantReviewResult } from './models/CanvasAssistantReviewResult';
 export type { CanvasAssistantSkillUse } from './models/CanvasAssistantSkillUse';
 export type { CanvasAutomaticCheckEstimate } from './models/CanvasAutomaticCheckEstimate';
 export type { CanvasCardOutputs } from './models/CanvasCardOutputs';
