@@ -12,7 +12,6 @@ export const managementNavigation = [
   { to: '/assets', label: '资产库' },
   { to: '/prompts', label: '提示词模板' },
   { to: '/files', label: '文件管理' },
-  { to: '/agents', label: 'Agent 管理' },
 ] as const
 
 export function managementPageForPath(pathname: string) {
@@ -24,7 +23,7 @@ export function activeMainNavigation(pathname: string): typeof mainNavigation[nu
   if (!section) return 'home'
   if (section === 'canvases') return 'canvases'
   if (section === 'projects') return 'projects'
-  if (managementPageForPath(pathname)) return 'management'
+  if (section === 'agents' || managementPageForPath(pathname)) return 'management'
   if (section === 'lab') return 'lab'
   return undefined
 }
@@ -65,7 +64,7 @@ export function pageBreadcrumbs(pathname: string, titles: NavigationTitles = {})
     return [{ label: uiText("资产"), to: '/assets' }, { label: category.label, to: `/assets?tab=${category.tab}` }, { label: titles.page || uiText("{{label}}档案", { label: category.label }) }]
   }
   if (path.length === 3 && path[0] === 'agents' && path[1] && path[2] === 'edit') return [{ label: uiText("Agent 管理"), to: '/agents' }, { label: titles.page || uiText("Agent 编辑") }]
-  const pageLabels: Record<string, string> = { canvases: '画布', projects: '项目列表', lab: '实验室', settings: '设置' }
+  const pageLabels: Record<string, string> = { canvases: '画布', projects: '项目列表', agents: 'Agent 管理', lab: '实验室', settings: '设置' }
   const label = managementPageForPath(pathname)?.label ?? pageLabels[path[0]]
   return [{ label: path.length === 0 ? uiText("首页") : (path.length === 1 && typeof label === 'string' ? uiText(label) : uiText("页面未找到")) }]
 }
