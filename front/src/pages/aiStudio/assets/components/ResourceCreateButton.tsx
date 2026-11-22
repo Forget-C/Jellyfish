@@ -79,7 +79,7 @@ export function ResourceImageSourceDrawer({ kind, projectId, onClose, onCreated,
   const host = useWorkspaceDraftStatus()
   useWorkspaceDraft({ name: '上传资源', dirty, busy: busy || uploading, save, discard: onClose })
   const close = () => { if (dirty || busy || uploading) setCloseRequested(true); else onClose() }
-  return <><ResourceEditorFrame id={id} open drawer drawerWidth={720} title={uiText("上传图片创建")} backLabel={uiText("返回")} onClose={close}
+  return <><ResourceEditorFrame id={id} className="resource-upload-drawer" open drawer drawerWidth={720} title={uiText("上传图片创建")} backLabel={uiText("返回")} onClose={close}
     actions={<Button aria-label={accepted.current ? projectUpload ? uiText("重试选用") : uiText("重试刷新") : uiText("创建")} type="primary" loading={busy} disabled={uploading || !accepted.current && (!name.trim() || (!rows.length || rows.some(row => !row.fileId)))} onClick={async () => { if (await save()) onClose() }}>{accepted.current ? projectUpload ? uiText("重试选用") : uiText("重试刷新") : uiText("创建")}</Button>}>
     <ConfigProvider theme={uploadFormTheme}>
       <div className="resource-editor-fields resource-upload-form">

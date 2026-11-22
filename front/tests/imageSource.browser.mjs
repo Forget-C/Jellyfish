@@ -132,6 +132,14 @@ try {
    const panel=await form.boundingBox()
    assert.ok(panel.x>=0 && panel.x+panel.width<=390,'upload drawer fits the mobile viewport')
    await checkFileLayout()
+   const backBox=await form.getByRole('button',{name:'返回',exact:true}).boundingBox()
+   const titleBox=await form.getByRole('heading',{name:'上传图片创建',exact:true}).boundingBox()
+   const createBox=await form.getByRole('button',{name:'创建',exact:true}).boundingBox()
+   const centerY=box=>box.y+box.height/2
+   assert.ok(Math.abs(centerY(backBox)-centerY(createBox))<=1,'back and create share one row')
+   assert.ok(Math.abs(centerY(titleBox)-centerY(createBox))<=1,'title and create share one row')
+   assert.ok(titleBox.x>=backBox.x+backBox.width && createBox.x>=titleBox.x+titleBox.width)
+   assert.ok(Math.abs(panel.x+panel.width-createBox.x-createBox.width-16)<=1,'create aligns to the right gutter')
    await page.screenshot({path:output+'/upload-files-mobile.png',animations:'disabled'})
    await page.setViewportSize({width:1366,height:768})
   }
