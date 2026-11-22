@@ -19,6 +19,9 @@ from app.models.llm import ModelCategoryKey
 from app.schemas.canvas_assistant import (CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
                                           CanvasAssistantModelSelection, CanvasAssistantReadContext, CanvasAssistantSkillUse)
 from app.services.generation_canvas.assistant_context import resolve_assistant_context
+from app.services.generation_canvas.assistant_media import (
+    describe_assistant_media, resolve_assistant_media, retain_assistant_media,
+)
 from app.services.generation_canvas.assistant_skills import skill_guidance, skill_tools
 from app.services.generation_canvas.store import CanvasStore
 from app.services.llm.model_capabilities import effective_chat_capabilities
@@ -112,7 +115,8 @@ class CanvasAssistant:
             context = resolve_assistant_context(await self.store.get(canvas_id), command.context).model_dump(mode='json')
         previous = await self.db.get(CanvasAssistantTurn, (canvas_id, command.request_id))
         if previous is not None:
-            if previous.text != command.text or previous.context != context:
+            attached_ids = [attachment['file_id'] for attachment in (previous.attachments or [])]
+            if previous.text != command.text or previous.context != context or attached_ids != command.attachment_file_ids:
                 raise HTTPException(409, 'Request already used for a different assistant message')
             return CanvasAssistantExchange.model_validate(previous)
 
@@ -125,7 +129,7 @@ class CanvasAssistant:
         messages = []
         for turn in await self._turns(canvas_id):
             messages.extend([HumanMessage(content=turn.text), AIMessage(content=turn.reply)])
-        messages.append(HumanMessage(content=command.text))
+        sources = await resolve_assistant_media(self.db, self.store.project_id, command.attachment_file_ids)
 
         token = uuid4().hex
         session.pending_token = token
@@ -134,6 +138,10 @@ class CanvasAssistant:
         # turns for this conversation and can expire after an interrupted process.
         await self.db.commit()
         try:
+            content, attachments = await describe_assistant_media(
+                command.text, command.attachment_file_ids, sources, enabled=capability.image_inputs,
+            )
+            messages.append(HumanMessage(content=content))
             reply, skills = await self._reply(
                 client, messages, CanvasAssistantReadContext.model_validate(context) if context else None,
                 supports_tools=capability.tool_calling,
@@ -150,9 +158,10 @@ class CanvasAssistant:
             raise HTTPException(409, 'Canvas assistant reply lease expired')
         session.pending_token = session.pending_until = None
         session.sequence += 1
+        await retain_assistant_media(self.db, self.store.project_id, canvas_id, sources)
         turn = CanvasAssistantTurn(
             canvas_id=canvas_id, sequence=session.sequence, request_id=command.request_id,
-            model_id=model_id, text=command.text, reply=reply, context=context,
+            model_id=model_id, text=command.text, reply=reply, context=context, attachments=attachments,
             skills=[skill.model_dump() for skill in skills],
         )
         self.db.add(turn)

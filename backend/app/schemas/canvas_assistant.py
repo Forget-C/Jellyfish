@@ -34,12 +34,31 @@ class CanvasAssistantModelSelection(BaseModel):
     model_id: str | None
 
 
+class CanvasAssistantAttachment(BaseModel):
+    """A selected file and the evidence actually sent for this turn."""
+
+    file_id: str
+    name: str | None = None
+    file_type: Literal['image', 'video'] | None = None
+    observation: Literal['image', 'video_frame', 'unavailable']
+    at_ms: int | None = None
+
+
 class CanvasAssistantMessage(BaseModel):
     """Send a turn with a stable request identity for retries."""
 
     request_id: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')]
     text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16000)]
     context: CanvasAssistantDraftContext | None = None
+    attachment_file_ids: list[Annotated[str, StringConstraints(min_length=1, max_length=64)]] = Field(
+        default_factory=list, max_length=4,
+    )
+
+    @model_validator(mode='after')
+    def check_attachment_identity(self):
+        if len(set(self.attachment_file_ids)) != len(self.attachment_file_ids):
+            raise ValueError('Assistant attachments must be distinct')
+        return self
 
 
 class CanvasAssistantSkillUse(BaseModel):
@@ -58,6 +77,7 @@ class CanvasAssistantExchange(BaseModel):
     request_id: str
     text: str
     context: CanvasAssistantReadContext | None = None
+    attachments: list[CanvasAssistantAttachment] | None = None
     sequence: int
     model_id: str
     reply: str

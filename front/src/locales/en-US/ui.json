@@ -3849,5 +3849,20 @@
   "（选填）": "(optional)",
   "，请重新选择": ". Select again.",
   "；完整代号确认后绑定": ". Confirm the full token to bind it.",
-  "＠ 引用与指令": "@ References and instructions"
+  "＠ 引用与指令": "@ References and instructions",
+  "上传对话参考素材": "Upload a conversation reference",
+  "选择参考素材": "Choose a reference",
+  "选择对话参考素材": "Choose conversation references",
+  "每条消息最多添加 4 份参考素材": "Each message can include up to 4 references",
+  "参考素材上传失败，请选择图片或视频后重试": "Upload failed. Choose an image or video and retry.",
+  "素材类型": "Media type",
+  "搜索素材": "Search media",
+  "无法读取参考素材": "Could not load reference media",
+  "正在读取参考素材": "Loading reference media",
+  "暂无匹配素材": "No matching media",
+  "对话参考素材": "Conversation references",
+  "素材不可用": "Media unavailable",
+  "已读取视频静帧": "Video still loaded",
+  "本次未读取": "Not read for this reply",
+  "可读图片与视频静帧": "Reads images and video stills"
 }

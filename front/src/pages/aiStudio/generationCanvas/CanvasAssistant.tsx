@@ -3,8 +3,9 @@ import { CommentOutlined, CloseOutlined } from '@ant-design/icons'
 import { Alert, Input, Select, Spin } from 'antd'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantMessage, ModelRead } from '../../../services/generated'
+import type { CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantMessage, FileRead, ModelRead } from '../../../services/generated'
 import { useUiText } from '../../../uiText'
+import { CanvasAssistantAttachments, CanvasAssistantEvidence } from './CanvasAssistantAttachments'
 import './canvasAssistant.css'
 
 type AssistantScope = NonNullable<CanvasAssistantMessage['context']>['scope'] | 'text'
@@ -23,6 +24,8 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft 
   const [historyError, setHistoryError] = useState(false)
   const [retryLoad, setRetryLoad] = useState(0)
   const [draft, setDraft] = useState('')
+  const [referenceFiles, setReferenceFiles] = useState<FileRead[]>([])
+  const [uploadingReference, setUploadingReference] = useState(false)
   const [sendError, setSendError] = useState<'text' | 'tools' | 'reply'>()
   const [sending, setSending] = useState(false)
   const [modelId, setModelId] = useState<string | null>(null)
@@ -88,12 +91,13 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft 
 
   const send = async () => {
     const text = draft.trim()
-    if (sendingNow.current || savingModel || !turns || !text) return
+    if (sendingNow.current || savingModel || uploadingReference || !turns || !text) return
     if (!pending.current && effectiveScope === 'selection' && !selectedCards.length) return
     const requestBody = pending.current?.text === text
       ? pending.current : {
           text,
           request_id: crypto.randomUUID(),
+          attachment_file_ids: referenceFiles.map(file => file.id),
           context: effectiveScope === 'text' ? undefined : {
             ...readDraft(), scope: effectiveScope, card_ids: effectiveScope === 'selection' ? selectedCards : [],
           },
@@ -108,6 +112,7 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft 
       setTurns(current => current?.some(existing => existing.request_id === turn.request_id)
         ? current : [...(current || []), turn])
       setDraft('')
+      setReferenceFiles([])
       pending.current = undefined
     } catch (error) {
       const detail = error instanceof ApiError ? error.body?.message ?? error.body?.detail : undefined
@@ -135,8 +140,14 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft 
     }
   }
 
-  const modelLabel = (model: ModelRead) => model.name + ' · ' + (model.effective_capabilities?.tool_calling
-    ? uiText("可读画布") : uiText("仅文字对话"))
+  const modelLabel = (model: ModelRead) => {
+    const capability = model.effective_capabilities
+    const modes = [
+      ...(capability?.tool_calling ? [uiText("可读画布")] : []),
+      ...(capability?.image_inputs ? [uiText("可读图片与视频静帧")] : []),
+    ]
+    return [model.name, ...(modes.length ? modes : [uiText("仅文字对话")])].join(' · ')
+  }
   const defaultModel = models.find(model => model.id === defaultModelId)
   const scopeOptions = [
     { label: uiText("仅对话"), value: 'text' },
@@ -180,6 +191,7 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft 
         {!turns && !historyError && <Spin aria-label={uiText("正在读取助手对话")} />}
         {turns?.map(turn => <article className="canvas-assistant-turn" key={turn.request_id}>
           <div className="canvas-assistant-question">{turn.text}</div>
+          {!!turn.attachments?.length && <CanvasAssistantEvidence attachments={turn.attachments} />}
           <div>{turn.reply}</div>
           {!!turn.skills?.length && <small className="canvas-assistant-skills">
             {turn.skills.map(skill => skill.name).join('、')}
@@ -196,8 +208,11 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft 
         <Input.TextArea id={inputId} aria-label={uiText("给画布助手发消息")} value={draft} maxLength={16000}
           autoSize={{ minRows: 2, maxRows: 5 }} disabled={sending}
           onChange={event => { setDraft(event.target.value); pending.current = undefined; setSendError(undefined) }} />
+        <CanvasAssistantAttachments projectId={projectId} files={referenceFiles} uploading={uploadingReference}
+          setUploading={setUploadingReference} disabled={sending || !turns}
+          onChange={files => { setReferenceFiles(files); pending.current = undefined; setSendError(undefined) }} />
         <WorkbenchButton htmlType="submit" variant="primary" loading={sending}
-          disabled={!turns || !draft.trim() || savingModel || !pending.current && effectiveScope === 'selection' && !selectedCards.length}>{uiText("发送消息")}</WorkbenchButton>
+          disabled={!turns || !draft.trim() || savingModel || uploadingReference || !pending.current && effectiveScope === 'selection' && !selectedCards.length}>{uiText("发送消息")}</WorkbenchButton>
       </form>
     </aside>}
   </div>

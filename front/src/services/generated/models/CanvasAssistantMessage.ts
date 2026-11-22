@@ -10,4 +10,5 @@ export type CanvasAssistantMessage = {
     request_id: string;
     text: string;
     context?: (CanvasAssistantDraftContext | null);
+    attachment_file_ids?: Array<string>;
 };
