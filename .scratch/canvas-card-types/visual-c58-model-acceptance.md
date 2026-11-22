@@ -25,7 +25,7 @@
 
 ## F07–F09图片逐项对照
 
-目标使用 `/private/tmp/c55-60-prototype-targets/manifest.json` 中F07–F09最终C原型（`794ee4a0`）；旧正式复审图不是目标。每项覆盖1440×960、390×844、3830×1688。正式文件前缀为 `F07-text-model-<width>-default`、`F08-text-model-<width>-expanded`、`F09-text-model-<width>-empty`，各有整页 `-page.png` 和编辑区原尺寸 `-editor.png`，桌面及超宽另有 `-card.png`。移动端原型隐藏卡面，不能伪称有配对卡面图。
+目标使用 [原型目标清单](../../front/tests/visual-baselines/c-794ee4a0-v1/manifest.json) 中F07–F09最终C原型（`794ee4a0`）；旧正式复审图不是目标。每项覆盖1440×960、390×844、3830×1688。正式文件前缀为 `F07-text-model-<width>-default`、`F08-text-model-<width>-expanded`、`F09-text-model-<width>-empty`，各有整页 `-page.png` 和编辑区原尺寸 `-editor.png`，桌面及超宽另有 `-card.png`。移动端原型隐藏卡面，不能伪称有配对卡面图。
 
 | 区域 | 实际查看与结论 |
 | --- | --- |

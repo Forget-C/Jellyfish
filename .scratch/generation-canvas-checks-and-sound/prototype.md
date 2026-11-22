@@ -2,28 +2,13 @@
 
 日期：2026-11-07
 
-状态：原型已构建并完成交互验证；界面方案待用户选择，未推广为生产实现。
+状态：原型已构建并完成交互验证；评审时尚未选定界面方案，未推广为生产实现。
 
-## 来源与保存
+## 查看设计与复核正式功能
 
-- 实施规格：本目录 spec.md；使用已确认的产品范围和测试边界。
-- 原型分支：`codex-check-sound-prototype`。
-- 保存提交：`ebf5c1f3`（初版 `1fca8a21`，基于 `e2f60251`）。
-- 隔离工作区：`/private/tmp/jellyfish-check-sound-prototype`。
-- 说明入口：`front/src/pages/aiStudio/generationCanvas/checkSoundPrototype/README.md`，位于原型分支。
-- 当前工作区只增加此记录与截图，应用源代码改动留在原型分支。没有新建实施票据；本记录作为后续拆票时的原型来源指针。
+初版 `1fca8a21` 和修订版 `ebf5c1f3` 用于比较三种布局。文末[截图](#截图)保留了每种布局的桌面和窄屏状态，以及报告和声音设计示例。
 
-## 查看与重启
-
-[打开本地原型](http://127.0.0.1:5188/projects/prototype/generation-canvas?prototype=checks&variant=A)
-
-```sh
-pnpm --dir /private/tmp/jellyfish-check-sound-prototype/front run prototype:checks
-```
-
-预览服务停止后可用上述命令重启。在其他检出目录中，从原型分支仓库根目录运行 `pnpm --dir front run prototype:checks`。
-
-底部按钮或非输入区左右方向键切换方案；URL 中 `variant=A/B/C` 可直接分享具体布局。三个方案共享本轮内存状态，刷新重置。
+正式功能的边界见[规格](spec.md)。从仓库根目录运行 `node front/tests/run-browser.mjs generation-canvas-post-check` 可验证生成后检查，运行 `node front/tests/run-browser.mjs generation-canvas-sound` 可验证声音设计。
 
 ## 要解决的界面问题
 

@@ -119,7 +119,7 @@ Status: ready-for-agent
 卡片的删除图标替代详情入口，确认时显示项目名。批量模式在同一位置使用复选框。编辑项目配置迁入项目设置，显式保存，失败保留输入，取消恢复已保存值。
 
 - 用户最终选择桌面 A。A 说明首页、项目列表、项目概览和章节入口的布局，管理与实验室的正式交互以本规格为准。
-- 可运行原型与截图归档在本地分支 `codex-prototype-home-project-layout`，基于 `codex/0718` 的提交 `6ccbcdc0`。
+- A 方案的布局以本节截图和下述评审结论为依据。
 - [首页](prototype/home.png)、[项目列表](prototype/projects.png)、[项目概览](prototype/project-overview.png)、[章节](prototype/chapters.png) 为最终 A 的 1440px 原型截图。
 
 ### 首页首屏与项目卡片对齐
@@ -129,7 +129,7 @@ Status: ready-for-agent
 项目卡片的桌面封面高度限制在约 128–160px，默认封面按项目 ID 稳定选择三种雾蓝构图。项目名最多两行，当前章名称显示一行，风格与制作状态使用轻量标签。分页总章数与当前章场次数使用已有可靠数据，缺失时省略。底部左侧显示已知更新时间，右侧统一放置约 32px 高的下一步或重试入口。删除与批量管理沿用现有流程。
 
 在 1366×768、1440×900 和 1920×1080 验收首页无整体滚动、两栏对齐、同排卡片动作对齐，并覆盖极矮窗口、窄屏、长标题、空数据和失败状态。
-- 在原型分支的工作区根目录运行 `pnpm --dir front run prototype:home-project`，使用浏览器打开开发服务中的 `/dev/home-project-prototype?variant=A`。项目列表可追加 `&page=projects`。
+- 验证现行首页与项目页面，可在仓库根目录运行 `node front/tests/run-browser.mjs home-project-layout`。
 - A 版曾通过前端类型检查，并在 Chrome 中核对 1440px、1024px、390px 的布局及章节入口。该结果仅覆盖原型，正式页面按上面的验收边界验证。
 
 ### 首页最近资产

@@ -12,7 +12,7 @@
 
 ## F04–F06 图片对照
 
-[正式矩阵清单](/private/tmp/c57-verified/generation-canvas-image-editor/matrix.json)每组含正式整页、外部标题在内的卡面及原尺寸编辑区。文件命名 `F04|F05|F06-1440|390|3830-{page,card,editor}.png`，视口1440×960、390×844、3830×1688。目标来自[最终 C 原型36组清单](/private/tmp/c55-60-prototype-targets/manifest.json)，来源提交 `794ee4a0`；复审正式页不是目标。
+[正式矩阵清单](/private/tmp/c57-verified/generation-canvas-image-editor/matrix.json)每组含正式整页、外部标题在内的卡面及原尺寸编辑区。文件命名 `F04|F05|F06-1440|390|3830-{page,card,editor}.png`，视口1440×960、390×844、3830×1688。目标来自[最终 C 原型36组清单](../../front/tests/visual-baselines/c-794ee4a0-v1/manifest.json)，来源提交 `794ee4a0`；复审正式页不是目标。
 
 | 状态 | 逐区域核对结果 | 合理差异／边界 |
 | --- | --- | --- |

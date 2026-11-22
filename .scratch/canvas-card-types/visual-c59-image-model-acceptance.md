@@ -12,7 +12,7 @@
 
 ## F10–F12三视口图片
 
-目标来自[保留C原型矩阵](/private/tmp/c55-60-prototype-targets/manifest.json)及[原型局限](/private/tmp/c55-60-prototype-targets/observations.md)，包括1440×960、390×844、3830×1688。正式文件目录为 `/private/tmp/c59-merged-verified/generation-canvas-image-model-focus`，每组前缀含类型、视口、状态，`-page`是整页、`-editor`是原尺寸编辑区，桌面另有`-card`。移动原型不展示卡面，不将缺目标视为正式卡面免验；最终统一四类移动卡面与工具栏组合由60收口。
+目标来自[保留C原型矩阵](../../front/tests/visual-baselines/c-794ee4a0-v1/manifest.json)及[原型局限](../../front/tests/visual-baselines/c-794ee4a0-v1/observations.md)，包括1440×960、390×844、3830×1688。正式文件目录为 `/private/tmp/c59-merged-verified/generation-canvas-image-model-focus`，每组前缀含类型、视口、状态，`-page`是整页、`-editor`是原尺寸编辑区，桌面另有`-card`。移动原型不展示卡面，不将缺目标视为正式卡面免验；最终统一四类移动卡面与工具栏组合由60收口。
 
 | 状态 | 正式前缀（三种宽度分别1440、390、3830） | 逐区域结论 |
 | --- | --- | --- |
