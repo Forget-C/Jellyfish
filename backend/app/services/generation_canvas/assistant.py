@@ -13,7 +13,7 @@ from langchain_core.tools import tool
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.canvas_assistant import CanvasAssistantSession, CanvasAssistantTurn
+from app.models.canvas_assistant import CanvasAssistantGeneration, CanvasAssistantSession, CanvasAssistantTurn
 from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.models.llm import ModelCategoryKey
 from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
@@ -90,6 +90,32 @@ class CanvasAssistant:
                                                exchange.text, turn.context, exchange.proposal))
         return exchange
 
+    async def stop(self, canvas_id: str, source_id: str) -> CanvasAssistantExchange:
+        """Withdraw pending edits and follow-up work at the canvas transaction boundary."""
+        await self.store.get(canvas_id, lock=True)
+        turn = await self.db.get(CanvasAssistantTurn, (canvas_id, source_id), with_for_update=True, populate_existing=True)
+        if turn is None:
+            raise HTTPException(404, 'Canvas assistant turn not found')
+        if not turn.stopped:
+            turn.stopped = True
+            if turn.proposal and turn.proposal['state'] == 'pending':
+                proposal = {**turn.proposal, 'state': 'superseded'}
+                if proposal.get('groups'):
+                    proposal['groups'] = [
+                        {**group, 'state': 'superseded'} if group['state'] == 'pending' else group
+                        for group in proposal['groups']
+                    ]
+                turn.proposal = proposal
+            entry = await self.db.get(CanvasAssistantGeneration, (canvas_id, source_id), with_for_update=True,
+                                      populate_existing=True)
+            if entry is not None:
+                if entry.state in ('waiting_approval', 'queued'):
+                    entry.state = 'stopped'
+                if entry.review_state in ('waiting', 'reviewing'):
+                    entry.review_state, entry.review_token, entry.review_lease_until = 'stopped', None, None
+            await self.db.flush()
+        return await self._exchange(turn)
+
     async def set_model(self, canvas_id: str, choice: CanvasAssistantModelSelection) -> CanvasAssistantModelSelection:
         """Persist a conversation-only model choice after checking its text capability."""
         await self._ensure_session(canvas_id)
@@ -112,6 +138,18 @@ class CanvasAssistant:
         if needs_context and not capability.tool_calling:
             raise HTTPException(422, 'ASSISTANT_TOOL_CALLING_REQUIRED')
         return model, provider, capability
+
+    async def _model_client(self, model, provider, capability):
+        """Resolve the provider transport needed to deliver the model's actual media inputs."""
+        client = await build_text_chat_model(self.db, model_id=model.id, thinking=False)
+        if supports_synchronized_video_audio(provider.provider_key, model.name):
+            extra_body = dict(client.extra_body or {})
+            extra_body.pop('enable_thinking', None)
+            extra_body.update(modalities=['text'], reasoning_effort='none')
+            return client.model_copy(update={'streaming': True, 'use_responses_api': False, 'extra_body': extra_body})
+        if capability.video_inputs:
+            return client.model_copy(update={'use_responses_api': False})
+        return client
 
     async def _ensure_session(self, canvas_id: str) -> None:
         await self.store.get(canvas_id)
@@ -157,14 +195,7 @@ class CanvasAssistant:
             raise HTTPException(409, 'Canvas assistant is already replying')
         model, provider, capability = await self._resolve_model(session.model_id, needs_context=context is not None)
         model_id = model.id
-        client = await build_text_chat_model(self.db, model_id=model_id, thinking=False)
-        if supports_synchronized_video_audio(provider.provider_key, model.name):
-            extra_body = dict(client.extra_body or {})
-            extra_body.pop('enable_thinking', None)
-            extra_body.update(modalities=['text'], reasoning_effort='none')
-            client = client.model_copy(update={'streaming': True, 'use_responses_api': False, 'extra_body': extra_body})
-        elif capability.video_inputs:
-            client = client.model_copy(update={'use_responses_api': False})
+        client = await self._model_client(model, provider, capability)
         messages = []
         for turn in await self._turns(canvas_id):
             messages.extend([HumanMessage(content=turn.text), AIMessage(content=turn.reply)])
@@ -236,7 +267,7 @@ class CanvasAssistant:
         if source_id is None:
             return None
         turn = await self.db.get(CanvasAssistantTurn, (canvas_id, source_id), with_for_update=lock, populate_existing=lock)
-        proposal = turn.proposal if turn else None
+        proposal = turn.proposal if turn and not turn.stopped else None
         groups = proposal.get('groups') if proposal else None
         pending_cards = ({edit['card_id'] for group in groups if group['state'] == 'pending' for edit in group['edits']}
                          if groups else {proposal['card_id']} if proposal else set())
@@ -246,6 +277,17 @@ class CanvasAssistant:
                 and (pending_creation or pending_cards.intersection(edit_draft.cards))):
             raise HTTPException(409, 'The assistant proposal can no longer be revised')
         return turn
+
+    async def prepare_review_model(self, model_id: str):
+        """Prepare the assistant model used for the original review request."""
+        model, provider, capability = await self._resolve_model(model_id, needs_context=False)
+        return await self._model_client(model, provider, capability), capability
+
+    @classmethod
+    async def review_evidence(cls, client, content, *, supports_tools: bool) -> str:
+        """Review only the supplied immutable result without write or generation tools."""
+        reply, _ = await cls._reply(client, [HumanMessage(content=content)], None, None, supports_tools=supports_tools)
+        return reply
 
     @staticmethod
     async def _reply(client, messages, context: CanvasAssistantReadContext | None,

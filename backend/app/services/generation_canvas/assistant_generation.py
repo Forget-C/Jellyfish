@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.canvas_assistant import CanvasAssistantGeneration, CanvasAssistantTurn
 from app.models.generation_canvas import CanvasPreview, CanvasRun, CanvasRunNode, CanvasRunReceipt, CanvasScopeOccupancy, GenerationCanvas
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposalDecision, CanvasAssistantProposalResult
-from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationRead, CanvasAssistantGenerationVersion
+from app.schemas.canvas_assistant_generation import (CanvasAssistantGenerationRead, CanvasAssistantGenerationReview,
+                                                       CanvasAssistantGenerationVersion)
 from app.schemas.generation_canvas import CanvasDocument, CanvasPrecheckRequest, CanvasRunSubmit
 from app.services.generation_canvas.assistant_edits import resolve_assistant_proposal
 from app.services.generation_canvas.runtime import CanvasRuntime
@@ -22,7 +23,7 @@ _DIGITS = dict(zip('一二三四五六七八九', range(1, 10))) | {'两': 2}
 _CHINESE_REQUEST = re.compile(
     r'(?:请|帮我|给我)?(?:再)?生成\s*(?P<count>[1-9][0-9]?|[一二两三四五六七八九]?十[一二三四五六七八九]?'
     r'|[一二两三四五六七八九])\s*(?:个)?(?:版|版本|次)'
-    r'(?:[，,。；;]\s*(?:再|完成后|生成后)(?:帮我)?(?:看看|看|复看|审看|点评|检查)[^？?]*)?[。！!]?'
+    r'(?:[，,。；;]\s*(?:再|完成后|生成后)(?:帮我)?(?P<review>(?:看看|看|复看|审看|点评|检查)[^？?]*))?[。！!]?'
 )
 _ENGLISH_REQUEST = re.compile(
     r'(?:please )?(?:re)?generate (?P<count>[1-9][0-9]?|one|two|three) versions?[.!]?', re.IGNORECASE,
@@ -31,7 +32,7 @@ _EDIT_PREFIX = re.compile(r'^(?:请|帮我)?(?:先)?(?:把|将|修改|改写|调
 _AFTER_EDIT = ('改好后', '修改后', '调整后', '更新后')
 
 
-def _explicit_quantity(text: str) -> tuple[int, bool] | None:
+def _explicit_quantity(text: str) -> tuple[int, bool, str | None] | None:
     """Match a bounded imperative and optional edit prerequisite in the user turn."""
     if any(mark in text for mark in ('「', '『', '“', '”', '"', '`', '？', '?')):
         return None
@@ -53,6 +54,7 @@ def _explicit_quantity(text: str) -> tuple[int, bool] | None:
     if match is None:
         return None
     count = match['count'].lower()
+    review = match.groupdict().get('review')
     if count.isascii() and count.isdecimal():
         quantity = int(count)
     elif count in ('one', 'two', 'three'):
@@ -62,7 +64,7 @@ def _explicit_quantity(text: str) -> tuple[int, bool] | None:
         quantity = 10 * _DIGITS.get(tens, 1) + _DIGITS.get(units, 0)
     else:
         quantity = _DIGITS[count]
-    return quantity, waits_for_edit
+    return quantity, waits_for_edit, review
 
 
 def generation_authorization(turn: CanvasAssistantTurn, document: CanvasDocument,
@@ -72,7 +74,7 @@ def generation_authorization(turn: CanvasAssistantTurn, document: CanvasDocument
     context = turn.context
     if authority is None or turn.revises or not context or context['scope'] != 'selection':
         return None
-    count, waits_for_edit = authority
+    count, waits_for_edit, review = authority
     target_ids = context['target_card_ids']
     if len(target_ids) != 1:
         return None
@@ -88,7 +90,8 @@ def generation_authorization(turn: CanvasAssistantTurn, document: CanvasDocument
         if context['revision'] != revision or any(saved.get(item['id']) != item for item in context['cards']):
             state, error = 'failed', '画布输入存在未保存的改动，请保存并重新明确授权生成'
     return CanvasAssistantGeneration(canvas_id=turn.canvas_id, source_id=turn.request_id, card_id=card_id,
-        requested_count=count, state=state, expected_revision=revision, error=error, created_at=utcnow())
+        requested_count=count, state=state, expected_revision=revision, error=error, created_at=utcnow(),
+        review_request=review, review_state='waiting' if review else None)
 
 
 async def update_generation_for_decision(db: AsyncSession, canvas_id: str, source_id: str,
@@ -201,8 +204,11 @@ async def read_generation(db: AsyncSession, canvas_id: str, source_id: str) -> C
         else:
             state = 'failed'
             error = next((version.error for version in versions if version.error), None) or '有已授权的版本未完成'
+    review = CanvasAssistantGenerationReview(
+        state=entry.review_state, results=entry.review_results or [],
+    ) if entry.review_state else None
     return CanvasAssistantGenerationRead(card_id=entry.card_id, requested_count=entry.requested_count,
-        state=state, error=error, versions=versions)
+        state=state, error=error, versions=versions, review=review)
 
 
 async def advance_assistant_generations(sessions) -> None:

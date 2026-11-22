@@ -89,6 +89,14 @@ async def set_assistant_approval(canvas_id: str, body: CanvasAssistantApprovalSe
     return success_response(await CanvasAssistant(db, project_id).set_approval(canvas_id, body))
 
 
+@router.post('/{canvas_id}/assistant/turns/{source_id}/stop', response_model=ApiResponse[CanvasAssistantExchange],
+             operation_id='canvas_assistant_stop')
+async def stop_assistant_turn(canvas_id: str, source_id: str, project_id: str = '',
+                              db: AsyncSession = Depends(get_db, scope='function')):
+    """Stop the remaining assistant work without canceling any accepted runs."""
+    return success_response(await CanvasAssistant(db, project_id).stop(canvas_id, source_id))
+
+
 @router.post('/{canvas_id}/assistant/proposals/{source_id}', response_model=ApiResponse[CanvasAssistantProposalResult],
              operation_id='canvas_assistant_decide_proposal')
 async def decide_assistant_proposal(canvas_id: str, source_id: str, body: CanvasAssistantProposalDecision,

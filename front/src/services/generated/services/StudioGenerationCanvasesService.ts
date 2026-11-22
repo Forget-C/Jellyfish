@@ -380,6 +380,36 @@ export class StudioGenerationCanvasesService {
         });
     }
     /**
+     * Stop Assistant Turn
+     * Stop the remaining assistant work without canceling any accepted runs.
+     * @returns ApiResponse_CanvasAssistantExchange_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantStop({
+        canvasId,
+        sourceId,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantExchange_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/turns/{source_id}/stop',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Decide Assistant Proposal
      * Approve a saved preview through the existing canvas save transaction, or reject it.
      * @returns ApiResponse_CanvasAssistantProposalResult_ Successful Response

@@ -25,4 +25,5 @@ export type CanvasAssistantExchange = {
     automatic_approval?: boolean;
     approval_audit?: (Array<CanvasAssistantApprovalAudit> | null);
     generation?: (CanvasAssistantGenerationRead | null);
+    stopped?: boolean;
 };

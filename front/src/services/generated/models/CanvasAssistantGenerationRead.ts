@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CanvasAssistantGenerationReview } from './CanvasAssistantGenerationReview';
 import type { CanvasAssistantGenerationVersion } from './CanvasAssistantGenerationVersion';
 /**
  * Generation proceeds independently of the composing assistant model.
@@ -9,7 +10,8 @@ import type { CanvasAssistantGenerationVersion } from './CanvasAssistantGenerati
 export type CanvasAssistantGenerationRead = {
     card_id: string;
     requested_count: number;
-    state: 'waiting_approval' | 'queued' | 'running' | 'completed' | 'failed' | 'rejected';
+    state: 'waiting_approval' | 'queued' | 'running' | 'completed' | 'failed' | 'rejected' | 'stopped';
     error?: (string | null);
     versions?: Array<CanvasAssistantGenerationVersion>;
+    review?: (CanvasAssistantGenerationReview | null);
 };
