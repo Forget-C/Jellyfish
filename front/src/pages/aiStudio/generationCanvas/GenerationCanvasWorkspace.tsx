@@ -238,7 +238,7 @@ export function GenerationCanvasWorkspace({
         <WorkbenchIconButton label={back.label} variant="quiet" icon={<ArrowLeftOutlined />} onClick={async () => { if (await requestLeave()) back.onClick() }} />
         <strong className="canvas-sequence-name">{document?.name || uiText("画布生成")}</strong>
         <span role="status" aria-label={uiText("画布保存状态")}>{saving ? uiText("保存中") : editor.conflict ? uiText("修订冲突") : !ownership.editable && canvasId ? uiText("只读") : dirty ? uiText("待保存") : uncreated ? uiText("尚未创建") : current ? uiText("已保存") : uiText("尚无画布")}</span>
-        {current && <WorkbenchIconButton label={uiText("保存画布")} variant={dirty ? 'primary' : 'quiet'} icon={<SaveOutlined />} onClick={() => void save()} loading={saving} disabled={!ownership.editable || !!editor.recovery || editor.conflict} />}
+        {current && <WorkbenchIconButton label={uiText("保存画布")} variant={dirty ? 'primary' : 'quiet'} icon={<SaveOutlined />} onClick={() => void save(true)} loading={saving} disabled={!ownership.editable || !!editor.recovery || editor.conflict} />}
         <div className="generation-browse-history-host">{canvasId && <CanvasHistoryControls key={scope} storageKey={`generation-canvas:${scope}`} requestLeave={requestLeave} />}</div>
       </div>
       <div className="generation-toolbar-center" />
@@ -300,8 +300,8 @@ export function GenerationCanvasWorkspace({
         }))}
         runtime={{ outputs: runtime.snapshot.current_outputs, outputsVerified: runtime.outputsVerified, runs: runtime.snapshot.runs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
           disabled: uncreated || runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => { if (!promptEditors.size) void runtime.precheck(cardId) } }} /></PromptEditingActiveContext.Provider></PromptDraftContext.Provider></PromptEditingContext.Provider>
-      {canvasId && current.id === canvasId && !uncreated &&
-        <CanvasAssistant key={scope} canvasId={canvasId} projectId={projectId}
+      {canvasId && current.id === canvasId &&
+        <CanvasAssistant key={scope} canvasId={canvasId} projectId={projectId} localDraft={uncreated} draftPromoting={uncreated && saving}
           applyLayout={applyAssistantLayout}
           openRun={runId => setAssistantHistoryTarget({ canvasId, runId })}
           approvalDisabled={!!promptEditors.size || !ownership.editable || !!editor.recovery || editor.conflict}
@@ -317,7 +317,7 @@ export function GenerationCanvasWorkspace({
               const card = read()
               return [card.id, card]
             }))
-            return { revision: current.revision, layout_positions: assistantLayout.current?.positions(), draft: { ...document, cards: document.cards?.map(card => active.get(card.id) || card) } }
+            return { revision: Math.max(0, current.revision), layout_positions: assistantLayout.current?.positions(), draft: { ...document, cards: document.cards?.map(card => active.get(card.id) || card) } }
           }} />}
     </div>}
   </section></WorkbenchDetailsProvider></WorkbenchTheme>
