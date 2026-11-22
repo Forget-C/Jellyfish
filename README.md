@@ -1,7 +1,7 @@
 # Jellyfish — AI Short Drama Studio
 
 <p align="center">
-  <img src="./docs/img/logo.svg" alt="Jellyfish Logo" width="160" />
+  <img src="docs/img/logo.svg" alt="Jellyfish Logo" width="160" />
 </p>
 
 <p align="center">
@@ -23,180 +23,94 @@
 </p>
 
 <p align="center">
-  <a href="./README.md">English</a> ·
-  <a href="./docs/README.ja.md">日本語</a>
+  <a href="README.md">English</a> ·
+  <a href="docs/README.zh.md">简体中文</a> ·
+  <a href="docs/README.ja.md">日本語</a>
 </p>
 
-An end-to-end production workspace for AI-generated short dramas.  
-From script input to structured storyboarding, consistency management,
-shot preparation, video generation, and export.
+A production workspace for AI short dramas. Divide a chapter into scenes, prepare visual references and generate candidate frames on a storyboard canvas. The interface supports Chinese (default) and English.
 
 ## 📷 Screenshots
 
-| Project overview | Asset management |
-| --- | --- |
-| <img src="./docs/img/project.png" alt="Project overview" width="420" /> | <img src="./docs/img/%E8%B5%84%E4%BA%A7%E7%AE%A1%E7%90%86.png" alt="Asset management" width="420" /> |
+| Scene division | Scene references | Storyboard canvas |
+| --- | --- | --- |
+| <a href="site/static/images/screenshots/home/scene-division.webp"><img src="site/static/images/screenshots/home/scene-division.webp" alt="Scene division" width="320" /></a> | <a href="site/static/images/screenshots/home/object-references.webp"><img src="site/static/images/screenshots/home/object-references.webp" alt="Scene references" width="320" /></a> | <a href="site/static/images/screenshots/home/storyboard.webp"><img src="site/static/images/screenshots/home/storyboard.webp" alt="Storyboard canvas" width="320" /></a> |
 
 ## ✨ Core Value
 
-- **Connect the full production flow**: Move from script input to storyboard preparation, image/video generation, and task tracking in one place.
-- **Turn AI output into reusable production assets**: Shots, candidate assets, dialogue, prompts, and generation tasks can all be reviewed and reused.
-- **Treat consistency as a first-class problem**: Centralized character, scene, prop, and costume management reduces drift across shots.
-- **Handle long-running generation as trackable tasks**: Text, image, and video jobs all go through one async task system with status, cancel, and recovery.
-- **Build AI capability as infrastructure**: Model management, prompt templates, files, and OpenAPI-based collaboration make the system extensible.
+- Trace each scene back to the passage it adapts.
+- Reuse the same character, location and prop references across shots.
+- Inspect the inputs and results of a generation run before choosing a candidate.
 
 ## ✨ Core Capabilities
 
-Jellyfish is not just a single “AI image/video” utility. It is a
-production workspace built around:
-
-- script understanding
-- shot preparation
-- asset consistency
-- generation execution
-- task tracking
-
 ### 1. AI script understanding and storyboard breakdown
 
-- Split chapter scripts into shots
-- Extract characters, scenes, props, costumes, and dialogue
-- Run script optimization, simplification, and consistency checks
-- Support targeted analysis such as character portraits or scene details
+Save the chapter text, mark scene boundaries, then generate and edit a storyboard for a selected scene.
 
 ### 2. Shot preparation and confirmation workflow
 
-The main workflow is:
-
-`script breakdown → shot preparation → candidate confirmation → shot ready → generation workspace`
-
-Preparation currently supports:
-
-- extracting and refreshing shot candidates
-- accepting or ignoring asset candidates
-- accepting or ignoring dialogue candidates
-- linking existing characters, scenes, props, and costumes
-- correcting shot-level basic information
-- using a unified readiness state to decide whether a shot is prepared
+Chapter text → scene division → reference selection → storyboard canvas → precheck → candidate review.
 
 ### 3. Asset consistency and reuse
 
-The system maintains a shared entity model across:
-
-- characters / actors
-- scenes
-- props
-- costumes
-
-This supports asset reuse across shots and helps stabilize style and identity.
+Link characters, locations, props and costumes to project assets. Choose the reference images needed for each scene.
 
 ### 4. Shot-level image and video orchestration
 
-Once a shot is `ready`, the generation workspace supports:
-
-- keyframe and reference image management
-- shot-level video prompt preview
-- image and video generation tasks
-- single-shot and batch pre-checks
-- writing generation outputs back into the shot/media system
+On the canvas, connect shot descriptions and references to a model card, check its inputs and review the generated media.
 
 ### 5. Unified async task center
 
-Current task infrastructure supports:
-
-- async text-processing tasks
-- async image and video generation tasks
-- unified task status, result, and elapsed-time tracking
-- task cancellation
-- a global task center with context-aware navigation back to project/chapter/shot
+Track text, image and video jobs, inspect failures and cancel eligible tasks.
 
 ### 6. Model, prompt, and generation infrastructure
 
-Supporting capabilities include:
-
-- multi-provider / multi-model management
-- default model settings by category
-- prompt template management
-- file and generated media management
-- OpenAPI-driven frontend/backend contracts
+Configure providers and default models, manage prompt templates and access the backend through its OpenAPI contract.
 
 ## 🚀 Feature Overview
 
 ### Project and chapter management
 
-- Create and manage projects and chapters
-- Use chapters as the unit for scripts, shots, and generation
-- Provide dashboard-style entry points and aggregated stats
+Create a project, save chapter text and reopen earlier scene divisions.
 
 ### AI script processing
 
-- Break chapter scripts into shots
-- Extract characters, scenes, props, costumes, and dialogue
-- Support optimization, simplification, and consistency checks
-- Support focused analysis such as character portraits or scene information
+Use the text lab to explore alternate dialogue, actions and shot descriptions.
 
 ### Shot preparation workflow
 
-- Edit shot title, summary, and basic information
-- Refresh extracted asset and dialogue candidates
-- Confirm, ignore, or link candidate items
-- Use preparation state to determine shot readiness
-- Keep “prepared” distinct from “currently generating”
+Review the source passage alongside the scene references and refine each shot description.
 
 ### Asset and entity management
 
-- Manage characters, actors, scenes, props, and costumes
-- Link and reuse them at shot level
-- Manage entity images
-- Check name existence to encourage reuse of existing assets
+Maintain project assets and choose which reference images a scene uses.
 
 ### Shot generation workspace
 
-- Manage keyframes, reference images, and video prompts
-- Check video readiness before generation
-- Launch image/video generation tasks
-- Support both single-shot and batch generation workflows
+Edit prompts and model parameters, run a precheck and preview candidate outputs.
 
 ### Task center
 
-- View active and recently finished tasks
-- Track status, progress, elapsed time, and results
-- Cancel tasks
-- Jump back to the related project, chapter, or shot
+Monitor progress and open a task to inspect its result.
 
 ### Model and prompt infrastructure
 
-- Manage providers, models, and default settings
-- Manage prompt templates for images, video, and shots
-- Generate frontend request helpers and types from OpenAPI
-- Provide a stable base for future AI workflow expansion
+Choose defaults for different generation tasks and maintain reusable prompt templates.
 
 ### File and media management
 
-- Manage uploads and generated outputs
-- Preview, link, and reuse image/video assets
-- Preserve shot and entity context around generated media
+Preview uploaded and generated media and reuse them as references.
 
 ## 🎯 Use Cases
 
-- Short / micro-drama creators
-- AI studios producing video content in batches
-- Solo creators exploring vertical drama production
-- Education and training teams making lesson videos
-- Brands and e-commerce teams producing story-driven promos
+- Short-drama teams preparing storyboards and reviewing candidate frames together.
+- Independent creators trying different shots for the same scene.
+- Education, brand and e-commerce teams developing scripts into short videos.
 
 ## 🔁 Frontend OpenAPI client and type generation
 
-Frontend request helpers and types are generated from the backend
-OpenAPI spec. Output directory:
-
-- `front/src/services/generated/`
-
-Cached spec file:
-
-- `front/openapi.json`
-
-With the backend dev server running at `http://127.0.0.1:8000` and loading the
-current workspace changes, run from the repository root:
+With the API serving the current code at `http://127.0.0.1:8000`, run the following from the repository root to refresh `front/openapi.json` and `front/src/services/generated/`.
 
 ```bash
 pnpm --dir front run openapi:update
@@ -204,34 +118,31 @@ pnpm --dir front run openapi:update
 
 ## 🐳 Docker Compose
 
-The repository includes a ready-to-run compose setup under
-`deploy/compose/`.
-
 ### Ports
 
 - Frontend: `http://localhost:7788`
-- Backend: `http://localhost:8000` (`/docs` for Swagger)
+- API: `http://localhost:8000` (Swagger UI: `/docs`)
 - MySQL: `localhost:${MYSQL_PORT:-3306}`
 - RustFS: `http://localhost:${RUSTFS_PORT:-9000}`
 
 ### Start
+
+From the repository root, create the environment file on first setup and start the services.
 
 ```bash
 cp deploy/compose/.env.example deploy/compose/.env
 docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up --build
 ```
 
+Once the frontend opens, [create your first project](site/content/docs/guide/first-project.md). Before generating media, [configure a model](site/content/docs/getting-started/model-setup.md).
+
 ## 🧑‍💻 Local Development
 
-Use the [local development guide](docs/development/guides/local-development.md)
-to start the API, task worker, and Vite frontend with Compose-managed services.
-The [developer documentation](docs/development/README.md) lists architecture,
-integration guides, and project standards. See the [site maintenance guide](site/README.md)
-when working on the website itself.
+Follow the [local development guide](docs/development/guides/local-development.md) to start the API, task worker and Vite frontend. See the [developer documentation](docs/development/README.md) for architecture and standards, or the [site guide](site/README.md) to work on the website.
 
 ## 📄 License
 
-This project is licensed under [Apache-2.0](./LICENSE).
+This project is licensed under [Apache-2.0](LICENSE).
 
 ## 💬 Community & Feedback
 

@@ -1,219 +1,149 @@
 # Jellyfish — AI Short Drama Studio
 
 <p align="center">
-  <img src="./img/logo.svg" alt="Jellyfish Logo" width="160" />
+  <img src="img/logo.svg" alt="Jellyfish Logo" width="160" />
 </p>
 
 <p align="center">
-  <a href="./README.en.md">English</a> ·
-  <a href="./README.ja.md">日本語</a>
+  <a href="https://www.apache.org/licenses/LICENSE-2.0">
+    <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License" />
+  </a>
+  <a href="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
+    <img src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB" alt="Frontend" />
+  </a>
+  <a href="https://img.shields.io/badge/backend-FastAPI-009688">
+    <img src="https://img.shields.io/badge/backend-FastAPI-009688" alt="Backend" />
+  </a>
+  <a href="https://github.com/Forget-C/Jellyfish/actions/workflows/deploy-site.yml">
+    <img src="https://github.com/Forget-C/Jellyfish/actions/workflows/deploy-site.yml/badge.svg" alt="Deploy Site" />
+  </a>
+  <a href="https://github.com/Forget-C/Jellyfish/actions/workflows/ghcr-images.yml">
+    <img src="https://github.com/Forget-C/Jellyfish/actions/workflows/ghcr-images.yml/badge.svg" alt="Build and push images" />
+  </a>
 </p>
 
-An end-to-end production tool for AI-generated short dramas (vertical / micro drama).  
-From script input → smart storyboarding → character/scene/prop consistency management → AI video generation → post-production editing → one-click export.
+<p align="center">
+  <a href="README.en.md">English</a> ·
+  <a href="README.zh.md">简体中文</a> ·
+  <a href="README.ja.md">日本語</a>
+</p>
+
+A production workspace for AI short dramas. Divide a chapter into scenes, prepare visual references and generate candidate frames on a storyboard canvas. The interface supports Chinese (default) and English.
 
 ## 📷 Screenshots
 
-| Project overview | Asset management |
-| --- | --- |
-| <img src="./img/project.png" alt="Project overview" width="420" /> | <img src="./img/资产管理.png" alt="Asset management" width="420" /> |
+| Scene division | Scene references | Storyboard canvas |
+| --- | --- | --- |
+| <a href="../site/static/images/screenshots/home/scene-division.webp"><img src="../site/static/images/screenshots/home/scene-division.webp" alt="Scene division" width="320" /></a> | <a href="../site/static/images/screenshots/home/object-references.webp"><img src="../site/static/images/screenshots/home/object-references.webp" alt="Scene references" width="320" /></a> | <a href="../site/static/images/screenshots/home/storyboard.webp"><img src="../site/static/images/screenshots/home/storyboard.webp" alt="Storyboard canvas" width="320" /></a> |
 
-## ✨ Core value
+## ✨ Core Value
 
-- **Consistency first**: Global seed + unified style + asset reuse to address the main pain of AI generation—character and scene drift.
-- **Industrialized workflow**: From narrative script to shootable storyboards to video clips in one closed loop.
-- **Visual & controllable**: WYSIWYG storyboard editor + fine-grained shot controls + real-time preview.
-- **Asset reuse system**: Full lifecycle management for characters, scenes, props, costumes, and prompt templates.
+- Trace each scene back to the passage it adapts.
+- Reuse the same character, location and prop references across shots.
+- Inspect the inputs and results of a generation run before choosing a candidate.
 
-## 🚀 Key features
+## ✨ Core Capabilities
 
-| Module | Core capabilities | Highlights |
-|--------|-------------------|------------|
-| Project management | Create projects, global style/seed control, project dashboard, chapter stats | Global seed to reduce drift, enforced style inheritance |
-| Chapter production workspace | Script input → smart condense → storyboard extraction → storyboard edit → video generation → preview | Three-column layout, collapsible right panel, batch operations |
-| Storyboard fine controls | Shot size/angle/movement/emotion/duration/atmosphere/dialog/music/SFX/hidden shots | Separate prompts for first/last/key frames, multi-version management |
-| Advanced generation controls | Reference images across shots, ControlNet pose/depth, lip-sync, model & duration selection | Controllable motion + lip-sync |
-| Asset management | Centralized characters/scenes/props/costumes, smart extraction + manual linking + prompt templates | Per-project vs global asset library |
-| Prompt template library | Storyboard/character/scene/video/music/SFX/composite prompt templates | One-click init for new chapters |
-| Post-production editing | Timeline editing, multi-track video/audio, asset bin drag-drop, final export | Edit full short dramas directly from AI clips |
-| Agent workflows | Custom agents (plot/character extraction, storyboard suggestions), visual orchestration & testing | Node-based workflow editor (Dify-like) |
-| Model management | Multi-provider (OpenAI/Claude/Tongyi/Hunyuan, etc.), model types (text/image/video) | Per-type default model, quick connection test |
-| Generated media management | Unified image/video preview, tagging, filtering, batch export | Reuse high-quality assets quickly |
+### 1. AI script understanding and storyboard breakdown
 
-## 🎯 Use cases
+Save the chapter text, mark scene boundaries, then generate and edit a storyboard for a selected scene.
 
-- Short / micro-drama content creators
-- AI film studios for batch production
-- Solo creators exploring vertical short drama on a budget
-- Education and training teams making teaching videos
-- Brands and e-commerce creating story-driven product promos
+### 2. Shot preparation and confirmation workflow
 
-## 🛠 Tech stack (example)
+Chapter text → scene division → reference selection → storyboard canvas → precheck → candidate review.
 
-- Frontend: React 18 + TypeScript + Vite + Ant Design / Tailwind CSS
-- State: Redux Toolkit / Zustand
-- Workflow editor: React Flow
-- Video player: Video.js / Plyr
-- Rich text / code editor: Monaco Editor / React Quill
-- Backend (optional open-source): Node.js / NestJS / FastAPI / Spring Boot
-- AI layer: Multiple model APIs (OpenAI / Anthropic / Midjourney / Runway / Kling / Luma, etc.)
+### 3. Asset consistency and reuse
 
-## 🔁 Frontend OpenAPI client & type generation
+Link characters, locations, props and costumes to project assets. Choose the reference images needed for each scene.
 
-Request helpers and types are generated from the backend OpenAPI spec. Output directory: `front/src/services/generated/`. Cached spec: `front/openapi.json`.
+### 4. Shot-level image and video orchestration
 
-With the backend dev server running (default `http://127.0.0.1:8000`), from the frontend directory run:
+On the canvas, connect shot descriptions and references to a model card, check its inputs and review the generated media.
+
+### 5. Unified async task center
+
+Track text, image and video jobs, inspect failures and cancel eligible tasks.
+
+### 6. Model, prompt, and generation infrastructure
+
+Configure providers and default models, manage prompt templates and access the backend through its OpenAPI contract.
+
+## 🚀 Feature Overview
+
+### Project and chapter management
+
+Create a project, save chapter text and reopen earlier scene divisions.
+
+### AI script processing
+
+Use the text lab to explore alternate dialogue, actions and shot descriptions.
+
+### Shot preparation workflow
+
+Review the source passage alongside the scene references and refine each shot description.
+
+### Asset and entity management
+
+Maintain project assets and choose which reference images a scene uses.
+
+### Shot generation workspace
+
+Edit prompts and model parameters, run a precheck and preview candidate outputs.
+
+### Task center
+
+Monitor progress and open a task to inspect its result.
+
+### Model and prompt infrastructure
+
+Choose defaults for different generation tasks and maintain reusable prompt templates.
+
+### File and media management
+
+Preview uploaded and generated media and reuse them as references.
+
+## 🎯 Use Cases
+
+- Short-drama teams preparing storyboards and reviewing candidate frames together.
+- Independent creators trying different shots for the same scene.
+- Education, brand and e-commerce teams developing scripts into short videos.
+
+## 🔁 Frontend OpenAPI client and type generation
+
+With the API serving the current code at `http://127.0.0.1:8000`, run the following from the repository root to refresh `front/openapi.json` and `front/src/services/generated/`.
 
 ```bash
-cd front
-pnpm run openapi:update
+pnpm --dir front run openapi:update
 ```
 
-Notes:
-
-- `openapi:update` fetches `http://127.0.0.1:8000/openapi.json` into `front/openapi.json`, then generates code under `front/src/services/generated/`.
-- To change the API base URL, use `VITE_BACKEND_URL` (build-time) or inject `BACKEND_URL` at runtime (served as `/env.js` and loaded by `front/index.html`); see `front/src/services/openapi.ts`.
-
-## 🐳 Run with Docker Compose (MySQL + RustFS + Backend + Task Worker + Front)
-
-The repository ships a ready-to-run compose setup under `deploy/compose/`.
+## 🐳 Docker Compose
 
 ### Ports
 
 - Frontend: `http://localhost:7788`
-- Backend: `http://localhost:8000` (Swagger at `/docs`)
+- API: `http://localhost:8000` (Swagger UI: `/docs`)
 - MySQL: `localhost:${MYSQL_PORT:-3306}`
-- RustFS (S3 API): `http://localhost:${RUSTFS_PORT:-9000}` (Console: `http://localhost:${RUSTFS_CONSOLE_PORT:-9001}`)
+- RustFS: `http://localhost:${RUSTFS_PORT:-9000}`
 
 ### Start
+
+From the repository root, create the environment file on first setup and start the services.
 
 ```bash
 cp deploy/compose/.env.example deploy/compose/.env
 docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up --build
 ```
 
-On startup, `backend-migrate` runs the Alembic revision chain and records the
-applied revision in `alembic_version`. After it succeeds,
-`backend-seed-system-data` applies idempotent system prompt-template seed data.
-The backend and task worker only start after both one-off services complete.
+Once the frontend opens, [create your first project](../site/content/docs/guide/first-project.md). Before generating media, [configure a model](../site/content/docs/getting-started/model-setup.md).
 
-Compose starts one `task-worker` process (`python -m app.task_worker`). It reads
-queued tasks from MySQL and polls provider IDs for remote media jobs. Redis and
-Celery are no longer required. Task status and history come from `tasks`, through
-the `/api/v1/film/tasks` APIs.
+## 🧑‍💻 Local Development
 
-Do not run old and new workers together. Back up the database and stop API/worker
-processes before upgrading an existing environment. The task schema migration
-removes old execution history while retaining business records and stored files;
-new task history is kept in the new tables. Non-empty unversioned databases are
-not automatically stamped. See the database migration documentation for details.
+Follow the [local development guide](development/guides/local-development.md) to start the API, task worker and Vite frontend. See the [developer documentation](development/README.md) for architecture and standards, or the [site guide](../site/README.md) to work on the website.
 
-## 🧑‍💻 Development setup (frontend & backend separately)
+## 📄 License
 
-### Ports
+This project is licensed under [Apache-2.0](../LICENSE).
 
-- Frontend (Vite dev): `http://localhost:7788`
-- Backend (FastAPI): `http://localhost:8000` (Swagger at `/docs`)
+## 💬 Community & Feedback
 
-### Start backend
-
-```bash
-cd backend
-cp .env.example .env
-uv sync
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Before opening a PR, you can run `uv sync --group dev` and `uv run pylint app` under `backend` for static analysis (see [backend/README.md](../backend/README.md)).
-
-### Start the task worker
-
-After migrations and system seeds complete, run one worker in another terminal:
-
-```bash
-cd backend
-uv run python -m app.task_worker
-```
-
-### Start frontend
-
-```bash
-cd front
-pnpm install
-pnpm dev
-```
-
-### (Optional) Run only dependencies: MySQL + RustFS
-
-For local development with the supported MySQL migration chain, start the infrastructure services:
-
-```bash
-cp deploy/compose/.env.example deploy/compose/.env
-docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up -d mysql rustfs
-```
-
-### Git commit message format
-
-The **first line** of each local commit must match: `[type] summary`. `type` must be **one of the following literals** (**lowercase only**), then **one space**, then the subject:
-
-| type | meaning |
-|------|---------|
-| `feat` | new feature |
-| `fix` | bug fix |
-| `docs` | documentation |
-| `style` | formatting (no semantic change) |
-| `refactor` | refactor |
-| `perf` | performance |
-| `test` | tests |
-| `chore` | chores / tooling |
-| `ci` | CI config |
-| `build` | build system or dependencies |
-| `revert` | revert |
-
-Examples: `[feat] add feature`, `[fix] repair login`, `[docs] update README`. Custom tags like `[wip]` are not allowed.
-
-Enable the hook once from the repository root:
-
-```bash
-git config core.hooksPath .githooks
-```
-
-Notes: merge commits (`Merge …`), `Revert …`, and commits created during a merge are allowed by the hook.
-
-**Remote enforcement**: pull requests run [`.github/workflows/commit-messages.yml`](.github/workflows/commit-messages.yml), which checks every commit subject in the PR (same rules; subjects starting with `Merge` / `Revert` are skipped). Push commits that match the format before opening or updating a PR.
-
-## 🚧 Development status / Roadmap
-
-The project is **actively developed**. Below is the current completion and planned work. Feedback and contributions via [Issues](https://github.com/Forget-C/Jellyfish/issues) are welcome.
-
-### ✅ Done
-
-| Module | Description |
-|--------|-------------|
-| Model management UI | Model list, filters, and config UI are in place |
-| Project management UI | Project create/edit and dashboard flows are wired |
-| Project workspace UI | Project-level workspace layout and basic actions |
-| Chapter production workspace UI | Chapter production screens and interactions |
-| Model management | Multi-provider, multi-type model management and default config |
-| Project management | Project CRUD, global style and seed configuration |
-
-### 🚧 In progress / Planned
-
-| Module | Description |
-|--------|-------------|
-| Chapter production workspace | Full storyboard editing, video generation, and preview (deepening features) |
-| Advanced prompts | Advanced prompt templates and smart fill for storyboard/character/scene (planned) |
-
-## Developer
-
-The project is still under development and core workflows / data models may change. A Docker Compose setup is provided for local startup (see above).
-
-## 📄 Open-source License / License
-
-This project is licensed under [Apache-2.0](../LICENSE).  
-We welcome Pull Requests, Issues, and Stars, and we will work with the community to turn this AI short drama production tool into a practical, industry-ready solution.
-
-## 💬 Community & feedback
-
-- **[GitHub Issues](https://github.com/Forget-C/Jellyfish/issues)** — Feature suggestions, bug reports, and usage discussions
-- **WeChat / Discord** — To be set up; we will update the entry on this page later
+- [GitHub Issues](https://github.com/Forget-C/Jellyfish/issues)

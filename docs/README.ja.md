@@ -1,118 +1,149 @@
-# Jellyfish — AI短編ドラマ制作スタジオ
+# Jellyfish — AI ショートドラマ制作スタジオ
 
 <p align="center">
-  <img src="./img/logo.svg" alt="Jellyfish Logo" width="160" />
+  <img src="img/logo.svg" alt="Jellyfish Logo" width="160" />
 </p>
 
 <p align="center">
-  <a href="./README.en.md">English</a> ·
-  <a href="./README.ja.md">日本語</a>
+  <a href="https://www.apache.org/licenses/LICENSE-2.0">
+    <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License" />
+  </a>
+  <a href="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
+    <img src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB" alt="Frontend" />
+  </a>
+  <a href="https://img.shields.io/badge/backend-FastAPI-009688">
+    <img src="https://img.shields.io/badge/backend-FastAPI-009688" alt="Backend" />
+  </a>
+  <a href="https://github.com/Forget-C/Jellyfish/actions/workflows/deploy-site.yml">
+    <img src="https://github.com/Forget-C/Jellyfish/actions/workflows/deploy-site.yml/badge.svg" alt="Deploy Site" />
+  </a>
+  <a href="https://github.com/Forget-C/Jellyfish/actions/workflows/ghcr-images.yml">
+    <img src="https://github.com/Forget-C/Jellyfish/actions/workflows/ghcr-images.yml/badge.svg" alt="Build and push images" />
+  </a>
 </p>
 
-AI生成の短編ドラマ制作を一気通貫で支えるワークスペースです。  
-脚本入力から、分鏡、アセット整合性管理、生成実行、書き出しまでをつなぎます。
+<p align="center">
+  <a href="README.en.md">English</a> ·
+  <a href="README.zh.md">简体中文</a> ·
+  <a href="README.ja.md">日本語</a>
+</p>
+
+AI ショートドラマの制作ワークスペースです。章の本文をシーンに分け、参考素材をそろえ、絵コンテのキャンバスで候補画像を生成します。画面の表示言語は中国語（初期設定）と英語です。
 
 ## 📷 スクリーンショット
 
-| プロジェクト概要 | アセット管理 |
-| --- | --- |
-| <img src="./img/project.png" alt="Project overview" width="420" /> | <img src="./img/%E8%B5%84%E4%BA%A7%E7%AE%A1%E7%90%86.png" alt="Asset management" width="420" /> |
+| シーン分割 | シーンの参考素材 | 絵コンテのキャンバス |
+| --- | --- | --- |
+| <a href="../site/static/images/screenshots/home/scene-division.webp"><img src="../site/static/images/screenshots/home/scene-division.webp" alt="シーン分割" width="320" /></a> | <a href="../site/static/images/screenshots/home/object-references.webp"><img src="../site/static/images/screenshots/home/object-references.webp" alt="シーンの参考素材" width="320" /></a> | <a href="../site/static/images/screenshots/home/storyboard.webp"><img src="../site/static/images/screenshots/home/storyboard.webp" alt="絵コンテのキャンバス" width="320" /></a> |
 
-## ✨ コアバリュー
+## ✨ 主な特長
 
-- **制作フローを一本化**：脚本入力から分鏡準備、画像・動画生成、タスク追跡までを一つの流れで扱えます
-- **AI出力を再利用可能な制作資産に変換**：ショット、候補アセット、台詞、プロンプト、生成タスクとして蓄積できます
-- **整合性を最重要課題として扱う**：キャラクター、シーン、小道具、衣装を統合管理し、ショット間のブレを抑えます
-- **長時間ジョブを追跡可能なタスクとして扱う**：テキスト、画像、動画の非同期処理を統一的に可視化・中断・再開できます
+- 各シーンに対応する原文の範囲を確認できます。
+- 同じ人物、場所、小道具の参考素材を複数のカットで再利用できます。
+- 候補画像を選ぶ前に、生成に使った入力と結果を照合できます。
 
 ## ✨ 主な機能
 
-### 1. AI脚本理解と分鏡分解
+### 1. AI による脚本の分析と絵コンテの作成
 
-- 章の脚本をショット単位に分解
-- キャラクター、シーン、小道具、衣装、台詞の抽出
-- 脚本の最適化、簡略化、一貫性チェック
-- キャラクター像やシーン情報などの補助分析
+章の本文を保存してシーンの境界を指定し、選んだシーンの絵コンテを生成・編集します。
 
-### 2. 分鏡準備ワークフロー
+### 2. カットの準備と確認
 
-標準フロー：
+章の本文 → シーン分割 → 参考素材の選択 → 絵コンテ → 生成前チェック → 候補画像の確認。
 
-`脚本分解 → 分鏡準備 → 候補確認 → ショット ready → 生成ワークスペース`
+### 3. 素材の一貫性と再利用
 
-準備段階では次を扱えます：
+人物、場所、小道具、衣装をプロジェクトの素材に関連付け、シーンごとに参考画像を選びます。
 
-- ショット候補の抽出と再取得
-- アセット候補の採用 / 無視
-- 台詞候補の採用 / 無視
-- 既存キャラクター / シーン / 小道具 / 衣装との関連付け
-- ショット基本情報の修正
-- 準備状態による ready 判定
+### 4. カット単位の画像・動画生成
 
-### 3. アセット整合性と再利用
+キャンバスでカットの説明と参考素材をモデルカードにつなぎ、入力を確認して生成した画像や動画を確認します。
 
-以下のエンティティを統一管理します：
+### 5. 非同期タスクの管理
 
-- キャラクター / 俳優
-- シーン
-- 小道具
-- 衣装
+テキスト・画像・動画のタスクを追跡し、失敗の原因を確認したり、対応するタスクをキャンセルしたりできます。
 
-これによりショット間での再利用とスタイル安定化を支えます。
+### 6. モデル・プロンプト・生成サービス
 
-### 4. ショット単位の画像・動画生成
+プロバイダーと既定モデルを設定し、プロンプトテンプレートを管理します。バックエンドとの連携には OpenAPI を使います。
 
-ショットが `ready` になると、生成ワークスペースで次を行えます：
+## 🚀 機能一覧
 
-- キーフレームと参照画像の管理
-- 動画プロンプトのプレビュー
-- 画像 / 動画生成タスクの起動
-- 単ショット / バッチの生成前チェック
-- 生成結果のショット・素材体系への反映
+### プロジェクトと章の管理
 
-### 5. 統一タスクセンター
+プロジェクトを作成し、章の本文を保存して過去のシーン分割案を参照できます。
 
-- 実行中および最近完了したタスクの一覧
-- ステータス、進捗、経過時間、結果の追跡
-- タスク取消
-- 関連プロジェクト / 章 / ショットへのジャンプ
+### AI による脚本処理
 
-## 🔁 OpenAPI クライアント生成
+テキストラボで台詞、人物の動き、カットの描写を試作できます。
 
-フロントエンドの API クライアントと型は、バックエンドの
-OpenAPI 仕様から生成されます。
+### カットの準備手順
+
+原文とシーンの参考素材を照合しながら、カットごとの描写を調整できます。
+
+### 素材と登場要素の管理
+
+プロジェクトの素材を管理し、各シーンで使用する参考画像を選択できます。
+
+### カット生成ワークスペース
+
+プロンプトとモデル設定を編集し、生成前チェックを実行して候補をプレビューできます。
+
+### タスクセンター
+
+進捗を追跡し、タスクを開いて結果を確認できます。
+
+### モデルとプロンプトの管理
+
+生成タスクごとの既定モデルを選び、再利用するプロンプトテンプレートを管理できます。
+
+### ファイルとメディアの管理
+
+アップロードした素材や生成結果をプレビューし、参考素材として再利用できます。
+
+## 🎯 活用例
+
+- ショートドラマのチームで絵コンテを準備し、候補画像をレビューする。
+- 個人制作で同じシーンのカット割りを試す。
+- 教育、ブランド、EC 向けの脚本を短編動画に仕上げる。
+
+## 🔁 フロントエンドの OpenAPI クライアントと型の生成
+
+現在のコードで API を `http://127.0.0.1:8000` に起動し、リポジトリのルートで次のコマンドを実行して `front/openapi.json` と `front/src/services/generated/` を更新します。
 
 ```bash
-cd front
-pnpm run openapi:update
+pnpm --dir front run openapi:update
 ```
 
 ## 🐳 Docker Compose
+
+### ポート
+
+- フロントエンド: `http://localhost:7788`
+- API: `http://localhost:8000` (Swagger UI: `/docs`)
+- MySQL: `localhost:${MYSQL_PORT:-3306}`
+- RustFS: `http://localhost:${RUSTFS_PORT:-9000}`
+
+### 起動
+
+初回はリポジトリのルートで環境ファイルを作成し、サービスを起動します。
 
 ```bash
 cp deploy/compose/.env.example deploy/compose/.env
 docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up --build
 ```
 
+フロントエンドを開いたら、[最初のプロジェクトを作成](../site/content/docs/guide/first-project.md)します。メディアを生成する前に[モデルを設定](../site/content/docs/getting-started/model-setup.md)してください。
+
 ## 🧑‍💻 ローカル開発
 
-### Backend
+API、タスクワーカー、Vite の起動手順は[ローカル開発ガイド](development/guides/local-development.md)を参照してください。設計と規約は[開発ドキュメント](development/README.md)、公式サイトの保守は[サイトガイド](../site/README.md)にまとめています。
 
-```bash
-cd backend
-cp .env.example .env
-uv sync
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
+## 📄 ライセンス
 
-### Frontend
+このプロジェクトは [Apache-2.0](../LICENSE) ライセンスで公開されています。
 
-```bash
-cd front
-pnpm install
-pnpm dev
-```
+## 💬 コミュニティ・フィードバック
 
-## 📄 License
-
-This project is licensed under [Apache-2.0](../LICENSE).
+- [GitHub Issues](https://github.com/Forget-C/Jellyfish/issues)
