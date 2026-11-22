@@ -19,6 +19,21 @@ const messages: Record<ProviderTestResult['outcome'], string> = {
   unknown: '未能确认供应商是否受理，再次测试可能重复计费。',
 }
 
+type TestSelection = { model: string; category?: ModelCategoryKey }
+
+function readSelection(key: string, available: ModelCategoryKey[]): TestSelection {
+  const fallback = available.length === 1 ? available[0] : undefined
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) ?? 'null')
+    return {
+      model: typeof saved?.model === 'string' ? saved.model : '',
+      category: available.includes(saved?.category) ? saved.category : fallback,
+    }
+  } catch {
+    return { model: '', category: fallback }
+  }
+}
+
 export function ProviderTestPanel({ provider, spec, endpointLabel, desktop, busy, onSubmitting, onClose }: {
   provider: ProviderRead
   spec: ProviderSupportedRead
@@ -28,9 +43,9 @@ export function ProviderTestPanel({ provider, spec, endpointLabel, desktop, busy
   onSubmitting: (busy: boolean) => void
   onClose: (restoreFocus: boolean) => void
 }) {
-  const [model, setModel] = useState('')
   const available = Object.keys(spec.test_prompts ?? {}) as ModelCategoryKey[]
-  const [category, setCategory] = useState<ModelCategoryKey | undefined>(available.length === 1 ? available[0] : undefined)
+  const storageKey = `jellyfish_provider_test_selection:${provider.id}`
+  const [{ model, category }, setSelection] = useState(() => readSelection(storageKey, available))
   const [options, setOptions] = useState<{ value: string }[]>([])
   const [catalogFailed, setCatalogFailed] = useState(false)
   const [result, setResult] = useState<ProviderTestResult>()
@@ -89,8 +104,13 @@ export function ProviderTestPanel({ provider, spec, endpointLabel, desktop, busy
     else onClose(true)
   }
   const popupHost = (node: HTMLElement) => node.parentElement ?? node
-  const changeModel = (value: string) => {
-    setModel(value)
+  const changeSelection = (selection: TestSelection) => {
+    setSelection(selection)
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(selection))
+    } catch {
+      // 浏览器禁用存储时，仍可在当前面板完成测试。
+    }
     setResult(undefined)
     setFailure('')
   }
@@ -125,15 +145,15 @@ export function ProviderTestPanel({ provider, spec, endpointLabel, desktop, busy
           {spec.live_model_catalog
             ? <AutoComplete id={id + '-model'} value={model} options={options} disabled={busy} getPopupContainer={popupHost}
               filterOption={(value, option) => !!option?.value.toLowerCase().includes(value.toLowerCase())}
-              placeholder={uiText('选择或输入模型名称')} onChange={changeModel} />
+              placeholder={uiText('选择或输入模型名称')} onChange={value => changeSelection({ model: value, category })} />
             : <Input id={id + '-model'} value={model} disabled={busy} placeholder={uiText('输入模型名称')}
-              onChange={event => changeModel(event.target.value)} />}
+              onChange={event => changeSelection({ model: event.target.value, category })} />}
         </Form.Item>
         {available.length === 1 && category
           ? !desktop && <Typography.Text type="secondary">{uiText('调用类型')} · {uiText(categories[category])}</Typography.Text>
           : <Form.Item label={uiText('调用类型')} htmlFor={id + '-category'} style={{ marginBottom: 0 }}>
             <Select id={id + '-category'} value={category} disabled={busy} getPopupContainer={popupHost}
-              placeholder={uiText('选择调用类型')} onChange={value => { setCategory(value); setResult(undefined); setFailure('') }}
+              placeholder={uiText('选择调用类型')} onChange={value => changeSelection({ model, category: value })}
               options={available.map(value => ({ value, label: uiText(categories[value]) }))} />
           </Form.Item>}
       </Form>

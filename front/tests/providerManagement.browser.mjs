@@ -22,6 +22,8 @@ let browser
 let listFails = false
 let saveFails = true
 let credentialsReads = 0
+let listedId = provider.id
+let testPrompts = { text: '回复 OK' }
 let catalogFails = false
 let paidCalls = 0
 let releaseSubmission
@@ -49,7 +51,7 @@ try {
     if (pathname.endsWith('/providers')) {
       lastSearch = searchParams.get('q') ?? ''
       if (listFails) return route.fulfill({ status: 500, json: { message: '读取失败' } })
-      const items = providerExists && (!lastSearch || provider.name.includes(lastSearch)) ? [provider] : []
+      const items = providerExists && (!lastSearch || provider.name.includes(lastSearch)) ? [{ ...provider, id: listedId }] : []
       return respond({ items, pagination: { total: items.length, page: 1, page_size: 20, max_page: 1 } })
     }
     if (pathname.endsWith('/providers/provider1/credentials')) {
@@ -79,7 +81,7 @@ try {
     if (pathname.endsWith('/catalog')) return respond({ models: [{ name: 'remote-model', category: 'text' }] })
     if (pathname.endsWith('/models')) return respond({ items: [], pagination: { total: 2 } })
     if (pathname.endsWith('/supported')) return respond([
-      { key: 'openai', test_prompts: { text: '回复 OK' }, live_model_catalog: true, display_name: 'OpenAI', default_base_url: 'https://one.example/v1', requires_api_key: true, requires_api_secret: true },
+      { key: 'openai', test_prompts: testPrompts, live_model_catalog: true, display_name: 'OpenAI', default_base_url: 'https://one.example/v1', requires_api_key: true, requires_api_secret: true },
       { key: 'vidu', display_name: 'Vidu', default_base_url: 'https://two.example/v1' },
     ])
     return respond({ items: [], next_cursor: null })
@@ -240,8 +242,7 @@ try {
   await probe.getByRole('button', { name: /关\s*闭/ }).click()
   await page.setViewportSize({ width: 390, height: 844 })
   await testButton.click()
-  assert.equal(await model.inputValue(), '')
-  await model.fill('manual')
+  assert.equal(await model.inputValue(), 'manual')
   await startTest.click()
   await feeConfirm.getByRole('button', { name: '确认测试' }).click()
   await probe.getByText('请先为此配置填写 API Key').waitFor()
@@ -270,6 +271,34 @@ try {
   assert.equal(hintLayout.panelWidth, 280)
   assert.equal(hintLayout.lines, 1)
   assert.ok(hintLayout.width > 0 && hintLayout.width < hintLayout.space)
+  await probe.getByRole('button', { name: /关\s*闭/ }).click()
+
+  catalogFails = false
+  testPrompts = { text: '回复 OK', image: '一个蓝色圆点' }
+  await page.reload()
+  await testButton.click()
+  assert.equal(await model.inputValue(), 'manual')
+  await model.fill('remote')
+  await page.getByText('remote-model', { exact: true }).last().click()
+  const type = probe.getByRole('combobox', { name: '调用类型' })
+  await type.press('ArrowDown')
+  await page.getByText('图片', { exact: true }).last().click()
+  await page.reload()
+  await testButton.click()
+  assert.equal(await model.inputValue(), 'remote-model')
+  await probe.locator('.ant-select-selection-item').filter({ hasText: /^图片$/ }).waitFor()
+  listedId = 'other-config'
+  await page.reload()
+  await testButton.click()
+  assert.equal(await model.inputValue(), '')
+  assert.equal(await startTest.isDisabled(), true)
+  assert.equal(paidCalls, 2)
+  listedId = provider.id
+  testPrompts = { text: '回复 OK' }
+  await page.reload()
+  await testButton.click()
+  assert.equal(await model.inputValue(), 'remote-model')
+  assert.equal(await startTest.isEnabled(), true)
   await probe.getByRole('button', { name: /关\s*闭/ }).click()
 
   await page.setViewportSize({ width: 1440, height: 900 })
