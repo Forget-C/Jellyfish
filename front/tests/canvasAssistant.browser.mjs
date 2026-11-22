@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
+import { once } from 'node:events'
+import { readFile } from 'node:fs/promises'
 import { createServer as createHttpServer } from 'node:http'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -15,6 +17,14 @@ const apiPort = Number(process.env.CANVAS_ASSISTANT_TEST_API_PORT || 8462)
 const webPort = Number(process.env.CANVAS_ASSISTANT_TEST_WEB_PORT || 4462)
 const api = 'http://127.0.0.1:' + apiPort
 const canvasApi = api + '/api/v1/studio/generation-canvases'
+const journey = '把镜头三的推近放慢，生成一版，再审看'
+const clipPath = join(output, 'known-silent-clip.mp4')
+execFileSync('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi',
+  '-i', 'color=red:size=64x64:rate=24:duration=2', '-an', '-c:v', 'libx264', '-bf', '0',
+  '-pix_fmt', 'yuv420p', clipPath])
+const clip = await readFile(clipPath)
+const videoRequests = []
+const reviewInputs = []
 const prompts = []
 const observed = []
 let acceptSlowReply
@@ -24,9 +34,43 @@ const slowReplyAllowed = new Promise(resolve => { acceptSlowReply = resolve })
 const provider = createHttpServer(async (request, response) => {
   const chunks = []
   for await (const chunk of request) chunks.push(chunk)
+  const pathname = new URL(request.url, 'http://localhost').pathname
+  if (/\/videos\/fixture-\d+\/content$/.test(pathname)) {
+    response.writeHead(200, { 'Content-Type': 'video/mp4' })
+    response.end(clip)
+    return
+  }
+  if (pathname.endsWith('/videos') && request.method === 'POST') {
+    videoRequests.push(JSON.parse(Buffer.concat(chunks).toString()))
+    response.writeHead(200, { 'Content-Type': 'application/json' })
+    response.end(JSON.stringify({ id: 'fixture-' + videoRequests.length }))
+    return
+  }
+  if (pathname.includes('/videos/fixture-')) {
+    response.writeHead(200, { 'Content-Type': 'application/json' })
+    response.end(JSON.stringify({ status: 'succeeded' }))
+    return
+  }
   const { model, messages, tools, stream } = JSON.parse(Buffer.concat(chunks).toString())
+  const evidence = messages.flatMap(message => Array.isArray(message.content) ? message.content : [])
+    .find(part => part.type === 'video_url' || part.type === 'image_url')
+  const isReview = messages.some(message => Array.isArray(message.content)
+    && message.content.some(part => part.text?.includes('请用成片审看技能')))
+  if (evidence && isReview) {
+    reviewInputs.push(evidence)
+    const content = evidence.type === 'video_url'
+      ? '连续画面 0–2 秒为红色，没有音轨，无法判断声画同步。'
+      : '仅收到红色静帧，无法判断动作连续性。'
+    const choices = stream ? [{ index: 0, delta: { role: 'assistant', content }, finish_reason: 'stop' }]
+      : [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }]
+    response.writeHead(200, { 'Content-Type': stream ? 'text/event-stream' : 'application/json' })
+    const body = JSON.stringify({ id: 'review', object: 'chat.completion', created: 1, model, choices })
+    response.end(stream ? 'data: ' + body + '\n\ndata: [DONE]\n\n' : body)
+    return
+  }
   const turns = messages.filter(message => message.role === 'user').map(message => message.content)
-  if (stream) {
+  const combined = turns.at(-1) === journey
+  if (stream && !combined) {
     assert.equal(turns.at(-1), '准备两版短片旁白')
     response.writeHead(200, { 'Content-Type': 'text/event-stream' })
     response.end('data: ' + JSON.stringify({ choices: [{
@@ -34,7 +78,7 @@ const provider = createHttpServer(async (request, response) => {
     }] }) + '\n\ndata: [DONE]\n\n')
     return
   }
-  if (model === 'browser-tool-model') {
+  if (model === 'browser-tool-model' || combined) {
     const names = tools.map(tool => tool.function.name)
     assert.ok(names.includes('read_canvas_context'))
     assert.ok(names.includes('load_canvas_skill'))
@@ -72,6 +116,18 @@ const provider = createHttpServer(async (request, response) => {
           arguments: JSON.stringify({ card_ids, group_name: turns.at(-1).includes('分组') ? '片头' : undefined,
             placement: turns.at(-1).includes('整理') ? { kind: 'arrange' } : { kind: 'move', positions } }) },
       }] }
+    } else if (combined && !proposed) {
+      const card_id = draft.target_card_ids[0]
+      const adopted = draft.cards.some(card => card.type === 'direction.movement')
+      answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: adopted ? {
+        name: 'propose_canvas_structure', arguments: JSON.stringify({
+          change: { kind: 'adjust_shot_movement', card_id, field: 'movement_speed', text: '缓慢推近' },
+        }),
+      } : {
+        name: 'propose_canvas_edit', arguments: JSON.stringify({
+          card_id, target: { kind: 'video_prompt_segment', segment_id: 'text' }, text: '缓慢推近',
+        }),
+      } }] }
     } else if (requestEdit && !proposed) {
       const card = draft.cards.find(item => item.id === draft.target_card_ids[0])
       const target = card.type === 'direction.movement'
@@ -107,6 +163,16 @@ const provider = createHttpServer(async (request, response) => {
     } else if (!requestEdit && !requestLocalMovement && !reference && !layoutRequest) {
       observed.push(draft)
     }
+    if (stream) {
+      const delta = { ...answer, ...(answer.tool_calls ? { tool_calls: answer.tool_calls.map((call, index) => ({
+        ...call, index,
+      })) } : {}) }
+      response.writeHead(200, { 'Content-Type': 'text/event-stream' })
+      response.end('data: ' + JSON.stringify({ id: 'edit-reply', model, choices: [{
+        index: 0, delta, finish_reason: answer.tool_calls ? 'tool_calls' : 'stop',
+      }] }) + '\n\ndata: [DONE]\n\n')
+      return
+    }
     response.writeHead(200, { 'Content-Type': 'application/json' })
     response.end(JSON.stringify({
       id: 'test-reply', object: 'chat.completion', created: 1, model,
@@ -133,7 +199,7 @@ const backend = spawn(python || 'uv', [...(python ? [] : ['run', '--no-sync', 'p
   cwd: join(root, '../backend'),
   env: { ...process.env, CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: String(apiPort),
     CANVAS_BROWSER_ASSISTANT_PROVIDER: 'http://127.0.0.1:' + provider.address().port,
-    CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media') },
+    CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_ASSISTANT_REVIEW: '1' },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 captureBackend(backend, output)
@@ -481,11 +547,15 @@ try {
   await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('生成两版')
   await panel.getByRole('button', { name: '发送消息' }).click()
   await panel.getByText('已授权生成版本数 2 · 已排队，等待提交', { exact: true }).waitFor()
-  worker = spawn(python || 'uv', [...(python ? [] : ['run', '--no-sync', 'python']), '-m', 'app.task_worker'], {
+  const workerEntrypoint = 'import asyncio; from tests.generation_canvas_browser_server import configure_media_storage; from app.task_worker import main; configure_media_storage(); asyncio.run(main())'
+  worker = spawn(python || 'uv', [...(python ? [] : ['run', '--no-sync', 'python']), '-c', workerEntrypoint], {
     cwd: join(root, '../backend'),
-    env: { ...process.env, DATABASE_URL: 'sqlite+aiosqlite:///' + join(output, 'browser.sqlite') },
-    stdio: 'ignore',
+    env: { ...process.env, DATABASE_URL: 'sqlite+aiosqlite:///' + join(output, 'browser.sqlite'),
+      CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'),
+      S3_PUBLIC_BASE_URL: api },
+    stdio: ['ignore', 'pipe', 'pipe'],
   })
+  captureBackend(worker, output)
   await panel.getByText('已授权生成版本数 2 · 已生成', { exact: true }).waitFor({ timeout: 15_000 })
   assert.equal(await panel.getByRole('button', { name: '查看运行', exact: true }).count(), 2)
   await page.screenshot({ path: join(output, 'assistant-generation.png') })
@@ -504,6 +574,75 @@ try {
   await panel.getByRole('button', { name: '查看审看的运行', exact: true }).click()
   await page.getByRole('region', { name: '画布运行历史' }).locator('details[data-history-run][open]')
     .getByText('旁白生成完成', { exact: true }).waitFor()
+
+  for (const canvas of [free, scene]) {
+    const url = canvas.project_id ? storyboardCanvasApi(canvasApi, canvas.id) : canvasApi + '/' + canvas.id
+    const extra = canvas.project_id ? '?project_id=' + canvas.project_id : ''
+    const read = async (resource = '') => (await (await fetch(url.split('?')[0] + resource + extra)).json()).data
+    const before = await read()
+    const mirror = before.document.cards.find(card => card.id === 'other')
+    const originalMovement = before.document.cards.find(card => card.id === 'camera-movement')
+    const target = before.document.cards.find(card => card.id === 'target')
+    target.config.seconds = 4
+    before.document.groups.push({ id: 'ticket-17-shot-three', name: '镜头三', card_ids: ['target'] },
+      { id: 'ticket-17-shot-four', name: '镜头四', card_ids: ['other'] })
+    const seeded = await fetch(url, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_id: 'ticket-17-seed-video', expected_revision: before.revision,
+        document: before.document }),
+    })
+    assert.ok(seeded.ok, await seeded.clone().text())
+    const originalRuns = (await read('/runtime')).runs
+    const requestCount = videoRequests.length
+    await page.goto(base + (canvas.project_id ? storyboardCanvasPath(canvas) : '/canvases/' + canvas.id))
+    await page.locator('[data-card-id="target"]').click()
+    await open()
+    await panel.getByTitle('browser-tool-model · 可读画布', { exact: true }).click()
+    await page.locator('.ant-select-item-option').getByText('qwen3.8-omni-flash', { exact: false }).click()
+    await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill(journey)
+    await panel.getByRole('button', { name: '发送消息' }).click()
+    const proposal = panel.getByRole('region', { name: '修改建议' }).last()
+    await proposal.getByText('缓慢推近', { exact: true }).waitFor()
+    await panel.getByText('已授权生成版本数 1 · 批准修改后生成', { exact: true }).waitFor()
+    assert.equal((await read('/runtime')).runs.length, originalRuns.length, 'no admission before approval')
+    if (canvas.project_id) {
+      await proposal.getByText('other', { exact: true }).waitFor()
+      await proposal.getByRole('checkbox', { name: '只修改所选镜头的运镜' }).check()
+    } else {
+      await proposal.getByText(target.prompt.segments[0].text, { exact: true }).waitFor()
+    }
+    await proposal.getByRole('button', { name: '确认写入', exact: true }).click()
+    await proposal.getByText('已写入画布', { exact: true }).waitFor()
+    await panel.getByText('连续画面 0–2 秒为红色，没有音轨，无法判断声画同步。', { exact: true })
+      .last().waitFor({ timeout: 30_000 })
+    const after = (await read()).document
+    const afterTarget = after.cards.find(card => card.id === 'target')
+    assert.deepEqual(after.cards.find(card => card.id === 'other'), mirror)
+    if (canvas.project_id) {
+      assert.deepEqual(after.cards.find(card => card.id === 'camera-movement'), originalMovement)
+      const movement = afterTarget.input_bindings[0].source.card_id
+      assert.notEqual(movement, originalMovement.id)
+      assert.equal(after.cards.find(card => card.id === movement).fields.movement_speed.text, '缓慢推近')
+    } else {
+      assert.equal(afterTarget.prompt.segments[0].text, '缓慢推近')
+      assert.ok(after.cards.every(card => !card.type.startsWith('direction.')))
+    }
+    const [turn] = (await read('/assistant')).turns.filter(turn => turn.text === journey)
+    const added = (await read('/runtime')).runs.filter(run => !originalRuns.some(original => original.id === run.id))
+    assert.equal(added.length, 1)
+    assert.equal(videoRequests.length - requestCount, 1)
+    assert.match(videoRequests.at(-1).prompt, /缓慢推近/)
+    assert.equal(added[0].nodes[0].card_id, 'target')
+    assert.equal(turn.generation.versions[0].run_id, added[0].id)
+    assert.equal(turn.generation.review.results[0].run_id, added[0].id)
+    const [observation] = turn.generation.review.results[0].evidence
+    assert.equal(observation.observation, 'video_sequence')
+    assert.equal(observation.start_ms, 0)
+    assert.equal(observation.end_ms, 2000)
+    assert.equal(observation.audio_start_ms ?? null, null)
+    assert.match(reviewInputs.at(-1).video_url.url, /^data:video\/mp4;base64,/)
+    await page.screenshot({ path: join(output, canvas.project_id ? 'assistant-journey-scene.png' : 'assistant-journey-free.png') })
+  }
   const totalCanvases = async () => (await (await fetch(canvasApi)).json()).data.pagination.total
   const beforeDrafts = await totalCanvases()
   const newDraft = async () => {
@@ -557,7 +696,11 @@ try {
   console.log('Assistant conversation persisted independently on both real canvas entries.')
 } finally {
   acceptSlowReply()
-  if (worker && worker.exitCode === null) worker.kill()
+  if (worker?.pid && worker.exitCode === null && worker.signalCode === null) {
+    const exited = once(worker, 'close')
+    worker.kill()
+    await exited
+  }
   await cleanup()
   provider.close()
 }
