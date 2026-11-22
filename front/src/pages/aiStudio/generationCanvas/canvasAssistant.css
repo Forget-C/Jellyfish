@@ -67,6 +67,10 @@
   white-space: pre-wrap;
 }
 
+.canvas-assistant-skills {
+  color: var(--wb-muted);
+}
+
 .canvas-assistant-question {
   padding: 8px;
   border-radius: var(--wb-radius);

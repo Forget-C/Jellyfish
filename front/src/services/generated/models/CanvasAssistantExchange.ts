@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { CanvasAssistantReadContext } from './CanvasAssistantReadContext';
+import type { CanvasAssistantSkillUse } from './CanvasAssistantSkillUse';
 /**
  * A completed turn in the order visible to the user.
  */
@@ -13,4 +14,5 @@ export type CanvasAssistantExchange = {
     sequence: number;
     model_id: string;
     reply: string;
+    skills?: (Array<CanvasAssistantSkillUse> | null);
 };

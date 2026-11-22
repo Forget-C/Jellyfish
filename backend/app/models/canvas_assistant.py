@@ -40,3 +40,4 @@ class CanvasAssistantTurn(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     reply: Mapped[str] = mapped_column(Text().with_variant(MEDIUMTEXT(), 'mysql'), nullable=False)
     context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    skills: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)

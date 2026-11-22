@@ -25,16 +25,24 @@ const provider = createHttpServer(async (request, response) => {
   const { model, messages, tools } = JSON.parse(Buffer.concat(chunks).toString())
   const turns = messages.filter(message => message.role === 'user').map(message => message.content)
   if (model === 'browser-tool-model') {
-    assert.deepEqual(tools.map(tool => tool.function.name), ['read_canvas_context'])
-    const result = messages.find(message => message.role === 'tool')
-    const answer = result
-      ? { role: 'assistant', content: '找到原先的草稿' }
-      : { role: 'assistant', tool_calls: [{ id: 'context', type: 'function', function: { name: 'read_canvas_context', arguments: '{}' } }] }
-    if (result) observed.push(JSON.parse(result.content))
+    const result = messages.filter(message => message.role === 'tool')
+    const names = tools.map(tool => tool.function.name)
+    assert.ok(names.includes('read_canvas_context'))
+    assert.ok(names.includes('load_canvas_skill'))
+    assert.ok(!names.includes('write_file'))
+    const useSkill = turns.at(-1) === '只从摄影角度看'
+    const nextTool = !result.length ? 'read_canvas_context'
+      : useSkill && result.length === 1 ? 'load_canvas_skill' : undefined
+    const answer = nextTool
+      ? { role: 'assistant', tool_calls: [{ id: nextTool, type: 'function', function: {
+          name: nextTool, arguments: nextTool === 'load_canvas_skill' ? '{"skill_id":"shot-staging"}' : '{}',
+        } }] }
+      : { role: 'assistant', content: useSkill ? '建议保持景别，再选择机位。' : '找到原先的草稿' }
+    if (!nextTool) observed.push(JSON.parse(result[0].content))
     response.writeHead(200, { 'Content-Type': 'application/json' })
     response.end(JSON.stringify({
       id: 'test-reply', object: 'chat.completion', created: 1, model,
-      choices: [{ index: 0, finish_reason: result ? 'stop' : 'tool_calls', message: answer }],
+      choices: [{ index: 0, finish_reason: nextTool ? 'tool_calls' : 'stop', message: answer }],
     }))
     return
   }
@@ -158,21 +166,25 @@ try {
     await panel.getByRole('button', { name: '关闭画布助手' }).click()
     await page.locator('[data-card-id="other"]').click()
     await open()
-    await panel.getByText('默认模型 · browser-assistant-model · 仅文字对话', { exact: true }).click()
+    await panel.getByTitle('默认模型 · browser-assistant-model · 仅文字对话', { exact: true }).click()
     await page.locator('.ant-select-item-option').getByText('browser-tool-model · 可读画布', { exact: true }).click()
-    await panel.getByText('browser-tool-model · 可读画布', { exact: true }).waitFor()
+    await panel.getByTitle('browser-tool-model · 可读画布', { exact: true }).waitFor()
     await panel.getByRole('button', { name: '发送消息' }).click()
     await panel.getByText('找到原先的草稿').waitFor()
     assert.deepEqual(observed.at(-1).target_card_ids, ['target'])
     assert.equal(observed.at(-1).cards[0].prompt.segments[0].text, '只在本地编辑器看到')
+    await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('只从摄影角度看')
+    await panel.getByRole('button', { name: '发送消息' }).click()
+    await panel.getByText('建议保持景别，再选择机位。', { exact: true }).waitFor()
+    await panel.getByText('镜头与场面调度', { exact: true }).waitFor()
     const after = (await (await fetch(url)).json()).data
     assert.equal(after.document.cards.find(item => item.id === 'target').prompt.segments[0].text, '已保存正文')
     assert.equal(after.document.cards.find(item => item.id === 'target').model_id, 'original-video-generator')
     await page.reload()
     await open()
-    await panel.getByText('browser-tool-model · 可读画布', { exact: true }).waitFor()
+    await panel.getByTitle('browser-tool-model · 可读画布', { exact: true }).waitFor()
   }
-  assert.equal(observed.length, 2)
+  assert.equal(observed.length, 4)
   console.log('Assistant conversation persisted independently on both real canvas entries.')
 } finally {
   acceptSlowReply()

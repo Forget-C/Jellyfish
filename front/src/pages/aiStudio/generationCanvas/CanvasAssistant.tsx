@@ -181,6 +181,9 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft 
         {turns?.map(turn => <article className="canvas-assistant-turn" key={turn.request_id}>
           <div className="canvas-assistant-question">{turn.text}</div>
           <div>{turn.reply}</div>
+          {!!turn.skills?.length && <small className="canvas-assistant-skills">
+            {turn.skills.map(skill => skill.name).join('、')}
+          </small>}
         </article>)}
         {sending && <p role="status">{uiText("助手正在回复")}</p>}
         <div ref={lastTurn} />

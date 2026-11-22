@@ -42,6 +42,14 @@ class CanvasAssistantMessage(BaseModel):
     context: CanvasAssistantDraftContext | None = None
 
 
+class CanvasAssistantSkillUse(BaseModel):
+    """Version of a product skill actually loaded to answer a message."""
+
+    id: str
+    name: str
+    version: str
+
+
 class CanvasAssistantExchange(BaseModel):
     """A completed turn in the order visible to the user."""
 
@@ -53,6 +61,7 @@ class CanvasAssistantExchange(BaseModel):
     sequence: int
     model_id: str
     reply: str
+    skills: list[CanvasAssistantSkillUse] | None = None
 
 
 class CanvasAssistantHistory(BaseModel):

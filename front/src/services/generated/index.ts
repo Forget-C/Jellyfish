@@ -171,6 +171,7 @@ export type { CanvasAssistantHistory } from './models/CanvasAssistantHistory';
 export type { CanvasAssistantMessage } from './models/CanvasAssistantMessage';
 export type { CanvasAssistantModelSelection } from './models/CanvasAssistantModelSelection';
 export type { CanvasAssistantReadContext } from './models/CanvasAssistantReadContext';
+export type { CanvasAssistantSkillUse } from './models/CanvasAssistantSkillUse';
 export type { CanvasAutomaticCheckEstimate } from './models/CanvasAutomaticCheckEstimate';
 export type { CanvasCardOutputs } from './models/CanvasCardOutputs';
 export type { CanvasCardTypeDefinition } from './models/CanvasCardTypeDefinition';
