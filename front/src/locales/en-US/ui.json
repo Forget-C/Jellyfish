@@ -3869,5 +3869,20 @@
   "已读取连续画面和音轨": "Continuous video and audio track loaded",
   "声画重合时段": "Overlapping picture and audio",
   "本次未读取": "Not read for this reply",
-  "可读图片与视频静帧": "Reads images and video stills"
+  "可读图片与视频静帧": "Reads images and video stills",
+  "运动起点": "Movement start",
+  "运动触发": "Movement trigger",
+  "修改建议": "Edit proposal",
+  "原值": "Original",
+  "拟议值": "Proposed",
+  "确认写入": "Confirm and apply",
+  "修订建议": "Revise proposal",
+  "拒绝建议": "Reject proposal",
+  "请完成当前编辑并取得画布编辑权后再确认。": "Finish editing and obtain canvas edit access before confirming.",
+  "未能完成审批，请核对画布状态后重试。": "Review the canvas state and try the decision again.",
+  "已写入画布": "Applied to canvas",
+  "建议已拒绝": "Proposal rejected",
+  "建议已被修订替代": "Proposal superseded",
+  "正在修订修改建议": "Revising proposal",
+  "取消修订": "Cancel revision"
 }

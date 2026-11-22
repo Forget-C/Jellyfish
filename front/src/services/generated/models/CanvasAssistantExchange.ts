@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { CanvasAssistantAttachment } from './CanvasAssistantAttachment';
+import type { CanvasAssistantProposal } from './CanvasAssistantProposal';
 import type { CanvasAssistantReadContext } from './CanvasAssistantReadContext';
 import type { CanvasAssistantSkillUse } from './CanvasAssistantSkillUse';
 /**
@@ -16,5 +17,7 @@ export type CanvasAssistantExchange = {
     sequence: number;
     model_id: string;
     reply: string;
+    proposal?: (CanvasAssistantProposal | null);
+    revises?: (string | null);
     skills?: (Array<CanvasAssistantSkillUse> | null);
 };

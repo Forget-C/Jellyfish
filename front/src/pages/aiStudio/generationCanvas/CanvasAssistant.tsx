@@ -4,6 +4,7 @@ import { Alert, Input, Select, Spin } from 'antd'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantMessage, FileRead, ModelRead } from '../../../services/generated'
+import { AssistantProposal } from './AssistantProposal'
 import { useUiText } from '../../../uiText'
 import { CanvasAssistantAttachments, CanvasAssistantEvidence } from './CanvasAssistantAttachments'
 import './canvasAssistant.css'
@@ -11,10 +12,12 @@ import './canvasAssistant.css'
 type AssistantScope = NonNullable<CanvasAssistantMessage['context']>['scope'] | 'text'
 
 /** Nonmodal conversation for one saved canvas. Closing it keeps the draft and in-flight reply. */
-export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft }: {
+export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft, approve, approvalDisabled }: {
   canvasId: string
   projectId: string
   selectedCards: string[]
+  approve: (sourceId: string) => Promise<boolean>
+  approvalDisabled: boolean
   readDraft: () => Pick<CanvasAssistantDraftContext, 'draft' | 'revision'>
 }) {
   const uiText = useUiText()
@@ -26,6 +29,8 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft 
   const [draft, setDraft] = useState('')
   const [referenceFiles, setReferenceFiles] = useState<FileRead[]>([])
   const [uploadingReference, setUploadingReference] = useState(false)
+  const [revising, setRevising] = useState<CanvasAssistantExchange>()
+  const composer = useRef<HTMLFormElement>(null)
   const [sendError, setSendError] = useState<'text' | 'tools' | 'reply'>()
   const [sending, setSending] = useState(false)
   const [modelId, setModelId] = useState<string | null>(null)
@@ -92,13 +97,16 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft 
   const send = async () => {
     const text = draft.trim()
     if (sendingNow.current || savingModel || uploadingReference || !turns || !text) return
-    if (!pending.current && effectiveScope === 'selection' && !selectedCards.length) return
-    const requestBody = pending.current?.text === text
+    if (!revising && !pending.current && effectiveScope === 'selection' && !selectedCards.length) return
+    const requestBody: CanvasAssistantMessage = pending.current?.text === text
       ? pending.current : {
           text,
           request_id: crypto.randomUUID(),
           attachment_file_ids: referenceFiles.map(file => file.id),
-          context: effectiveScope === 'text' ? undefined : {
+          revises: revising?.request_id,
+          context: revising?.proposal ? {
+            ...readDraft(), scope: 'selection', card_ids: [revising.proposal.card_id],
+          } : effectiveScope === 'text' ? undefined : {
             ...readDraft(), scope: effectiveScope, card_ids: effectiveScope === 'selection' ? selectedCards : [],
           },
         }
@@ -110,7 +118,9 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft 
       const { data: turn } = await Canvases.canvasAssistantSend({ canvasId, projectId, requestBody })
       if (!turn) throw new Error('missing assistant reply')
       setTurns(current => current?.some(existing => existing.request_id === turn.request_id)
-        ? current : [...(current || []), turn])
+        ? current : [...(current || []).map(existing => turn.proposal && turn.revises === existing.request_id && existing.proposal
+          ? { ...existing, proposal: { ...existing.proposal, state: 'superseded' as const } } : existing), turn])
+      setRevising(undefined)
       setDraft('')
       setReferenceFiles([])
       pending.current = undefined
@@ -196,6 +206,29 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft 
           <div className="canvas-assistant-question">{turn.text}</div>
           {!!turn.attachments?.length && <CanvasAssistantEvidence attachments={turn.attachments} />}
           <div>{turn.reply}</div>
+          {turn.proposal && <AssistantProposal proposal={turn.proposal} editDisabled={approvalDisabled || sending}
+            revise={() => {
+              setRevising(turn); pending.current = undefined; setSendError(undefined)
+              composer.current?.querySelector('textarea')?.focus()
+            }} decide={async action => {
+              if (action === 'approve') {
+                if (!await approve(turn.request_id)) return false
+              } else {
+                const { data } = await Canvases.canvasAssistantDecideProposal({
+                  canvasId, projectId, sourceId: turn.request_id,
+                  requestBody: { action, expected_revision: readDraft().revision },
+                })
+                if (!data) return false
+              }
+              setTurns(current => current?.map(item => item.request_id === turn.request_id && item.proposal
+                ? { ...item, proposal: { ...item.proposal, state: action === 'approve' ? 'applied' : 'rejected' } }
+                : item))
+              if (revising?.request_id === turn.request_id) {
+                pending.current = undefined
+                setRevising(undefined)
+              }
+              return true
+            }} />}
           {!!turn.skills?.length && <small className="canvas-assistant-skills">
             {turn.skills.map(skill => skill.name).join('、')}
           </small>}
@@ -203,7 +236,13 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft 
         {sending && <p role="status">{uiText("助手正在回复")}</p>}
         <div ref={lastTurn} />
       </div>
-      <form className="canvas-assistant-composer" onSubmit={event => { event.preventDefault(); void send() }}>
+      <form className="canvas-assistant-composer" ref={composer} onSubmit={event => { event.preventDefault(); void send() }}>
+        {revising?.proposal && <div className="canvas-assistant-edit-actions">
+          <span>{uiText("正在修订修改建议")} · {uiText(revising.proposal.card_name)}</span>
+          <WorkbenchButton variant="quiet" disabled={sending} onClick={() => {
+            setRevising(undefined); pending.current = undefined
+          }}>{uiText("取消修订")}</WorkbenchButton>
+        </div>}
         {sendError && <Alert type="error" message={sendError === 'tools'
           ? uiText("当前模型无法调用画布工具。切换可读画布的模型后，发送同一消息即可接续。")
           : sendError === 'text' ? uiText("当前模型无法进行文字对话，请切换助手模型。")
@@ -215,7 +254,7 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft 
           setUploading={setUploadingReference} disabled={sending || !turns}
           onChange={files => { setReferenceFiles(files); pending.current = undefined; setSendError(undefined) }} />
         <WorkbenchButton htmlType="submit" variant="primary" loading={sending}
-          disabled={!turns || !draft.trim() || savingModel || uploadingReference || !pending.current && effectiveScope === 'selection' && !selectedCards.length}>{uiText("发送消息")}</WorkbenchButton>
+          disabled={!turns || !draft.trim() || savingModel || uploadingReference || !revising && !pending.current && effectiveScope === 'selection' && !selectedCards.length}>{uiText("发送消息")}</WorkbenchButton>
       </form>
     </aside>}
   </div>

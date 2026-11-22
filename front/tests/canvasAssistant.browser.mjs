@@ -25,24 +25,42 @@ const provider = createHttpServer(async (request, response) => {
   const { model, messages, tools } = JSON.parse(Buffer.concat(chunks).toString())
   const turns = messages.filter(message => message.role === 'user').map(message => message.content)
   if (model === 'browser-tool-model') {
-    const result = messages.filter(message => message.role === 'tool')
     const names = tools.map(tool => tool.function.name)
     assert.ok(names.includes('read_canvas_context'))
     assert.ok(names.includes('load_canvas_skill'))
     assert.ok(!names.includes('write_file'))
+    const result = messages.find(message => message.role === 'tool' && message.tool_call_id === 'context')
+    const draft = result && JSON.parse(result.content)
+    const requestEdit = turns.at(-1) === '把这张卡的推近放慢'
     const useSkill = turns.at(-1) === '只从摄影角度看'
-    const nextTool = !result.length ? 'read_canvas_context'
-      : useSkill && result.length === 1 ? 'load_canvas_skill' : undefined
-    const answer = nextTool
-      ? { role: 'assistant', tool_calls: [{ id: nextTool, type: 'function', function: {
-          name: nextTool, arguments: nextTool === 'load_canvas_skill' ? '{"skill_id":"shot-staging"}' : '{}',
-        } }] }
-      : { role: 'assistant', content: useSkill ? '建议保持景别，再选择机位。' : '找到原先的草稿' }
-    if (!nextTool) observed.push(JSON.parse(result[0].content))
+    const loaded = messages.some(message => message.role === 'tool' && message.tool_call_id === 'load_canvas_skill')
+    const proposed = messages.some(message => message.role === 'tool' && message.tool_call_id === 'proposal')
+    let answer = { role: 'assistant', content: requestEdit ? '已给出修改建议' : useSkill ? '建议保持景别，再选择机位。' : '找到原先的草稿' }
+    if (!result) {
+      answer = { role: 'assistant', tool_calls: [{
+        id: 'context', type: 'function', function: { name: 'read_canvas_context', arguments: '{}' },
+      }] }
+    } else if (useSkill && !loaded) {
+      answer = { role: 'assistant', tool_calls: [{
+        id: 'load_canvas_skill', type: 'function', function: { name: 'load_canvas_skill',
+          arguments: JSON.stringify({ skill_id: 'shot-staging' }) },
+      }] }
+    } else if (requestEdit && !proposed) {
+      const card = draft.cards.find(item => item.id === draft.target_card_ids[0])
+      const target = card.type === 'direction.movement'
+        ? { kind: 'movement_field', field: 'movement_speed' }
+        : { kind: 'video_prompt_segment', segment_id: 'text' }
+      answer = { role: 'assistant', tool_calls: [{
+        id: 'proposal', type: 'function', function: { name: 'propose_canvas_edit',
+          arguments: JSON.stringify({ card_id: card.id, target, text: '缓慢推近' }) },
+      }] }
+    } else if (!requestEdit) {
+      observed.push(draft)
+    }
     response.writeHead(200, { 'Content-Type': 'application/json' })
     response.end(JSON.stringify({
       id: 'test-reply', object: 'chat.completion', created: 1, model,
-      choices: [{ index: 0, finish_reason: nextTool ? 'tool_calls' : 'stop', message: answer }],
+      choices: [{ index: 0, finish_reason: answer.tool_calls ? 'tool_calls' : 'stop', message: answer }],
     }))
     return
   }
@@ -144,7 +162,9 @@ try {
       ...(generated ? { generated_prompt: { version: 1, designs: [], edit_confirmed: true } } : {}),
     })
     const document = { ...saved.document, cards: [...(saved.document.cards || []),
-      card('target', '已保存正文', true), card('other', '另一个同名模型卡')] }
+      card('target', '已保存正文', true), card('other', '另一个同名模型卡'),
+      ...(canvas.project_id ? [{ id: 'camera-movement', type: 'direction.movement',
+        fields: { movement_speed: { text: '快速推近' } } }] : [])] }
     const seeded = await fetch(url, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ request_id: 'scope-fixture', expected_revision: saved.revision, document }),
@@ -183,6 +203,31 @@ try {
     await page.reload()
     await open()
     await panel.getByTitle('browser-tool-model · 可读画布', { exact: true }).waitFor()
+    await panel.getByRole('button', { name: '关闭画布助手' }).click()
+    const target = canvas.project_id ? 'camera-movement' : 'target'
+    await page.locator('[data-card-id="' + target + '"]').click()
+    if (canvas.project_id) await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+    await open()
+    await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('把这张卡的推近放慢')
+    await panel.getByRole('button', { name: '发送消息' }).click()
+    const proposal = panel.getByRole('region', { name: '修改建议' }).last()
+    await proposal.getByText('缓慢推近', { exact: true }).waitFor()
+    const original = canvas.project_id ? '快速推近' : '已保存正文'
+    await proposal.getByText(original, { exact: true }).waitFor()
+    const storedText = async () => {
+      const current = (await (await fetch(url)).json()).data
+      const edited = current.document.cards.find(item => item.id === target)
+      return canvas.project_id ? edited.fields.movement_speed.text : edited.prompt.segments[0].text
+    }
+    assert.equal(await storedText(), original)
+    await proposal.getByRole('button', { name: '确认写入', exact: true }).click()
+    await proposal.getByText('已写入画布', { exact: true }).waitFor()
+    assert.equal(await storedText(), '缓慢推近')
+    await page.screenshot({ path: join(output, canvas.project_id ? 'assistant-scene-edit.png' : 'assistant-free-edit.png') })
+    await panel.getByRole('button', { name: '关闭画布助手' }).click()
+    await page.getByRole('button', { name: '撤销操作', exact: true }).click()
+    for (let attempt = 0; attempt < 40 && await storedText() !== original; attempt++) await delay(150)
+    assert.equal(await storedText(), original, 'one undo restores the saved field')
   }
   assert.equal(observed.length, 4)
   console.log('Assistant conversation persisted independently on both real canvas entries.')
