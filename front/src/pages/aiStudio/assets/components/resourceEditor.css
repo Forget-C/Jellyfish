@@ -1,3 +1,4 @@
+.resource-editor-outside { position: fixed; inset: 0; z-index: 100; }
 .resource-editor-drawer.ant-drawer { position: fixed; z-index: 100; pointer-events: auto; color: #263244; font-size: 14px; line-height: 1.5715; }
 .resource-editor-drawer .ant-drawer-content-wrapper { height: 100%; width: 100%; }
 .resource-editor-drawer .ant-drawer-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }

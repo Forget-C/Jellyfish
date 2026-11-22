@@ -76,6 +76,8 @@ export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel
     <div ref={actionsRef} className="resource-editor-page-actions">{actions}</div>
   </>
   if (drawer) return <><span ref={anchor} hidden />{open && bounds && createPortal(
+    <>
+    <div className="resource-editor-outside" aria-hidden="true" onMouseDown={event => event.preventDefault()} onClick={event => { event.stopPropagation(); onClose() }} />
     <div className={`resource-editor-drawer ant-drawer resource-editor-appearance-${appearance}${scrollEdges.top ? ' resource-editor-scrolled' : ''}${scrollEdges.bottom ? ' resource-editor-more' : ''}${left > 0 ? '' : ' resource-editor-no-side'}`}
       style={{ top: bounds.y, left, width, height: bounds.height, maxWidth: `calc(100vw - ${left}px)`, maxHeight: `calc(100dvh - ${bounds.y}px)` }}>
       <div className="ant-drawer-content-wrapper">
@@ -90,7 +92,7 @@ export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel
           <div className="ant-drawer-body"><div className="resource-editor-drawer-content" ref={captureBody}>{children}</div></div>
         </div>
       </div>
-    </div>, document.body)}</>
+    </div></>, document.body)}</>
   if (!open) return null
   const escape = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape' && escapeToParent && !event.defaultPrevented) { event.stopPropagation(); onClose() }

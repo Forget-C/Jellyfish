@@ -102,7 +102,7 @@ try {
   if(kind==='actor') {
    await form.getByRole('img',{name:'first.png',exact:true}).click()
    await page.locator('.ant-image-preview-wrap').waitFor({state:'visible'})
-   await page.keyboard.press('Escape')
+   await page.locator('.ant-image-preview-close:visible').click()
    await page.locator('.ant-image-preview-wrap').waitFor({state:'hidden'})
    assert.equal(await form.isVisible(),true,'closing the preview keeps the upload draft')
    await form.locator('input[type=file]').setInputFiles({name:'remove.png',mimeType:'image/png',buffer:Buffer.from('three')})
@@ -122,6 +122,8 @@ try {
   }
   await form.getByRole('combobox',{name:'图片1视角',exact:true}).press('ArrowDown')
   await page.getByText('侧面',{exact:true}).last().click()
+  assert.equal(await form.isVisible(), true, 'selecting a view keeps the upload draft open')
+  assert.equal(await page.getByRole('dialog',{name:'离开资产详情'}).count(),0)
   const before=requests.length
   await form.getByRole('button',{name:'创建',exact:true}).click()
   if(kind==='actor') {
