@@ -75,6 +75,7 @@ class CanvasAssistant:
         session = await self.db.get(CanvasAssistantSession, canvas_id)
         return CanvasAssistantHistory(
             turns=[await self._exchange(turn) for turn in await self._turns(canvas_id)],
+            pending_request=session.pending_request['command'] if session and session.pending_request else None,
             model_id=session.model_id if session else None,
             approval_mode=session.approval_mode if session else 'manual',
         )

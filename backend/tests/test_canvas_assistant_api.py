@@ -229,6 +229,10 @@ async def test_resending_interrupted_assistant_turn_continues_completed_tool_ste
         'draft': canvas['document'], 'revision': canvas['revision'], 'scope': 'canvas',
     }}
     assert (await canvas_client.post(assistant, json=command)).status_code == 502
-    assert (await canvas_client.get(assistant)).json()['data']['turns'] == []
-    assert (await canvas_client.post(assistant, json=command)).json()['data']['reply'] == '已从中断处继续'
+    history = (await canvas_client.get(assistant)).json()['data']
+    assert history['turns'] == []
+    assert history['pending_request']['request_id'] == command['request_id']
+    assert history['pending_request']['context']['draft'] == command['context']['draft']
+    assert (await canvas_client.post(assistant, json=history['pending_request'])).json()['data']['reply'] == '已从中断处继续'
+    assert (await canvas_client.get(assistant)).json()['data']['pending_request'] is None
     assert calls == [False, True, True]

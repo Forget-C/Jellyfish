@@ -194,6 +194,7 @@ export type { CanvasAssistantLayout } from './models/CanvasAssistantLayout';
 export type { CanvasAssistantLayoutDecision } from './models/CanvasAssistantLayoutDecision';
 export type { CanvasAssistantMessage } from './models/CanvasAssistantMessage';
 export type { CanvasAssistantModelSelection } from './models/CanvasAssistantModelSelection';
+export type { CanvasAssistantPendingRequest } from './models/CanvasAssistantPendingRequest';
 export type { CanvasAssistantPoint } from './models/CanvasAssistantPoint';
 export type { CanvasAssistantProposal } from './models/CanvasAssistantProposal';
 export type { CanvasAssistantProposalDecision } from './models/CanvasAssistantProposalDecision';

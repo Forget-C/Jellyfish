@@ -55,6 +55,7 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
   const pending = useRef<CanvasAssistantMessage>()
   const sendingNow = useRef(false)
   const [activeRequestId, setActiveRequestId] = useState<string>()
+  const [pendingServerRequest, setPendingServerRequest] = useState<CanvasAssistantMessage>()
   const activeRequest = useRef<ReturnType<typeof Canvases.canvasAssistantSend>>()
   const stoppedRequest = useRef<string>()
   const lastTurn = useRef<HTMLDivElement>(null)
@@ -141,6 +142,7 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
         setTurns(previous => (previous?.[previous.length - 1]?.sequence ?? 0) > (saved[saved.length - 1]?.sequence ?? 0)
           ? previous : saved)
         setModelId(response.data.model_id ?? null)
+        setPendingServerRequest(response.data.pending_request ?? undefined)
         setAutomaticApproval(response.data.approval_mode === 'automatic')
       }
     }).catch(() => { if (current) setHistoryError(true) })
@@ -182,6 +184,7 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
       if (!data) throw new Error('missing assistant stop receipt')
       setTurns(current => current?.some(turn => turn.request_id === sourceId)
         ? current.map(turn => turn.request_id === sourceId ? data : turn) : [...(current || []), data])
+      setPendingServerRequest(request => request?.request_id === sourceId ? undefined : request)
       if (activeRequestId === sourceId) {
         stoppedRequest.current = sourceId
         activeRequest.current?.cancel()
@@ -209,15 +212,15 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
     trigger.current?.focus()
   }
 
-  const send = async () => {
-    const text = draft.trim()
+  const send = async (resume?: CanvasAssistantMessage) => {
+    const text = (resume?.text ?? draft).trim()
     if (draftPromoting || sendingNow.current || savingModel || savingApproval || uploadingReference || !turns || !text) return
-    if (!revising && !pending.current && effectiveScope === 'selection' && !selectedCards.length) return
+    if (!resume && !revising && !pending.current && effectiveScope === 'selection' && !selectedCards.length) return
     const revisionTargets = revising?.proposal?.groups
       ? [...new Set(revising.proposal.groups.filter(group => group.state === 'pending')
         .flatMap(group => group.edits.filter(edit => edit.target.kind !== 'add_canvas_card').map(edit => edit.card_id)))]
       : revising?.proposal ? [revising.proposal.card_id] : []
-    const requestBody: CanvasAssistantMessage = pending.current?.text === text
+    const requestBody: CanvasAssistantMessage = resume ?? (pending.current?.text === text
       ? pending.current : {
           text,
           request_id: crypto.randomUUID(),
@@ -229,7 +232,7 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
           } : effectiveScope === 'text' ? undefined : {
             ...readDraft(), scope: effectiveScope, card_ids: effectiveScope === 'selection' ? selectedCards : [],
           },
-        }
+        })
     pending.current = requestBody
     sendingNow.current = true
     setSending(true)
@@ -261,6 +264,7 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
       setDraft('')
       setReferenceFiles([])
       pending.current = undefined
+      setPendingServerRequest(undefined)
       if (turn.automatic_approval && !approvalDisabled && turn.proposal) {
         const groupIds = turn.proposal.groups?.map(group => group.id)
         try {
@@ -273,6 +277,10 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
       }
     } catch (error) {
       if (stoppedRequest.current === requestBody.request_id) return
+      if (!localDraft) {
+        const history = await Canvases.canvasAssistantHistory({ canvasId, projectId }).catch(() => undefined)
+        setPendingServerRequest(history?.data?.pending_request ?? undefined)
+      }
       const detail = error instanceof ApiError ? error.body?.message ?? error.body?.detail : undefined
       setSendError(detail === 'ASSISTANT_TOOL_CALLING_REQUIRED' ? 'tools'
         : detail === 'ASSISTANT_TEXT_CAPABILITY_REQUIRED' ? 'text' : 'reply')
@@ -471,6 +479,11 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
         {sending && <p role="status">{uiText("助手正在回复")}</p>}
         {activeRequestId && <WorkbenchButton variant="quiet" loading={stopping === activeRequestId}
           onClick={() => { void stopTurn(activeRequestId) }}>{uiText("停止助手")}</WorkbenchButton>}
+        {!activeRequestId && pendingServerRequest && <div>
+          <WorkbenchButton variant="quiet" onClick={() => { void send(pendingServerRequest) }}>{uiText("继续回复")}</WorkbenchButton>
+          <WorkbenchButton variant="quiet" loading={stopping === pendingServerRequest.request_id}
+            onClick={() => { void stopTurn(pendingServerRequest.request_id) }}>{uiText("停止助手")}</WorkbenchButton>
+        </div>}
         <div ref={lastTurn} />
       </div>
       <form className="canvas-assistant-composer" ref={composer} onSubmit={event => { event.preventDefault(); void send() }}>

@@ -88,9 +88,14 @@ class CanvasAssistantExchange(BaseModel):
     layout: CanvasAssistantLayout | None = None
 
 
+class CanvasAssistantPendingRequest(CanvasAssistantMessage):
+    """Original immutable command available to retry after reconnecting."""
+
+
 class CanvasAssistantHistory(BaseModel):
     """Persisted exchanges for the selected canvas."""
 
     turns: list[CanvasAssistantExchange]
+    pending_request: CanvasAssistantPendingRequest | None = None
     model_id: str | None = None
     approval_mode: Literal['manual', 'automatic'] = 'manual'
