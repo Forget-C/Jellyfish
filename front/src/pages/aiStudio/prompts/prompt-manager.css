@@ -22,3 +22,11 @@
   .prompt-list { flex: 1; }
   .prompt-columns { gap: 0; }
 }
+
+.prompt-editor-short-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 16px; }
+.prompt-editor-drawer details > summary { margin-bottom: 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+@media (max-width: 767px) {
+  .prompt-editor-short-fields { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .resource-editor-drawer .prompt-editor-drawer :is(.resource-editor-page-heading, .resource-editor-page-actions) { width: auto; }
+}

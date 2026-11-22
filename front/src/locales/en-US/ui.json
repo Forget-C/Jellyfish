@@ -1013,6 +1013,7 @@
   "变更前原文": "Previous source",
   "变更后原文": "Updated source",
   "变量": "Variables",
+  "变量设置": "Variable settings",
   "变量默认值": "Variable defaults",
   "变量默认值必须是 JSON 对象": "Variable defaults must be a JSON object",
   "变量默认值（JSON 对象）": "Variable defaults (JSON object)",

@@ -3,7 +3,10 @@ import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FC } from 'react'
-import { Alert, Skeleton, Input, Tag, Pagination, Button, Drawer, Modal, Form, Select, Switch, message } from 'antd'
+import { Alert, Skeleton, Input, Tag, ConfigProvider, Pagination, Button, Drawer, Modal, Form, Select, Switch, message } from 'antd'
+import { DrawerDiscardDialog } from '../../../components/layout/DrawerDiscardDialog'
+import { ResourceEditorFrame } from '../assets/components/ResourceEditorFrame'
+import '../assets/components/resourceEditor.css'
 import './prompt-manager.css'
 import { StudioPromptsService } from '../../../services/generated'
 import type { PromptCategory, PromptTemplateRead, PromptTemplateSummary } from '../../../services/generated'
@@ -60,7 +63,8 @@ type CreatePromptForm = {
   is_default?: boolean
 }
 
-type PromptModalMode = 'create' | 'edit'
+const editorId = 'prompt-template-editor'
+const editorTheme = { token: { controlHeight: 36 }, components: { Form: { labelFontSize: 13, itemMarginBottom: 16 } } }
 
 const groupOrder = [
   'frame',
@@ -114,7 +118,12 @@ const PromptTemplateManager: FC = () => {
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<PromptModalMode>('create')
+  const [discardOpen, setDiscardOpen] = useState(false)
+  const [pendingVariable, setPendingVariable] = useState('')
+  const initialFields = useRef<Partial<CreatePromptForm>>({})
+  const variableSettings = useRef<HTMLDetailsElement>(null)
+  const editTrigger = useRef<HTMLButtonElement>(null)
+  const returnToEdit = useRef(false)
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [categoryOptions, setCategoryOptions] = useState<Array<{ value: PromptCategory; label: string }>>(
@@ -263,23 +272,8 @@ const PromptTemplateManager: FC = () => {
     setPage(nextPage)
   }
 
-  const openCreateModal = () => {
-    createForm.resetFields()
-    setModalMode('create')
-    setEditingTemplateId(null)
-    createForm.setFieldsValue({
-      category: categoryOptions[0]?.value,
-      is_default: false,
-      variables: [],
-    })
-    setFormOpen(true)
-  }
-
-  const openEditModal = (template: PromptTemplateRead) => {
-    setModalMode('edit')
-    setEditingTemplateId(template.id)
-    createForm.resetFields()
-    createForm.setFieldsValue({
+  const openEditor = (template?: PromptTemplateRead) => {
+    initialFields.current = template ? {
       category: template.category,
       name: template.name,
       preview: template.preview,
@@ -287,29 +281,60 @@ const PromptTemplateManager: FC = () => {
       variables: template.variables,
       variable_defaults_json: JSON.stringify(template.variable_defaults ?? {}, null, 2),
       is_default: template.is_default,
-    })
+    } : { category: categoryOptions[0]?.value, is_default: false, variables: [] }
+    createForm.resetFields()
+    createForm.setFieldsValue(initialFields.current)
+    setPendingVariable('')
+    setEditingTemplateId(template?.id ?? null)
     setFormOpen(true)
   }
 
-  const buildPayload = (values: CreatePromptForm) => {
-    let variableDefaults: Record<string, string> = {}
-    const rawDefaults = values.variable_defaults_json?.trim()
-    if (rawDefaults) {
-      const parsed = JSON.parse(rawDefaults)
-      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-        throw new Error(uiText("变量默认值必须是 JSON 对象"))
-      }
-      variableDefaults = Object.fromEntries(
-        Object.entries(parsed).map(([key, value]) => [key, String(value)]),
-      )
+  const closeEditor = () => {
+    setDiscardOpen(false)
+    setFormOpen(false)
+    setEditingTemplateId(null)
+    if (!editingTemplateId) return
+    if (wide) {
+      requestAnimationFrame(() => editTrigger.current?.focus({ preventScroll: true }))
+    } else {
+      returnToEdit.current = true
+      setReaderOpen(true)
     }
+  }
+
+  const requestCloseEditor = () => {
+    if (submittingRef.current || discardOpen) return
+    const current = createForm.getFieldsValue()
+    const baseline = initialFields.current
+    const changed = (Object.keys({ ...baseline, ...current }) as (keyof CreatePromptForm)[]).some(field =>
+      JSON.stringify(current[field] ?? '') !== JSON.stringify(baseline[field] ?? ''),
+    )
+    if (changed || pendingVariable.trim()) setDiscardOpen(true)
+    else closeEditor()
+  }
+
+  const parseVariableDefaults = (raw?: string): Record<string, unknown> => {
+    if (!raw?.trim()) return {}
+    try {
+      const parsed: unknown = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>
+      }
+    } catch {
+      // Invalid syntax and non-object values use the same field message.
+    }
+    throw new Error(uiText("变量默认值必须是 JSON 对象"))
+  }
+
+  const buildPayload = (values: CreatePromptForm) => {
+    const defaults = parseVariableDefaults(values.variable_defaults_json)
     return {
       category: values.category,
       name: values.name.trim(),
       content: values.content.trim(),
       preview: values.preview?.trim() || undefined,
-      variables: (values.variables ?? []).map((v) => v.trim()).filter(Boolean),
-      variable_defaults: variableDefaults,
+      variables: (values.variables ?? []).map(v => v.trim()).filter(Boolean),
+      variable_defaults: Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, String(value)])),
       is_default: values.is_default ?? false,
     }
   }
@@ -320,9 +345,13 @@ const PromptTemplateManager: FC = () => {
     setSubmitting(true)
     try {
       const values = await createForm.validateFields()
+      const pending = pendingVariable.trim()
+      if (pending && !values.variables?.includes(pending)) {
+        values.variables = [...(values.variables ?? []), pending]
+      }
       const payload = buildPayload(values)
 
-      if (modalMode === 'create') {
+      if (!editingTemplateId) {
         const res = await StudioPromptsService.createPromptTemplateApiV1StudioPromptsPost({
           requestBody: payload,
         })
@@ -332,18 +361,12 @@ const PromptTemplateManager: FC = () => {
         }
 
         message.success(uiText("提示词已添加"))
-        setFormOpen(false)
-        createForm.resetFields()
+        closeEditor()
         clearDetail()
         setSearchText('')
         setQuery('')
         setPage(1)
         if (page === 1 && !query) void loadTemplates(1, '')
-        return
-      }
-
-      if (!editingTemplateId) {
-        message.error(uiText("编辑目标不存在"))
         return
       }
 
@@ -358,14 +381,22 @@ const PromptTemplateManager: FC = () => {
       const updatedTemplate = res.data
 
       message.success(uiText("提示词已更新"))
-      setFormOpen(false)
-      setEditingTemplateId(null)
-      createForm.resetFields()
+      closeEditor()
       setSelected((prev) => (prev?.id === updatedTemplate.id ? updatedTemplate : prev))
       setTemplates((prev) => prev.map((item) => (item.id === updatedTemplate.id ? updatedTemplate : item)))
       void loadTemplates(page, query)
     } catch (error) {
-      if (error && typeof error === 'object' && 'errorFields' in error) return
+      if (error && typeof error === 'object' && 'errorFields' in error) {
+        const [first] = (error as { errorFields: { name: string[] }[] }).errorFields
+        if (first?.name[0] === 'variable_defaults_json' && variableSettings.current) {
+          variableSettings.current.open = true
+        }
+        if (first) requestAnimationFrame(() => {
+          createForm.scrollToField(first.name)
+          createForm.getFieldInstance(first.name)?.focus()
+        })
+        return
+      }
       const reason = apiErrorMessage(error)
       message.error(reason === '请先将同类别的其他模板设为默认' ? uiText("请先将同类别的其他模板设为默认") : reason)
     } finally {
@@ -446,7 +477,7 @@ const PromptTemplateManager: FC = () => {
     <div className="management-prompt-reader-heading">
       <h2>{selected.name}</h2>
       <div className="management-prompt-reader-actions">
-        {!selected.is_system && <Button size="small" onClick={() => openEditModal(selected)}>{uiText("编辑")}</Button>}
+        {!selected.is_system && <Button ref={editTrigger} size="small" onClick={() => openEditor(selected)}>{uiText("编辑")}</Button>}
         {selected.is_system && !selected.is_default && <Button size="small" onClick={() => void restoreSystemDefault(selected)}>{uiText("恢复默认")}</Button>}
         {!selected.is_system && <Button size="small" danger onClick={() => handleDeleteTemplate(selected)}>{uiText("删除")}</Button>}
       </div>
@@ -481,7 +512,7 @@ const PromptTemplateManager: FC = () => {
             }} />
           <Button onClick={() => { void loadTemplates(page, query); if (detailId) void loadDetail(detailId) }} disabled={loading}>{uiText("刷新模板")}</Button>
         </div>
-        <Button type="primary" className="management-primary" onClick={openCreateModal}>{uiText("添加提示词")}</Button>
+        <Button type="primary" className="management-primary" onClick={event => { event.currentTarget.focus(); openEditor() }}>{uiText("添加提示词")}</Button>
       </PageToolbar>
       <div className="management-panel prompt-columns">
         <section className="management-surface prompt-list" aria-label={uiText("模板列表")} tabIndex={-1} ref={listRef} aria-busy={loading}>
@@ -509,76 +540,78 @@ const PromptTemplateManager: FC = () => {
           {readerContent}
         </WorkspaceScrollPanel>}
       </div>
-      {!wide && <Drawer title={uiText("模板阅读")} aria-label={uiText("模板阅读")} width="min(720px, 100vw)" open={readerOpen}
+      {!wide && !formOpen && <Drawer title={uiText("模板阅读")} aria-label={uiText("模板阅读")} width="min(720px, 100vw)" open={readerOpen}
         onClose={() => {
           setReaderOpen(false)
           requestAnimationFrame(restoreListFocus)
         }} afterOpenChange={shown => {
-          if (!shown) requestAnimationFrame(restoreListFocus)
+          if (shown && returnToEdit.current) {
+            returnToEdit.current = false
+            editTrigger.current?.focus({ preventScroll: true })
+          } else if (!shown) requestAnimationFrame(restoreListFocus)
         }} className="management-prompt-reader-drawer app-detail-drawer">
         <div className="management-prompt-reader">{readerContent}</div>
       </Drawer>}
 
-      <Modal
-        title={modalMode === 'create' ? uiText("添加提示词") : uiText("编辑提示词")}
-        open={formOpen}
-        zIndex={1100}
-        closable={!submitting}
-        maskClosable={!submitting}
-        keyboard={!submitting}
-        cancelButtonProps={{ disabled: submitting }}
-        onCancel={() => {
-          if (submittingRef.current) return
-          setFormOpen(false)
-          setEditingTemplateId(null)
-        }}
-        onOk={handleFormSubmit}
-        okText={uiText("保存")}
-        cancelText={uiText("取消")}
-        confirmLoading={submitting}
-        destroyOnClose
-      >
-        <Form layout="vertical" form={createForm}>
-          <Form.Item
-            label={uiText("模板类别")}
-            name="category"
-            rules={[{ required: true, message: uiText("请选择模板类别") }]}
-          >
-            <Select options={categoryOptions.map(option => ({ ...option, label: uiText(option.label) }))} placeholder={uiText("请选择类别")} />
-          </Form.Item>
-          <Form.Item
-            label={uiText("模板名称")}
-            name="name"
-            rules={[{ required: true, message: uiText("请输入模板名称") }]}
-          >
-            <Input maxLength={255} placeholder={uiText("例如：分镜基础提示词")} />
-          </Form.Item>
-          <Form.Item label={uiText("预览文案")} name="preview">
-            <Input.TextArea rows={2} maxLength={500} placeholder={uiText("用于列表预览的简短说明")} />
-          </Form.Item>
-          <Form.Item
-            label={uiText("模板内容")}
-            name="content"
-            rules={[{ required: true, message: uiText("请输入模板内容") }]}
-          >
-            <Input.TextArea rows={6} placeholder={uiText("请输入提示词模板内容")} />
-          </Form.Item>
-          <Form.Item label={uiText("变量（回车添加）")} name="variables">
-            <Select
-              mode="tags"
-              tokenSeparators={[',', '，']}
-              open={false}
-              placeholder={uiText("例如：subject, style, lighting")}
-            />
-          </Form.Item>
-          <Form.Item label={uiText("变量默认值（JSON 对象）")} name="variable_defaults_json">
-            <Input.TextArea rows={4} placeholder={uiText("例如：{\n  \"background_instruction\": \"Plain studio background\"\n}")} />
-          </Form.Item>
-          <Form.Item label={uiText("设为默认提示词")} name="is_default" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-        </Form>
-      </Modal>
+      {formOpen && <ResourceEditorFrame id={editorId} className="prompt-editor-drawer" open drawer drawerWidth={720}
+        title={editingTemplateId ? uiText("编辑提示词") : uiText("添加提示词")} backLabel={uiText("返回")} onClose={requestCloseEditor}
+        actions={<Button type="primary" loading={submitting} onClick={() => void handleFormSubmit()}>
+          {editingTemplateId ? uiText("保存") : uiText("创建")}
+        </Button>}>
+        <DrawerDiscardDialog drawerId={editorId} open={discardOpen} onContinue={() => setDiscardOpen(false)} onDiscard={closeEditor} />
+        <ConfigProvider theme={editorTheme}>
+          <Form layout="vertical" form={createForm} disabled={submitting}>
+            <div className="prompt-editor-short-fields">
+              <Form.Item
+                label={uiText("模板类别")}
+                name="category"
+                rules={[{ required: true, message: uiText("请选择模板类别") }]}
+              >
+                <Select options={categoryOptions.map(option => ({ ...option, label: uiText(option.label) }))} placeholder={uiText("请选择类别")} />
+              </Form.Item>
+              <Form.Item
+                label={uiText("模板名称")}
+                name="name"
+                rules={[{ required: true, message: uiText("请输入模板名称") }]}
+              >
+                <Input maxLength={255} placeholder={uiText("例如：分镜基础提示词")} />
+              </Form.Item>
+            </div>
+            <Form.Item
+              label={uiText("模板内容")}
+              name="content"
+              rules={[{ required: true, message: uiText("请输入模板内容") }]}
+            >
+              <Input.TextArea rows={6} placeholder={uiText("请输入提示词模板内容")} />
+            </Form.Item>
+            <Form.Item label={uiText("预览文案")} name="preview">
+              <Input.TextArea rows={2} maxLength={500} placeholder={uiText("用于列表预览的简短说明")} />
+            </Form.Item>
+            <Form.Item label={uiText("设为默认提示词")} name="is_default" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+            <details ref={variableSettings}>
+              <summary>{uiText("变量设置")}</summary>
+              <Form.Item label={uiText("变量（回车添加）")} name="variables">
+                <Select
+                  mode="tags"
+                  tokenSeparators={[',', '，']}
+                  open={false}
+                  searchValue={pendingVariable}
+                  onSearch={setPendingVariable}
+                  onSelect={() => setPendingVariable('')}
+                  placeholder={uiText("例如：subject, style, lighting")}
+                />
+              </Form.Item>
+              <Form.Item label={uiText("变量默认值（JSON 对象）")} name="variable_defaults_json" rules={[{ validator: async (_, value?: string) => {
+                parseVariableDefaults(value)
+              } }]}>
+                <Input.TextArea rows={4} placeholder={uiText("例如：{\n  \"background_instruction\": \"Plain studio background\"\n}")} />
+              </Form.Item>
+            </details>
+          </Form>
+        </ConfigProvider>
+      </ResourceEditorFrame>}
     </WorkspaceLayout>
   )
 }
