@@ -2125,6 +2125,8 @@
   "有封面": "Has cover",
   "有效模型参数": "Effective model parameters",
   "有未保存修改": "Unsaved changes",
+  "放弃未保存的修改？": "Discard unsaved changes?",
+  "离开后，本次填写的内容将丢失。": "If you leave, your changes will be lost.",
   "有未保存的修改": "Unsaved changes",
   "有未发送内容": "Unsent changes",
   "有未提交的配置": "Unsubmitted configuration",

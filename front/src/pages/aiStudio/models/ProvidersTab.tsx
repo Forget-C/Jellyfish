@@ -27,6 +27,7 @@ import { ApiError } from '../../../services/generated'
 import type { ProviderCreate, ProviderRead, ProviderSupportedRead } from '../../../services/generated'
 import { PROVIDER_STATUS_MAP, SORT_OPTIONS, maskUrl } from './constants'
 
+import { DrawerDiscardDialog } from '../../../components/layout/DrawerDiscardDialog'
 import { ResourceEditorFrame } from '../assets/components/ResourceEditorFrame'
 import '../assets/components/resourceEditor.css'
 import '../project/ProjectWorkbench/tabs/project-settings.css'
@@ -60,6 +61,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
   const desktopTest = !!Grid.useBreakpoint().md
   const [testing, setTesting] = useState<string | null>(null)
   const [testSubmitting, setTestSubmitting] = useState(false)
+  const [discardOpen, setDiscardOpen] = useState(false)
   const [providerEditorOpen, setProviderEditorOpen] = useState(false)
   const [providerEditing, setProviderEditing] = useState<ProviderRead | null>(null)
   const [credentialsLoading, setCredentialsLoading] = useState(false)
@@ -160,6 +162,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
     credentialsRequest.current = null
     setCredentialsLoading(false)
     initialFields.current = {}
+    setDiscardOpen(false)
     setProviderEditorOpen(false)
     setProviderEditing(null)
     form.resetFields()
@@ -508,12 +511,14 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
           const changed = Object.entries(form.getFieldsValue()).some(([field, value]) =>
             (value ?? '') !== (initialFields.current[field] ?? ''))
           if (!changed) closeProviderEditor()
-          else modal.confirm({ title: uiText("有未保存的修改"), okText: uiText("放弃修改"), onOk: closeProviderEditor })
+          else setDiscardOpen(true)
         }}
         actions={<Button type="primary" form="provider-editor-form" htmlType="submit" disabled={credentialsLoading} loading={saving}>
           {providerEditing ? uiText("保存") : uiText("创建")}
         </Button>}
       >
+        <DrawerDiscardDialog open={discardOpen} drawerId="provider-editor-drawer"
+          onContinue={() => setDiscardOpen(false)} onDiscard={closeProviderEditor} />
         <Form id="provider-editor-form" form={form} layout="vertical" className="app-settings-form project-settings-form"
           disabled={saving} onFinish={handleSaveProvider} onFinishFailed={({ errorFields }) => {
             const first = errorFields[0]?.name

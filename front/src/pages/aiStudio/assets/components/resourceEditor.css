@@ -74,3 +74,6 @@
 @media (max-width: 767px) {
   .resource-editor-page-heading > .ant-btn, .resource-editor-page-actions .ant-btn { min-height: 36px; }
 }
+
+.drawer-discard-dialog .ant-btn-primary:not(:disabled) { background: var(--app-accent, #245fc5); }
+.drawer-discard-dialog .ant-btn-primary:not(:disabled):hover { background: #1d50aa; }
