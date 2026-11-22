@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { CanvasAssistantAttachment } from './CanvasAssistantAttachment';
+import type { CanvasAssistantSkillUse } from './CanvasAssistantSkillUse';
 /**
  * Feedback or an evidence limitation tied to one canonical run.
  */
@@ -11,4 +12,5 @@ export type CanvasAssistantReviewResult = {
     version: number;
     reply: string;
     evidence?: Array<CanvasAssistantAttachment>;
+    skills?: Array<CanvasAssistantSkillUse>;
 };

@@ -293,10 +293,9 @@ class CanvasAssistant:
         return await self._model_client(model, provider, capability), capability
 
     @classmethod
-    async def review_evidence(cls, client, content, *, supports_tools: bool) -> str:
+    async def review_evidence(cls, client, content, *, supports_tools: bool) -> tuple[str, list[CanvasAssistantSkillUse]]:
         """Review only the supplied immutable result without write or generation tools."""
-        reply, _ = await cls._reply(client, [HumanMessage(content=content)], None, None, supports_tools=supports_tools)
-        return reply
+        return await cls._reply(client, [HumanMessage(content=content)], None, None, supports_tools=supports_tools)
 
     @staticmethod
     async def _reply(client, messages, context: CanvasAssistantReadContext | None,

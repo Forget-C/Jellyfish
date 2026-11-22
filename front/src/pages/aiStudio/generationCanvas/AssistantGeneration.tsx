@@ -55,6 +55,7 @@ export function AssistantGeneration({ generation, openRun, cancelRun }: {
       <span>{uiText("审看结果")} · {uiText("版本")} {result.version}</span>
       <WorkbenchButton variant="quiet" onClick={() => openRun(result.run_id)}>{uiText("查看审看的运行")}</WorkbenchButton>
       {!!result.evidence?.length && <CanvasAssistantEvidence attachments={result.evidence} />}
+      {!!result.skills?.length && <small>{result.skills.map(skill => skill.name + ' · ' + skill.version).join('、')}</small>}
       <p>{result.reply}</p>
     </div>)}
   </div>

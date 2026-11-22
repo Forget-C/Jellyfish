@@ -211,5 +211,7 @@ async def test_worker_reviews_only_the_authorized_immutable_generation(runtime, 
         assert result['version'] == 1 and result['reply'] == '成片中的主色是红色。'
         assert result['evidence'][0]['file_id'] == published[0]['nodes'][0]['outputs'][0]['file_id']
         assert result['evidence'][0]['observation'] == 'image'
+        skill, = result['skills']
+        assert skill['id'] == 'footage-review' and skill['version']
     else:
         assert generation['review'] is None

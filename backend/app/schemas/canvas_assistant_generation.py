@@ -18,6 +18,14 @@ class CanvasAssistantGenerationVersion(BaseModel):
     error: str | None = None
 
 
+class CanvasAssistantSkillUse(BaseModel):
+    """Version of a product skill actually loaded to answer a message."""
+
+    id: str
+    name: str
+    version: str
+
+
 class CanvasAssistantReviewResult(BaseModel):
     """Feedback or an evidence limitation tied to one canonical run."""
 
@@ -25,6 +33,7 @@ class CanvasAssistantReviewResult(BaseModel):
     version: int
     reply: str
     evidence: list[CanvasAssistantAttachment] = Field(default_factory=list)
+    skills: list[CanvasAssistantSkillUse] = Field(default_factory=list)
 
 
 class CanvasAssistantGenerationReview(BaseModel):

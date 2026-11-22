@@ -6,7 +6,7 @@ from datetime import timedelta
 from uuid import uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, or_, select, tuple_, update
 
 from app.models.canvas_assistant import CanvasAssistantGeneration, CanvasAssistantTurn
 from app.models.generation_canvas import CanvasResultSet, CanvasRunNode, GenerationCanvas
@@ -42,30 +42,35 @@ def _available(now):
 async def _choose_review(sessions):
     """Find a terminal generation, then claim it before any provider action."""
     now = utcnow()
+    generation_key = (CanvasAssistantGeneration.created_at, CanvasAssistantGeneration.canvas_id,
+                      CanvasAssistantGeneration.source_id)
     async with sessions() as db:
-        candidates = (await db.execute(select(
+        query = select(
+            CanvasAssistantGeneration.created_at,
             CanvasAssistantGeneration.canvas_id, CanvasAssistantGeneration.source_id,
             CanvasAssistantGeneration.review_request, CanvasAssistantGeneration.review_results,
             GenerationCanvas.project_id, CanvasAssistantTurn.model_id,
         ).join(GenerationCanvas, GenerationCanvas.id == CanvasAssistantGeneration.canvas_id).join(
             CanvasAssistantTurn, and_(CanvasAssistantTurn.canvas_id == CanvasAssistantGeneration.canvas_id,
                                       CanvasAssistantTurn.request_id == CanvasAssistantGeneration.source_id),
-        ).where(_available(now), CanvasAssistantGeneration.state.in_(('submitted', 'failed', 'rejected')))
-            .order_by(CanvasAssistantGeneration.created_at).limit(16))).all()
-        for canvas_id, source_id, question, results, project_id, model_id in candidates:
-            generation = await read_generation(db, canvas_id, source_id)
-            if generation is None or any(version.state not in _TERMINAL_VERSION_STATES
-                                         for version in generation.versions):
-                continue
-            token = uuid4().hex
-            changed = await db.execute(update(CanvasAssistantGeneration).where(
-                CanvasAssistantGeneration.canvas_id == canvas_id, CanvasAssistantGeneration.source_id == source_id,
-                _available(now),
-            ).values(review_state='reviewing', review_token=token, review_lease_until=now + _REVIEW_LEASE))
-            if not changed.rowcount:
-                continue
-            await db.commit()
-            return canvas_id, source_id, question, project_id, model_id, token, generation.versions, results or []
+        ).where(_available(now), CanvasAssistantGeneration.state.in_(('submitted', 'failed', 'rejected'))
+                ).order_by(*generation_key).limit(16)
+        page = query
+        while candidates := (await db.execute(page)).all():
+            for created_at, canvas_id, source_id, question, results, project_id, model_id in candidates:
+                generation = await read_generation(db, canvas_id, source_id)
+                if generation is None or any(version.state not in _TERMINAL_VERSION_STATES
+                                             for version in generation.versions):
+                    continue
+                token = uuid4().hex
+                changed = await db.execute(update(CanvasAssistantGeneration).where(
+                    CanvasAssistantGeneration.canvas_id == canvas_id, CanvasAssistantGeneration.source_id == source_id,
+                    _available(now),
+                ).values(review_state='reviewing', review_token=token, review_lease_until=now + _REVIEW_LEASE))
+                if changed.rowcount:
+                    await db.commit()
+                    return canvas_id, source_id, question, project_id, model_id, token, generation.versions, results or []
+            page = query.where(tuple_(*generation_key) > tuple_(created_at, canvas_id, source_id))
     return None
 
 
@@ -113,7 +118,8 @@ async def _review_version(sessions, identity, item, question, project_id, model_
         if entry is None or entry.review_token != token:
             return None
     try:
-        result.reply = await CanvasAssistant.review_evidence(model, content, supports_tools=capability.tool_calling)
+        result.reply, result.skills = await CanvasAssistant.review_evidence(
+            model, content, supports_tools=capability.tool_calling)
     except HTTPException:
         result.reply = '未收到本次生成结果的审看回复。'
     return result

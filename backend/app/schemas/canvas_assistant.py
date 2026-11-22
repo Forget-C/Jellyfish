@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.schemas.canvas_assistant_edit import CanvasAssistantApprovalAudit, CanvasAssistantProposal
-from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationRead
+from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationRead, CanvasAssistantSkillUse
 from app.schemas.canvas_assistant_media import CanvasAssistantAttachment
 from app.schemas.canvas_assistant_layout import CanvasAssistantLayout, CanvasAssistantPoint, CardId
 
@@ -64,14 +64,6 @@ class CanvasAssistantMessage(BaseModel):
         if len(set(self.attachment_file_ids)) != len(self.attachment_file_ids):
             raise ValueError('Assistant attachments must be distinct')
         return self
-
-
-class CanvasAssistantSkillUse(BaseModel):
-    """Version of a product skill actually loaded to answer a message."""
-
-    id: str
-    name: str
-    version: str
 
 
 class CanvasAssistantExchange(BaseModel):
