@@ -1,4 +1,3 @@
-import { assertDetailDrawerLayout } from './detailLayout.assertions.mjs'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -77,16 +76,19 @@ try {
     if (pathname.endsWith('/providers')) return respond({ items: [provider], pagination: { total: 1 } })
     if (pathname.endsWith('/providers/provider1/models/catalog')) {
       return respond({
-        provider_id: provider.id, provider_key: 'fixture', source: 'provider_catalog', models: [],
+        provider_id: provider.id, provider_key: 'fixture', source: 'provider_catalog', models: [{ name: '目录模型', category: 'text', description: '目录描述', params: { temperature: 0.5 } }],
       })
     }
     if (pathname.endsWith('/providers/provider1/models/import') && route.request().method() === 'POST') {
       createRequests += 1
       const { models } = route.request().postDataJSON()
-      assert.deepEqual(models, [{ name: '新增验收模型', category: 'text', params: {} }])
+      assert.deepEqual(models, [
+        { name: '新增验收模型', category: 'text', params: {}, description: '手填描述' },
+        { name: '目录模型', category: 'text', description: '目录描述', params: { temperature: 0.5 } },
+      ])
       const created = { ...models[0], id: 'new-model', provider_id: provider.id }
       rows.push(created)
-      return respond({ created: [created], skipped: [] })
+      return respond({ created: [created], skipped: ['目录模型'] })
     }
     if (pathname.endsWith('/models')) {
       await initialLoad
@@ -128,24 +130,25 @@ try {
   const name = page.getByRole('button', { name: model.name, exact: true })
   await name.focus()
   await page.keyboard.press('Enter')
-  const details = page.getByRole('dialog').filter({ hasText: '模型详情' })
-  await details.getByText(model.description, { exact: true }).waitFor()
-  await assertDetailDrawerLayout(details)
-  await details.getByText(model.created_by, { exact: true }).waitFor()
-  const parameters = details.getByLabel('完整参数 JSON')
-  assert.match(await parameters.innerText(), /abcdefghijklmnopqrstuvwxyz/)
-  const codeGeometry = await parameters.evaluate(element => ({
-    width: element.clientWidth, scrollWidth: element.scrollWidth, parentWidth: element.parentElement.clientWidth,
-    whiteSpace: getComputedStyle(element).whiteSpace, overflowX: getComputedStyle(element).overflowX,
-  }))
-  assert.ok(codeGeometry.scrollWidth > codeGeometry.width, JSON.stringify(codeGeometry))
-  assert.ok(await details.evaluate(element => element.scrollWidth <= element.clientWidth + 1))
-  await details.screenshot({ path: output + '/model-details.png', animations: 'disabled' })
+  const editor = page.getByRole('dialog', { name: '编辑模型' })
+  await editor.screenshot({ path: output + '/model-editor-desktop.png', animations: 'disabled' })
+  assert.equal((await editor.boundingBox()).width, 720)
+  const modelDescription = editor.getByRole('textbox', { name: '描述', exact: true })
+  await editor.getByText(model.created_by, { exact: false }).waitFor()
+  assert.equal(await modelDescription.inputValue(), model.description)
+  assert.match(await editor.getByRole('textbox', { name: '参数（JSON）' }).inputValue(), /abcdefghijklmnopqrstuvwxyz/)
+  await modelDescription.fill('未保存的描述')
   await page.keyboard.press('Escape')
-  await details.waitFor({ state: 'hidden' })
+  const discard = page.getByRole('dialog', { name: '放弃未保存的修改？' })
+  await discard.getByRole('button', { name: '继续编辑' }).click()
+  await discard.waitFor({ state: 'hidden' })
+  assert.equal(await modelDescription.inputValue(), '未保存的描述')
+  await editor.getByRole('button', { name: '返回' }).click()
+  await discard.getByRole('button', { name: '放弃修改' }).click()
+  await editor.waitFor({ state: 'hidden' })
   await name.and(page.locator(':focus')).waitFor()
   const modelRow = page.getByRole('row').filter({ has: name })
-  assert.equal(await modelRow.getByRole('button', { name: /测试.*暂未接入/ }).isDisabled(), true)
+  assert.equal(await modelRow.getByRole('button', { name: /测试|编辑/ }).count(), 0)
   await modelRow.getByText('默认', { exact: true }).waitFor()
   await page.getByRole('button', { name: '筛选', exact: true }).click()
   const filters = page.getByRole('dialog').filter({ has: page.getByText('筛选', { exact: true }) })
@@ -234,11 +237,11 @@ try {
     assert.ok(width === 390 ? layout.belowTitle && layout.fillsRow : layout.besideTitle, JSON.stringify(layout))
   }
   await page.setViewportSize({ width: 1440, height: 900 })
-  await modelRow.getByRole('button', { name: `Edit ${model.name}`, exact: true }).press('Enter')
+  await name.click()
   const edit = page.getByRole('dialog', { name: 'Edit model' })
   const description = edit.getByRole('textbox', { name: 'Description', exact: true })
   await description.fill('更新后的完整描述')
-  const save = edit.getByRole('button', { name: 'OK' })
+  const save = edit.getByRole('button', { name: 'Save' })
   await save.click()
   await page.getByText('Save failed').waitFor()
   assert.equal(await description.inputValue(), '更新后的完整描述')
@@ -268,16 +271,35 @@ try {
   assert.equal(deleteRequests, 2)
   await search.fill('')
   const create = page.getByRole('button', { name: /添加模型$/ })
+  await page.setViewportSize({ width: 390, height: 844 })
   await create.click()
   const add = page.getByRole('dialog', { name: '添加模型' })
   await add.getByRole('combobox', { name: '供应商', exact: true }).click()
   await page.getByText('验收供应商（OpenAI）', { exact: true }).filter({ visible: true }).last().click()
   await add.getByRole('combobox', { name: '类别', exact: true }).click()
   await page.getByText('文本生成', { exact: true }).filter({ visible: true }).last().click()
+  const supplierField = add.getByRole('combobox', { name: '供应商', exact: true })
+  const categoryField = add.getByRole('combobox', { name: '类别', exact: true })
+  assert.ok((await categoryField.boundingBox()).y > (await supplierField.boundingBox()).y)
+  assert.ok(await add.evaluate(node => node.scrollWidth <= node.clientWidth))
+  await add.screenshot({ path: output + '/model-editor-narrow.png', animations: 'disabled' })
   const modelNames = add.getByRole('combobox', { name: '模型名称', exact: true })
   await modelNames.fill('新增验收模型')
   await modelNames.press('Enter')
-  await add.getByRole('button', { name: /确\s*定/ }).click()
+  await modelNames.fill('目录')
+  await page.getByText('目录模型 · 目录描述', { exact: true }).filter({ visible: true }).last().click()
+  await add.getByRole('textbox', { name: '描述', exact: true }).fill('手填描述')
+  await add.getByText('高级参数', { exact: true }).click()
+  const json = add.getByRole('textbox', { name: '参数（JSON）' })
+  await json.fill('[]')
+  await add.getByText('高级参数', { exact: true }).click()
+  const submit = add.getByRole('button', { name: /^添\s*加$/ })
+  await submit.click()
+  await add.getByText('参数必须为 JSON 对象').waitFor()
+  await json.and(page.locator(':focus')).waitFor()
+  assert.equal(createRequests, 0)
+  await json.fill('{}')
+  await submit.click()
   await add.waitFor({ state: 'hidden' })
   assert.equal(createRequests, 1)
   await search.fill('新增验收模型')
@@ -287,8 +309,9 @@ try {
   await addedRow.getByRole('button', { name: '新增验收模型的更多操作' }).click()
   await page.getByRole('menuitem', { name: /复制/ }).click()
   await add.getByText('新增验收模型-复制', { exact: true }).waitFor()
-  await add.getByRole('button', { name: /取\s*消/ }).click()
+  await add.getByRole('button', { name: '返回' }).click()
   await add.waitFor({ state: 'hidden' })
+  await addedRow.getByRole('button', { name: '新增验收模型的更多操作' }).and(page.locator(':focus')).waitFor()
   assert.equal(createRequests, 1)
 
   await search.fill('')
@@ -335,7 +358,7 @@ try {
   await page.getByRole('tab', { name: '模型', exact: true }).click()
   await page.getByText('暂无模型', { exact: true }).waitFor()
   await page.getByRole('button', { name: /添加第一个模型/ }).waitFor()
-  process.stdout.write('模型管理：主题、视口、列表状态、详情、默认配置、添加、复制、编辑和删除通过。\n')
+  process.stdout.write('模型管理：主题、视口、列表状态、抽屉布局与草稿保护、默认配置、添加、复制、编辑和删除通过。\n')
 } finally {
   await cleanup()
 }
