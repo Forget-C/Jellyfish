@@ -309,7 +309,7 @@ class CanvasStore:
         await self.db.execute(delete(CanvasCheckReport).where(CanvasCheckReport.canvas_id == canvas_id))
         await self.db.execute(delete(CanvasSaveReceipt).where(CanvasSaveReceipt.canvas_id == canvas_id))
         await self.db.execute(delete(FileUsage).where(
-            FileUsage.project_id == self.project_id, FileUsage.usage_kind.in_(('canvas_content', 'canvas_storyboard_source', 'generation_upload')),
+            FileUsage.project_id == self.project_id, FileUsage.usage_kind.in_(('canvas_content', 'canvas_storyboard_source', 'generation_upload', 'canvas_assistant_attachment')),
             FileUsage.source_ref.like(f'{canvas_id}:%')))
         await self.db.delete(canvas)
         await self.db.flush()

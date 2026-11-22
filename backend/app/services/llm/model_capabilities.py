@@ -16,6 +16,7 @@ def effective_chat_capabilities(
     return EffectiveModelCapabilities(
         text_inputs=text_inputs,
         text_outputs=text_outputs,
+        image_inputs=text_inputs and text_outputs and profile.image_inputs.declaration == 'supported',
         tool_calling=text_inputs and text_outputs and profile.tool_calling.declaration == "supported",
         max_input_tokens=profile.max_input_tokens,
     )
