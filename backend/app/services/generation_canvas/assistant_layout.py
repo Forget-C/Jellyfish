@@ -62,9 +62,10 @@ async def decide_assistant_layout(db, project_id, canvas_id, source_id, action) 
     result = CanvasAssistantLayout.model_validate(turn.layout)
     expected, target = {
         'approve': ('proposed', 'waiting'), 'reject': ('proposed', 'rejected'),
-        'applied': ('waiting', 'applied'), 'stale': ('waiting', 'stale'),
+        'claim': ('waiting', 'executing'),
+        'applied': ('executing', 'applied'), 'stale': ('executing', 'stale'),
     }[action]
-    if result.state == target or action == 'approve' and result.state in ('applied', 'stale'):
+    if result.state == target or action == 'approve' and result.state in ('executing', 'applied', 'stale'):
         return result
     if result.state != expected:
         raise HTTPException(409, 'Canvas assistant layout has already been decided')

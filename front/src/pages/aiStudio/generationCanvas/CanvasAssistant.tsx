@@ -24,7 +24,7 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
   selectedCards: string[]
   approve: (sourceId: string, groupIds?: string[], automatic?: boolean) => Promise<boolean>
   approvalDisabled: boolean
-  applyLayout: (sourceId: string, proposal: CanvasAssistantLayout) => Promise<AssistantLayoutOutcome>
+  applyLayout: (sourceId: string, proposal: CanvasAssistantLayout, claim: () => Promise<void>) => Promise<AssistantLayoutOutcome>
   openRun: (runId: string) => void
   readDraft: () => Pick<CanvasAssistantDraftContext, 'draft' | 'revision' | 'layout_positions'>
 }) {
@@ -65,7 +65,7 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
     || ['waiting', 'reviewing'].includes(generation.review?.state ?? '')
     || generation.versions?.some(version => ['queued', 'running'].includes(version.state))
   ))
-  const waitingLayout = turns?.find(turn => !turn.stopped && turn.layout?.state === 'waiting')
+  const waitingLayout = turns?.find(turn => turn.layout?.state === 'executing' || !turn.stopped && turn.layout?.state === 'waiting')
   const layoutEditor = useRef(applyLayout)
   layoutEditor.current = applyLayout
 
@@ -78,14 +78,22 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
       if (!active || busy) return
       busy = true
       try {
-        const outcome = await layoutEditor.current(sourceId, layout)
+        const outcome = await layoutEditor.current(sourceId, layout, async () => {
+          await Canvases.canvasAssistantDecideLayout({ projectId, canvasId, sourceId, requestBody: { action: 'claim' } })
+        })
         if (!active || outcome === 'deferred') return
         const { data } = await Canvases.canvasAssistantDecideLayout({
           projectId, canvasId, sourceId, requestBody: { action: outcome },
         })
         if (active && data) setTurns(previous => previous?.map(turn =>
           turn.request_id === sourceId ? { ...turn, layout: data } : turn))
-      } catch { /* Retry pending work and reuse the browser receipt when delivery fails. */ }
+      } catch (error) {
+        if (active && error instanceof ApiError && error.status === 409) {
+          const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId }).catch(() => ({ data: undefined }))
+          if (active && data) setTurns(data.turns ?? [])
+        }
+        // Retry pending work and reuse the browser receipt when delivery fails.
+      }
       finally { busy = false }
     }
     const timer = window.setInterval(() => void execute(), 500)

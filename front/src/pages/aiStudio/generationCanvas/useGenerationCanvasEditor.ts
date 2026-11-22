@@ -158,9 +158,15 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       history.current = { scope: key, past: [...history.current.past.slice(-49), entry], future: [] }
     }
   }
-  const recordAction = (undo: () => void, redo: () => void) => {
+  const recordAction = (undo: () => void, redo: () => void, documentBefore?: CanvasDocument) => {
     if (!ownership.canEdit() || state.current.scope !== key || state.current.recovery || state.current.initialBefore) return
-    history.current = { scope: key, past: [...history.current.past.slice(-49), { apply: undo, reverse: redo }], future: [] }
+    const past = history.current.past
+    const last = past[past.length - 1]
+    if (documentBefore && last && 'document' in last && same(last.document, documentBefore)) {
+      last.arrangement = { undo, redo }
+    } else {
+      history.current = { scope: key, past: [...history.current.past.slice(-49), { apply: undo, reverse: redo }], future: [] }
+    }
     refreshHistory(value => value + 1)
   }
   // 文档和布局按操作顺序撤销；场次整批切换在收到服务端回执后入栈。
@@ -464,10 +470,9 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     return s.current
   }
   // 和场次应用使用同一回执及撤销链，已确认前保持原文档可见。
-  const commitVisualContinuity = (expectedRevision: number, requestId: string, transform: (before: CanvasDocument) => CanvasDocument) => {
+  const commitTransformedDocument = (expectedRevision: number, id: string, transform: (before: CanvasDocument) => CanvasDocument) => {
     const s = state.current
     if (!ownership.canEdit() || !s.current || !s.document || s.scope !== key || s.recovery || s.conflict) return Promise.resolve(false)
-    const id = `visual-continuity:${requestId}`
     if (s.pending?.request_id === id) return save()
     if (inFlight.current || s.pending || !same(s.document, s.current.document) || s.current.revision !== expectedRevision) return Promise.resolve(false)
     const next = markStoryboardEdits(s.document, cleanObjectSources(transform(s.document)))
@@ -477,6 +482,10 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     setInitialApplying(true); persist()
     return save()
   }
+  const commitVisualContinuity = (revision: number, requestId: string, transform: (before: CanvasDocument) => CanvasDocument) =>
+    commitTransformedDocument(revision, `visual-continuity:${requestId}`, transform)
+  const commitAssistantLayoutGroup = (revision: number, group: NonNullable<CanvasDocument['groups']>[number]) =>
+    commitTransformedDocument(revision, `assistant-layout:${group.id}`, before => ({ ...before, groups: [...(before.groups || []), group] }))
   const commitAssistantProposal = async (sourceId: string, groupIds?: string[], automatic?: boolean) => {
     const s = state.current
     if (s.pending?.assistantProposalId === sourceId) {
@@ -532,6 +541,6 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   }
   const past = history.current.past
   const lastChange = history.current.scope === key ? past[past.length - 1] : undefined
-  return { handoffStoryboardApplication, canUndoArrangement: !!lastChange && 'document' in lastChange && !!lastChange.arrangement, saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, storyboardApplication, applyInitialCandidate, applyReviewedCandidate, prepareReview, prepareCommittedEdit, commitVisualContinuity, commitAssistantProposal, dirty, error: error === '此画布已不可用' ? uiText(error) : error, storageError: storageError === '本地恢复记录无法读取；未覆盖服务器内容' ? uiText(storageError) : storageError, recovery, conflict, restore, reload, ownership, requestLeave, needsLeaveProtection, renameSceneCanvas, pendingRename, commitSettings, pendingSettings, settingsDraft, clearSettingsDraft: () => setSettingsDraft(undefined),
+  return { handoffStoryboardApplication, canUndoArrangement: !!lastChange && 'document' in lastChange && !!lastChange.arrangement, saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, storyboardApplication, applyInitialCandidate, applyReviewedCandidate, prepareReview, prepareCommittedEdit, commitVisualContinuity, commitAssistantLayoutGroup, commitAssistantProposal, dirty, error: error === '此画布已不可用' ? uiText(error) : error, storageError: storageError === '本地恢复记录无法读取；未覆盖服务器内容' ? uiText(storageError) : storageError, recovery, conflict, restore, reload, ownership, requestLeave, needsLeaveProtection, renameSceneCanvas, pendingRename, commitSettings, pendingSettings, settingsDraft, clearSettingsDraft: () => setSettingsDraft(undefined),
     undo: () => travel('past'), redo: () => travel('future'), canUndo: history.current.scope === key && !!history.current.past.length, canRedo: history.current.scope === key && !!history.current.future.length }
 }

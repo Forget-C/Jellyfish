@@ -10,7 +10,7 @@ import type { MoveCanvasCards } from './MoveCanvasCards';
  * A proposal reserves no document edit or layout until the editor applies it.
  */
 export type CanvasAssistantLayout = {
-    state?: 'proposed' | 'waiting' | 'applied' | 'stale' | 'rejected';
+    state?: 'proposed' | 'waiting' | 'executing' | 'applied' | 'stale' | 'rejected';
     before: Record<string, CanvasAssistantPoint>;
     group_membership: Record<string, (string | null)>;
     placement?: ((MoveCanvasCards | ArrangeCanvasCards) | null);

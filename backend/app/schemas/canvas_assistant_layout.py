@@ -40,7 +40,7 @@ class CanvasAssistantGrouping(BaseModel):
 class CanvasAssistantLayout(BaseModel):
     """A proposal reserves no document edit or layout until the editor applies it."""
 
-    state: Literal['proposed', 'waiting', 'applied', 'stale', 'rejected'] = 'proposed'
+    state: Literal['proposed', 'waiting', 'executing', 'applied', 'stale', 'rejected'] = 'proposed'
     before: dict[str, CanvasAssistantPoint]
     group_membership: dict[str, str | None]
     placement: CanvasAssistantPlacement | None = None
@@ -50,4 +50,4 @@ class CanvasAssistantLayout(BaseModel):
 class CanvasAssistantLayoutDecision(BaseModel):
     """Approve or decline a proposal, or return an editor execution result."""
 
-    action: Literal['approve', 'reject', 'applied', 'stale']
+    action: Literal['approve', 'reject', 'claim', 'applied', 'stale']

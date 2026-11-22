@@ -474,10 +474,33 @@ try {
     return proposal
   }
   const groupLayout = await requestLayout('把布局卡分组并向右移')
-  await groupLayout.getByRole('button', { name: '确认布局' }).click()
-  await groupLayout.getByText('布局已执行', { exact: true }).waitFor()
-  assert.equal(await left(), beforeLayout + 70)
   const readLayoutGroups = async () => (await (await fetch(layoutUrl)).json()).data.document.groups
+  let groupSaveArrived
+  let allowGroupSave
+  const groupSaveStarted = new Promise(resolve => { groupSaveArrived = resolve })
+  const groupSaveAllowed = new Promise(resolve => { allowGroupSave = resolve })
+  const groupSaveRoute = async route => {
+    if (route.request().method() !== 'PUT' || !route.request().postDataJSON()?.document?.groups?.length) {
+      await route.continue()
+      return
+    }
+    groupSaveArrived()
+    await groupSaveAllowed
+    await route.continue()
+  }
+  const isLayoutDocument = url => url.pathname.endsWith('/generation-canvases/' + layoutCanvas.id)
+  await page.route(isLayoutDocument, groupSaveRoute)
+  await groupLayout.getByRole('button', { name: '确认布局' }).click()
+  try {
+    await Promise.race([groupSaveStarted, delay(8000).then(() => { throw new Error('layout group save not observed') })])
+    assert.equal(await left(), beforeLayout)
+    assert.deepEqual(await readLayoutGroups(), [])
+  } finally {
+    allowGroupSave()
+  }
+  await groupLayout.getByText('布局已执行', { exact: true }).waitFor()
+  await page.unroute(isLayoutDocument, groupSaveRoute)
+  assert.equal(await left(), beforeLayout + 70)
   assert.deepEqual((await readLayoutGroups())[0].card_ids, ['layout-left', 'layout-right'])
   await panel.getByRole('button', { name: '关闭画布助手' }).click()
   await page.getByRole('button', { name: '撤销操作', exact: true }).click()

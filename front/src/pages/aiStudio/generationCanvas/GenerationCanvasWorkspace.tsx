@@ -118,6 +118,7 @@ export function GenerationCanvasWorkspace({
   const editor = useGenerationCanvasEditor(projectId, canvasId, true, sceneSave, freeDraft)
   const [promptEditors, setPromptEditors] = useState<Set<string>>(() => new Set())
   const assistantLayout = useRef<AssistantLayoutEditor>()
+  const assistantGroupingBefore = useRef<{ sourceId: string, document: CanvasDocument }>()
   const [selectedCards, setSelectedCards] = useState<string[]>([])
   const activePromptDrafts = useRef(new Map<string, () => GenerationCard>())
   const reportPromptDraft = useCallback((sessionId: string, readDraft?: () => GenerationCard) => {
@@ -208,10 +209,13 @@ export function GenerationCanvasWorkspace({
     settingsError: editor.error,
     saveSettings: changes => promptEditors.size ? Promise.resolve(false) : editor.commitSettings(changes),
   }
-  const applyAssistantLayout = async (sourceId: string, proposal: CanvasAssistantLayout): Promise<AssistantLayoutOutcome> => {
+  const applyAssistantLayout = async (sourceId: string, proposal: CanvasAssistantLayout, claim: () => Promise<void>): Promise<AssistantLayoutOutcome> => {
     if (!document || promptEditors.size || !ownership.canEdit()) return 'deferred'
     const prepared = await editor.prepareCommittedEdit()
     if (!prepared || scope !== latestScope.current || !ownership.canEdit() || !assistantLayout.current) return 'deferred'
+    if (assistantLayout.current.plan(sourceId, proposal).outcome === 'deferred') return 'deferred'
+    await claim()
+    if (scope !== latestScope.current || !ownership.canEdit() || !assistantLayout.current) return 'deferred'
     const { document: current } = prepared
     const group = proposal.group
     const existing = group && current.groups?.find(item => item.id === group.id)
@@ -224,12 +228,15 @@ export function GenerationCanvasWorkspace({
       // A saved local receipt cannot recreate a group the user subsequently removed or undid.
       return plan.outcome === 'applied' && group && !existing ? 'stale' : plan.outcome
     }
-    if (!plan.apply()) return 'deferred'
     if (group && !existing) {
-      change(before => ({ ...before, groups: [...(before.groups || []), group] }), plan.arrangement)
-      return await editor.save() ? 'applied' : 'deferred'
+      assistantGroupingBefore.current = { sourceId, document: current }
+      if (!await editor.commitAssistantLayoutGroup(prepared.revision, group)) return 'deferred'
+      runtime.invalidate()
     }
-    editor.recordAction(plan.arrangement.undo, plan.arrangement.redo)
+    if (scope !== latestScope.current || !ownership.canEdit() || !plan.apply()) return 'deferred'
+    const undoGroup = assistantGroupingBefore.current
+    editor.recordAction(plan.arrangement.undo, plan.arrangement.redo, undoGroup?.sourceId === sourceId ? undoGroup.document : undefined)
+    assistantGroupingBefore.current = undefined
     return 'applied'
   }
   return <WorkbenchTheme adaptive><WorkbenchDetailsProvider><section className="canvas-workbench generation-workbench" aria-label={uiText("生成画布工作台")} onContextMenu={event => event.preventDefault()}>

@@ -6,5 +6,5 @@
  * Approve or decline a proposal, or return an editor execution result.
  */
 export type CanvasAssistantLayoutDecision = {
-    action: 'approve' | 'reject' | 'applied' | 'stale';
+    action: 'approve' | 'reject' | 'claim' | 'applied' | 'stale';
 };

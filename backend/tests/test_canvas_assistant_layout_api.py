@@ -63,6 +63,16 @@ async def test_layout_approval_survives_reload_and_records_one_editor_receipt(ca
     history = await canvas_client.get(assistant)
     assert history.json()['data']['turns'][0]['layout']['state'] == 'waiting'
     assert (await canvas_client.get(target)).json()['data']['document']['groups'] == []
+    assert (await canvas_client.post(decision, json={'action': 'applied'})).status_code == 409
+    second = await canvas_client.post(assistant, json={**source, 'request_id': 'stopped-layout'})
+    assert second.status_code == 200, second.text
+    assert (await canvas_client.post(assistant + '/layout/stopped-layout', json={'action': 'approve'})).status_code == 200
+    stopped = await canvas_client.post(assistant + '/turns/stopped-layout/stop')
+    assert stopped.status_code == 200, stopped.text
+    assert (await canvas_client.post(assistant + '/layout/stopped-layout', json={'action': 'claim'})).status_code == 409
+    claimed = await canvas_client.post(decision, json={'action': 'claim'})
+    assert claimed.json()['data']['state'] == 'executing'
+    assert (await canvas_client.post(decision, json={'action': 'claim'})).json() == claimed.json()
     draft['groups'] = [{key: proposal['group'][key] for key in ('id', 'name', 'card_ids')}]
     save_group = await canvas_client.put(target, json={
         'request_id': 'editor', 'expected_revision': revision, 'document': draft,

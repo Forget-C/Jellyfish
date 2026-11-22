@@ -30,7 +30,7 @@ export function AssistantLayout({ layout, disabled, decide }: {
       <WorkbenchButton variant="quiet" disabled={busy} onClick={() => void submit('reject')}>{uiText('拒绝布局')}</WorkbenchButton>
     </>}
     <small role="status">
-      {layout.state === 'waiting' && uiText('等待画布执行布局')}
+      {(layout.state === 'waiting' || layout.state === 'executing') && uiText('等待画布执行布局')}
       {layout.state === 'applied' && uiText('布局已执行')}
       {layout.state === 'stale' && uiText('布局未执行，请核对当前卡片和位置')}
       {layout.state === 'rejected' && uiText('建议已拒绝')}
