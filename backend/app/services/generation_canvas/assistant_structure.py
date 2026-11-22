@@ -11,6 +11,7 @@ from app.core.contracts.generation_canvas import InputBinding, MovementDesignFie
 from app.schemas.canvas_assistant_edit import CanvasAssistantChange, CanvasAssistantEditGroup, CanvasAssistantProposal
 from app.schemas.canvas_assistant_structure import (
     AddCanvasCardTarget, AddModelCard, AddMovementCard, AddTextCard, AdoptFirstFrame, AdoptFirstFrameTarget,
+    AdjustShotMovement, AdjustShotMovementTarget,
     ProposedStructure, ReplaceFirstFrame,
 )
 from app.schemas.generation_canvas import (
@@ -18,6 +19,7 @@ from app.schemas.generation_canvas import (
     PromptInstruction, PromptReference, PromptText, TextContentCard, TextModelCard, VideoModelCard,
 )
 from app.services.generation_canvas.assistant_media import resolve_assistant_media
+from app.services.generation_canvas.assistant_movement import apply_shot_movement, preview_shot_movement
 from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
 from app.services.generation_canvas.capabilities import model_capability
 from app.services.generation_canvas.catalog import CARD_TITLES
@@ -77,7 +79,12 @@ def structural_preview_tool(draft, kind: str, sources):
         """Preview explicit card creation or first-frame use. Choose replace_first_frame only when explicitly requested."""
         if draft.proposal:
             raise ToolException('A preview has already been prepared for this turn')
-        if isinstance(change, AdoptFirstFrame):
+        if isinstance(change, AdjustShotMovement):
+            if kind == 'free':
+                raise ToolException('当前画布不允许修改设计卡')
+            preview = preview_shot_movement(draft, change)
+            title = '只修改所选镜头的运镜'
+        elif isinstance(change, AdoptFirstFrame):
             media = sources.get(change.file_id)
             if media is None or media.file_type != 'image':
                 raise ToolException('Choose an image attached to this message')
@@ -122,6 +129,8 @@ def structural_preview_tool(draft, kind: str, sources):
 async def apply_structural_change(store, canvas, document: CanvasDocument, edit: CanvasAssistantChange) -> bool:
     """Apply a structural edit to a tentative document after checking its current basis."""
     change = edit.target
+    if isinstance(change, AdjustShotMovementTarget):
+        return apply_shot_movement(canvas, document, edit, change)
     existing = {card.id: card for card in document.cards}
     if isinstance(change, AddCanvasCardTarget):
         card, _ = _card_configuration(change.card, edit.card_id)

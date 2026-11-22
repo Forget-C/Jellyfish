@@ -97,6 +97,17 @@ export function AssistantEditGroups({ groups, current, editDisabled, revise, dec
       </Checkbox>
       {group.edits.map(edit => {
         const { target } = edit
+        if ('movement_card_id' in target) return <dl key={target.connection_id}>
+          <dt>{uiText('已采用运镜')} · {uiText(movementFields[target.movement_field])}</dt>
+          <dd title={target.movement_card_id}>{target.movement_card_id}</dd>
+          <dt>{uiText('连线目标')}</dt><dd title={edit.card_id}>{edit.card_id} · {target.binding_id}</dd>
+          {target.copy_card_id && <>
+            <dt>{uiText('新建专属运镜')}</dt><dd title={target.copy_card_id}>{target.copy_card_id.slice(0, 8)}</dd>
+            <dt>{uiText('保留原运镜的卡片')}</dt><dd>{target.other_consumer_ids.join('、')}</dd>
+          </>}
+          <dt>{uiText('原值')}</dt><dd>{edit.before || '—'}</dd>
+          <dt>{uiText('拟议值')}</dt><dd>{edit.after}</dd>
+        </dl>
         if ('edge_id' in target) return <dl key={target.edge_id}>
           <dt>{uiText('参考素材')}</dt><dd>{target.file_name}</dd>
           <dt>{uiText('新建卡片')}</dt><dd>{uiText('图片内容卡')} · {target.reference_card_id.slice(0, 8)}</dd>
