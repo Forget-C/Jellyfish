@@ -54,13 +54,15 @@ def _explicit_quantity(text: str) -> tuple[int, bool] | None:
         return None
     count = match['count'].lower()
     if count.isascii() and count.isdecimal():
-        return int(count), waits_for_edit
-    if count in ('one', 'two', 'three'):
-        return ('one', 'two', 'three').index(count) + 1, waits_for_edit
-    if '十' in count:
+        quantity = int(count)
+    elif count in ('one', 'two', 'three'):
+        quantity = ('one', 'two', 'three').index(count) + 1
+    elif '十' in count:
         tens, units = count.split('十')
-        return 10 * _DIGITS.get(tens, 1) + _DIGITS.get(units, 0), waits_for_edit
-    return _DIGITS[count], waits_for_edit
+        quantity = 10 * _DIGITS.get(tens, 1) + _DIGITS.get(units, 0)
+    else:
+        quantity = _DIGITS[count]
+    return quantity, waits_for_edit
 
 
 def generation_authorization(turn: CanvasAssistantTurn, document: CanvasDocument,
