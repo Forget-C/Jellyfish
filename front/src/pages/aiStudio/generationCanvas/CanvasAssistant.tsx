@@ -98,17 +98,19 @@ export function CanvasAssistant({ canvasId, projectId, selectedCards, readDraft,
     const text = draft.trim()
     if (sendingNow.current || savingModel || uploadingReference || !turns || !text) return
     if (!revising && !pending.current && effectiveScope === 'selection' && !selectedCards.length) return
+    const revisionTargets = revising?.proposal?.groups
+      ? [...new Set(revising.proposal.groups.filter(group => group.state === 'pending')
+        .flatMap(group => group.edits.filter(edit => edit.target.kind !== 'add_canvas_card').map(edit => edit.card_id)))]
+      : revising?.proposal ? [revising.proposal.card_id] : []
     const requestBody: CanvasAssistantMessage = pending.current?.text === text
       ? pending.current : {
           text,
           request_id: crypto.randomUUID(),
-          attachment_file_ids: referenceFiles.map(file => file.id),
+          attachment_file_ids: referenceFiles.length ? referenceFiles.map(file => file.id) :
+            revising?.attachments?.map(file => file.file_id) ?? [],
           revises: revising?.request_id,
           context: revising?.proposal ? {
-            ...readDraft(), scope: 'selection', card_ids: revising.proposal.groups
-              ? [...new Set(revising.proposal.groups.filter(group => group.state === 'pending')
-                .flatMap(group => group.edits.map(edit => edit.card_id)))]
-              : [revising.proposal.card_id],
+            ...readDraft(), scope: revisionTargets.length ? 'selection' : 'canvas', card_ids: revisionTargets,
           } : effectiveScope === 'text' ? undefined : {
             ...readDraft(), scope: effectiveScope, card_ids: effectiveScope === 'selection' ? selectedCards : [],
           },

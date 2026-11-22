@@ -43,6 +43,8 @@ async def prepare():
             db.add(Model(id='browser-tool-model', name='browser-tool-model', category='text',
                          provider_id='browser-assistant-provider',
                          capability_profile={'tool_calling': {'declaration': 'supported'}}))
+            db.add(Model(id='original-video-generator', name='sora-2', category='video',
+                         provider_id='browser-assistant-provider'))
             if os.environ.get('CANVAS_BROWSER_ASSISTANT_REVIEW'):
                 db.add(Provider(id='browser-review-provider', provider_key='aliyun_bailian', name='审看测试',
                                 base_url=provider_url, api_key='browser-test-key'))

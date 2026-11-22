@@ -93,9 +93,21 @@ export function AssistantEditGroups({ groups, current, editDisabled, revise, dec
     {groups.map(group => <div key={group.id}>
       <Checkbox disabled={!!busy || !pending.includes(group)} checked={selectedPending.includes(group.id)}
         onChange={event => setSelected(ids => event.target.checked ? [...ids, group.id] : ids.filter(id => id !== group.id))}>
-        {group.title}
+        {uiText(group.title)}
       </Checkbox>
       {group.edits.map(edit => {
+        const { target } = edit
+        if (target.kind === 'adopt_first_frame') return <dl key={target.edge_id}>
+          <dt>{uiText('参考素材')}</dt><dd>{target.file_name}</dd>
+          <dt>{uiText('新建卡片')}</dt><dd>{uiText('图片内容卡')} · {target.reference_card_id.slice(0, 8)}</dd>
+          <dt>{uiText('连线目标')}</dt><dd>{uiText(edit.card_name)} · <span title={edit.card_id}>{edit.card_id.slice(0, 8)}</span></dd>
+          <dt>{uiText('采用用途')}</dt><dd>{uiText('首帧')}</dd>
+          {edit.before && <><dt>{uiText('原参考卡')}</dt><dd title={edit.before}>{edit.before.slice(0, 8)}</dd></>}
+        </dl>
+        if (target.kind === 'add_canvas_card') return <dl key={edit.card_id}>
+          <dt>{uiText('新建卡片')}</dt><dd>{uiText(edit.card_name)} · {edit.card_id.slice(0, 8)}</dd>
+          {edit.after && <><dt>{uiText('拟议值')}</dt><dd>{edit.after}</dd></>}
+        </dl>
         const currentValue = currentText(currentDraft, edit)
         const changed = pending.includes(group) && currentValue !== edit.before
         return <dl key={edit.card_id + JSON.stringify(edit.target)}>

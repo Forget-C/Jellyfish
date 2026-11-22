@@ -12,11 +12,14 @@ from app.models.canvas_assistant import CanvasAssistantTurn
 from app.schemas.canvas_assistant import CanvasAssistantReadContext
 from app.schemas.canvas_assistant_edit import (
     CanvasAssistantChange, CanvasAssistantEditConflict, CanvasAssistantEditGroup,
-    CanvasAssistantEditTarget, CanvasAssistantEditText, CanvasAssistantProposal,
+    CanvasAssistantEditTarget, CanvasAssistantEditText, CanvasAssistantFieldTarget, CanvasAssistantProposal,
     CanvasAssistantProposalDecision, CanvasAssistantProposalResult, MovementFieldEdit, ProposedEditGroup,
+    VideoPromptSegmentEdit,
 )
+from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, AdoptFirstFrameTarget
 from app.schemas.generation_canvas import CanvasDocument, CanvasSave, MovementCard, PromptText, VideoModelCard
 from app.services.generation_canvas.catalog import CARD_TITLES
+from app.services.generation_canvas.assistant_structure import apply_structural_change
 from app.services.generation_canvas.store import CanvasStore
 
 
@@ -26,7 +29,7 @@ def _editable_text(card, target: CanvasAssistantEditTarget):
         # A structured field can own references. This operation only edits plain text.
         if field.document is None:
             return field
-    elif isinstance(card, VideoModelCard) and not isinstance(target, MovementFieldEdit):
+    elif isinstance(card, VideoModelCard) and isinstance(target, VideoPromptSegmentEdit):
         return next((part for part in card.prompt.segments
                      if isinstance(part, PromptText) and part.id == target.segment_id), None)
     return None
@@ -62,7 +65,7 @@ class CanvasAssistantEditDraft:
     def tool(self):
         """Expose a preview operation with no document writes or generation."""
         @tool
-        async def propose_canvas_edit(card_id: str, target: CanvasAssistantEditTarget, text: CanvasAssistantEditText) -> str:
+        async def propose_canvas_edit(card_id: str, target: CanvasAssistantFieldTarget, text: CanvasAssistantEditText) -> str:
             """Preview a clearly requested change to one existing video prompt segment or movement field."""
             if self.proposal or len(self.cards) != 1:
                 raise ToolException('Choose grouping for multiple cards or changes')
@@ -191,30 +194,39 @@ async def _resolve_groups(store, canvas, turn, proposal, decision) -> CanvasAssi
 
 async def _apply_groups(store, canvas, groups, digest):
     document = CanvasDocument.model_validate(canvas.document)
-    cards = {card.id: card for card in document.cards}
     conflicts = []
     edited = False
     for group in groups:
-        writes = []
-        stale = []
-        for change in group.edits:
-            card = cards.get(change.card_id)
-            field = _editable_text(card, change.target)
-            if field is None or field.text != change.before:
-                stale.append(CanvasAssistantEditConflict(
-                    group_id=group.id, card_id=change.card_id, target=change.target,
-                    current=field.text if field is not None else None,
-                ))
-            else:
-                writes.append((card, field, change))
+        candidate = document.model_copy(deep=True)
+        stale = await _apply_group(store, canvas, candidate, group)
         if stale:
             conflicts.extend(stale)
             continue
-        for card, field, change in writes:
-            _apply_text(card, field, change)
+        document = candidate
         group.state = 'applied'
         edited = True
     receipt = await store.save(canvas.id, CanvasSave(
         request_id='assistant:' + digest, expected_revision=canvas.revision, document=document.model_dump(mode='json'),
     )) if edited else None
     return receipt, conflicts
+
+
+async def _apply_group(store, canvas, document, group):
+    conflicts = []
+    for change in group.edits:
+        current = None
+        if isinstance(change.target, (AddCanvasCardTarget, AdoptFirstFrameTarget)):
+            if await apply_structural_change(store, canvas, document, change):
+                continue
+        else:
+            card = next((item for item in document.cards if item.id == change.card_id), None)
+            field = _editable_text(card, change.target)
+            if field is not None:
+                current = field.text
+                if current == change.before:
+                    _apply_text(card, field, change)
+                    continue
+        conflicts.append(CanvasAssistantEditConflict(
+            group_id=group.id, card_id=change.card_id, target=change.target, current=current,
+        ))
+    return conflicts

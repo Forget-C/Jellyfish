@@ -21,6 +21,7 @@ from app.schemas.canvas_assistant import (CanvasAssistantExchange, CanvasAssista
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.assistant_context import resolve_assistant_context
 from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
+from app.services.generation_canvas.assistant_structure import structural_preview_tool
 from app.services.generation_canvas.assistant_media import (
     describe_assistant_media, resolve_assistant_media, retain_assistant_media,
 )
@@ -119,8 +120,7 @@ class CanvasAssistant:
             canvas = await self.store.get(canvas_id)
             scoped = resolve_assistant_context(canvas, command.context)
             context = scoped.model_dump(mode='json')
-            if scoped.target_card_ids:
-                edit_draft = CanvasAssistantEditDraft(scoped, CanvasDocument.model_validate(canvas.document))
+            edit_draft = CanvasAssistantEditDraft(scoped, CanvasDocument.model_validate(canvas.document))
         previous = await self.db.get(CanvasAssistantTurn, (canvas_id, command.request_id))
         if previous is not None:
             attached_ids = [attachment['file_id'] for attachment in (previous.attachments or [])]
@@ -149,6 +149,7 @@ class CanvasAssistant:
         if revised_proposal:
             messages.append(AIMessage(content='正在修改这条待审批建议：' + str(revised_proposal.proposal)))
         sources = await resolve_assistant_media(self.db, self.store.project_id, command.attachment_file_ids)
+        structure_tool = structural_preview_tool(edit_draft, canvas.kind, sources) if edit_draft else None
 
         token = uuid4().hex
         session.pending_token = token
@@ -163,7 +164,7 @@ class CanvasAssistant:
             messages.append(HumanMessage(content=content))
             reply, skills = await self._reply(
                 client, messages, CanvasAssistantReadContext.model_validate(context) if context else None,
-                edit_draft, supports_tools=capability.tool_calling,
+                edit_draft, supports_tools=capability.tool_calling, structure_tool=structure_tool,
             )
         except HTTPException:
             await self.db.execute(update(CanvasAssistantSession).where(
@@ -208,13 +209,16 @@ class CanvasAssistant:
         groups = proposal.get('groups') if proposal else None
         pending_cards = ({edit['card_id'] for group in groups if group['state'] == 'pending' for edit in group['edits']}
                          if groups else {proposal['card_id']} if proposal else set())
-        if not (proposal and proposal['state'] == 'pending' and edit_draft and pending_cards.intersection(edit_draft.cards)):
+        pending_creation = any(edit['target']['kind'] == 'add_canvas_card' for group in (groups or ())
+                               if group['state'] == 'pending' for edit in group['edits'])
+        if not (proposal and proposal['state'] == 'pending' and edit_draft
+                and (pending_creation or pending_cards.intersection(edit_draft.cards))):
             raise HTTPException(409, 'The assistant proposal can no longer be revised')
         return turn
 
     @staticmethod
     async def _reply(client, messages, context: CanvasAssistantReadContext | None,
-                     edit_draft: CanvasAssistantEditDraft | None, *, supports_tools: bool
+                     edit_draft: CanvasAssistantEditDraft | None, *, supports_tools: bool, structure_tool=None
                      ) -> tuple[str, list[CanvasAssistantSkillUse]]:
         @tool
         def read_canvas_context() -> str:
@@ -228,6 +232,10 @@ class CanvasAssistant:
         if supports_tools:
             tools.extend(skill_tools(used_skills))
             guidance += skill_guidance()
+            if structure_tool:
+                tools.append(structure_tool)
+                guidance += ('只有用户明确要求建卡或用本次附图作为首帧时，才用 propose_canvas_structure。'
+                             '工具仅预览，用户确认后才写入。')
         if edit_draft and edit_draft.available:
             if len(edit_draft.cards) == 1:
                 tools.append(edit_draft.tool())

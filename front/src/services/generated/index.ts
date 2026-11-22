@@ -15,6 +15,11 @@ export type { ActorImageParametersRead } from './models/ActorImageParametersRead
 export type { ActorUpdate } from './models/ActorUpdate';
 export type { ActualCoverage_Input } from './models/ActualCoverage_Input';
 export type { ActualCoverage_Output } from './models/ActualCoverage_Output';
+export type { AddCanvasCardTarget } from './models/AddCanvasCardTarget';
+export type { AddModelCard } from './models/AddModelCard';
+export type { AddMovementCard } from './models/AddMovementCard';
+export type { AddTextCard } from './models/AddTextCard';
+export type { AdoptFirstFrameTarget } from './models/AdoptFirstFrameTarget';
 export type { AdoptReferenceMainRequest } from './models/AdoptReferenceMainRequest';
 export type { AIRequest } from './models/AIRequest';
 export type { AnchorDesignFields } from './models/AnchorDesignFields';

@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AddCanvasCardTarget } from './AddCanvasCardTarget';
+import type { AdoptFirstFrameTarget } from './AdoptFirstFrameTarget';
 import type { MovementFieldEdit } from './MovementFieldEdit';
 import type { VideoPromptSegmentEdit } from './VideoPromptSegmentEdit';
 /**
@@ -10,7 +12,7 @@ import type { VideoPromptSegmentEdit } from './VideoPromptSegmentEdit';
 export type CanvasAssistantChange = {
     card_id: string;
     card_name: string;
-    target: (VideoPromptSegmentEdit | MovementFieldEdit);
+    target: (VideoPromptSegmentEdit | MovementFieldEdit | AddCanvasCardTarget | AdoptFirstFrameTarget);
     before: string;
     after: string;
 };

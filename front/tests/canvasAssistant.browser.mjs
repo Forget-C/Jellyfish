@@ -32,6 +32,7 @@ const provider = createHttpServer(async (request, response) => {
     const result = messages.find(message => message.role === 'tool' && message.tool_call_id === 'context')
     const draft = result && JSON.parse(result.content)
     const requestEdit = turns.at(-1) === '把这张卡的推近放慢'
+    const reference = Array.isArray(turns.at(-1)) && turns.at(-1).find(block => block.text?.startsWith('参考素材 1 '))
     const useSkill = turns.at(-1) === '只从摄影角度看'
     const loaded = messages.some(message => message.role === 'tool' && message.tool_call_id === 'load_canvas_skill')
     const proposed = messages.some(message => message.role === 'tool' && message.tool_call_id === 'proposal')
@@ -60,7 +61,14 @@ const provider = createHttpServer(async (request, response) => {
         ] }),
       } : { name: 'propose_canvas_edit', arguments: JSON.stringify(edit) }
       answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: operation }] }
-    } else if (!requestEdit) {
+    } else if (reference && !proposed) {
+      const file = JSON.parse(reference.text.slice('参考素材 1 '.length))
+      answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: {
+        name: 'propose_canvas_structure', arguments: JSON.stringify({
+          change: { kind: 'adopt_first_frame', card_id: draft.target_card_ids[0], file_id: file.file_id },
+        }),
+      } }] }
+    } else if (!requestEdit && !reference) {
       observed.push(draft)
     }
     response.writeHead(200, { 'Content-Type': 'application/json' })
@@ -88,7 +96,8 @@ const python = process.env.CANVAS_BROWSER_PYTHON
 const backend = spawn(python || 'uv', [...(python ? [] : ['run', '--no-sync', 'python']), '-m', 'tests.generation_canvas_browser_server'], {
   cwd: join(root, '../backend'),
   env: { ...process.env, CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8462',
-    CANVAS_BROWSER_ASSISTANT_PROVIDER: 'http://127.0.0.1:' + provider.address().port },
+    CANVAS_BROWSER_ASSISTANT_PROVIDER: 'http://127.0.0.1:' + provider.address().port,
+    CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media') },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 captureBackend(backend, output)
@@ -192,7 +201,7 @@ try {
     await panel.getByRole('button', { name: '关闭画布助手' }).click()
     await page.locator('[data-card-id="other"]').click()
     await open()
-    await panel.getByTitle('默认模型 · browser-assistant-model · 仅文字对话', { exact: true }).click()
+    await panel.getByTitle('默认模型 · browser-assistant-model · 可读图片与视频静帧', { exact: true }).click()
     await page.locator('.ant-select-item-option').getByText('browser-tool-model · 可读画布', { exact: true }).click()
     await panel.getByTitle('browser-tool-model · 可读画布', { exact: true }).waitFor()
     await panel.getByRole('button', { name: '发送消息' }).click()
@@ -243,6 +252,33 @@ try {
     for (let attempt = 0; attempt < 40 && await storedText() !== original; attempt++) await delay(150)
     assert.equal(await storedText(), original, 'one undo restores the saved field')
     if (canvas.project_id) assert.notEqual((await storedMovement()).movement_path.text, '直线')
+    else {
+      await open()
+      const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAIAAADZF8uwAAAAF0lEQVR4nGP8z0AYMBGhhmFUEQOdgwAAz+ABFyTybdUAAAAASUVORK5CYII=', 'base64')
+      await panel.getByLabel('上传对话参考素材').setInputFiles({ name: '首帧红船.png', mimeType: 'image/png', buffer: png })
+      await panel.getByRole('button', { name: '移除 首帧红船', exact: true }).waitFor()
+      await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('把这张图用作首帧')
+      await panel.getByRole('button', { name: '发送消息' }).click()
+      const structure = panel.getByRole('region', { name: '修改建议' }).last()
+      await structure.getByText('首帧红船', { exact: true }).waitFor()
+      await structure.getByText('首帧', { exact: true }).waitFor()
+      await structure.getByRole('checkbox', { name: '建卡、连线并采用首帧' }).check()
+      await page.screenshot({ path: join(output, 'assistant-first-frame-preview.png') })
+      await structure.getByRole('button', { name: '确认写入', exact: true }).click()
+      await structure.getByText('已写入画布', { exact: true }).waitFor()
+      const inspectGraph = async () => (await (await fetch(url)).json()).data.document
+      const adopted = await inspectGraph()
+      assert.equal(adopted.cards.filter(card => card.type === 'content.image').length, 1)
+      assert.equal(adopted.edges.filter(edge => edge.target_card === target && edge.target_port === 'first_frame').length, 1)
+      assert.equal(adopted.cards.find(card => card.id === target).input_bindings.filter(binding => binding.input_port === 'first_frame').length, 1)
+      await panel.getByRole('button', { name: '关闭画布助手' }).click()
+      await page.getByRole('button', { name: '撤销操作', exact: true }).click()
+      for (let attempt = 0; attempt < 40 && (await inspectGraph()).edges.length; attempt++) await delay(150)
+      const undone = await inspectGraph()
+      assert.equal(undone.cards.filter(card => card.type === 'content.image').length, 0)
+      assert.equal(undone.edges.length, 0)
+      assert.equal(undone.cards.find(card => card.id === target).input_bindings.length, 0)
+    }
   }
   assert.equal(observed.length, 4)
   console.log('Assistant conversation persisted independently on both real canvas entries.')

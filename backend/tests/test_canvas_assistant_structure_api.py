@@ -1,0 +1,158 @@
+"""Verify typed canvas structure previews, approval and video compilation."""
+
+import io
+import json
+
+import httpx
+from PIL import Image
+import pytest
+
+from tests.canvas_urls import append_canvas_path, canvas_url, seed_scene_canvas
+from tests.test_canvas_assistant_edit_api import assistant_edit_model  # pylint: disable=unused-import
+from tests.test_canvas_assistant_media_api import recorded_media_storage  # pylint: disable=unused-import
+from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # pylint: disable=unused-import
+
+
+def mock_structure_reply(monkeypatch, change):
+    """Respond to the assistant against the public supplier tool interface."""
+    original_send = httpx.AsyncClient.send
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original_send(client, request, **kwargs)
+        body = json.loads(request.content)
+        tools = [m['tool_call_id'] for m in body['messages'] if m['role'] == 'tool']
+        call = ('read_canvas_context', {}) if not tools else (
+            ('propose_canvas_structure', {'change': change}) if 'structure' not in tools else None
+        )
+        outcome = next((m['content'] for m in body['messages'] if m.get('tool_call_id') == 'structure'), '')
+        message = {'role': 'assistant', 'content': outcome if '当前画布不允许' in outcome else '事项请确认'}
+        if call:
+            message = {'role': 'assistant', 'tool_calls': [{
+                'id': 'read' if not tools else 'structure', 'type': 'function',
+                'function': {'name': call[0], 'arguments': json.dumps(call[1])},
+            }]}
+        return httpx.Response(200, request=request, json={
+            'id': 'answer', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+            'choices': [{'index': 0, 'finish_reason': 'tool_calls' if call else 'stop', 'message': message}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+
+
+async def send_structure(client, url, canvas, text, *, target=None, files=None):
+    context = {'draft': canvas['document'], 'revision': canvas['revision'], 'scope': 'canvas'}
+    if target:
+        context.update(scope='selection', card_ids=[target])
+    result = await client.post(append_canvas_path(url, '/assistant'), json={
+        'request_id': 'structure', 'text': text, 'context': context, 'attachment_file_ids': files or [],
+    })
+    assert result.status_code == 200, result.text
+    return result.json()['data']
+
+
+async def approve_structure(client, url, canvas, proposal):
+    assert proposal is not None
+    return await client.post(append_canvas_path(url, '/assistant/proposals/structure'), json={
+        'action': 'approve', 'expected_revision': canvas['revision'], 'group_ids': [proposal['groups'][0]['id']],
+    })
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures('assistant_edit_model')
+@pytest.mark.parametrize('target_change', [None, 'removed', 'changed_model', 'replace'])
+async def test_approve_reference_as_first_frame(recorded_media_storage, monkeypatch, target_change):
+    client = recorded_media_storage
+    buffer = io.BytesIO()
+    Image.new('RGB', (12, 12), 'red').save(buffer, 'PNG')
+    uploaded = await client.post('/files/upload', files={'file': ('红船.png', buffer.getvalue(), 'image/png')})
+    assert uploaded.status_code == 201, uploaded.text
+    file_id = uploaded.json()['data']['id']
+    canvas = (await client.post('/canvases', json={'name': '画布'})).json()['data']
+    url = f"/canvases/{canvas['id']}"
+    card = {'id': 'shot', 'type': 'model.video', 'model_id': 'canvas-video', 'config': {'ratio': '16:9', 'seconds': 5}}
+    document = {**canvas['document'], 'cards': [card]}
+    if target_change == 'replace':
+        old_file = await client.post('/files/upload', files={'file': ('旧参考.png', buffer.getvalue(), 'image/png')})
+        assert old_file.status_code == 201, old_file.text
+        document['cards'].append({'id': 'old-image', 'type': 'content.image', 'file_id': old_file.json()['data']['id']})
+        document['edges'] = [{'id': 'old-edge', 'source_card': 'old-image', 'source_port': 'image',
+                              'target_card': 'shot', 'target_port': 'first_frame'}]
+        document['input_order'] = {'shot': {'first_frame': ['old-edge']}}
+        card['input_bindings'] = [{'id': 'old-binding', 'input_port': 'first_frame',
+                                   'source': {'canvas_id': canvas['id'], 'card_id': 'old-image',
+                                              'port_id': 'image', 'position': 0}}]
+        card['prompt'] = {'segments': [{'id': 'old-instruction', 'kind': 'instruction', 'command': '首帧参考',
+                                      'references': [{'id': 'old-ref', 'kind': 'reference', 'binding_id': 'old-binding'}]}]}
+    saved = await client.put(url, json={
+        'request_id': 'setup', 'expected_revision': canvas['revision'], 'document': document,
+    })
+    assert saved.status_code == 200, saved.text
+    canvas = (await client.get(url)).json()['data']
+    replace = target_change == 'replace'
+    kind = 'replace_first_frame' if replace else 'adopt_first_frame'
+    mock_structure_reply(monkeypatch, {'kind': kind, 'card_id': 'shot', 'file_id': file_id})
+    exchange = await send_structure(client, url, canvas, '换首帧参考' if replace else '把这张图用作首帧',
+                                    target='shot', files=[file_id])
+    group = exchange['proposal']['groups'][0]
+    assert '首帧' in group['title']
+    assert file_id in json.dumps(group)
+    assert (await client.get(url)).json()['data']['document'] == canvas['document']
+    if replace:
+        assert group['edits'][0]['before'] == 'old-image'
+    if target_change in ('removed', 'changed_model'):
+        latest = {**canvas['document'], 'cards': [] if target_change == 'removed' else [{**card, 'model_id': None}]}
+        changed = await client.put(url, json={
+            'request_id': 'changed', 'expected_revision': canvas['revision'], 'document': latest,
+        })
+        assert changed.status_code == 200, changed.text
+        before = (await client.get(url)).json()['data']
+    approved = await approve_structure(client, url, canvas, exchange['proposal'])
+    assert approved.status_code == 200, approved.text
+    if target_change in ('removed', 'changed_model'):
+        assert approved.json()['data']['conflicts'][0]['card_id'] == 'shot'
+        assert (await client.get(url)).json()['data'] == before
+        return
+    saved = approved.json()['data']['canvas']
+    source = next(card for card in saved['document']['cards'] if card['type'] == 'content.image' and card['id'] != 'old-image')
+    assert source['file_id'] == file_id
+    assert any(edge['source_card'] == source['id'] and edge['target_card'] == 'shot'
+               and edge['target_port'] == 'first_frame' for edge in saved['document']['edges'])
+    precheck = await client.post(url + '/precheck', json={'card_id': 'shot'})
+    assert precheck.status_code == 200, precheck.text
+    assert precheck.json()['data']['input']['video_media']['frames']['first']['file_id'] == file_id
+    if replace:
+        assert any(card['id'] == 'old-image' for card in saved['document']['cards'])
+        assert any(edge['id'] == 'old-edge' for edge in saved['document']['edges'])
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures('assistant_edit_model')
+@pytest.mark.parametrize('scene,change,expected', [
+    (False, {'kind': 'add_text_card', 'text': '红船'}, 'content.text'),
+    (False, {'kind': 'add_model_card', 'modality': 'image', 'prompt': '安静湖面'}, 'model.image'),
+    (False, {'kind': 'add_movement_card', 'movement_speed': '慢推'}, None),
+    (True, {'kind': 'add_movement_card', 'movement_speed': '慢推'}, 'direction.movement'),
+])
+async def test_catalog_limits_assistant_card_creation(canvas_client, monkeypatch, scene, change, expected):
+    if scene:
+        canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '分镜画布'})).json()['data']
+        url = canvas_url(f"/canvases/p/{canvas['id']}")
+    else:
+        canvas = (await canvas_client.post('/canvases', json={'name': '自由画布'})).json()['data']
+        url = f"/canvases/{canvas['id']}"
+    mock_structure_reply(monkeypatch, change)
+    exchange = await send_structure(canvas_client, url, canvas, '请新建这张卡')
+    assert (await canvas_client.get(url)).json()['data']['document'] == canvas['document']
+    proposal = exchange['proposal']
+    if expected is None:
+        assert proposal is None
+        assert exchange['reply'] == '当前画布不允许创建 运镜卡'
+        return
+    approval = await approve_structure(canvas_client, url, canvas, proposal)
+    assert approval.status_code == 200, approval.text
+    current = (await canvas_client.get(url)).json()['data']
+    created = next(card for card in current['document']['cards'] if card['id'] == proposal['card_id'])
+    assert created['type'] == expected
+    if scene:
+        assert created['fields']['movement_speed']['text'] == '慢推'
