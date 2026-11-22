@@ -25,8 +25,8 @@ import { resultScopeIncludes } from './resultConnections'
 import { referenceLabels } from './referenceLabels'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { activeNode, canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
-import { PromptEditingContext } from './PromptEditingContext'
-import { useContext, useEffect, useId, useRef, useState } from 'react'
+import { PromptDraftContext, PromptEditingContext } from './PromptEditingContext'
+import { useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CardComposer } from './CardComposer'
 import { availableDefaultModel, defaultVideoRatio } from './modelCardDefaults'
@@ -51,6 +51,12 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const editingKey = card.id + ':' + promptSession
   const editingPrompt = !!promptDraft
   const reportEditing = useContext(PromptEditingContext)
+  const reportDraft = useContext(PromptDraftContext)
+  useLayoutEffect(() => {
+    if (!promptDraft) return
+    reportDraft(editingKey, () => withEditorPrompt(card, promptEditor.current?.readVisible() ?? promptDraft))
+    return () => reportDraft(editingKey)
+  }, [card, editingKey, promptDraft, reportDraft])
   useEffect(() => {
     reportEditing(editingKey, editingPrompt)
     return () => reportEditing(editingKey, false)

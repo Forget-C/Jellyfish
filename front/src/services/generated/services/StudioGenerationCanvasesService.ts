@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { ApiResponse_CanvasAssistantExchange_ } from '../models/ApiResponse_CanvasAssistantExchange_';
 import type { ApiResponse_CanvasAssistantHistory_ } from '../models/ApiResponse_CanvasAssistantHistory_';
+import type { ApiResponse_CanvasAssistantModelSelection_ } from '../models/ApiResponse_CanvasAssistantModelSelection_';
 import type { ApiResponse_CanvasCardOutputs_ } from '../models/ApiResponse_CanvasCardOutputs_';
 import type { ApiResponse_CanvasCatalog_ } from '../models/ApiResponse_CanvasCatalog_';
 import type { ApiResponse_CanvasCheckPreview_ } from '../models/ApiResponse_CanvasCheckPreview_';
@@ -25,6 +26,7 @@ import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_CanvasSummary__ } from '../models/ApiResponse_PaginatedData_CanvasSummary__';
 import type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from '../models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
 import type { CanvasAssistantMessage } from '../models/CanvasAssistantMessage';
+import type { CanvasAssistantModelSelection } from '../models/CanvasAssistantModelSelection';
 import type { CanvasCheckRecheckRequest } from '../models/CanvasCheckRecheckRequest';
 import type { CanvasCheckRequest } from '../models/CanvasCheckRequest';
 import type { CanvasCreate } from '../models/CanvasCreate';
@@ -298,6 +300,37 @@ export class StudioGenerationCanvasesService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant',
+            path: {
+                'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Set Assistant Model
+     * Set the assistant model for this canvas independently of card generation.
+     * @returns ApiResponse_CanvasAssistantModelSelection_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantSetModel({
+        canvasId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        requestBody: CanvasAssistantModelSelection,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantModelSelection_> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/model',
             path: {
                 'canvas_id': canvasId,
             },

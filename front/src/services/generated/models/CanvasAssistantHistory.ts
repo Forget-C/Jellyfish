@@ -8,4 +8,5 @@ import type { CanvasAssistantExchange } from './CanvasAssistantExchange';
  */
 export type CanvasAssistantHistory = {
     turns: Array<CanvasAssistantExchange>;
+    model_id?: (string | null);
 };

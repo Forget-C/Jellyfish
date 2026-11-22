@@ -7,13 +7,14 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { chromium } from 'playwright'
 import { createServer as createViteServer } from 'vite'
 import { browserCleanup, browserOutput, captureBackend } from './browser-runtime.mjs'
-import { createStoryboardCanvas, storyboardCanvasPath } from './storyboard-canvas-fixture.mjs'
+import { createStoryboardCanvas, storyboardCanvasApi, storyboardCanvasPath } from './storyboard-canvas-fixture.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-canvas-assistant-')
 const api = 'http://127.0.0.1:8462'
 const canvasApi = api + '/api/v1/studio/generation-canvases'
 const prompts = []
+const observed = []
 let acceptSlowReply
 let slowReplyArrived
 const slowReplyStarted = new Promise(resolve => { slowReplyArrived = resolve })
@@ -22,9 +23,23 @@ const provider = createHttpServer(async (request, response) => {
   const chunks = []
   for await (const chunk of request) chunks.push(chunk)
   const { model, messages, tools } = JSON.parse(Buffer.concat(chunks).toString())
+  const turns = messages.filter(message => message.role === 'user').map(message => message.content)
+  if (model === 'browser-tool-model') {
+    assert.deepEqual(tools.map(tool => tool.function.name), ['read_canvas_context'])
+    const result = messages.find(message => message.role === 'tool')
+    const answer = result
+      ? { role: 'assistant', content: '找到原先的草稿' }
+      : { role: 'assistant', tool_calls: [{ id: 'context', type: 'function', function: { name: 'read_canvas_context', arguments: '{}' } }] }
+    if (result) observed.push(JSON.parse(result.content))
+    response.writeHead(200, { 'Content-Type': 'application/json' })
+    response.end(JSON.stringify({
+      id: 'test-reply', object: 'chat.completion', created: 1, model,
+      choices: [{ index: 0, finish_reason: result ? 'stop' : 'tool_calls', message: answer }],
+    }))
+    return
+  }
   assert.equal(model, 'browser-assistant-model')
   assert.equal(tools, undefined)
-  const turns = messages.filter(message => message.role === 'user').map(message => message.content)
   prompts.push(turns)
   if (turns.at(-1) === '自由二') {
     slowReplyArrived()
@@ -110,6 +125,52 @@ try {
   const narrow = await panel.boundingBox()
   assert.ok(narrow && narrow.x >= 0 && narrow.x + narrow.width <= 375, 'assistant fits the narrow viewport')
   await page.screenshot({ path: join(output, 'assistant-narrow.png') })
+  await page.setViewportSize({ width: 1440, height: 960 })
+
+  for (const canvas of [free, scene]) {
+    const url = canvas.project_id ? storyboardCanvasApi(canvasApi, canvas.id) : canvasApi + '/' + canvas.id
+    const saved = (await (await fetch(url)).json()).data
+    const card = (id, text, generated = false) => ({
+      id, type: 'model.video', model_id: 'original-video-generator',
+      prompt: { segments: [{ id: 'text', kind: 'text', text }] }, config: { ratio: '16:9' },
+      ...(generated ? { generated_prompt: { version: 1, designs: [], edit_confirmed: true } } : {}),
+    })
+    const document = { ...saved.document, cards: [...(saved.document.cards || []),
+      card('target', '已保存正文', true), card('other', '另一个同名模型卡')] }
+    const seeded = await fetch(url, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_id: 'scope-fixture', expected_revision: saved.revision, document }),
+    })
+    assert.ok(seeded.ok, await seeded.clone().text())
+    await page.goto(base + (canvas.project_id ? storyboardCanvasPath(canvas) : '/canvases/' + canvas.id))
+    await page.locator('[data-card-id="target"]').click()
+    await page.getByRole('button', { name: '编辑提示词', exact: true }).click()
+    const draft = page.getByRole('textbox', { name: '模型正文', exact: true })
+    await draft.fill('只在本地编辑器看到')
+    assert.equal(await draft.textContent(), '只在本地编辑器看到')
+    await open()
+    assert.equal(await draft.textContent(), '只在本地编辑器看到')
+    await panel.getByText('分析所选卡片', { exact: true }).waitFor()
+    await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('分析原卡片')
+    await panel.getByRole('button', { name: '发送消息' }).click()
+    await panel.getByText(/当前模型无法调用画布工具/).waitFor()
+    await page.getByRole('button', { name: '取消编辑', exact: true }).click()
+    await page.locator('[data-card-id="other"]').click()
+    await panel.getByText('默认模型 · browser-assistant-model · 仅文字对话', { exact: true }).click()
+    await page.locator('.ant-select-item-option').getByText('browser-tool-model · 可读画布', { exact: true }).click()
+    await panel.getByText('browser-tool-model · 可读画布', { exact: true }).waitFor()
+    await panel.getByRole('button', { name: '发送消息' }).click()
+    await panel.getByText('找到原先的草稿').waitFor()
+    assert.deepEqual(observed.at(-1).target_card_ids, ['target'])
+    assert.equal(observed.at(-1).cards[0].prompt.segments[0].text, '只在本地编辑器看到')
+    const after = (await (await fetch(url)).json()).data
+    assert.equal(after.document.cards.find(item => item.id === 'target').prompt.segments[0].text, '已保存正文')
+    assert.equal(after.document.cards.find(item => item.id === 'target').model_id, 'original-video-generator')
+    await page.reload()
+    await open()
+    await panel.getByText('browser-tool-model · 可读画布', { exact: true }).waitFor()
+  }
+  assert.equal(observed.length, 2)
   console.log('Assistant conversation persisted independently on both real canvas entries.')
 } finally {
   acceptSlowReply()
