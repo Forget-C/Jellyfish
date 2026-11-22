@@ -58,6 +58,7 @@
 - [分镜生成前拍摄准备的归属与固定采用（历史决策）](adr/0012-pre-generation-shooting-preparation.md)
 - [拍摄解释按章节原文版本维护](adr/0013-chapter-shooting-explanations.md)
 - [退役旧场次版本 HTTP 接口](adr/0014-retire-scene-version-api.md)
+- [自由画布与分镜画布共用 Deep Agents 助手](adr/0015-canvas-assistant-harness.md)
 
 ## 开发与维护指南
 
