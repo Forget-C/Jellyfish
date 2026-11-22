@@ -211,6 +211,29 @@ try {
   await search.fill('验收文本模型')
   await page.getByRole('button', { name: '用户与语言设置' }).click()
   await page.getByRole('menuitem', { name: 'English', exact: true }).click()
+  await page.getByRole('tab', { name: 'Model', exact: true }).waitFor()
+  for (const width of [1440, 1024, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    const layout = await page.getByRole('tablist').evaluate(async nav => {
+      const heading = nav.closest('.management-heading')
+      const title = heading.querySelector('h1')
+      const table = document.querySelector('.management-table')
+      let previous, stableFrames = 0
+      for (let frame = 0; frame < 60 && stableFrames < 12; frame++) {
+        await new Promise(requestAnimationFrame)
+        const sample = [nav.getBoundingClientRect().width, table.getBoundingClientRect().top].join(',')
+        stableFrames = sample === previous ? stableFrames + 1 : 0
+        previous = sample
+      }
+      const tabs = nav.getBoundingClientRect(), label = title.getBoundingClientRect()
+      return { stableFrames, belowTitle: tabs.top >= label.bottom, besideTitle: tabs.left >= label.right && tabs.top < label.bottom,
+        fillsRow: Math.abs(tabs.left - label.left) < 1 && Math.abs(tabs.right - heading.getBoundingClientRect().right
+          + parseFloat(getComputedStyle(heading).paddingRight)) < 1 }
+    })
+    assert.equal(layout.stableFrames, 12, `英文页签和表格在 ${width}px 下应连续 12 帧保持稳定`)
+    assert.ok(width === 390 ? layout.belowTitle && layout.fillsRow : layout.besideTitle, JSON.stringify(layout))
+  }
+  await page.setViewportSize({ width: 1440, height: 900 })
   await modelRow.getByRole('button', { name: `Edit ${model.name}`, exact: true }).press('Enter')
   const edit = page.getByRole('dialog', { name: 'Edit model' })
   const description = edit.getByRole('textbox', { name: 'Description', exact: true })
