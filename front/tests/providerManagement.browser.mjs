@@ -41,6 +41,12 @@ try {
     const { pathname, searchParams } = new URL(route.request().url())
     const method = route.request().method()
     const respond = data => route.fulfill({ json: { code: 200, data } })
+    if (pathname.endsWith('/providers') && method === 'POST') {
+      const body = route.request().postDataJSON()
+      assert.equal(body.name, '生产')
+      assert.equal(body.provider_key, 'vidu')
+      return respond({ ...provider, ...body })
+    }
     if (pathname.endsWith('/providers')) {
       lastSearch = searchParams.get('q') ?? ''
       if (listFails) return route.fulfill({ status: 500, json: { message: '读取失败' } })
@@ -92,6 +98,11 @@ try {
   await page.getByRole('columnheader', { name: '凭据配置状态' }).waitFor()
   await create.click()
   const add = page.getByRole('dialog', { name: '添加供应商' })
+  await add.getByRole('button', { name: '返回' }).waitFor()
+  await add.screenshot({ path: output + '/provider-create-desktop.png', animations: 'disabled' })
+  const desktopBox = await add.boundingBox()
+  assert.equal(desktopBox.width, 720)
+  assert.equal(desktopBox.x + desktopBox.width, 1440)
   const preset = add.getByRole('combobox', { name: '供应商', exact: true })
   await preset.press('ArrowDown')
   await page.getByText('OpenAI', { exact: true }).filter({ visible: true }).last().click()
@@ -100,6 +111,10 @@ try {
   await configName.fill('生产')
   const keyInput = add.getByLabel(/^API Key/)
   await page.setViewportSize({ width: 375, height: 812 })
+  await page.waitForFunction(() => document.querySelector('#provider-create-drawer')?.getBoundingClientRect().width === 375)
+  await add.screenshot({ path: output + '/provider-create-narrow.png', animations: 'disabled' })
+  assert.equal(await add.evaluate(el => el.scrollWidth <= el.clientWidth), true)
+  assert.ok((await preset.boundingBox()).y > (await configName.boundingBox()).y)
   for (const [name, hints] of [['API Key', ['调用时必需', '请勿分享密钥']], ['API Secret', ['调用时必需']]]) {
     const label = add.locator('label').filter({ hasText: name })
     const labelBox = await label.boundingBox()
@@ -123,7 +138,13 @@ try {
   assert.equal(await configName.inputValue(), '生产')
   assert.equal(await keyInput.inputValue(), '')
   assert.equal(await add.getByLabel('文本/通用 Base URL').inputValue(), 'https://two.example/v1')
-  await add.getByRole('button', { name: /取\s*消/ }).click()
+  await add.getByRole('button', { name: '返回' }).click()
+  await page.getByRole('dialog').filter({ hasText: '有未保存的修改' }).getByRole('button', { name: /取\s*消/ }).click()
+  await Promise.all([
+    page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/providers')),
+    add.getByRole('button', { name: /创\s*建/ }).click(),
+  ])
+  await add.waitFor({ state: 'hidden' })
   const name = page.getByRole('button', { name: provider.name, exact: true })
   await name.focus()
   await page.keyboard.press('Enter')

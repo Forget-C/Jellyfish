@@ -53,7 +53,7 @@ export function ProjectCreateDrawer({ styleOptions, onClose }: {
 
   if (createdId) return <Navigate to={`/projects/${createdId}`} />
   return (
-    <ResourceEditorFrame id="project-create-drawer" className="project-create-drawer" open drawer drawerWidth={720}
+    <ResourceEditorFrame id="project-create-drawer" className="settings-create-drawer" open drawer drawerWidth={720}
       title={uiText("新建短剧项目")} backLabel={uiText("返回")} onClose={() => { if (!pending.current) onClose() }}
       actions={<Button type="primary" htmlType="submit" form="project-create-form" loading={saving}>{uiText("创建并进入")}</Button>}>
       <Form id="project-create-form" className="app-settings-form project-settings-form" form={form}

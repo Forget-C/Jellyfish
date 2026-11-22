@@ -11,6 +11,7 @@
   "输入模型名称": "Enter a model name",
   "调用类型": "Request type",
   "选择调用类型": "Select a request type",
+  "访问凭据": "Access credentials",
   "调用地址": "Endpoint",
   "测试文本": "Test prompt",
   "本次测试会向供应商发起真实调用，可能产生费用。": "This test sends a real request to the provider and may incur charges.",
