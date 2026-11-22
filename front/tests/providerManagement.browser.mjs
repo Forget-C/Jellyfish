@@ -23,6 +23,7 @@ let browser
 let listFails = false
 let saveFails = true
 let credentialsReads = 0
+let catalogFails = false
 let paidCalls = 0
 let releaseSubmission
 let deleteRequests = 0
@@ -69,6 +70,7 @@ try {
       await new Promise(resolve => { releaseSubmission = resolve })
       return respond({ outcome: 'success', http_status: 200 })
     }
+    if (pathname.endsWith('/catalog') && catalogFails) return route.fulfill({ status: 503, json: {} })
     if (pathname.endsWith('/catalog')) return respond({ models: [{ name: 'remote-model', category: 'text' }] })
     if (pathname.endsWith('/models')) return respond({ items: [], pagination: { total: 2 } })
     if (pathname.endsWith('/supported')) return respond([
@@ -142,36 +144,63 @@ try {
   const startTest = probe.getByRole('button', { name: /^测\s*试$/ })
   const feeNotice = '本次测试会向供应商发起真实调用，可能产生费用。'
   const feeConfirm = page.getByRole('dialog', { name: '确认付费测试？' })
+  assert.equal(await probe.evaluate(el => !!el.closest('.ant-popover')), true)
+  assert.equal(await probe.getByRole('combobox').count(), 1)
+  assert.equal(await page.locator('.ant-popover-title:visible').count(), 0)
+  const info = probe.getByRole('button', { name: '调用详情' })
+  await info.hover()
+  await page.getByRole('tooltip').filter({ hasText: provider.base_url }).last().waitFor()
+  assert.equal(await model.evaluate(el => getComputedStyle(el).fontSize), '12px')
+  assert.ok((await probe.boundingBox()).width <= 280)
   assert.equal(await startTest.isDisabled(), true)
   assert.equal(await probe.getByText(feeNotice).count(), 0)
   await model.click()
   await page.getByText('remote-model', { exact: true }).last().click()
   await model.fill('manual')
   await model.press('Tab')
+  await page.locator('.ant-popover').filter({ has: probe }).screenshot({ path: output + '/provider-test-desktop.png', animations: 'disabled' })
   assert.equal(paidCalls, 0)
   await page.setViewportSize({ width: 390, height: 844 })
+  await probe.and(page.locator('.ant-modal')).waitFor()
+  const mobileDialog = await probe.elementHandle()
   await startTest.focus()
   await startTest.press('Enter')
   await feeConfirm.getByText(feeNotice).waitFor()
+  assert.equal(await feeConfirm.evaluate((el, previous) => el === previous, mobileDialog), true)
+  await feeConfirm.getByText(provider.name, { exact: true }).waitFor()
+  await feeConfirm.getByText('manual', { exact: true }).waitFor()
   assert.equal(await feeConfirm.evaluate(el => el.scrollWidth <= el.clientWidth), true)
+  await feeConfirm.screenshot({ path: output + '/provider-test-confirm-mobile.png', animations: 'disabled' })
   assert.equal(paidCalls, 0)
   await page.keyboard.press('Escape')
   await feeConfirm.waitFor({ state: 'hidden' })
   assert.equal(await model.inputValue(), 'manual')
   assert.equal(await probe.evaluate(el => el.scrollWidth <= el.clientWidth), true)
   await page.setViewportSize({ width: 1440, height: 900 })
+  await page.locator('.ant-popover').getByRole('dialog', { name: '测试调用' }).waitFor()
+  const desktopPanel = await probe.elementHandle()
+  await startTest.click()
+  assert.equal(await feeConfirm.evaluate((el, previous) => el === previous, desktopPanel), true)
+  await feeConfirm.getByRole('button', { name: /返\s*回/ }).click()
+  assert.equal(await model.inputValue(), 'manual')
+  assert.equal(paidCalls, 0)
   const submitting = page.waitForRequest(request => request.url().endsWith('/test-call'))
   await startTest.click()
   await feeConfirm.getByRole('button', { name: '确认测试' }).click()
   await submitting
   assert.equal(await probe.getByRole('button', { name: /关\s*闭/ }).isDisabled(), true)
+  await page.getByRole('columnheader', { name: '凭据配置状态' }).click()
+  assert.equal(await probe.isVisible(), true)
   await page.keyboard.press('Escape')
   assert.equal(await probe.isVisible(), true)
   assert.equal(typeof releaseSubmission, 'function')
   releaseSubmission()
-  await probe.getByText('调用成功，已收到有效输出。').waitFor()
+  const successIcon = probe.getByRole('button', { name: /调用成功，已收到有效输出/ })
+  await successIcon.focus()
+  await page.getByRole('tooltip').filter({ hasText: 'HTTP 200' }).last().waitFor()
   assert.equal(paidCalls, 1)
   await probe.getByRole('button', { name: /关\s*闭/ }).click()
+  await page.setViewportSize({ width: 390, height: 844 })
   await testButton.click()
   assert.equal(await model.inputValue(), '')
   await model.fill('manual')
@@ -180,6 +209,32 @@ try {
   await probe.getByText('请先为此配置填写 API Key').waitFor()
   await probe.getByRole('button', { name: /关\s*闭/ }).click()
 
+  await page.setViewportSize({ width: 1440, height: 900 })
+  catalogFails = true
+  await testButton.click()
+  const listHint = probe.getByText('列表不可用，请手填', { exact: true })
+  await listHint.waitFor()
+  await model.fill('manual')
+  await page.locator('.ant-popover').filter({ has: probe }).screenshot({ path: output + '/provider-test-catalog-failed.png', animations: 'disabled' })
+  const hintLayout = await listHint.evaluate(el => {
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    const dialog = el.closest('[role="dialog"]')
+    const closeButton = [...dialog.querySelectorAll('button')].find(button => button.textContent.replace(/\s/g, '') === '关闭')
+    const end = closeButton.getBoundingClientRect().left
+    const text = range.getBoundingClientRect()
+    const canvas = document.createElement('canvas').getContext('2d')
+    canvas.font = getComputedStyle(el).font
+    return { lines: range.getClientRects().length, width: text.width, space: end - text.left,
+      fullWidth: canvas.measureText(el.title).width, panelWidth: dialog.closest('.ant-popover').offsetWidth }
+  })
+  console.log('模型目录提示布局', hintLayout)
+  assert.equal(hintLayout.panelWidth, 280)
+  assert.equal(hintLayout.lines, 1)
+  assert.ok(hintLayout.width > 0 && hintLayout.width < hintLayout.space)
+  await probe.getByRole('button', { name: /关\s*闭/ }).click()
+
+  await page.setViewportSize({ width: 1440, height: 900 })
   await page.getByRole('button', { name: `编辑 ${provider.name}`, exact: true }).click()
   const edit = page.getByRole('dialog', { name: '编辑供应商' })
   const description = edit.getByRole('textbox', { name: '描述', exact: true })

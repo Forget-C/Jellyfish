@@ -9,6 +9,7 @@ import {
   Dropdown,
   Empty,
   Form,
+  Grid,
   Input,
   Modal,
   Select,
@@ -28,7 +29,7 @@ import { ApiError } from '../../../services/generated'
 import type { ProviderRead, ProviderSupportedRead } from '../../../services/generated'
 import { PROVIDER_STATUS_MAP, SORT_OPTIONS, maskUrl } from './constants'
 
-import { ProviderTestModal } from './ProviderTestModal'
+import { ProviderTestPanel } from './ProviderTestPanel'
 
 const PAGE_SIZE = 20
 
@@ -55,7 +56,9 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
   const [page, setPage] = useState(1)
   const [supportedSpecs, setSupportedSpecs] = useState<ProviderSupportedRead[]>([])
   const [supportedLoading, setSupportedLoading] = useState(true)
-  const [testing, setTesting] = useState<{ provider: ProviderRead; spec: ProviderSupportedRead } | null>(null)
+  const desktopTest = !!Grid.useBreakpoint().md
+  const [testing, setTesting] = useState<string | null>(null)
+  const [testSubmitting, setTestSubmitting] = useState(false)
   const [selectedProvider, setSelectedProvider] = useState<ProviderRead | null>(null)
   const [detailPanelOpen, setDetailPanelOpen] = useState(false)
   const detailTrigger = useRef<HTMLElement | null>(null)
@@ -330,7 +333,12 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
           <Button type="text" size="small" aria-label={uiText("编辑 {{name}}", { name: record.name })} onClick={() => void openProviderModal(record)}>{uiText("编辑")}</Button>
           {reason ? <Tooltip title={uiText(reason)} trigger={['hover', 'focus', 'click']}>
             <span tabIndex={0} aria-label={uiText(reason)}><Button disabled type="text" size="small">{uiText('测试调用')}</Button></span>
-          </Tooltip> : <Button type="text" size="small" onClick={() => spec && setTesting({ provider: record, spec })}>{uiText('测试调用')}</Button>}
+          </Tooltip> : testing === record.id && spec ? <ProviderTestPanel provider={record} spec={spec} endpointLabel={endpointLabel}
+            desktop={desktopTest} busy={testSubmitting} onSubmitting={setTestSubmitting} onClose={restoreFocus => {
+              setTesting(null)
+              if (restoreFocus) requestAnimationFrame(() => document.getElementById(`provider-test-${record.id}`)?.focus())
+            }} /> : <Button id={`provider-test-${record.id}`} type="text" size="small" aria-haspopup="dialog" disabled={testSubmitting}
+              onClick={() => setTesting(record.id)}>{uiText('测试调用')}</Button>}
           <Dropdown trigger={['click']} menu={{ items: [{
             key: 'delete', label: uiText("删除"), danger: true, icon: <DeleteOutlined />,
             disabled: confirmingDelete,
@@ -346,7 +354,6 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
   return (
     <>
       {header}
-      {testing && <ProviderTestModal {...testing} endpointLabel={endpointLabel} onClose={() => setTesting(null)} />}
       <PageToolbar className="management-toolbar">
         <div className="management-tools">
           <Input
