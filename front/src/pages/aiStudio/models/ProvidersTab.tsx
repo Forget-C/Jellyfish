@@ -4,8 +4,6 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Alert,
   Button,
-  Descriptions,
-  Drawer,
   Dropdown,
   Empty,
   Form,
@@ -62,13 +60,11 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
   const desktopTest = !!Grid.useBreakpoint().md
   const [testing, setTesting] = useState<string | null>(null)
   const [testSubmitting, setTestSubmitting] = useState(false)
-  const [selectedProvider, setSelectedProvider] = useState<ProviderRead | null>(null)
-  const [detailPanelOpen, setDetailPanelOpen] = useState(false)
-  const detailTrigger = useRef<HTMLElement | null>(null)
-  const [providerModalOpen, setProviderModalOpen] = useState(false)
+  const [providerEditorOpen, setProviderEditorOpen] = useState(false)
   const [providerEditing, setProviderEditing] = useState<ProviderRead | null>(null)
   const [credentialsLoading, setCredentialsLoading] = useState(false)
   const credentialsRequest = useRef<ReturnType<typeof LlmService.getProviderCredentialsApiV1LlmProvidersProviderIdCredentialsGet> | null>(null)
+  const initialFields = useRef<Record<string, string | null | undefined>>({})
   const advanced = useRef<HTMLDetailsElement>(null)
   const [saving, setSaving] = useState(false)
   const saveInFlight = useRef(false)
@@ -159,11 +155,12 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
     } else apply()
   }
 
-  const closeProviderModal = () => {
+  const closeProviderEditor = () => {
     credentialsRequest.current?.cancel()
     credentialsRequest.current = null
     setCredentialsLoading(false)
-    setProviderModalOpen(false)
+    initialFields.current = {}
+    setProviderEditorOpen(false)
     setProviderEditing(null)
     form.resetFields()
   }
@@ -204,7 +201,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         })
         message.success(uiText("供应商已添加"))
       }
-      closeProviderModal()
+      closeProviderEditor()
       reload()
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
@@ -261,13 +258,14 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
     }
   }
 
-  /** 真实凭据仅通过原编辑流程读取，列表和只读详情不请求凭据。 */
-  const openProviderModal = async (provider?: ProviderRead) => {
+  /** 真实凭据仅通过原编辑流程读取，列表不请求凭据。 */
+  const openProviderEditor = async (provider?: ProviderRead) => {
     setProviderEditing(provider ?? null)
     form.resetFields()
-    setProviderModalOpen(true)
+    setProviderEditorOpen(true)
+    initialFields.current = { status: 'active' }
     if (!provider) return
-    form.setFieldsValue({
+    initialFields.current = {
       provider_key: provider.provider_key,
       name: provider.name,
       base_url: provider.base_url,
@@ -275,14 +273,17 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
       video_base_url: provider.video_base_url,
       description: provider.description,
       status: provider.status ?? 'active',
-    })
+    }
+    form.setFieldsValue(initialFields.current)
     setCredentialsLoading(true)
     const request = LlmService.getProviderCredentialsApiV1LlmProvidersProviderIdCredentialsGet({ providerId: provider.id })
     credentialsRequest.current = request
     try {
       const response = await request
       if (credentialsRequest.current === request) {
-        form.setFieldsValue({ api_key: response.data?.api_key ?? '', api_secret: response.data?.api_secret ?? '' })
+        const credentials = { api_key: response.data?.api_key ?? '', api_secret: response.data?.api_secret ?? '' }
+        Object.assign(initialFields.current, credentials)
+        form.setFieldsValue(credentials)
       }
     } catch {
       if (credentialsRequest.current === request) message.error(uiText("加载供应商密钥失败，可留空或重新填写后保存"))
@@ -303,11 +304,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
     {
       title: uiText("名称"), dataIndex: 'name', key: 'name', width: 180,
       render: (name: string, record) => (
-        <Button type="link" className="management-name" title={name} onClick={event => {
-          detailTrigger.current = event.currentTarget
-          setSelectedProvider(record)
-          setDetailPanelOpen(true)
-        }}>{name}</Button>
+        <Button type="link" className="management-name" title={name} aria-haspopup="dialog" onClick={() => void openProviderEditor(record)}>{name}</Button>
       ),
     },
     { title: uiText("供应商"), dataIndex: 'provider_key', render: (key: string) => supportedSpecs.find(spec => spec.key === key)?.display_name ?? key },
@@ -332,7 +329,6 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         const reason = record.status === 'disabled' ? '供应商配置已禁用'
           : !Object.keys(spec?.test_prompts ?? {}).length ? '该供应商暂不支持测试调用' : ''
         return <Space size={4}>
-          <Button type="text" size="small" aria-label={uiText("编辑 {{name}}", { name: record.name })} onClick={() => void openProviderModal(record)}>{uiText("编辑")}</Button>
           {reason ? <Tooltip title={uiText(reason)} trigger={['hover', 'focus', 'click']}>
             <span tabIndex={0} aria-label={uiText(reason)}><Button disabled type="text" size="small">{uiText('测试调用')}</Button></span>
           </Tooltip> : testing === record.id && spec ? <ProviderTestPanel provider={record} spec={spec} endpointLabel={endpointLabel}
@@ -467,7 +463,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
             {result.total === undefined ? uiText("已加载 {{length}} 个供应商", { length: result.providers.length }) : uiText("共 {{total}} 个供应商", { total: result.total })}
           </span>}
         </div>
-        <Button className="management-primary" type="primary" icon={<PlusOutlined />} onClick={() => void openProviderModal()}>
+        <Button className="management-primary" type="primary" icon={<PlusOutlined />} onClick={() => void openProviderEditor()}>
           {uiText("添加供应商")}
         </Button>
       </PageToolbar>
@@ -495,7 +491,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
                 <Empty description={search.trim() ? uiText("无匹配结果") : uiText("暂无供应商")}>
                   {search.trim()
                     ? <Button onClick={() => changeSearch('')}>{uiText("清除搜索")}</Button>
-                    : <Button onClick={() => void openProviderModal()}>{uiText("添加第一个供应商")}</Button>}
+                    : <Button onClick={() => void openProviderEditor()}>{uiText("添加第一个供应商")}</Button>}
                 </Empty>
               ),
             }}
@@ -504,44 +500,21 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         </div>}
       </WorkspaceScrollPanel>
 
-      <Drawer
-        className="app-detail-drawer"
-        title={uiText("供应商详情")}
-        aria-label={uiText("供应商详情")}
-        open={detailPanelOpen}
-        placement="right"
-        width="min(100vw, 420px)"
-        onClose={() => setDetailPanelOpen(false)}
-        afterOpenChange={open => {
-          if (!open) {
-            setSelectedProvider(null)
-            requestAnimationFrame(() => detailTrigger.current?.focus({ preventScroll: true }))
-          }
-        }}
-      >
-        {selectedProvider && <Descriptions className="management-details" column={1} layout="vertical" size="small" items={[
-          { key: 'name', label: uiText("名称"), children: selectedProvider.name },
-          { key: 'url', label: uiText("文本/通用 Base URL"), children: endpointLabel(selectedProvider.base_url) },
-          { key: 'image', label: uiText("图片 Base URL"), children: selectedProvider.image_base_url ? endpointLabel(selectedProvider.image_base_url) : uiText("回退到文本/通用") },
-          { key: 'video', label: uiText("视频 Base URL"), children: selectedProvider.video_base_url ? endpointLabel(selectedProvider.video_base_url) : uiText("回退到文本/通用") },
-          { key: 'credentials', label: uiText("凭据配置状态"), children: uiText("未知") },
-          { key: 'status', label: uiText("状态"), children: selectedProvider.status ? uiText(PROVIDER_STATUS_MAP[selectedProvider.status]?.text ?? "未知") : uiText("未知") },
-          { key: 'description', label: uiText("描述"), children: selectedProvider.description || '—' },
-          { key: 'created', label: uiText("创建人"), children: selectedProvider.created_by || '—' },
-        ]} />}
-      </Drawer>
-
       {modalContext}
-      {providerModalOpen && !providerEditing && <ResourceEditorFrame
-        id="provider-create-drawer" className="settings-create-drawer" open drawer drawerWidth={720}
-        title={uiText("添加供应商")} backLabel={uiText("返回")} onClose={() => {
+      {providerEditorOpen && <ResourceEditorFrame
+        id="provider-editor-drawer" className="settings-create-drawer" open drawer drawerWidth={720}
+        title={providerEditing ? uiText("编辑供应商") : uiText("添加供应商")} backLabel={uiText("返回")} onClose={() => {
           if (saveInFlight.current) return
-          if (!form.isFieldsTouched()) closeProviderModal()
-          else modal.confirm({ title: uiText("有未保存的修改"), okText: uiText("放弃修改"), onOk: closeProviderModal })
+          const changed = Object.entries(form.getFieldsValue()).some(([field, value]) =>
+            (value ?? '') !== (initialFields.current[field] ?? ''))
+          if (!changed) closeProviderEditor()
+          else modal.confirm({ title: uiText("有未保存的修改"), okText: uiText("放弃修改"), onOk: closeProviderEditor })
         }}
-        actions={<Button type="primary" form="provider-create-form" htmlType="submit" loading={saving}>{uiText("创建")}</Button>}
+        actions={<Button type="primary" form="provider-editor-form" htmlType="submit" disabled={credentialsLoading} loading={saving}>
+          {providerEditing ? uiText("保存") : uiText("创建")}
+        </Button>}
       >
-        <Form id="provider-create-form" form={form} layout="vertical" className="app-settings-form project-settings-form"
+        <Form id="provider-editor-form" form={form} layout="vertical" className="app-settings-form project-settings-form"
           disabled={saving} onFinish={handleSaveProvider} onFinishFailed={({ errorFields }) => {
             const first = errorFields[0]?.name
             if (!first) return
@@ -553,8 +526,8 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
           }}>
           <section className="project-settings-group">
             <h2>{uiText("基本信息")}</h2>
-            <div className="project-settings-short-fields">{configName}{preset}</div>
-            {description}{status}
+            <div className="project-settings-short-fields provider-create-identity">{configName}{preset}{status}</div>
+            {description}
           </section>
           <section className="project-settings-group">
             <h2>{uiText("调用地址")}</h2>
@@ -566,25 +539,10 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
           </section>
           <section className="project-settings-group">
             <h2>{uiText("访问凭据")}</h2>
-            {apiKey}{apiSecret}
+            <div className="project-settings-short-fields">{apiKey}{apiSecret}</div>
           </section>
         </Form>
       </ResourceEditorFrame>}
-      {providerEditing && <Modal
-        title={uiText("编辑供应商")}
-        open={providerModalOpen}
-        onCancel={() => { if (!saving) closeProviderModal() }}
-        onOk={() => form.submit()}
-        confirmLoading={saving}
-        okButtonProps={{ disabled: credentialsLoading }}
-        cancelButtonProps={{ disabled: saving }}
-        width={560}
-        destroyOnClose
-      >
-        <Form form={form} layout="vertical" className="pt-2" onFinish={handleSaveProvider}>
-          {configName}{preset}{endpoint}{imageEndpoint}{videoEndpoint}{apiKey}{apiSecret}{description}{status}
-        </Form>
-      </Modal>}
     </>
   )
 }
