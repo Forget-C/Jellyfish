@@ -62,7 +62,7 @@ try {
     }
     if (pathname.endsWith('/models')) return respond({ items: [], pagination: { total: 2 } })
     if (pathname.endsWith('/supported')) return respond([
-      { key: 'openai', display_name: 'OpenAI', default_base_url: 'https://one.example/v1' },
+      { key: 'openai', display_name: 'OpenAI', default_base_url: 'https://one.example/v1', requires_api_key: true, requires_api_secret: true },
       { key: 'vidu', display_name: 'Vidu', default_base_url: 'https://two.example/v1' },
     ])
     return respond({ items: [], next_cursor: null })
@@ -86,18 +86,30 @@ try {
   const configName = add.getByRole('textbox', { name: '配置名称' })
   assert.equal(await configName.inputValue(), 'OpenAI')
   await configName.fill('生产')
-  await add.getByLabel('API Key', { exact: true }).fill('fixture-key')
+  const keyInput = add.getByLabel(/^API Key/)
+  await page.setViewportSize({ width: 375, height: 812 })
+  for (const [name, hints] of [['API Key', ['调用时必需', '请勿分享密钥']], ['API Secret', ['调用时必需']]]) {
+    const label = add.locator('label').filter({ hasText: name })
+    const labelBox = await label.boundingBox()
+    for (const hint of hints) {
+      const hintBox = await label.getByText(hint, { exact: true }).boundingBox()
+      assert.ok(hintBox.y >= labelBox.y && hintBox.y + hintBox.height <= labelBox.y + labelBox.height + 1)
+      assert.ok(hintBox.x + hintBox.width <= 375)
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await keyInput.fill('fixture-key')
   await preset.press('ArrowDown')
   await page.getByText('Vidu', { exact: true }).filter({ visible: true }).last().click()
   const confirm = page.getByRole('dialog').filter({ hasText: '切换供应商？' })
   await confirm.getByRole('button', { name: /取\s*消/ }).click()
   await confirm.waitFor({ state: 'hidden' })
-  assert.equal(await add.getByLabel('API Key', { exact: true }).inputValue(), 'fixture-key')
+  assert.equal(await keyInput.inputValue(), 'fixture-key')
   await preset.press('ArrowDown')
   await page.getByText('Vidu', { exact: true }).filter({ visible: true }).last().click()
   await confirm.getByRole('button', { name: /切\s*换/ }).click()
   assert.equal(await configName.inputValue(), '生产')
-  assert.equal(await add.getByLabel('API Key', { exact: true }).inputValue(), '')
+  assert.equal(await keyInput.inputValue(), '')
   assert.equal(await add.getByLabel('文本/通用 Base URL').inputValue(), 'https://two.example/v1')
   await add.getByRole('button', { name: /取\s*消/ }).click()
   const name = page.getByRole('button', { name: provider.name, exact: true })

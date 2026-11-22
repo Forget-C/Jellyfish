@@ -16,6 +16,7 @@ import {
   Space,
   Table,
   Tag,
+  Typography,
   message,
 } from 'antd'
 import type { TableColumnsType } from 'antd'
@@ -443,6 +444,9 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         destroyOnClose
       >
         <Form form={form} layout="vertical" className="pt-2">
+          <Form.Item name="name" label={uiText("配置名称")} rules={[{ required: true, whitespace: true }]}>
+            <Input maxLength={255} />
+          </Form.Item>
           <Form.Item name="provider_key" label={uiText("供应商")} rules={[{ required: true, message: uiText("请选择供应商") }]}>
             <Select
               aria-label={uiText("供应商")}
@@ -455,9 +459,6 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
               notFoundContent={supportedLoading ? uiText("加载中…") : uiText("暂无数据")}
               onChange={changePreset}
             />
-          </Form.Item>
-          <Form.Item name="name" label={uiText("配置名称")} rules={[{ required: true, whitespace: true }]}>
-            <Input maxLength={255} />
           </Form.Item>
           <Form.Item
             name="base_url"
@@ -472,10 +473,25 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
           <Form.Item name="video_base_url" label={uiText("视频 Base URL（可选覆盖）")} rules={[{ type: 'url', message: uiText("请输入有效 URL") }]}>
             <Input placeholder={uiText("留空则回退到文本/通用 Base URL")} />
           </Form.Item>
-          <Form.Item name="api_key" label="API Key" extra={selectedSpec?.requires_api_key && uiText("调用时必需")} help={providerEditing ? uiText("留空则不修改") : uiText("请勿分享密钥")}>
+          <Form.Item
+            name="api_key"
+            label={<>
+              API Key
+              {selectedSpec?.requires_api_key && <Typography.Text type="secondary" className="ml-2 text-xs">{uiText("调用时必需")}</Typography.Text>}
+              {!providerEditing && <Typography.Text type="secondary" className="ml-2 text-xs">{uiText("请勿分享密钥")}</Typography.Text>}
+            </>}
+            help={providerEditing ? uiText("留空则不修改") : undefined}
+          >
             <Input.Password placeholder="AK" disabled={credentialsLoading} />
           </Form.Item>
-          <Form.Item name="api_secret" label="API Secret" extra={selectedSpec?.requires_api_secret && uiText("调用时必需")} help={providerEditing ? uiText("留空则不修改") : undefined}>
+          <Form.Item
+            name="api_secret"
+            label={<>
+              API Secret
+              {selectedSpec?.requires_api_secret && <Typography.Text type="secondary" className="ml-2 text-xs">{uiText("调用时必需")}</Typography.Text>}
+            </>}
+            help={providerEditing ? uiText("留空则不修改") : undefined}
+          >
             <Input.Password placeholder="SK" disabled={credentialsLoading} />
           </Form.Item>
           <Form.Item name="description" label={uiText("描述")}>
