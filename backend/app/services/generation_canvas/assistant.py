@@ -316,8 +316,9 @@ class CanvasAssistant:
             guidance += skill_guidance()
             if structure_tool:
                 tools.append(structure_tool)
-                guidance += ('只有用户明确要求建卡或用本次附图作为首帧时，才用 propose_canvas_structure。'
-                             '工具仅预览，用户确认后才写入。')
+                guidance += ('用户明确要求建卡、使用本次附图作首帧，或调整所选镜头实际采用的运镜时，使用 propose_canvas_structure。'
+                             '局部调整采用运镜卡的视频镜头使用 adjust_shot_movement，避免直接改变共享运镜或覆盖视频提示词。'
+                             '如果没有采用运镜卡，可以改实际使用的视频提示词。工具仅预览，用户确认后才写入。')
         if edit_draft and edit_draft.available:
             if len(edit_draft.cards) == 1:
                 tools.append(edit_draft.tool())

@@ -42,6 +42,7 @@ const provider = createHttpServer(async (request, response) => {
     const result = messages.find(message => message.role === 'tool' && message.tool_call_id === 'context')
     const draft = result && JSON.parse(result.content)
     const requestEdit = turns.at(-1) === '把这张卡的推近放慢'
+    const requestLocalMovement = turns.at(-1) === '只把镜头三的推近放慢'
     const reference = Array.isArray(turns.at(-1)) && turns.at(-1).find(block => block.text?.startsWith('参考素材 1 '))
     const layoutRequest = typeof turns.at(-1) === 'string' && turns.at(-1).startsWith('把布局卡')
     const useSkill = turns.at(-1) === '只从摄影角度看'
@@ -84,6 +85,12 @@ const provider = createHttpServer(async (request, response) => {
         ] }),
       } : { name: 'propose_canvas_edit', arguments: JSON.stringify(edit) }
       answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: operation }] }
+    } else if (requestLocalMovement && !proposed) {
+      answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: {
+        name: 'propose_canvas_structure', arguments: JSON.stringify({
+          change: { kind: 'adjust_shot_movement', card_id: draft.target_card_ids[0], field: 'movement_speed', text: '缓慢推近' },
+        }),
+      } }] }
     } else if (reference && !proposed) {
       const file = JSON.parse(reference.text.slice('参考素材 1 '.length))
       answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: {
@@ -91,7 +98,7 @@ const provider = createHttpServer(async (request, response) => {
           change: { kind: 'adopt_first_frame', card_id: draft.target_card_ids[0], file_id: file.file_id },
         }),
       } }] }
-    } else if (!requestEdit && !reference && !layoutRequest) {
+    } else if (!requestEdit && !requestLocalMovement && !reference && !layoutRequest) {
       observed.push(draft)
     }
     response.writeHead(200, { 'Content-Type': 'application/json' })
@@ -203,6 +210,14 @@ try {
       card('target', '已保存正文', true), card('other', '另一个同名模型卡'),
       ...(canvas.project_id ? [{ id: 'camera-movement', type: 'direction.movement',
         fields: { movement_speed: { text: '快速推近' } } }] : [])] }
+    if (canvas.project_id) {
+      for (const shot of ['target', 'other']) {
+        const edgeId = 'shared-movement-' + shot
+        document.edges.push({ id: edgeId, source_card: 'camera-movement', source_port: 'text',
+          target_card: shot, target_port: 'text' })
+        document.input_order[shot] = { text: [edgeId] }
+      }
+    }
     const seeded = await fetch(url, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ request_id: 'scope-fixture', expected_revision: saved.revision, document }),
@@ -274,8 +289,32 @@ try {
     await page.getByRole('button', { name: '撤销操作', exact: true }).click()
     for (let attempt = 0; attempt < 40 && await storedText() !== original; attempt++) await delay(150)
     assert.equal(await storedText(), original, 'one undo restores the saved field')
-    if (canvas.project_id) assert.notEqual((await storedMovement()).movement_path.text, '直线')
-    else {
+    if (canvas.project_id) {
+      assert.notEqual((await storedMovement()).movement_path.text, '直线')
+      await page.locator('[data-card-id="target"]').click()
+      await open()
+      await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('只把镜头三的推近放慢')
+      await panel.getByRole('button', { name: '发送消息' }).click()
+      const isolated = panel.getByRole('region', { name: '修改建议' }).last()
+      await isolated.getByText('新建专属运镜', { exact: true }).waitFor()
+      await isolated.getByText('保留原运镜的卡片', { exact: true }).waitFor()
+      await isolated.getByText('other', { exact: true }).waitFor()
+      await isolated.getByRole('checkbox', { name: '只修改所选镜头的运镜' }).check()
+      await isolated.getByRole('button', { name: '确认写入', exact: true }).click()
+      await isolated.getByText('已写入画布', { exact: true }).waitFor()
+      const shotBindings = async () => {
+        const current = (await (await fetch(url)).json()).data.document
+        return ['target', 'other'].map(id => current.cards.find(card => card.id === id).input_bindings[0].source.card_id)
+      }
+      const [selectedMovement, otherMovement] = await shotBindings()
+      assert.notEqual(selectedMovement, 'camera-movement')
+      assert.equal(otherMovement, 'camera-movement')
+      await page.screenshot({ path: join(output, 'assistant-shared-movement.png') })
+      await panel.getByRole('button', { name: '关闭画布助手' }).click()
+      await page.getByRole('button', { name: '撤销操作', exact: true }).click()
+      for (let attempt = 0; attempt < 40 && (await shotBindings())[0] !== 'camera-movement'; attempt++) await delay(150)
+      assert.deepEqual(await shotBindings(), ['camera-movement', 'camera-movement'])
+    } else {
       await open()
       const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAIAAADZF8uwAAAAF0lEQVR4nGP8z0AYMBGhhmFUEQOdgwAAz+ABFyTybdUAAAAASUVORK5CYII=', 'base64')
       await panel.getByLabel('上传对话参考素材').setInputFiles({ name: '首帧红船.png', mimeType: 'image/png', buffer: png })
