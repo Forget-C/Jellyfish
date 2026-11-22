@@ -22,3 +22,14 @@
 .canvas-association-inspect .wb-action { max-width: 100%; height: auto; min-height: 32px; white-space: normal; overflow-wrap: anywhere; }
 
 .canvas-association-inspect.design-source-expanded .ant-popover-inner-content > div:has(.anchor-marker-image) { width: min(680px, calc(100vw - 64px)); }
+
+@media (max-width: 700px) {
+  /* 收窄视口时立即约束浮层，纵向仍由 Popover 按触发位置对齐。 */
+  .generation-card-editor > .canvas-association-inspect {
+    inset-inline: 8px !important;
+    width: fit-content;
+    max-width: calc(100% - 16px);
+    margin-inline: auto;
+  }
+  .generation-card-editor > .canvas-association-inspect .ant-popover-arrow { display: none; }
+}
