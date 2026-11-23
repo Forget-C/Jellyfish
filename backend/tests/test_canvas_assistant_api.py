@@ -98,7 +98,14 @@ async def test_assistant_switches_model_without_losing_visible_card_scope(canvas
         tool_result = next((item for item in messages if item['role'] == 'tool'), None)
         answer = {'role': 'assistant', 'content': '已分析'}
         reason = 'stop'
-        if tool_result is None:
+        if body['model'] == 'canvas-text':
+            assert not body.get('tools')
+            supplied = next(item['content'] for item in reversed(messages) if item['role'] == 'user')
+            assert '只在编辑器可见' in supplied and '实际采用' in supplied
+            assert '另一个同名模型卡' not in supplied
+            assert '当前画布支持的卡片' in supplied
+            assert ('direction.movement（' in supplied) == scene_owned
+        elif tool_result is None:
             assert {tool['function']['name'] for tool in body['tools']} == {
                 'read_canvas_context', 'load_canvas_skill', 'read_canvas_skill_example', 'propose_canvas_structure',
             }
@@ -109,7 +116,7 @@ async def test_assistant_switches_model_without_losing_visible_card_scope(canvas
             reason = 'tool_calls'
         else:
             context = json.loads(tool_result['content'])
-            expected = ['target'] if len(requests) <= 2 else ['target', 'basis', 'unrelated']
+            expected = ['target'] if len(requests) <= 3 else ['target', 'basis', 'unrelated']
             assert context['target_card_ids'] == expected
             assert [card['id'] for card in context['cards']] == list(dict.fromkeys([*expected, 'basis']))
             assert context['cards'][0]['prompt']['segments'][0]['text'] == '只在编辑器可见'
@@ -146,17 +153,18 @@ async def test_assistant_switches_model_without_losing_visible_card_scope(canvas
     turn = {'request_id': 'scope-id', 'text': '看这两张卡', 'context': {
         'draft': draft, 'revision': canvas['revision'], 'scope': 'selection', 'card_ids': ['target'],
     }}
-    blocked = await canvas_client.post(assistant, json=turn)
-    assert blocked.status_code == 422, blocked.text
-    assert blocked.json()['detail'] == 'ASSISTANT_TOOL_CALLING_REQUIRED'
-    assert requests == []
+    reviewed = await canvas_client.post(assistant, json={**turn, 'request_id': 'text-scope'})
+    assert reviewed.status_code == 200, reviewed.text
+    assert reviewed.json()['data']['reply'] == '已分析'
+    assert reviewed.json()['data']['context']['target_card_ids'] == ['target']
+    assert reviewed.json()['data']['proposal'] is None
     chosen = await canvas_client.patch(append_canvas_path(url, '/assistant/model'), json={'model_id': 'tool-model'})
     assert chosen.status_code == 200, chosen.text
     result = await canvas_client.post(assistant, json=turn)
     assert result.status_code == 200, result.text
-    assert [request['model'] for request in requests] == ['tool-model', 'tool-model']
+    assert [request['model'] for request in requests] == ['canvas-text', 'tool-model', 'tool-model']
     assert (await canvas_client.post(assistant, json=turn)).json() == result.json()
-    assert len(requests) == 2
+    assert len(requests) == 3
     history = (await canvas_client.get(assistant)).json()['data']
     assert history['model_id'] == 'tool-model'
     assert history['turns'][0]['context']['target_card_ids'] == ['target']

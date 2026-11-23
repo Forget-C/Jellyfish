@@ -35,7 +35,7 @@ class DraftCanvasAssistant(CanvasAssistant):
             canvas = GenerationCanvas(id=canvas_id, kind='free', revision=0)
             context = resolve_assistant_context(canvas, command.context)
             edit_draft = CanvasAssistantEditDraft(context, empty, CanvasDocument.model_validate(command.context.draft))
-        model, provider, capability = await self._resolve_model(command.model_id, needs_context=context is not None)
+        model, provider, capability = await self._resolve_model(command.model_id)
         client = await self._model_client(model, provider, capability)
         model_id = model.id
         sources = await resolve_assistant_media(self.db, None, command.attachment_file_ids)

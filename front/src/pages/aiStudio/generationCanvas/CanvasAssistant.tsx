@@ -13,6 +13,13 @@ import { CanvasAssistantAttachments, CanvasAssistantEvidence } from './CanvasAss
 import { draftingAssistantReply, readDraftAssistant, writeDraftAssistant } from './draftAssistant'
 import './canvasAssistant.css'
 
+function confirmationKind(text: string) {
+  if (/^全部确认[。！!]?$/.test(text)) return 'all'
+  if (/^确认[。！!]?$/.test(text)) return 'selected'
+  if (/^确认[，,]\s*(不过|但是|但)\s*.+/.test(text)) return 'revise'
+  return undefined
+}
+
 type AssistantScope = NonNullable<CanvasAssistantMessage['context']>['scope'] | 'text'
 
 function appendExchange(turns: CanvasAssistantExchange[], incoming: CanvasAssistantExchange) {
@@ -52,6 +59,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const [referenceFiles, setReferenceFiles] = useState<FileRead[]>([])
   const [uploadingReference, setUploadingReference] = useState(false)
   const [revising, setRevising] = useState<CanvasAssistantExchange>()
+  const [selectedGroups, setSelectedGroups] = useState<Record<string, string[]>>({})
+  const [confirmationHint, setConfirmationHint] = useState<string>()
   const composer = useRef<HTMLFormElement>(null)
   const [sendError, setSendError] = useState<'text' | 'tools' | 'reply' | 'context-limit'>()
   const [sending, setSending] = useState(false)
@@ -106,6 +115,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   }, [draft, selectedCards.length])
 
   const updateDraft = (value: string) => {
+    setConfirmationHint(undefined)
     setDraft(value)
     pending.current = undefined
     setSendError(undefined)
@@ -313,22 +323,89 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     requestAnimationFrame(() => trigger.current?.focus())
   }
 
+  const refreshDecision = async (sourceId: string, clearSelection = true) => {
+    const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId }).catch(() => ({ data: undefined }))
+    if (!data) {
+      setRetryLoad(value => value + 1)
+      return false
+    }
+    setTurns(current => (current?.[current.length - 1]?.sequence ?? 0) > data.cursor ? current : data.turns)
+    if (clearSelection) setSelectedGroups(current => ({ ...current, [sourceId]: [] }))
+    if (revising?.request_id === sourceId) {
+      pending.current = undefined
+      setRevising(undefined)
+    }
+    return true
+  }
+
+  const approveProposal = async (sourceId: string, groups?: string[]) => {
+    const accepted = await approve(sourceId, groups)
+    const refreshed = await refreshDecision(sourceId, accepted)
+    if (accepted && !refreshed) setConfirmationHint(uiText('已收到审批结果，正在重新读取对话。'))
+    return accepted
+  }
+
   const send = async (resume?: CanvasAssistantMessage) => {
     const text = (resume?.text ?? draft).trim()
     if (draftPromoting || sendingNow.current || savingModel || savingApproval || uploadingReference || !turns || !text) return
-    if (!resume && awaitingSelection) return
-    const revisionTargets = revising?.proposal?.groups
-      ? [...new Set(revising.proposal.groups.filter(group => group.state === 'pending')
+    const intent = resume ? undefined : confirmationKind(text)
+    let revision = revising
+    if (intent) {
+      const candidates = turns.filter(turn => !turn.stopped && turn.proposal &&
+        (turn.proposal.state ?? 'pending') === 'pending')
+      const checked = (turn: CanvasAssistantExchange) => turn.proposal?.groups
+        ?.filter(group => (group.state ?? 'pending') === 'pending' && selectedGroups[turn.request_id]?.includes(group.id))
+        .map(group => group.id) ?? []
+      const highlighted = candidates.filter(turn => checked(turn).length)
+      const target = candidates.length === 1 ? candidates[0] : highlighted.length === 1 ? highlighted[0] : undefined
+      if (!target?.proposal) {
+        setConfirmationHint(candidates.length
+          ? uiText('有多份待审批建议，请先勾选要确认的建议，或使用该建议的确认按钮。')
+          : uiText('当前没有可以确认的修改建议，请核对最新对话。'))
+        return
+      }
+      if (intent === 'revise') revision = target
+      else {
+        const available = target.proposal.groups?.filter(group => (group.state ?? 'pending') === 'pending')
+          .map(group => group.id)
+        const groups = intent === 'all' || available?.length === 1 ? available : checked(target)
+        if (available && !groups?.length) {
+          setConfirmationHint(uiText('请先勾选要批准的改动组，或回复「全部确认」。'))
+          return
+        }
+        if (approvalDisabled) {
+          setConfirmationHint(uiText('请完成当前编辑并取得画布编辑权后再确认。'))
+          return
+        }
+        sendingNow.current = true
+        setSending(true)
+        setConfirmationHint(undefined)
+        try {
+          if (!await approveProposal(target.request_id, available ? groups : undefined)) throw new Error('approval failed')
+          setDraft('')
+          pending.current = undefined
+        } catch {
+          setConfirmationHint(uiText('未能完成审批，请核对画布状态后重试。'))
+        } finally {
+          sendingNow.current = false
+          setSending(false)
+        }
+        return
+      }
+    }
+    if (!resume && awaitingSelection && !revision) return
+    const revisionTargets = revision?.proposal?.groups
+      ? [...new Set(revision.proposal.groups.filter(group => group.state === 'pending')
         .flatMap(group => group.edits.filter(edit => edit.target.kind !== 'add_canvas_card').map(edit => edit.card_id)))]
-      : revising?.proposal ? [revising.proposal.card_id] : []
-    const requestBody: CanvasAssistantMessage = resume ?? (pending.current?.text === text
+      : revision?.proposal ? [revision.proposal.card_id] : []
+    const requestBody: CanvasAssistantMessage = resume ?? (pending.current?.text === text && pending.current.revises === revision?.request_id
       ? pending.current : {
           text,
           request_id: crypto.randomUUID(),
           attachment_file_ids: referenceFiles.length ? referenceFiles.map(file => file.id) :
-            revising?.attachments?.map(file => file.file_id) ?? [],
-          revises: revising?.request_id,
-          context: revising?.proposal ? {
+            revision?.attachments?.map(file => file.file_id) ?? [],
+          revises: revision?.request_id,
+          context: revision?.proposal ? {
             ...readDraft(), scope: revisionTargets.length ? 'selection' : 'canvas', card_ids: revisionTargets,
           } : effectiveScope === 'text' ? undefined : {
             ...readDraft(), scope: effectiveScope, card_ids: effectiveScope === 'selection' ? selectedCards : [],
@@ -431,7 +508,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const modelLabel = (model: ModelRead) => {
     const capability = model.effective_capabilities
     const modes = [
-      ...(capability?.tool_calling ? [uiText("可读画布")] : []),
+      ...(capability?.tool_calling ? [uiText("可读画布与提出修改")]
+        : capability?.text_inputs && capability.text_outputs ? [uiText("可读画布文字")] : []),
       ...(capability?.image_inputs ? [uiText("可读图片与视频静帧")] : []),
       ...(capability?.video_inputs
         ? [capability.audio_inputs ? uiText("可读连续画面及音轨") : uiText("可读连续画面")]
@@ -533,6 +611,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
               setTurns(previous => previous?.map(entry => entry.request_id === turn.request_id ? { ...entry, layout: data } : entry))
             }} />}
           {turn.proposal?.groups?.length ? <AssistantEditGroups groups={turn.proposal.groups}
+            selected={selectedGroups[turn.request_id] ?? []}
+            onSelectionChange={ids => setSelectedGroups(current => ({ ...current, [turn.request_id]: ids }))}
             current={() => readDraft().draft}
             editDisabled={approvalDisabled || sending}
             revise={() => {
@@ -540,7 +620,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
               composer.current?.querySelector('textarea')?.focus()
             }}
             decide={async (action, groupIds) => {
-              if (action === 'approve' && !await approve(turn.request_id, groupIds)) return false
+              if (action === 'approve') return approveProposal(turn.request_id, groupIds)
               if (action === 'reject' && localDraft) {
                 const changed = readDraftAssistant(canvasId).turns.map(item => item.request_id === turn.request_id && item.proposal
                   ? { ...item, proposal: { ...item.proposal, state: 'rejected' as const,
@@ -549,31 +629,14 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                 setTurns(changed)
                 return true
               }
-              if (action === 'reject' && !await rejectProposal(turn.request_id, groupIds)) return false
-              const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId })
-              if (!data) return false
-              setTurns(data.turns)
-              if (revising?.request_id === turn.request_id) {
-                pending.current = undefined
-                setRevising(undefined)
-              }
-              return true
+              return await rejectProposal(turn.request_id, groupIds) && await refreshDecision(turn.request_id)
             }} /> : turn.proposal && <AssistantProposal proposal={turn.proposal} current={() => readDraft().draft} editDisabled={approvalDisabled || sending}
             revise={() => {
               setRevising(turn); pending.current = undefined; setSendError(undefined)
               composer.current?.querySelector('textarea')?.focus()
             }} decide={async action => {
-              if (action === 'approve') {
-                if (!await approve(turn.request_id)) return false
-              } else if (!await rejectProposal(turn.request_id)) return false
-              const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId })
-              if (!data) return false
-              setTurns(data.turns)
-              if (revising?.request_id === turn.request_id) {
-                pending.current = undefined
-                setRevising(undefined)
-              }
-              return true
+              if (action === 'approve') return approveProposal(turn.request_id)
+              return await rejectProposal(turn.request_id) && await refreshDecision(turn.request_id)
             }} />}
           {turn.approval_audit?.map((entry, index) => <small key={index}>
             {uiText(entry.mode === 'automatic' ? '自动审批明确请求' : '人工审批')} · {
@@ -602,8 +665,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             setRevising(undefined); pending.current = undefined
           }}>{uiText("取消修订")}</WorkbenchButton>
         </div>}
+        {confirmationHint && <Alert type="warning" message={confirmationHint} />}
         {sendError && <Alert type="error" message={sendError === 'tools'
-          ? uiText("当前模型无法调用画布工具。切换可读画布的模型后，发送同一消息即可接续。")
+          ? uiText("当前模型无法调用画布工具。切换支持提出画布修改的模型后，发送同一消息即可接续。")
           : sendError === 'text' ? uiText("当前模型无法进行文字对话，请切换助手模型。")
           : sendError === 'context-limit' ? uiText("内容超出当前模型的上下文上限，请缩小分析范围或切换助手模型。")
             : uiText("未收到助手回复，请检查助手模型后重试")} />}
@@ -625,6 +689,12 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             <Input.TextArea id={inputId} aria-label={uiText("给画布助手发消息")} value={draft} maxLength={16000}
               placeholder={uiText("输入想讨论的镜头、画面或提示词…")}
               autoSize={{ minRows: 2, maxRows: 4 }} disabled={sending}
+              onKeyDown={event => {
+                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) {
+                  event.preventDefault()
+                  void send()
+                }
+              }}
               onChange={event => updateDraft(event.target.value)} />
             {modelError && <span role="alert">{uiText("无法读取或切换助手模型")}</span>}
             <div className="canvas-assistant-footer">
@@ -642,7 +712,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                   ]} />
                 <WorkbenchIconButton label={uiText("发送消息")} icon={<ArrowUpOutlined />}
                   htmlType="submit" variant="primary" loading={sending}
-                  disabled={draftPromoting || !turns || !draft.trim() || savingModel || savingApproval || uploadingReference || awaitingSelection} />
+                  disabled={draftPromoting || !turns || !draft.trim() || savingModel || savingApproval || uploadingReference || awaitingSelection && !confirmationKind(draft.trim())} />
               </div>
             </div>
           </>}

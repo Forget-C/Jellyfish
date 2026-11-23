@@ -59,15 +59,16 @@ export function AssistantProposal({ proposal, current, editDisabled, revise, dec
 }
 
 /** Select independent groups while preserving a single save and undo for the chosen set. */
-export function AssistantEditGroups({ groups, current, editDisabled, revise, decide }: {
+export function AssistantEditGroups({ groups, selected, onSelectionChange, current, editDisabled, revise, decide }: {
   groups: CanvasAssistantEditGroup[]
+  selected: string[]
+  onSelectionChange: (ids: string[]) => void
   current: () => Record<string, unknown>
   editDisabled: boolean
   revise: () => void
   decide: (action: Decision, groupIds: string[]) => Promise<boolean>
 }) {
   const uiText = useUiText()
-  const [selected, setSelected] = useState<string[]>([])
   const [firstGroupId] = useState(() => groups.find(group => (group.state ?? 'pending') === 'pending')?.id)
   const [busy, setBusy] = useState<Decision>()
   const [error, setError] = useState(false)
@@ -75,11 +76,11 @@ export function AssistantEditGroups({ groups, current, editDisabled, revise, dec
   const pending = groups.filter(group => (group.state ?? 'pending') === 'pending')
   const selectedPending = pending.filter(group => selected.includes(group.id)).map(group => group.id)
 
-  async function confirm(action: Decision) {
+  async function confirm(action: Decision, ids = selectedPending) {
     setBusy(action)
     setError(false)
     try {
-      if (await decide(action, selectedPending)) setSelected([])
+      if (await decide(action, ids)) onSelectionChange([])
       else setError(true)
     } catch {
       setError(true)
@@ -102,7 +103,8 @@ export function AssistantEditGroups({ groups, current, editDisabled, revise, dec
       })
       return <div key={group.id} className="canvas-assistant-edit-group">
         {isPending && <Checkbox disabled={!!busy} checked={selectedPending.includes(group.id)}
-          onChange={event => setSelected(ids => event.target.checked ? [...ids, group.id] : ids.filter(id => id !== group.id))}>
+          onChange={event => onSelectionChange(event.target.checked
+            ? [...selectedPending, group.id] : selectedPending.filter(id => id !== group.id))}>
           {uiText(group.title)}
         </Checkbox>}
         <details open={isPending && (group.id === firstGroupId || conflict)}>
@@ -156,6 +158,10 @@ export function AssistantEditGroups({ groups, current, editDisabled, revise, dec
     {!!pending.length && <div className="canvas-assistant-edit-actions">
       <WorkbenchButton variant="primary" loading={busy === 'approve'} disabled={editDisabled || !!busy || !selectedPending.length}
         onClick={() => void confirm('approve')}>{uiText('写入所选 {{count}} 组', { count: selectedPending.length })}</WorkbenchButton>
+      {pending.length > 1 && <WorkbenchButton variant="secondary" disabled={editDisabled || !!busy}
+        onClick={() => void confirm('approve', pending.map(group => group.id))}>
+        {uiText('批准全部 {{count}} 组', { count: pending.length })}
+      </WorkbenchButton>}
       <WorkbenchButton variant="secondary" disabled={!!busy} onClick={revise}>{uiText('修订建议')}</WorkbenchButton>
       <WorkbenchButton variant="quiet" loading={busy === 'reject'} disabled={!!busy || !selectedPending.length}
         onClick={() => void confirm('reject')}>{uiText('拒绝所选')}</WorkbenchButton>
