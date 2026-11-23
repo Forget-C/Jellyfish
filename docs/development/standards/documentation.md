@@ -23,7 +23,7 @@
 | `site/content/docs/getting-started/` | 安装、部署、初次运行与简短开发入门；开发入口只覆盖环境准备、启动、基本检查和进一步阅读 |
 | `site/content/docs/guide/` | 围绕用户目标说明操作入口、步骤、结果、限制与失败处理；模块、事务和执行器机制进入开发文档 |
 | `site/content/docs/community/` | 社区与贡献入口；详细开发协作步骤链接到仓库开发指南 |
-| `site/content/blog/` | 版本发布说明；保持版本、日期和历史语义，具体格式见[发布说明规范](development.md#release-note-规范) |
+| `site/content/release-notes/` | 版本发布说明；保持版本、日期和历史语义，具体格式见[发布说明规范](development.md#release-note-规范) |
 | `site/content/**/_index.md` | 首页或栏目简介、导航；保持简短，避免复制正文 |
 
 常规产品配置、升级说明可以留在官网；代码级调试、特定历史数据修复和开发迁移演练进入开发指南。教程可以解释必要的业务概念，不按是否含技术术语机械分流。

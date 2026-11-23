@@ -37,8 +37,8 @@ menu:
     - name: 文档
       pageRef: /docs
       weight: 3
-    - name: 博客
-      pageRef: /blog
+    - name: 发布日志
+      pageRef: /release-notes
       weight: 4
     - name: GitHub
       url: "https://github.com/Forget-C/Jellyfish"
