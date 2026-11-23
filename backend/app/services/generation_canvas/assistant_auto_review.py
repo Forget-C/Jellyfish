@@ -80,7 +80,7 @@ async def conduct_review(db, project_id, canvas_id, source_id, decision, validat
         raise HTTPException(409, 'Automatic approval requires an explicit user request for this change')
     basis = review_basis(canvas, turn, decision.group_ids)
     model_id = turn.model_id
-    if not validate_targets(document, proposal):
+    if not validate_targets(document, proposal, decision.group_ids):
         return AutomaticReview(basis=basis, receipt=CanvasAssistantIndependentReview(
             status='blocked', reason='当前字段或关联影响已改变',
         ))

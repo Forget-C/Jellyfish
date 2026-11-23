@@ -1,4 +1,10 @@
 {
+  "模型及参数": "Model and parameters",
+  "生成使用的素材": "Generation references",
+  "核对新的生成输入": "Review changed generation input",
+  "批准按新输入生成": "Approve generation with this input",
+  "生成输入已变化，待重新批准": "Generation input changed and needs approval again",
+  "停止排队任务": "Stop queued turn",
   "待审批": "Awaiting approval",
   "其他画布的只读引用": "Read-only references from another canvas",
   "每轮最多引用三个其他画布": "Reference up to three other canvases per turn",

@@ -31,6 +31,14 @@ async def find_text_request(db, session_id: str, request_id: str, body):
     return user_message
 
 
+async def text_stream_origin(db, session_id: str, task_id: str):
+    """Confirm a persisted text interaction belongs to the requested session."""
+    return await db.scalar(select(ExperimentMessage.id).where(
+        ExperimentMessage.session_id == session_id, ExperimentMessage.role == 'user',
+        ExperimentMessage.payload['interaction_run_id'].as_string() == task_id,
+    ))
+
+
 async def text_stream_result(db, session_id: str, task_id: str):
     """Read the terminal message bound to a text run in its original session."""
     return await db.scalar(select(ExperimentMessage).where(

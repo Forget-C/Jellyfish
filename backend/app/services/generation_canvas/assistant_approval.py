@@ -25,20 +25,22 @@ _INPUT_NAMES = {
 }
 
 
-def _single_change(proposal):
+def automatically_reviewed_change(proposal, group_ids=None):
+    """Resolve one safe change in the explicit scope of this automatic decision."""
     if not proposal.groups:
-        return proposal
-    return proposal.groups[0].edits[0] if len(proposal.groups) == 1 and len(proposal.groups[0].edits) == 1 else None
+        return proposal if group_ids is None else None
+    groups = proposal.groups if group_ids is None else [group for group in proposal.groups if group.id in group_ids]
+    if len(groups) != 1 or group_ids is not None and len(group_ids) != 1 or len(groups[0].edits) != 1:
+        return None
+    return groups[0].edits[0] if groups[0].state == 'pending' else None
 
 
 def automatic_approval_allowed(text: str, context: dict | None, proposal, document, group_ids=None) -> bool:
     """Authorize one unambiguous change using the user's words, never model output."""
     if not context or _AMBIGUOUS.search(text):
         return False
-    change = _single_change(proposal)
+    change = automatically_reviewed_change(proposal, group_ids)
     if change is None or change.card_id not in context.get('target_card_ids', []):
-        return False
-    if group_ids is not None and (not proposal.groups or group_ids != [proposal.groups[0].id]):
         return False
     command = text.strip().rstrip('。.!！')
     target = change.target
@@ -50,9 +52,14 @@ def automatic_approval_allowed(text: str, context: dict | None, proposal, docume
     if isinstance(target, ReleaseBindingEdit):
         match = _RELEASE.fullmatch(command)
         return bool(match and _names_binding(match[1], context, change.card_id, target.binding_id))
+    return _matches_edit_request(change, command, document, context)
+
+
+def _matches_edit_request(change, command, document, context):
     edit = re.split(r'[,，;；。]|并\s*(?=生成)', command, maxsplit=1)[0]
     if not _FIELD.fullmatch(edit) or not shot_request_matches(edit, document, change.card_id):
         return False
+    target = change.target
     if isinstance(target, MovementFieldEdit):
         return (_MOVEMENT_FIELD_NAMES[target.field] in edit
                 or target.field == 'movement_speed' and bool(_SPEED.search(edit)))

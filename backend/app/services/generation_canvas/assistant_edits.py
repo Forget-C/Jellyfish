@@ -31,7 +31,7 @@ from app.schemas.generation_canvas import (
 )
 from app.services.generation_canvas.catalog import CARD_TITLES, design_fields
 from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
-from app.services.generation_canvas.assistant_approval import automatic_approval_allowed
+from app.services.generation_canvas.assistant_approval import automatic_approval_allowed, automatically_reviewed_change
 from app.services.generation_canvas.assistant_auto_review import AutomaticReview, review_basis
 from app.services.generation_canvas.assistant_hitl import resume_canvas_approval
 from app.services.generation_canvas.assistant_removals import apply_removal, removal_impact
@@ -288,9 +288,11 @@ async def replace_proposed_field(store, canvas, original, reference, proposal, v
     return CanvasAssistantProposal(**edits[0].model_dump(), groups=[revised]), previous.model_dump(mode='json')
 
 
-def automatic_targets_current(document: CanvasDocument, proposal: CanvasAssistantProposal) -> bool:
+def automatic_targets_current(document: CanvasDocument, proposal: CanvasAssistantProposal, group_ids=None) -> bool:
     """Compare the guarded field or removal impact before consulting the reviewer."""
-    change = proposal.groups[0].edits[0] if proposal.groups else proposal
+    change = automatically_reviewed_change(proposal, group_ids)
+    if change is None:
+        return False
     if isinstance(change.target, (DeleteCardEdit, ReleaseBindingEdit, DisconnectCardsEdit)):
         impact = removal_impact(document, change.card_id, change.target)
         return impact is not None and impact[1] == change.impact_fingerprint
@@ -313,13 +315,17 @@ async def resolve_assistant_proposal(
     receipts = turn.proposal_receipt or {}
     selected = sorted(decision.group_ids or ())
     command = {'action': decision.action, 'mode': decision.approval_mode, 'groups': selected}
+    if decision.approve_layout:
+        if decision.action != 'approve' or decision.approval_mode != 'manual' or not decision.decision_id:
+            raise HTTPException(422, 'Layout must be selected by a manual decision with a request identity')
+        command['approve_layout'] = True
     decision_key = f'decision:{decision.decision_id}' if decision.decision_id else None
     if decision_key and (recorded := receipts.get(decision_key)):
         if recorded['command'] != command:
             raise HTTPException(409, 'Assistant decision identity already belongs to another action')
         return await _replay_decision(store, canvas_id, proposal, recorded)
     if decision.approval_mode == 'automatic':
-        session = await db.get(CanvasAssistantSession, canvas_id, populate_existing=True)
+        session = await db.get(CanvasAssistantSession, canvas_id, with_for_update=True, populate_existing=True)
         if (decision.action != 'approve' or turn.instructions or session is None or session.approval_mode != 'automatic'
                 or not automatic_approval_allowed(
                     turn.text, turn.context, proposal, CanvasDocument.model_validate(canvas.document), decision.group_ids)):

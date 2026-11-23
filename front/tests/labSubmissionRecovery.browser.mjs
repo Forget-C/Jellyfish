@@ -16,6 +16,7 @@ const sessions = Object.entries(labels).map(([mode, label]) => ({
   id: mode + '-session', lab_type: mode, title: label + '恢复会话', created_at: timestamp, updated_at: timestamp,
 }))
 const writes = []
+const requestHeaders = []
 let submission
 const histories = new Map()
 let historyReads = 0
@@ -59,6 +60,7 @@ try {
     }] : [] })
     if (/\/labs\/(text|image|video)\/sessions\/[^/]+\/(stream|tasks)$/.test(url.pathname)) {
       writes.push(request.postDataJSON())
+      requestHeaders.push(request.headers())
       return submission(route)
     }
     if (url.pathname.endsWith('/messages')) {
@@ -293,6 +295,9 @@ try {
   const writesBeforeDisconnect = writes.length
   const readsBeforeDisconnect = historyReads
   submission = route => {
+    if (route.request().headers()['last-event-id'] === '2') {
+      return route.fulfill({ contentType: 'text/event-stream', body: '' })
+    }
     histories.set('text-session', [...(histories.get('text-session') ?? []), disconnectUser])
     return route.fulfill({ contentType: 'text/event-stream', body:
       frame('accepted', 1, { task_id: 'disconnect-run', user_message: disconnectUser }) +
@@ -308,7 +313,12 @@ try {
   await page.getByRole('button', { name: '重试读取历史', exact: true }).click()
   await page.getByText('状态暂不可用', { exact: true }).waitFor()
   assert.ok(historyReads >= readsBeforeDisconnect + 2)
-  assert.equal(writes.length, writesBeforeDisconnect + 1)
+  assert.equal(writes.length, writesBeforeDisconnect + 2)
+  const initialStream = requestHeaders.at(-2)
+  const resumedStream = requestHeaders.at(-1)
+  assert.ok(initialStream['idempotency-key'])
+  assert.equal(resumedStream['idempotency-key'], initialStream['idempotency-key'])
+  assert.equal(resumedStream['last-event-id'], '2')
 
   console.log('Lab submission recovery browser checks passed', output)
 } catch (error) {

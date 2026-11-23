@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { ApiResponse_CanvasAssistantApprovalSetting_ } from '../models/ApiResponse_CanvasAssistantApprovalSetting_';
 import type { ApiResponse_CanvasAssistantExchange_ } from '../models/ApiResponse_CanvasAssistantExchange_';
+import type { ApiResponse_CanvasAssistantGenerationRead_ } from '../models/ApiResponse_CanvasAssistantGenerationRead_';
 import type { ApiResponse_CanvasAssistantHistory_ } from '../models/ApiResponse_CanvasAssistantHistory_';
 import type { ApiResponse_CanvasAssistantLayout_ } from '../models/ApiResponse_CanvasAssistantLayout_';
 import type { ApiResponse_CanvasAssistantModelSelection_ } from '../models/ApiResponse_CanvasAssistantModelSelection_';
@@ -33,6 +34,7 @@ import type { ApiResponse_PaginatedData_CanvasSummary__ } from '../models/ApiRes
 import type { ApiResponse_Union_CanvasAssistantExchange__NoneType__ } from '../models/ApiResponse_Union_CanvasAssistantExchange__NoneType__';
 import type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from '../models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
 import type { CanvasAssistantApprovalSetting } from '../models/CanvasAssistantApprovalSetting';
+import type { CanvasAssistantGenerationApproval } from '../models/CanvasAssistantGenerationApproval';
 import type { CanvasAssistantInstruction } from '../models/CanvasAssistantInstruction';
 import type { CanvasAssistantLayoutDecision } from '../models/CanvasAssistantLayoutDecision';
 import type { CanvasAssistantMessage } from '../models/CanvasAssistantMessage';
@@ -1433,6 +1435,40 @@ export class StudioGenerationCanvasesService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/turns/{source_id}/steer',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Reapprove Canvas Generation
+     * Accept the exact changed generation input without resubmitting earlier versions.
+     * @returns ApiResponse_CanvasAssistantGenerationRead_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantReapproveGeneration({
+        canvasId,
+        sourceId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        requestBody: CanvasAssistantGenerationApproval,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantGenerationRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/generations/{source_id}/approval',
             path: {
                 'canvas_id': canvasId,
                 'source_id': sourceId,

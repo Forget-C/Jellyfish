@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException, status
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from sqlalchemy import func
+from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.generation import (
@@ -41,7 +41,9 @@ from app.services.generation.runtime.text_streaming import TextStreamRunNotFound
 from app.services.generation.submission import GenerationAccepted, GenerationSubmitter
 from app.services.llm.resolver import build_text_chat_model
 from app.schemas.studio.text_lab import TextLabRunRequest
-from app.services.studio.experiment_interaction import find_text_request, interaction_request_payload, text_stream_result
+from app.services.studio.experiment_interaction import (
+    find_text_request, interaction_request_payload, text_stream_origin, text_stream_result,
+)
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, experiment_user_message
 
 _runtime = TextStreamingRuntime()
@@ -116,7 +118,7 @@ class TextInteractionAdmission:
 async def admit_text_interaction(db, session_id, body: TextLabRunRequest, request_id: str | None) -> TextInteractionAdmission:
     """Resume an existing text stream by identity without starting the model again."""
     if request_id is not None:
-        await _require_text_session(db, session_id=session_id)
+        await _lock_text_interaction(db, session_id)
         previous = await find_text_request(db, session_id, request_id, body)
         if previous is not None:
             task_id = previous.payload['interaction_run_id']
@@ -205,6 +207,15 @@ async def execute_text_inline(
     return user_message, assistant_message
 
 
+async def _lock_text_interaction(db, session_id):
+    # Use the same session row as message sequencing. A no-op update obtains
+    # the write lock even on SQLite, whose SELECT FOR UPDATE is ignored.
+    await db.execute(update(ExperimentSession).where(ExperimentSession.id == session_id).values(
+        message_sequence=ExperimentSession.message_sequence, updated_at=ExperimentSession.updated_at,
+    ))
+    return await _require_text_session(db, session_id=session_id)
+
+
 async def _require_text_session(db: AsyncSession, *, session_id: str) -> ExperimentSession:
     """验证会话存在且属于文本实验室。"""
     session = await db.get(ExperimentSession, session_id)
@@ -282,6 +293,21 @@ async def request_text_stream_cancel(*, session_id: str, task_id: str, reason: s
     return await _runtime.request_cancel(task_id, reason)
 
 
+async def cancel_text_interaction(db, session_id: str, task_id: str, reason: str | None) -> str:
+    """Return a verified terminal state or record an active user's stop request."""
+    try:
+        if await request_text_stream_cancel(session_id=session_id, task_id=task_id, reason=reason):
+            return 'cancelled'
+    except TextStreamRunNotFoundError:
+        pass
+    result = await text_stream_result(db, session_id, task_id)
+    if result:
+        return result.status
+    if await text_stream_origin(db, session_id, task_id):
+        return 'unknown'
+    raise HTTPException(404, 'text_stream_run_not_found')
+
+
 async def subscribe_text_stream(task_id: str, *, after: int = 0) -> AsyncIterator[GenerationStreamEvent]:
     """订阅同步 SSE run 的进程内事件序列。"""
     async for event in _runtime.subscribe(task_id, after_event_id=after):
@@ -308,6 +334,10 @@ async def _persist_stream_message(run_id, stream_input, events, body, state, det
             [event.sequence, event.data.text_delta] for event in events if isinstance(event.data, StreamDeltaData)
         ])
     async with async_session_maker() as db:
+        if stream_input.request_id:
+            await _lock_text_interaction(db, stream_input.session_id)
+            if settled := await text_stream_result(db, stream_input.session_id, run_id):
+                return settled
         message, = await append_experiment_messages(db, session_id=stream_input.session_id, drafts=[
             ExperimentMessageDraft(role='assistant', content=body, status=state, payload=payload),
         ])
@@ -321,13 +351,21 @@ async def _save_partial_stream(run_id, state, details):
     if stream_input.request_id:
         events = await _runtime.replay(run_id)
         body = ''.join(event.data.text_delta for event in events if isinstance(event.data, StreamDeltaData))
-        await _persist_stream_message(run_id, stream_input, events, body, state, details)
+        return await _persist_stream_message(run_id, stream_input, events, body, state, details)
+    return None
 
 
 async def _cancel(run_id: str, reason: str) -> None:
     """Publish cancellation and keep already received text in the original interaction."""
     try:
-        await _save_partial_stream(run_id, 'cancelled', {'reason': reason})
+        settled = await _save_partial_stream(run_id, 'cancelled', {'reason': reason})
+        if settled is not None and settled.status == 'succeeded':
+            await _runtime.complete(run_id, StreamCompletedData(
+                task_id=run_id, assistant_message=_as_message_data(settled),
+                result=StreamGenerationResult(text=settled.content, model_id=settled.payload['model_id']),
+            ))
+            await _discard_stream_input(run_id)
+            return
         await _runtime.cancel(run_id, reason)
         await _discard_stream_input(run_id)
     except TextStreamRunNotFoundError:

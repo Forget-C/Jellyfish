@@ -24,6 +24,7 @@ from app.schemas.studio.text_lab import (
 from app.services.generation.runtime.text_chat_streaming import (
     create_text_async_task,
     admit_text_interaction,
+    cancel_text_interaction,
     execute_text_inline,
     request_text_stream_cancel,
     stream_text_run,
@@ -147,7 +148,8 @@ async def cancel_text_lab_stream(
     session_id: str,
     task_id: str,
     body: TextLabCancelRequest,
+    db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[TextLabRunStatus]:
     """会话绑定取消入口不复用任务中心取消 API，避免 hidden run 越权展示。"""
-    cancelled = await request_text_stream_cancel(session_id=session_id, task_id=task_id, reason=body.reason)
-    return success_response(TextLabRunStatus(task_id=task_id, status="cancelled" if cancelled else "succeeded"))
+    outcome = await cancel_text_interaction(db, session_id, task_id, body.reason)
+    return success_response(TextLabRunStatus(task_id=task_id, status=outcome))

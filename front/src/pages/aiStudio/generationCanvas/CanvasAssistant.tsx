@@ -72,7 +72,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   localDraft?: boolean
   draftPromoting?: boolean
   selectedCards: string[]
-  approve: (sourceId: string, groupIds?: string[], automatic?: boolean) => Promise<boolean>
+  approve: (sourceId: string, groupIds?: string[], automatic?: boolean, approveLayout?: boolean) => Promise<boolean>
   approvalDisabled: boolean
   applyLayout: (sourceId: string, proposal: CanvasAssistantLayout, claim: () => Promise<void>) => Promise<AssistantLayoutOutcome>
   openRun: (runId: string) => void
@@ -472,8 +472,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     return true
   }
 
-  const approveProposal = async (sourceId: string, groups?: string[]) => {
-    const accepted = await approve(sourceId, groups)
+  const approveProposal = async (sourceId: string, groups?: string[], includeLayout?: boolean) => {
+    const accepted = await approve(sourceId, groups, false, includeLayout)
     const refreshed = await refreshDecision(sourceId, accepted)
     if (accepted && !refreshed) setConfirmationHint(uiText('已收到审批结果，正在重新读取对话。'))
     return accepted
@@ -883,7 +883,14 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
               .map(card => <li key={card.id}>{String(card.name || card.title || card.id)}</li>)}</ul>
           </details>}
           {turn.generation && <AssistantGeneration generation={turn.generation}
-            openRun={runId => { close(); openRun(runId) }} cancelRun={cancelRun} />}
+            openRun={runId => { close(); openRun(runId) }} cancelRun={cancelRun} approvalDisabled={approvalDisabled}
+            reapprove={async requestBody => {
+              const { data } = await Canvases.canvasAssistantReapproveGeneration({
+                projectId, canvasId, sourceId: turn.request_id, requestBody,
+              })
+              if (!data) throw new Error('missing generation approval receipt')
+              setTurns(current => current?.map(entry => entry.request_id === turn.request_id ? { ...entry, generation: data } : entry))
+            }} />}
           {turn.stopped && <small>{uiText("助手已停止")}</small>}
           {!turn.stopped && (
             turn.proposal?.state === 'pending'
@@ -979,8 +986,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             approve={async includeLayout => {
               const groups = turn.proposal?.groups?.filter(group => group.state === 'pending' && selectedGroups[turn.request_id]?.includes(group.id))
                 .map(group => group.id)
-              const approved = await approveProposal(turn.request_id, groups)
-              if (includeLayout) await decideLayout(turn.request_id, 'approve')
+              const approved = await approveProposal(turn.request_id, groups, includeLayout)
               if (!approved) throw new Error('proposal remains pending')
             }}
             locate={label => {
@@ -1044,7 +1050,11 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                   onClick={() => setQueueEditing({ id: item.request_id, text: item.message.text })}>{uiText('编辑')}</WorkbenchButton>
                 <WorkbenchButton variant="quiet" disabled={queueBusy}
                   onClick={() => { void changeQueue(item.request_id) }}>{uiText('移除')}</WorkbenchButton>
-              </> : <small>{uiText('已开始处理')}</small>}
+              </> : <>
+                <small>{uiText('已开始处理')}</small>
+                {item.turn_id && <WorkbenchButton variant="quiet" loading={stopping === item.turn_id}
+                  onClick={() => { if (item.turn_id) void stopTurn(item.turn_id) }}>{uiText('停止排队任务')}</WorkbenchButton>}
+              </>}
             </>}
           </li>)}</ul>
         </section>}

@@ -29,7 +29,7 @@ import { useExperimentHistory } from '../hooks/useExperimentHistory'
 import { useExperimentModels } from '../hooks/useExperimentModels'
 import { useExperimentTemplates } from '../hooks/useExperimentTemplates'
 import { focusExperimentPromptEditor, readExperimentInputSnapshot, type ExperimentInputSnapshot } from '../experimentInputSnapshot'
-import { streamTextLab } from '../../../../services/textLabStream'
+import { resumeTextLab } from '../../../../services/textLabStream'
 
 /** 文本实验室可使用的提示词模板类别。 */
 const textPromptCategories = [
@@ -202,7 +202,7 @@ export function TextExperimentMode({
       controller = new AbortController()
       streamAbortRef.current = controller
       streamSessionIdRef.current = session.id
-      for await (const event of streamTextLab({
+      for await (const event of resumeTextLab({
         sessionId: session.id,
         body: { model_id: modelId, content: currentPrompt },
         requestId: attempt.requestId,

@@ -99,6 +99,25 @@ export interface TextLabStreamRequest {
   signal?: AbortSignal
 }
 
+/** Reconnect once using the original request and the last delivered event. */
+export async function* resumeTextLab(request: TextLabStreamRequest) {
+  let cursor = request.afterEventId ?? 0
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      for await (const event of streamTextLab({ ...request, afterEventId: cursor })) {
+        if (event.event !== 'heartbeat') cursor = event.sequence
+        yield event
+        if (isTextLabTerminalEvent(event)) return
+      }
+      return
+    } catch (error) {
+      const status = error instanceof TextLabStreamTransportError ? error.status : undefined
+      if (attempt || request.signal?.aborted || status && status < 500 && status !== 408) throw error
+    }
+  }
+}
+
+
 /** 非 2xx 或非 SSE 响应时抛出的稳定传输错误，供页面统一展示。 */
 export class TextLabStreamTransportError extends Error {
   constructor(

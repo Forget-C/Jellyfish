@@ -324,9 +324,9 @@ export function GenerationCanvasWorkspace({
           applyLayout={applyAssistantLayout}
           openRun={runId => setAssistantHistoryTarget({ canvasId, runId })}
           approvalDisabled={!!promptEditors.size || !ownership.editable || !!editor.recovery || editor.conflict}
-          approve={async (sourceId, groupIds, automatic) => {
+          approve={async (sourceId, groupIds, automatic, approveLayout) => {
             if (promptEditors.size || !ownership.canEdit()) return false
-            const saved = await editor.commitAssistantProposal(sourceId, groupIds, automatic)
+            const saved = await editor.commitAssistantProposal(sourceId, groupIds, automatic, approveLayout)
             if (saved) runtime.invalidate()
             return saved
           }}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -96,9 +97,20 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
             assert received == ['独立的本轮输入']
             changed = await client.post(url, json={**body, 'content': '另一个输入'}, headers=headers)
             assert changed.status_code == 409, changed.text
-            history = (await client.get('/api/v1/studio/experiment-sessions/sse-replay/messages')).json()['data']
+            snapshot = (await client.get('/api/v1/studio/experiment-sessions/sse-replay/messages')).json()
+            assert snapshot['meta']['session_id'] == 'sse-replay' and snapshot['meta']['cursor'] == 2
+            task_id = snapshot['data'][0]['payload']['interaction_run_id']
+            late_stop = await client.post(f'/api/v1/studio/labs/text/sessions/sse-replay/runs/{task_id}/cancel', json={})
+            assert late_stop.json()['data']['status'] == 'succeeded'
+            history = snapshot['data']
             assert [(message['role'], message['content']) for message in history] == [
                 ('user', '独立的本轮输入'), ('assistant', '第一段第二段'),
             ]
+            concurrent = {'Idempotency-Key': 'concurrent-stream'}
+            simultaneous = await asyncio.gather(*[client.post(
+                url, json={**body, 'content': '并发请求只运行一次'}, headers=concurrent,
+            ) for _ in range(2)])
+            assert [item.status_code for item in simultaneous] == [200, 200]
+            assert received.count('并发请求只运行一次') == 1
     finally:
         await engine.dispose()

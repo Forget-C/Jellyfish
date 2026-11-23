@@ -21,7 +21,8 @@ from app.schemas.canvas_assistant_edit import CanvasAssistantProposalDecision, C
 from app.services.generation_canvas.assistant import CanvasAssistant
 from app.schemas.canvas_assistant_layout import CanvasAssistantLayout, CanvasAssistantLayoutDecision
 from app.services.generation_canvas.assistant_layout import decide_assistant_layout
-from app.services.generation_canvas.assistant_generation import decide_assistant_generation_edit
+from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationApproval, CanvasAssistantGenerationRead
+from app.services.generation_canvas.assistant_generation import decide_assistant_generation_edit, reapprove_generation
 
 router = APIRouter()
 
@@ -176,6 +177,14 @@ async def decide_assistant_proposal(canvas_id: str, source_id: str, body: Canvas
                                     project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """Approve a saved preview through the existing canvas save transaction, or reject it."""
     return success_response(await decide_assistant_generation_edit(db, project_id, canvas_id, source_id, body))
+
+
+@router.post('/{canvas_id}/assistant/generations/{source_id}/approval',
+             response_model=ApiResponse[CanvasAssistantGenerationRead], operation_id='canvas_assistant_reapprove_generation')
+async def reapprove_canvas_generation(canvas_id: str, source_id: str, body: CanvasAssistantGenerationApproval,
+                                     project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
+    """Accept the exact changed generation input without resubmitting earlier versions."""
+    return success_response(await reapprove_generation(db, project_id, canvas_id, source_id, body))
 
 
 @router.post('/{canvas_id}/assistant/layout/{source_id}', response_model=ApiResponse[CanvasAssistantLayout],

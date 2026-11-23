@@ -149,6 +149,7 @@ class CanvasAssistantProposalDecision(BaseModel):
     decision_id: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[A-Za-z0-9_-]+$')] | None = None
     group_ids: list[str] | None = Field(None, min_length=1, max_length=8)
     approval_mode: Literal['manual', 'automatic'] = 'manual'
+    approve_layout: bool = False
 
 
 class CanvasAssistantEditConflict(BaseModel):

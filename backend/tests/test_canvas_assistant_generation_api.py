@@ -103,7 +103,7 @@ async def test_worker_resumes_exact_authorized_versions(runtime, monkeypatch):
 @pytest.mark.parametrize('scenario, expected_state, expected_runs', [
     ('approve', 'running', 1), ('reject', 'rejected', 0), ('precheck', 'failed', 0), ('edit_only', None, 0),
     ('partial_group', 'running', 1), ('automatic', 'running', 1),
-    ('layout_after_approval', 'running', 1), ('new_input_after_approval', 'failed', 0),
+    ('layout_after_approval', 'running', 1), ('new_input_after_approval', 'reapproval_required', 0),
     ('named_match', 'running', 1), ('named_mismatch', None, 0), ('wrong_direction', None, 0),
 ])
 async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypatch, scenario, expected_state,
@@ -249,8 +249,23 @@ async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypa
                     assert '缓慢推近' in observed and '保持构图' in observed
                 else:
                     assert observed == '缓慢推近'
-            if expected_state == 'failed':
+            if expected_state in ('failed', 'reapproval_required'):
                 assert generation['error']
+            if scenario == 'new_input_after_approval':
+                difference = generation['changed_input']
+                assert difference['before']['text'] == '缓慢推近'
+                assert difference['after']['text'] == '独立修改后的文本'
+                approve_url = endpoint + '/assistant/generations/edit-one/approval' + suffix
+                body = {'revision': difference['revision'], 'basis_hash': difference['basis_hash'],
+                        'decision_id': 'changed-input'}
+                accepted = await runtime.client.post(approve_url, json=body)
+                assert accepted.status_code == 200, accepted.text
+                assert (await runtime.client.post(approve_url, json=body)).json() == accepted.json()
+                await worker.tick()
+                after = (await runtime.client.get(runs)).json()['data']['runs']
+                assert len(after) == 1
+                assert after[0]['nodes'][0]['basis']['input']['text'] == '独立修改后的文本'
+                await runtime.client.post(endpoint + f"/runs/{after[0]['id']}/cancel" + suffix)
             if published:
                 await runtime.client.post(endpoint + f"/runs/{published[0]['id']}/cancel" + suffix)
         finally:

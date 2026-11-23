@@ -35,6 +35,10 @@ let releaseSteerSource
 let noteSteerSource
 const steerSourceStarted = new Promise(resolve => { noteSteerSource = resolve })
 const steerSourceReleased = new Promise(resolve => { releaseSteerSource = resolve })
+let releaseSceneSource
+let noteSceneSource
+const sceneSourceStarted = new Promise(resolve => { noteSceneSource = resolve })
+const sceneSourceReleased = new Promise(resolve => { releaseSceneSource = resolve })
 const provider = createHttpServer(async (request, response) => {
   const chunks = []
   for await (const chunk of request) chunks.push(chunk)
@@ -229,7 +233,11 @@ const provider = createHttpServer(async (request, response) => {
     }))
     return
   }
-  prompts.push(turns)
+  if (!turns.some(value => typeof value === 'string' && value.startsWith('分镜准备中'))) prompts.push(turns)
+  if (turns.at(-1) === '分镜准备中') {
+    noteSceneSource()
+    await sceneSourceReleased
+  }
   if (turns.at(-1) === '需要补充的一轮') {
     noteSteerSource()
     await steerSourceReleased
@@ -287,6 +295,7 @@ try {
   page.setDefaultTimeout(8000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const base = 'http://127.0.0.1:' + webPort
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base })
   const panel = page.getByRole('complementary', { name: '画布助手' })
   const open = async () => {
     await page.getByRole('button', { name: '打开画布助手', exact: true }).click()
@@ -309,6 +318,21 @@ try {
   await page.goto(base + storyboardCanvasPath(scene))
   await open()
   await ask('分镜一')
+  const sceneComposer = panel.getByRole('textbox', { name: '给画布助手发消息' })
+  const sceneSend = panel.getByRole('button', { name: '发送消息' })
+  await sceneComposer.fill('分镜准备中')
+  await sceneSend.click()
+  await Promise.race([sceneSourceStarted, delay(8000).then(() => { throw Error('分镜轮次未进入供应商') })])
+  await sceneComposer.fill('分镜后续只分析第四场')
+  await panel.getByRole('button', { name: '排到下一轮' }).click()
+  const sceneQueue = panel.getByRole('region', { name: '下一轮队列' })
+  await sceneQueue.getByText('分镜后续只分析第四场').waitFor()
+  await sceneComposer.fill('先别生成，我只想修改镜头 03')
+  await sceneSend.click()
+  await panel.getByText('已采纳补充，只处理镜头 03', { exact: true }).waitFor()
+  releaseSceneSource()
+  await panel.getByText('答复 分镜后续只分析第四场', { exact: true }).waitFor()
+  assert.equal(await panel.getByText('答复 分镜准备中', { exact: true }).count(), 0)
   assert.equal(await panel.getByText('答复 自由一', { exact: true }).count(), 0)
   await page.goto(base + '/canvases/' + free.id)
   await open()
@@ -465,13 +489,19 @@ try {
     const target = canvas.project_id ? 'camera-movement' : 'target'
     await page.locator('[data-card-id="' + target + '"]').click()
     if (canvas.project_id) await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+    await page.locator('[data-card-id="' + target + '"]').focus()
+    await page.keyboard.press('Control+c')
+    const copied = await page.waitForFunction(async id => {
+      const value = await navigator.clipboard.readText()
+      return value.startsWith('jellyfish:cards:1:') && value.includes(id) ? value : false
+    }, target)
     await open()
     const writer = panel.getByRole('textbox', { name: '给画布助手发消息' })
-    await writer.evaluate((input, ref) => {
+    await writer.evaluate((input, value) => {
       const clipboardData = new DataTransfer()
-      clipboardData.setData('text/plain', 'jellyfish:cards:1:' + JSON.stringify(ref))
+      clipboardData.setData('text/plain', value)
       input.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }))
-    }, { canvasId: canvas.id, cardIds: [target] })
+    }, await copied.jsonValue())
     await panel.getByLabel('引用卡片', { exact: true }).first().getByRole('button').waitFor()
     await writer.fill('把这张卡的推近放慢')
     await panel.getByRole('button', { name: '发送消息' }).click()
@@ -937,6 +967,7 @@ try {
 } finally {
   acceptSlowReply()
   releaseSteerSource()
+  releaseSceneSource()
   if (worker?.pid && worker.exitCode === null && worker.signalCode === null) {
     const exited = once(worker, 'close')
     worker.kill()

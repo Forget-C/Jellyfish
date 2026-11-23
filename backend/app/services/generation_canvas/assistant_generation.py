@@ -10,13 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.canvas_assistant import CanvasAssistantGeneration, CanvasAssistantSession, CanvasAssistantTurn
 from app.models.generation_canvas import CanvasPreview, CanvasRun, CanvasRunNode, CanvasRunReceipt, CanvasScopeOccupancy, GenerationCanvas
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposalDecision, CanvasAssistantProposalResult
-from app.schemas.canvas_assistant_generation import (CanvasAssistantGenerationRead, CanvasAssistantGenerationReview,
+from app.schemas.canvas_assistant_generation import (CanvasAssistantGenerationApproval, CanvasAssistantGenerationRead, CanvasAssistantGenerationReview,
                                                        CanvasAssistantGenerationVersion)
 from app.schemas.generation_canvas import CanvasDocument, CanvasPrecheckRequest, CanvasRunSubmit
 from app.schemas.canvas_assistant import CanvasAssistantExchange
 from app.services.generation_canvas.assistant_events import publish_events
 from app.services.generation_canvas.assistant_auto_review import conduct_review
 from app.services.generation_canvas.assistant_edits import automatic_targets_current, resolve_assistant_proposal
+from app.services.generation_canvas.assistant_layout import decide_assistant_layout
 from app.services.generation_canvas.assistant_targets import shot_request_matches
 from app.services.generation_canvas.runtime import CanvasRuntime
 from app.services.generation_canvas.store import CanvasStore
@@ -71,6 +72,11 @@ def _explicit_quantity(text: str) -> tuple[int, bool, str | None] | None:
     return quantity, waits_for_edit, review
 
 
+def _presentation_guidance(text: str) -> bool:
+    """Recognize delivery-only instructions that leave the authorized generation unchanged."""
+    return re.fullmatch(r'(?:请)?(?:用(?:中文|英文)回复|(?:把)?回复(?:写得)?(?:简单|简短|精简)一点)[。！.!]?', text.strip()) is not None
+
+
 def generation_authorization(turn: CanvasAssistantTurn, document: CanvasDocument,
                              revision: int) -> CanvasAssistantGeneration | None:
     """Freeze the selected model card and quantity without interpreting model output as permission."""
@@ -93,6 +99,8 @@ def generation_authorization(turn: CanvasAssistantTurn, document: CanvasDocument
         saved = {item.id: item.model_dump(mode='json') for item in document.cards}
         if context['revision'] != revision or any(saved.get(item['id']) != item for item in context['cards']):
             state, error = 'failed', '画布输入存在未保存的改动，请保存并重新明确授权生成'
+    if turn.instructions and not all(_presentation_guidance(item['text']) for item in turn.instructions):
+        state, error = 'stopped', '补充指令改变了本轮依据，请核对后重新明确生成数量'
     return CanvasAssistantGeneration(canvas_id=turn.canvas_id, source_id=turn.request_id, card_id=card_id,
         requested_count=count, state=state, expected_revision=revision, error=error, created_at=utcnow(),
         review_request=review, review_state='waiting' if review else None)
@@ -136,6 +144,8 @@ async def decide_assistant_generation_edit(
     if result.replayed:
         result.generation = await read_generation(db, canvas_id, source_id)
         return result
+    if body.approve_layout:
+        await decide_assistant_layout(db, project_id, canvas_id, source_id, 'approve')
     await update_generation_for_decision(
         db, canvas_id, source_id, result.proposal.state, result.receipt.revision if result.receipt else None,
         result=result, group_ids=body.group_ids,
@@ -173,6 +183,7 @@ async def freeze_generation_basis(db: AsyncSession, project_id: str | None, entr
             else:
                 basis = await db.get(CanvasPreview, preview.preview_token)
                 entry.basis_hash = basis.basis_hash
+                entry.input_approval = {**(entry.input_approval or {}), 'authorized': _input_details(preview)}
                 await db.delete(basis)
     except HTTPException as error:
         _fail_generation(entry, error)
@@ -226,7 +237,8 @@ async def read_generation(db: AsyncSession, canvas_id: str, source_id: str) -> C
         state=entry.review_state, results=entry.review_results or [],
     ) if entry.review_state else None
     return CanvasAssistantGenerationRead(card_id=entry.card_id, requested_count=entry.requested_count,
-        state=state, error=error, versions=versions, review=review)
+        state=state, error=error, versions=versions, review=review,
+        changed_input=(entry.input_approval or {}).get('pending') if state == 'reapproval_required' else None)
 
 
 async def advance_assistant_generations(sessions) -> None:
@@ -244,6 +256,58 @@ async def advance_assistant_generations(sessions) -> None:
         async with sessions() as db:
             await _advance_generation(db, canvas_id, source_id, project_id)
             await db.commit()
+
+
+def _input_details(preview):
+    return {
+        'text': preview.input.text,
+        'model': preview.model or {},
+        'media': [item.model_dump(mode='json', exclude={'token', 'payload'}) for item in preview.input.media],
+    }
+
+
+def _hold_changed_input(entry, preview, basis):
+    approval = entry.input_approval or {}
+    entry.state, entry.error = 'reapproval_required', '生成依据已改变，请核对后重新授权剩余版本'
+    entry.input_approval = {**approval, 'pending': {
+        'before': approval.get('authorized'), 'after': _input_details(preview),
+        'revision': preview.revision, 'basis_hash': basis.basis_hash,
+    }}
+
+
+async def reapprove_generation(db, project_id, canvas_id, source_id, command: CanvasAssistantGenerationApproval):
+    """Approve changed input after checking the exact preview against the current canvas."""
+    await CanvasStore(db, project_id).get(canvas_id, lock=True)
+    entry = await db.get(CanvasAssistantGeneration, (canvas_id, source_id), with_for_update=True, populate_existing=True)
+    if entry is None:
+        raise HTTPException(404, 'Canvas generation authorization not found')
+    approval = entry.input_approval or {}
+    known = approval.get('decisions', {})
+    body = command.model_dump(exclude={'decision_id'})
+    if command.decision_id in known:
+        if known[command.decision_id] != body:
+            raise HTTPException(409, 'Generation approval identity already belongs to different input')
+        return await read_generation(db, canvas_id, source_id)
+    pending = approval.get('pending')
+    if entry.state != 'reapproval_required' or not pending:
+        raise HTTPException(409, 'This generation is not waiting for new approval')
+    if any(pending[key] != value for key, value in body.items()):
+        raise HTTPException(409, 'Generation input preview has been replaced')
+    if len(known) >= 20:
+        raise HTTPException(409, 'Create a fresh authorization for the remaining versions')
+    preview = await CanvasRuntime(db, project_id).precheck(canvas_id, CanvasPrecheckRequest(card_id=entry.card_id))
+    if preview.preview_token is None:
+        raise HTTPException(409, 'The current inputs fail generation precheck')
+    basis = await db.get(CanvasPreview, preview.preview_token)
+    if preview.revision != command.revision or basis.basis_hash != command.basis_hash:
+        _hold_changed_input(entry, preview, basis)
+    else:
+        entry.basis_hash, entry.expected_revision = basis.basis_hash, preview.revision
+        entry.state, entry.error = 'queued', None
+        entry.input_approval = {'authorized': _input_details(preview), 'decisions': {**known, command.decision_id: body}}
+    await db.delete(basis)
+    await db.flush()
+    return await read_generation(db, canvas_id, source_id)
 
 
 async def _advance_generation(db, canvas_id: str, source_id: str, project_id: str | None) -> None:  # pylint: disable=too-many-return-statements
@@ -277,7 +341,8 @@ async def _advance_generation(db, canvas_id: str, source_id: str, project_id: st
                 return
             basis = await db.get(CanvasPreview, preview.preview_token)
             if entry.basis_hash is not None and entry.basis_hash != basis.basis_hash:
-                entry.state, entry.error = 'failed', '生成依据已改变，请核对后重新授权剩余版本'
+                _hold_changed_input(entry, preview, basis)
+                await db.delete(basis)
                 return
             await runtime.submit(canvas_id, CanvasRunSubmit(
                 request_id=_request_id(source_id, version), preview_token=preview.preview_token,

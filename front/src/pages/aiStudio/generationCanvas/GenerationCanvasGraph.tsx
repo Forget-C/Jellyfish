@@ -958,15 +958,14 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const entries = ids.map(copyTarget)
     const targets = entries.flatMap(({ card }) => card ? [card] : [])
     const reason = entries.find(entry => entry.reason)?.reason
+    if (!duplicate && targets.length && targets.every(card => latest.current.cards?.some(item => item.id === card.id))) {
+      void writeCardReference({ canvasId: document.id, cardIds: targets.map(card => card.id) })?.catch(() => undefined)
+    }
     if (!targets.length || reason) {setReason(reason || uiText("请选择卡片"));return}
     const value:CardClipboard={schema:1,projectId:(document.project_id || ''),cards:structuredClone(targets),positions:targets.map(card=>point(card.id))}
     if(duplicate) pasteCards(value,{x:Math.min(...value.positions.map(point=>point.x))+32,y:Math.min(...value.positions.map(point=>point.y))+32})
     else try {
       writeCardClipboard(value)
-      const cardIds = targets.filter(card => latest.current.cards?.some(item => item.id === card.id)).map(card => card.id)
-      if (cardIds.length === targets.length) {
-        void writeCardReference({ canvasId: document.id, cardIds })?.catch(() => undefined)
-      }
       setReason(uiText("已复制，可在画布粘贴"))
     } catch { setReason(uiText("卡片剪贴板保存失败，请重试")) }
   }

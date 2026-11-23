@@ -24,7 +24,8 @@ export function AssistantActionSummary({ turn, canApprove, approve, locate }: {
     : layout?.state === 'waiting' || layout?.state === 'executing' ? uiText('等待画布执行布局')
       : layout?.state === 'proposed' ? uiText('待审批') :
         layout?.state === 'stale' ? uiText('布局未执行，请核对当前卡片和位置') : uiText('建议已拒绝')
-  const generationState = generation?.state === 'completed' ? uiText('已生成')
+  const generationState = generation?.state === 'reapproval_required' ? uiText('生成输入已变化，待重新批准')
+    : generation?.state === 'completed' ? uiText('已生成')
     : generation?.versions?.length ? uiText('已提交 {{count}} 版', { count: generation.versions.length })
       : generation?.state === 'waiting_approval' ? uiText('批准修改后生成')
         : generation?.state === 'failed' ? uiText('生成未完成')

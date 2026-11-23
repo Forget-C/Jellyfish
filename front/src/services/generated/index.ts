@@ -31,6 +31,7 @@ export type { ApiResponse_AsyncTaskCreateRead_ } from './models/ApiResponse_Asyn
 export type { ApiResponse_BatchRead_ } from './models/ApiResponse_BatchRead_';
 export type { ApiResponse_CanvasAssistantApprovalSetting_ } from './models/ApiResponse_CanvasAssistantApprovalSetting_';
 export type { ApiResponse_CanvasAssistantExchange_ } from './models/ApiResponse_CanvasAssistantExchange_';
+export type { ApiResponse_CanvasAssistantGenerationRead_ } from './models/ApiResponse_CanvasAssistantGenerationRead_';
 export type { ApiResponse_CanvasAssistantHistory_ } from './models/ApiResponse_CanvasAssistantHistory_';
 export type { ApiResponse_CanvasAssistantLayout_ } from './models/ApiResponse_CanvasAssistantLayout_';
 export type { ApiResponse_CanvasAssistantModelSelection_ } from './models/ApiResponse_CanvasAssistantModelSelection_';
@@ -191,6 +192,9 @@ export type { CanvasAssistantEditConflict } from './models/CanvasAssistantEditCo
 export type { CanvasAssistantEditGroup } from './models/CanvasAssistantEditGroup';
 export type { CanvasAssistantExchange } from './models/CanvasAssistantExchange';
 export type { CanvasAssistantFieldRevision } from './models/CanvasAssistantFieldRevision';
+export type { CanvasAssistantGenerationApproval } from './models/CanvasAssistantGenerationApproval';
+export type { CanvasAssistantGenerationDifference } from './models/CanvasAssistantGenerationDifference';
+export type { CanvasAssistantGenerationInput } from './models/CanvasAssistantGenerationInput';
 export type { CanvasAssistantGenerationRead } from './models/CanvasAssistantGenerationRead';
 export type { CanvasAssistantGenerationReview } from './models/CanvasAssistantGenerationReview';
 export type { CanvasAssistantGenerationVersion } from './models/CanvasAssistantGenerationVersion';

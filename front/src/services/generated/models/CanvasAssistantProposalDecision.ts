@@ -11,4 +11,5 @@ export type CanvasAssistantProposalDecision = {
     decision_id?: (string | null);
     group_ids?: (Array<string> | null);
     approval_mode?: 'manual' | 'automatic';
+    approve_layout?: boolean;
 };

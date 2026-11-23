@@ -1,18 +1,42 @@
-import { useState } from 'react'
-import type { CanvasAssistantGenerationRead } from '../../../services/generated'
+import { useRef, useState } from 'react'
+import type { CanvasAssistantGenerationApproval, CanvasAssistantGenerationInput, CanvasAssistantGenerationRead } from '../../../services/generated'
 import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 import { useUiText } from '../../../uiText'
 import { CanvasAssistantEvidence } from './CanvasAssistantAttachments'
 
 /** Present the authorization and its existing canvas run receipts. */
-export function AssistantGeneration({ generation, openRun, cancelRun }: {
+export function AssistantGeneration({ generation, openRun, cancelRun, reapprove, approvalDisabled }: {
   generation: CanvasAssistantGenerationRead
   openRun: (runId: string) => void
   cancelRun: (runId: string) => Promise<void>
+  reapprove: (command: CanvasAssistantGenerationApproval) => Promise<void>
+  approvalDisabled: boolean
 }) {
   const uiText = useUiText()
   const [cancelling, setCancelling] = useState<string>()
   const [cancelError, setCancelError] = useState(false)
+  const [approving, setApproving] = useState(false)
+  const [approvalError, setApprovalError] = useState(false)
+  const pendingApproval = useRef<CanvasAssistantGenerationApproval>()
+  const difference = generation.changed_input
+  const acceptInput = async () => {
+    if (!difference || approving) return
+    const { revision, basis_hash } = difference
+    if (pendingApproval.current?.revision !== revision || pendingApproval.current.basis_hash !== basis_hash) {
+      pendingApproval.current = { revision, basis_hash, decision_id: crypto.randomUUID() }
+    }
+    setApproving(true)
+    setApprovalError(false)
+    try {
+      await reapprove(pendingApproval.current)
+      pendingApproval.current = undefined
+    } catch { setApprovalError(true) }
+    finally { setApproving(false) }
+  }
+  const inputDetails = (input: CanvasAssistantGenerationInput) => [
+    input.text, uiText('模型及参数'), JSON.stringify(input.model, null, 2),
+    ...(input.media.length ? [uiText('生成使用的素材'), JSON.stringify(input.media, null, 2)] : []),
+  ].join('\n')
   const cancel = async (runId: string) => {
     setCancelling(runId)
     setCancelError(false)
@@ -28,6 +52,7 @@ export function AssistantGeneration({ generation, openRun, cancelRun }: {
     failed: uiText("生成未完成"),
     rejected: uiText("修改未获批准，未生成"),
     stopped: uiText("尚未提交的生成已停止"),
+    reapproval_required: uiText("生成输入已变化，待重新批准"),
   }
   const versionStates: Record<string, string> = {
     succeeded: uiText("已生成"),
@@ -46,6 +71,16 @@ export function AssistantGeneration({ generation, openRun, cancelRun }: {
         onClick={() => { void cancel(version.run_id) }}>{uiText("取消生成")}</WorkbenchButton>}
       {version.error && <small>{version.error}</small>}
     </div>)}
+    {difference && <details open>
+      <summary>{uiText('核对新的生成输入')}</summary>
+      <dl>
+        <dt>{uiText('原值')}</dt><dd>{difference.before ? inputDetails(difference.before) : '—'}</dd>
+        <dt>{uiText('拟议值')}</dt><dd>{inputDetails(difference.after)}</dd>
+      </dl>
+      <WorkbenchButton variant="primary" loading={approving} disabled={approvalDisabled}
+        onClick={() => { void acceptInput() }}>{uiText('批准按新输入生成')}</WorkbenchButton>
+      {approvalError && <p role="alert">{uiText('未能完成审批，请核对画布状态后重试。')}</p>}
+    </details>}
     {cancelError && <p role="alert">{uiText("暂时无法取消生成")}</p>}
     {generation.error && generation.state !== 'rejected' && <small>{generation.error}</small>}
     {generation.review?.state === 'waiting' && <div>{uiText("等待生成结果以审看")}</div>}

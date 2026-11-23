@@ -46,7 +46,7 @@ from app.services.generation_canvas.assistant_events import event_read, publish_
 from app.services.generation_canvas.assistant_queue import (
     complete_queued_turn, pending_queue, queue_item, require_queue_entry,
 )
-from app.services.generation_canvas.assistant_hitl import is_approval_pause, resume_canvas_approval, wait_for_canvas_approval
+from app.services.generation_canvas.assistant_hitl import PROPOSAL_TOOLS, is_approval_pause, resume_canvas_approval, wait_for_canvas_approval
 from app.services.generation_canvas.assistant_layout import CanvasAssistantLayoutDraft
 from app.services.generation_canvas.assistant_generation import (
     freeze_generation_basis, generation_authorization, read_generation, update_generation_for_decision,
@@ -195,7 +195,7 @@ class CanvasAssistant:
             entry = await self.db.get(CanvasAssistantGeneration, (canvas_id, source_id), with_for_update=True,
                                       populate_existing=True)
             if entry is not None:
-                if entry.state in ('waiting_approval', 'queued'):
+                if entry.state in ('waiting_approval', 'queued', 'reapproval_required'):
                     entry.state = 'stopped'
                 if entry.review_state in ('waiting', 'reviewing'):
                     entry.review_state, entry.review_token, entry.review_lease_until = 'stopped', None, None
@@ -570,7 +570,7 @@ class CanvasAssistant:
         )
         self.db.add(turn)
         await self.db.flush()
-        if context and capability.tool_calling and not instructions and not card_references:
+        if context and capability.tool_calling and not card_references:
             canvas = await self.store.get(canvas_id)
             authorization = generation_authorization(turn, CanvasDocument.model_validate(canvas.document), canvas.revision)
             if authorization is not None:
@@ -862,10 +862,7 @@ def _restore_tool_receipts(messages, skills, edits, layout):
             if message.name == 'load_canvas_skill':
                 skill = CanvasAssistantSkillUse.model_validate_json(message.content)
                 skills[skill.id] = skill
-            elif edits and message.name in {
-                'propose_canvas_edit', 'propose_canvas_edit_groups', 'propose_canvas_structure', 'propose_canvas_removal',
-                'propose_canvas_changes',
-            }:
+            elif edits and message.name in PROPOSAL_TOOLS:
                 edits.proposal = CanvasAssistantProposal.model_validate_json(message.content)
             elif layout and message.name == 'propose_canvas_layout':
                 layout.proposal = CanvasAssistantLayout.model_validate_json(message.content)

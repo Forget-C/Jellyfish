@@ -13,7 +13,7 @@ export const canvasRecoveryKey = (projectId: string, canvasId: string | null) =>
 
 export type StoryboardScope = { chapterId: string; sequenceId: string; taskId: string }
 type SceneChange = StoryboardScope & ({ action: 'apply'; choices: StoryboardApplication } | { action: 'undo' | 'redo' })
-export type PendingSave = CanvasSave & { scene?: SceneChange; assistantProposalId?: string; assistantDecisionId?: string; assistantGroupIds?: string[]; assistantAutomatic?: boolean; draftAssistant?: CanvasDraftSave['assistant']; draftAssistantApproval?: CanvasDraftSave['assistant_approval'] }
+export type PendingSave = CanvasSave & { scene?: SceneChange; assistantProposalId?: string; assistantDecisionId?: string; assistantGroupIds?: string[]; assistantAutomatic?: boolean; assistantApproveLayout?: boolean; draftAssistant?: CanvasDraftSave['assistant']; draftAssistantApproval?: CanvasDraftSave['assistant_approval'] }
 type StoryboardApplicationReceipt = { taskId: string; before: CanvasDocument }
 export type StoryboardReviewPreparation = { revision: number; appliedTaskId?: string }
 export type CanvasSettingsChanges = Partial<Pick<CanvasDocument, 'name' | 'cover_file_id'>>
@@ -215,7 +215,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       const { data } = await Canvases.canvasAssistantDecideProposal({
         projectId, canvasId: canvas.id, sourceId: command.assistantProposalId,
         requestBody: { action: 'approve', decision_id: command.assistantDecisionId, expected_revision: command.expected_revision, group_ids: command.assistantGroupIds,
-          approval_mode: command.assistantAutomatic ? 'automatic' : 'manual' },
+          approval_mode: command.assistantAutomatic ? 'automatic' : 'manual', approve_layout: command.assistantApproveLayout },
       })
       const manualReview = data?.automatic_review?.status === 'manual_required' ||
         data?.automatic_review?.status === 'unavailable'
@@ -508,10 +508,10 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     commitTransformedDocument(revision, `visual-continuity:${requestId}`, transform)
   const commitAssistantLayoutGroup = (revision: number, group: NonNullable<CanvasDocument['groups']>[number]) =>
     commitTransformedDocument(revision, `assistant-layout:${group.id}`, before => ({ ...before, groups: [...(before.groups || []), group] }))
-  const commitAssistantProposal = async (sourceId: string, groupIds?: string[], automatic?: boolean) => {
+  const commitAssistantProposal = async (sourceId: string, groupIds?: string[], automatic?: boolean, approveLayout?: boolean) => {
     const s = state.current
     if (s.pending?.assistantProposalId === sourceId) {
-      return same(s.pending.assistantGroupIds, groupIds) ? save() : false
+      return same(s.pending.assistantGroupIds, groupIds) && !!s.pending.assistantApproveLayout === !!approveLayout ? save() : false
     }
     if (s.pending?.draftAssistantApproval?.source_id === sourceId) {
       return same(s.pending.draftAssistantApproval?.group_ids, groupIds) ? save() : false
@@ -521,11 +521,11 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       s.conflict || s.scope !== key || inFlight.current || !same(s.document, before.document)) return false
     s.initialBefore = s.document
     if (before.revision === -1) {
-      if (!groupIds?.length || automatic) { s.initialBefore = undefined; return false }
+      if (!groupIds?.length || automatic || approveLayout) { s.initialBefore = undefined; return false }
       s.pending = { request_id: crypto.randomUUID(), expected_revision: -1, document: s.document,
         draftAssistant: draftAssistantSnapshot(before.id), draftAssistantApproval: { source_id: sourceId, group_ids: groupIds } }
     } else s.pending = { request_id: crypto.randomUUID(), expected_revision: before.revision, document: s.document,
-      assistantProposalId: sourceId, assistantDecisionId: crypto.randomUUID(), assistantGroupIds: groupIds, assistantAutomatic: automatic }
+      assistantProposalId: sourceId, assistantDecisionId: crypto.randomUUID(), assistantGroupIds: groupIds, assistantAutomatic: automatic, assistantApproveLayout: approveLayout }
     setInitialApplying(true); persist()
     return save()
   }
