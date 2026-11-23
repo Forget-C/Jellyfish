@@ -129,6 +129,9 @@ async def decide_assistant_generation_edit(
 ) -> CanvasAssistantProposalResult:
     """An edit decision and its effect on a waiting generation commit together."""
     result = await resolve_assistant_proposal(db, project_id, canvas_id, source_id, body)
+    if result.replayed:
+        result.generation = await read_generation(db, canvas_id, source_id)
+        return result
     await update_generation_for_decision(
         db, canvas_id, source_id, result.proposal.state, result.receipt.revision if result.receipt else None,
         result=result, group_ids=body.group_ids,

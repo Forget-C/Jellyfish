@@ -96,6 +96,7 @@ class CanvasAssistantApprovalAudit(BaseModel):
     action: Literal['approve', 'reject']
     outcome: Literal['applied', 'rejected', 'partial', 'conflict']
     group_ids: list[str] | None = None
+    decision_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class CanvasAssistantEditGroup(BaseModel):
@@ -120,6 +121,7 @@ class CanvasAssistantProposalDecision(BaseModel):
     model_config = ConfigDict(extra='forbid')
     action: Literal['approve', 'reject']
     expected_revision: int = Field(ge=0)
+    decision_id: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[A-Za-z0-9_-]+$')] | None = None
     group_ids: list[str] | None = Field(None, min_length=1, max_length=8)
     approval_mode: Literal['manual', 'automatic'] = 'manual'
 
@@ -141,6 +143,7 @@ class CanvasAssistantProposalResult(BaseModel):
     canvas: CanvasRead | None = None
     conflicts: list[CanvasAssistantEditConflict] = Field(default_factory=list)
     generation: CanvasAssistantGenerationRead | None = None
+    replayed: bool = Field(default=False, exclude=True)
 
 
 CanvasAssistantEditText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16000)]

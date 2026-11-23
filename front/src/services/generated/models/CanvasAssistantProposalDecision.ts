@@ -8,6 +8,7 @@
 export type CanvasAssistantProposalDecision = {
     action: 'approve' | 'reject';
     expected_revision: number;
+    decision_id?: (string | null);
     group_ids?: (Array<string> | null);
     approval_mode?: 'manual' | 'automatic';
 };

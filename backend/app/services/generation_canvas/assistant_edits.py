@@ -162,6 +162,14 @@ async def resolve_assistant_proposal(
     if turn is None or turn.proposal is None:
         raise HTTPException(404, 'Canvas assistant proposal not found')
     proposal = CanvasAssistantProposal.model_validate(turn.proposal)
+    receipts = turn.proposal_receipt or {}
+    selected = sorted(decision.group_ids or ())
+    command = {'action': decision.action, 'mode': decision.approval_mode, 'groups': selected}
+    decision_key = f'decision:{decision.decision_id}' if decision.decision_id else None
+    if decision_key and (recorded := receipts.get(decision_key)):
+        if recorded['command'] != command:
+            raise HTTPException(409, 'Assistant decision identity already belongs to another action')
+        return await _replay_decision(store, canvas_id, proposal, recorded)
     if decision.approval_mode == 'automatic':
         session = await db.get(CanvasAssistantSession, canvas_id, populate_existing=True)
         if (decision.action != 'approve' or session is None or session.approval_mode != 'automatic'
@@ -171,12 +179,31 @@ async def resolve_assistant_proposal(
     if decision.expected_revision > canvas.revision:
         raise HTTPException(409, 'Canvas revision does not exist')
     if proposal.groups:
-        return await _resolve_groups(store, canvas, turn, proposal, decision)
+        result = await _resolve_groups(store, canvas, turn, proposal, decision, decision_key)
+    else:
+        result = await _resolve_single(store, canvas, turn, proposal, decision)
+    if decision_key:
+        turn.proposal_receipt = {
+            **(turn.proposal_receipt or {}),
+            decision_key: {
+                'command': command,
+                'state': result.proposal.state,
+                'group_states': {group.id: group.state for group in result.proposal.groups or []},
+                'receipt': result.receipt.model_dump(mode='json') if result.receipt else None,
+                'conflicts': [item.model_dump(mode='json') for item in result.conflicts],
+            },
+        }
+    return result
+
+
+async def _resolve_single(store, canvas, turn, proposal, decision):
+    canvas_id = canvas.id
     if decision.group_ids is not None:
         raise HTTPException(422, 'This assistant proposal has no edit groups')
     if proposal.state == 'applied' and decision.action == 'approve':
-        return CanvasAssistantProposalResult(proposal=proposal, receipt=turn.proposal_receipt,
-                                             canvas=await store.read(canvas_id))
+        receipt = {key: value for key, value in (turn.proposal_receipt or {}).items()
+                   if not key.startswith('decision:')}
+        return await _replay_decision(store, canvas_id, proposal, {'receipt': receipt or None, 'conflicts': []})
     if proposal.state == 'rejected' and decision.action == 'reject':
         return CanvasAssistantProposalResult(proposal=proposal)
     if proposal.state != 'pending':
@@ -191,7 +218,7 @@ async def resolve_assistant_proposal(
     card = next((item for item in document.cards if item.id == proposal.card_id), None)
     field = _editable_text(card, proposal.target)
     if field is None or field.text != proposal.before:
-        if decision.approval_mode == 'automatic':
+        if decision.decision_id or decision.approval_mode == 'automatic':
             _record_decision(turn, decision, 'conflict')
             return CanvasAssistantProposalResult(proposal=proposal, canvas=await store.read(canvas_id), conflicts=[
                 CanvasAssistantEditConflict(group_id='', card_id=proposal.card_id, target=proposal.target,
@@ -199,13 +226,13 @@ async def resolve_assistant_proposal(
             ])
         raise HTTPException(409, 'Canvas assistant proposal needs a new preview')
     _apply_text(card, field, proposal)
-    request_id = 'assistant:' + hashlib.sha256(source_id.encode()).hexdigest()[:48]
+    request_id = 'assistant:' + hashlib.sha256(turn.request_id.encode()).hexdigest()[:48]
     receipt = await store.save(canvas_id, CanvasSave(
         request_id=request_id, expected_revision=canvas.revision, document=document.model_dump(mode='json'),
     ))
     proposal.state = 'applied'
     turn.proposal = proposal.model_dump(mode='json')
-    turn.proposal_receipt = receipt
+    turn.proposal_receipt = {**(turn.proposal_receipt or {}), **receipt}
     _record_decision(turn, decision, 'applied')
     return CanvasAssistantProposalResult(proposal=proposal, receipt=receipt, canvas=await store.read(canvas_id))
 
@@ -220,21 +247,19 @@ def _apply_text(card, field, change: CanvasAssistantChange) -> None:
         card.generated_prompt.edit_confirmed = True
 
 
-async def _resolve_groups(store, canvas, turn, proposal, decision) -> CanvasAssistantProposalResult:
+async def _resolve_groups(store, canvas, turn, proposal, decision, decision_key) -> CanvasAssistantProposalResult:
     groups = {group.id: group for group in proposal.groups}
     if decision.group_ids is None:
         raise HTTPException(422, 'Select the assistant edit groups to decide')
     selected = sorted(decision.group_ids)
     if len(set(selected)) != len(selected) or any(group_id not in groups for group_id in selected):
         raise HTTPException(422, 'Unknown or repeated assistant edit group')
-    digest = hashlib.sha256(':'.join((turn.request_id, decision.action, *selected)).encode()).hexdigest()[:48]
+    identity = (turn.request_id, decision_key) if decision_key else (turn.request_id, decision.action, *selected)
+    digest = hashlib.sha256(':'.join(identity).encode()).hexdigest()[:48]
     receipts = turn.proposal_receipt or {}
     recorded = receipts.get(digest)
     if recorded:
-        return CanvasAssistantProposalResult(
-            proposal=proposal, receipt=recorded['receipt'], conflicts=recorded['conflicts'],
-            canvas=await store.read(canvas.id) if recorded['receipt'] else None,
-        )
+        return await _replay_decision(store, canvas.id, proposal, recorded)
     if proposal.state == 'superseded' or any(groups[group_id].state != 'pending' for group_id in selected):
         raise HTTPException(409, 'An assistant edit group has already been decided')
     if decision.action == 'reject':
@@ -246,7 +271,7 @@ async def _resolve_groups(store, canvas, turn, proposal, decision) -> CanvasAssi
     states = {group.state for group in groups.values()}
     proposal.state = 'pending' if 'pending' in states else 'applied' if 'applied' in states else 'rejected'
     turn.proposal = proposal.model_dump(mode='json')
-    if receipt or decision.action == 'reject':
+    if not decision_key and (receipt or decision.action == 'reject'):
         turn.proposal_receipt = {
             **receipts, digest: {'receipt': receipt, 'conflicts': [item.model_dump(mode='json') for item in conflicts]},
         }
@@ -258,9 +283,22 @@ async def _resolve_groups(store, canvas, turn, proposal, decision) -> CanvasAssi
     )
 
 
+async def _replay_decision(store, canvas_id, proposal, recorded):
+    if 'state' in recorded:
+        proposal.state = recorded['state']
+        for group in proposal.groups or []:
+            group.state = recorded['group_states'][group.id]
+    return CanvasAssistantProposalResult(
+        proposal=proposal, receipt=recorded['receipt'], conflicts=recorded['conflicts'],
+        canvas=await store.read(canvas_id) if recorded['receipt'] or recorded['conflicts'] else None,
+        replayed=True,
+    )
+
+
 def _record_decision(turn, decision, outcome):
     audit = CanvasAssistantApprovalAudit(source_id=turn.request_id, mode=decision.approval_mode,
-                                       action=decision.action, outcome=outcome, group_ids=decision.group_ids)
+                                       action=decision.action, outcome=outcome, group_ids=decision.group_ids,
+                                       decision_id=decision.decision_id)
     entry = audit.model_dump(mode='json')
     previous = turn.approval_audit or []
     if entry not in previous:

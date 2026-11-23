@@ -58,6 +58,19 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const [starterScope, setStarterScope] = useState<AssistantScope>()
   const [draftUsesSelection, setDraftUsesSelection] = useState(false)
   const pending = useRef<CanvasAssistantMessage>()
+  const pendingRejections = useRef(new Map<string, { decision_id: string; expected_revision: number }>())
+  const rejectProposal = async (sourceId: string, groupIds?: string[]) => {
+    const key = JSON.stringify([canvasId, sourceId, groupIds ? [...groupIds].sort() : []])
+    const decision = pendingRejections.current.get(key) ?? {
+      decision_id: crypto.randomUUID(), expected_revision: readDraft().revision,
+    }
+    pendingRejections.current.set(key, decision)
+    const { data } = await Canvases.canvasAssistantDecideProposal({
+      canvasId, projectId, sourceId, requestBody: { ...decision, action: 'reject', group_ids: groupIds },
+    })
+    if (data) pendingRejections.current.delete(key)
+    return !!data
+  }
   const sendingNow = useRef(false)
   const [activeRequestId, setActiveRequestId] = useState<string>()
   const [pendingServerRequest, setPendingServerRequest] = useState<CanvasAssistantMessage>()
@@ -498,13 +511,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                 setTurns(changed)
                 return true
               }
-              if (action === 'reject') {
-                const { data } = await Canvases.canvasAssistantDecideProposal({
-                  canvasId, projectId, sourceId: turn.request_id,
-                  requestBody: { action, expected_revision: readDraft().revision, group_ids: groupIds },
-                })
-                if (!data) return false
-              }
+              if (action === 'reject' && !await rejectProposal(turn.request_id, groupIds)) return false
               const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId })
               if (!data) return false
               setTurns(data.turns)
@@ -520,13 +527,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             }} decide={async action => {
               if (action === 'approve') {
                 if (!await approve(turn.request_id)) return false
-              } else {
-                const { data } = await Canvases.canvasAssistantDecideProposal({
-                  canvasId, projectId, sourceId: turn.request_id,
-                  requestBody: { action, expected_revision: readDraft().revision },
-                })
-                if (!data) return false
-              }
+              } else if (!await rejectProposal(turn.request_id)) return false
               const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId })
               if (!data) return false
               setTurns(data.turns)

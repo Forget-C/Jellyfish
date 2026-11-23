@@ -11,4 +11,5 @@ export type CanvasAssistantApprovalAudit = {
     action: 'approve' | 'reject';
     outcome: 'applied' | 'rejected' | 'partial' | 'conflict';
     group_ids?: (Array<string> | null);
+    decision_id?: (string | null);
 };

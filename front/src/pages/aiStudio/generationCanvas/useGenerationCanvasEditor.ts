@@ -13,7 +13,7 @@ export const canvasRecoveryKey = (projectId: string, canvasId: string | null) =>
 
 export type StoryboardScope = { chapterId: string; sequenceId: string; taskId: string }
 type SceneChange = StoryboardScope & ({ action: 'apply'; choices: StoryboardApplication } | { action: 'undo' | 'redo' })
-export type PendingSave = CanvasSave & { scene?: SceneChange; assistantProposalId?: string; assistantGroupIds?: string[]; assistantAutomatic?: boolean; draftAssistant?: CanvasDraftSave['assistant']; draftAssistantApproval?: CanvasDraftSave['assistant_approval'] }
+export type PendingSave = CanvasSave & { scene?: SceneChange; assistantProposalId?: string; assistantDecisionId?: string; assistantGroupIds?: string[]; assistantAutomatic?: boolean; draftAssistant?: CanvasDraftSave['assistant']; draftAssistantApproval?: CanvasDraftSave['assistant_approval'] }
 type StoryboardApplicationReceipt = { taskId: string; before: CanvasDocument }
 export type StoryboardReviewPreparation = { revision: number; appliedTaskId?: string }
 export type CanvasSettingsChanges = Partial<Pick<CanvasDocument, 'name' | 'cover_file_id'>>
@@ -198,15 +198,15 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     next.arrangement?.[direction === 'past' ? 'undo' : 'redo']()
     s.document = cleaner.current!(next.document); setDocument(s.document); persist(); return 'document' as const
   }
-  const send = async (canvas: CanvasRead, command: PendingSave): Promise<CanvasRead> => {
+  const send = async (canvas: CanvasRead, command: PendingSave): Promise<CanvasRead & { assistantReceiptRevision?: number }> => {
     if (command.assistantProposalId) {
       const { data } = await Canvases.canvasAssistantDecideProposal({
         projectId, canvasId: canvas.id, sourceId: command.assistantProposalId,
-        requestBody: { action: 'approve', expected_revision: command.expected_revision, group_ids: command.assistantGroupIds,
+        requestBody: { action: 'approve', decision_id: command.assistantDecisionId, expected_revision: command.expected_revision, group_ids: command.assistantGroupIds,
           approval_mode: command.assistantAutomatic ? 'automatic' : 'manual' },
       })
       if (!data?.canvas || (data.receipt ? data.receipt.canvas_id !== canvas.id : !data.conflicts?.length)) throw new Error('invalid assistant edit receipt')
-      return data.canvas
+      return { ...data.canvas, assistantReceiptRevision: data.receipt?.revision }
     }
     const scene = command.scene
     if (scene) {
@@ -251,7 +251,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
           const committed = await send(s.current!, command)
           if (s !== state.current) return false
           if (s.initialBefore) {
-            if (!command.assistantProposalId || committed.revision === command.expected_revision + 1) {
+            if (!command.assistantProposalId || committed.revision === committed.assistantReceiptRevision && committed.revision === command.expected_revision + 1) {
               recordConfirmedSave(command, s.initialBefore, committed.document)
             } else if (committed.revision !== s.current?.revision) {
               // An approval replay can return a newer canvas after other edits.
@@ -295,13 +295,16 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     try {
       // 先重放未明请求取得原回执，再读取最新服务端；恢复不产生新的保存意图。
       let baseline = saved.baseline
+      let assistantReceiptRevision: number | undefined
       let recovered = saved.document
       const command = saved.pending
       let staged = !!command && (!!command.draftAssistantApproval || renameSave(command.request_id) || settingsSave(command.request_id) || initialStoryboardSave(command.request_id) || visualContinuitySave(command.request_id) || !!command.scene || !!command.assistantProposalId)
       let recoveredSettings: CanvasSettingsChanges | undefined
       if (command) {
         try {
-          baseline = await send(baseline, command)
+          const committed = await send(baseline, command)
+          assistantReceiptRevision = committed.assistantReceiptRevision
+          baseline = committed
           if (staged) recovered = baseline.document
         } catch (reason) {
           if (!settingsSave(command.request_id) || !rejectedSave(reason, true)) throw reason
@@ -339,7 +342,8 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       }
       s.current = response.data; s.document = cleaner.current!(recovered); s.pending = undefined; s.recovery = undefined
       history.current = { scope: key, past: [], future: [] }
-      if (!changed && staged && saved.pending) {
+      if (!changed && staged && saved.pending && (!saved.pending.assistantProposalId ||
+        assistantReceiptRevision === saved.baseline.revision + 1 && response.data.revision === assistantReceiptRevision)) {
         recordConfirmedSave(saved.pending, saved.baseline.document, s.document)
       }
       setSettingsDraft(recoveredSettings)
@@ -503,7 +507,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       s.pending = { request_id: crypto.randomUUID(), expected_revision: -1, document: s.document,
         draftAssistant: draftAssistantSnapshot(before.id), draftAssistantApproval: { source_id: sourceId, group_ids: groupIds } }
     } else s.pending = { request_id: crypto.randomUUID(), expected_revision: before.revision, document: s.document,
-      assistantProposalId: sourceId, assistantGroupIds: groupIds, assistantAutomatic: automatic }
+      assistantProposalId: sourceId, assistantDecisionId: crypto.randomUUID(), assistantGroupIds: groupIds, assistantAutomatic: automatic }
     setInitialApplying(true); persist()
     return save()
   }

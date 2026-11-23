@@ -109,9 +109,10 @@ async def test_assistant_edits_catalog_text_fields(canvas_client, monkeypatch, c
 @pytest.mark.usefixtures('assistant_edit_model')
 @pytest.mark.parametrize('scene_owned,canvas_client', [
     (False, 'sqlite'), (True, 'sqlite'), ('groups', 'sqlite'), ('restart', 'mysql'),
+    ('conflict-replay', 'sqlite'), ('conflict-replay', 'mysql'),
 ], indirect=['canvas_client'])
 async def test_assistant_edit_requires_approval_and_replays_original_save(canvas_client, monkeypatch, scene_owned, tmp_path):
-    grouped = scene_owned in ('groups', 'restart')
+    grouped = scene_owned in ('groups', 'restart', 'conflict-replay')
     if scene_owned is True:
         canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '分镜画布'})).json()['data']
         url = canvas_url(f"/canvases/p/{canvas['id']}")
@@ -181,6 +182,41 @@ async def test_assistant_edit_requires_approval_and_replays_original_save(canvas
             'request_id': 'manual', 'expected_revision': revision, 'document': {**draft, 'name': '手动改名'},
         })
         assert change.status_code == 200, change.text
+        if scene_owned == 'conflict-replay':
+            decision_url = assistant + '/proposals/edit-speed'
+            decision = {'action': 'approve', 'expected_revision': revision,
+                        'group_ids': [groups[0]['id']], 'decision_id': 'first-approval'}
+            first = await canvas_client.post(decision_url, json=decision)
+            assert first.status_code == 200, first.text
+            prior = first.json()['data']
+            assert prior['receipt'] is None
+            assert prior['conflicts'][0]['current'] == '手动环绕'
+
+            card['prompt']['segments'][0]['text'] = '快速推近'
+            restored = await canvas_client.put(url, json={
+                'request_id': 'restore', 'expected_revision': change.json()['data']['revision'], 'document': draft,
+            })
+            assert restored.status_code == 200, restored.text
+            replay = await canvas_client.post(decision_url, json=decision)
+            assert replay.status_code == 200, replay.text
+            assert replay.json()['data']['conflicts'] == prior['conflicts']
+            assert replay.json()['data']['receipt'] is None
+            assert (await canvas_client.get(url)).json()['data']['revision'] == restored.json()['data']['revision']
+            assert (await canvas_client.get(append_canvas_path(url, '/runtime'))).json()['data']['runs'] == []
+
+            retry = await canvas_client.post(decision_url, json={
+                **decision, 'decision_id': 'new-approval', 'expected_revision': restored.json()['data']['revision'],
+            })
+            assert retry.status_code == 200, retry.text
+            assert retry.json()['data']['receipt']['revision'] == restored.json()['data']['revision'] + 1
+            assert retry.json()['data']['canvas']['document']['cards'][0]['prompt']['segments'][0]['text'] == '慢推'
+            replay = await canvas_client.post(decision_url, json=decision)
+            assert replay.json()['data']['conflicts'] == prior['conflicts']
+            assert replay.json()['data']['receipt'] is None
+            assert replay.json()['data']['proposal'] == prior['proposal']
+            reused = await canvas_client.post(decision_url, json={**decision, 'action': 'reject'})
+            assert reused.status_code == 409
+            return
         decision_url = assistant + '/proposals/edit-speed'
         decision = {'action': 'approve', 'expected_revision': revision,
                     'group_ids': [group['id'] for group in groups]}
