@@ -1,6 +1,8 @@
 """Preview and approve the assistant's narrow, user-authorized canvas edits."""
 
+from copy import copy
 import hashlib
+from uuid import uuid4
 from typing import Annotated
 
 from fastapi import HTTPException
@@ -15,8 +17,8 @@ from app.schemas.canvas_assistant_edit import (
     CanvasAssistantChange, CanvasAssistantEditConflict, CanvasAssistantEditGroup,
     CanvasAssistantApprovalAudit, CanvasAssistantEditTarget, CanvasAssistantEditText, CanvasAssistantFieldTarget,
     CanvasAssistantProposal, CanvasAssistantProposalDecision, CanvasAssistantProposalResult,
-    CanvasAssistantRemovalTarget, CardTextEdit, DeleteCardEdit, DesignTextFieldEdit, ModelPromptSegmentEdit,
-    MovementFieldEdit, ProposedEditGroup, ReleaseBindingEdit,
+    CanvasAssistantRemovalTarget, CardTextEdit, DeleteCardEdit, DesignTextFieldEdit, DisconnectCardsEdit, ModelPromptSegmentEdit,
+    MovementFieldEdit, ProposedBatchCard, ProposedBatchField, ProposedBatchRemoval, ProposedCanvasBatch, ProposedEditGroup, ReleaseBindingEdit,
     VideoPromptSegmentEdit,
 )
 from app.schemas.canvas_assistant_structure import (
@@ -27,9 +29,12 @@ from app.schemas.generation_canvas import (
     TextContentCard, VideoModelCard,
 )
 from app.services.generation_canvas.catalog import CARD_TITLES, design_fields
+from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
 from app.services.generation_canvas.assistant_approval import automatic_approval_allowed
 from app.services.generation_canvas.assistant_removals import apply_removal, removal_impact
-from app.services.generation_canvas.assistant_structure import apply_structural_change
+from app.services.generation_canvas.assistant_structure import (
+    apply_structural_change, assistant_card_configuration, preview_assistant_connection,
+)
 from app.services.generation_canvas.store import CanvasStore
 
 
@@ -126,22 +131,97 @@ class CanvasAssistantEditDraft:
         propose_canvas_edit_groups.handle_validation_error = True
         return propose_canvas_edit_groups
 
+    def preview_batch(self, groups: ProposedCanvasBatch) -> CanvasAssistantProposal:
+        """Validate a mixed preview through the same catalog and scope used by approval."""
+        if self.proposal:
+            raise ToolException('A preview has already been prepared for this turn')
+        preview = []
+        targets: set[tuple[str, str]] = set()
+        for number, group in enumerate(groups, start=1):
+            local = copy(self)
+            local.saved_cards = dict(self.saved_cards)
+            local.visible_document = self.visible_document.model_copy(deep=True)
+            references: dict[str, str] = {}
+            edits = []
+            for operation in group.changes:
+                change = self._batch_operation(local, operation, references)
+                key = change.card_id, change.target.model_dump_json(exclude={'connection_id'})
+                if key in targets:
+                    raise ToolException('Each proposed change must appear once')
+                targets.add(key)
+                edits.append(change)
+            preview.append(CanvasAssistantEditGroup(id=str(number), title=group.title, edits=edits))
+        self.proposal = CanvasAssistantProposal(**preview[0].edits[0].model_dump(), groups=preview)
+        return self.proposal
+
+    def _batch_operation(self, local, operation, references):
+        if isinstance(operation, ProposedBatchField):
+            edit = operation.change
+            return self._preview(edit.card_id, edit.target, edit.text)
+        if isinstance(operation, ProposedBatchRemoval):
+            change = local._preview_removal(operation.card_id, operation.target)
+            apply_removal(local.visible_document, change.card_id, change.target)
+            if isinstance(change.target, DeleteCardEdit):
+                local.saved_cards.pop(change.card_id)
+            return change
+        if isinstance(operation, ProposedBatchCard):
+            if operation.reference in references or operation.reference in self.cards:
+                raise ToolException('Each new card reference must be unique within its group')
+            try:
+                card, text = assistant_card_configuration(operation.card, uuid4().hex)
+            except ValueError as exc:
+                raise ToolException('Choose a card available in the catalog') from exc
+            if not local.visible_document.project_id and card.type not in FREE_CARD_TYPES:
+                raise ToolException(f'当前画布不允许创建 {CARD_TITLES[card.type]}')
+            references[operation.reference] = card.id
+            local.saved_cards[card.id] = card
+            local.visible_document.cards.append(card)
+            return CanvasAssistantChange(card_id=card.id, card_name=CARD_TITLES[card.type], before='', after=text,
+                                         target=AddCanvasCardTarget(kind='add_canvas_card', card=operation.card))
+        connection = operation.model_copy(update={
+            'source_card': references.get(operation.source_card, operation.source_card),
+            'target_card': references.get(operation.target_card, operation.target_card),
+        })
+        return preview_assistant_connection(local, connection)
+
+    def batch_tool(self):
+        """Expose the unified operation as a typed read-only preview tool."""
+        @tool
+        def propose_canvas_changes(groups: ProposedCanvasBatch) -> str:
+            """Preview changes. Keep dependent changes together; connect new cards by their group reference."""
+            return self.preview_batch(groups).model_dump_json()
+
+        propose_canvas_changes.handle_tool_error = True
+        propose_canvas_changes.handle_validation_error = True
+        return propose_canvas_changes
+
+    def _preview_removal(self, card_id, target):
+        if card_id not in self.saved_cards:
+            raise ToolException('Choose one existing card in the locked scope')
+        if isinstance(target, DisconnectCardsEdit) and not any(
+            edge.id == target.edge_id and edge.source_card in self.saved_cards for edge in self.visible_document.edges
+        ):
+            raise ToolException('Choose one existing connection whose endpoints are within the locked scope')
+        impact = removal_impact(self.visible_document, card_id, target)
+        if impact is None:
+            raise ToolException('The removal has no valid target or would remove protected adopted content')
+        card = self.saved_cards[card_id]
+        titles = {'delete_card': '删除卡片', 'disconnect_cards': '解除连接', 'release_binding': '解除已采用引用'}
+        title = titles[target.kind]
+        return CanvasAssistantChange(
+            card_id=card_id, card_name=getattr(card, 'name', '') or CARD_TITLES[card.type], target=target,
+            before=impact[0], after=title, impact_fingerprint=impact[1],
+        )
+
     def removal_tool(self):
         """Preview a single explicit or inferred removal without changing the document."""
         @tool
         async def propose_canvas_removal(card_id: str, target: CanvasAssistantRemovalTarget) -> str:
-            """Preview deletion of one card or release of one adopted input binding."""
-            if self.proposal or card_id not in self.saved_cards:
-                raise ToolException('Choose one existing card in the locked scope')
-            impact = removal_impact(self.visible_document, card_id, target)
-            if impact is None:
-                raise ToolException('The removal has no valid target or would remove protected adopted content')
-            card = self.saved_cards[card_id]
-            title = '删除卡片' if isinstance(target, DeleteCardEdit) else '解除已采用引用'
-            change = CanvasAssistantChange(
-                card_id=card_id, card_name=getattr(card, 'name', '') or CARD_TITLES[card.type], target=target,
-                before=impact[0], after=title, impact_fingerprint=impact[1],
-            )
+            """Preview deletion of a card, disconnection of a candidate edge, or release of an adopted input."""
+            if self.proposal:
+                raise ToolException('A preview has already been prepared for this turn')
+            change = self._preview_removal(card_id, target)
+            title = change.after
             self.proposal = CanvasAssistantProposal(
                 **change.model_dump(), groups=[CanvasAssistantEditGroup(id='1', title=title, edits=[change])],
             )
@@ -331,7 +411,7 @@ async def _apply_group(store, canvas, document, group):
         if isinstance(change.target, (AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCardsTarget)):
             if await apply_structural_change(store, canvas, document, change):
                 continue
-        elif isinstance(change.target, (DeleteCardEdit, ReleaseBindingEdit)):
+        elif isinstance(change.target, (DeleteCardEdit, ReleaseBindingEdit, DisconnectCardsEdit)):
             impact = removal_impact(document, change.card_id, change.target)
             if impact:
                 current, fingerprint = impact

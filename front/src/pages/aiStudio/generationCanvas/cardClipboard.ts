@@ -2,6 +2,22 @@ import type { GenerationCard } from './graphRules'
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 import type { CanvasResolvedOutput } from '../../../services/generated'
 export type CardClipboard = { schema: 1; projectId: string; cards: GenerationCard[]; positions: CanvasPoint[] }
+export type CardReference = { canvasId: string; cardIds: string[] }
+const referencePrefix = 'jellyfish:cards:1:'
+
+export function writeCardReference(reference: CardReference) {
+  return navigator.clipboard?.writeText(referencePrefix + JSON.stringify(reference))
+}
+
+export function readCardReference(text: string): CardReference | undefined {
+  if (!text.startsWith(referencePrefix)) return
+  try {
+    const value: CardReference = JSON.parse(text.slice(referencePrefix.length))
+    if (typeof value.canvasId === 'string' && Array.isArray(value.cardIds) && value.cardIds.length > 0 &&
+      value.cardIds.length <= 200 && value.cardIds.every(id => typeof id === 'string' && id.length > 0)) return value
+  } catch { /* Paste unrecognized text as supplied. */ }
+}
+
 const storageKey = (projectId: string) => `jellyfish:card-clipboard:${projectId}`
 /** 所有采用都必须显式解除；候选边不属于卡片配置，不影响资格。 */
 export function copyRestriction(card: GenerationCard): string | undefined {

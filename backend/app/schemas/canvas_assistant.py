@@ -33,6 +33,7 @@ class CanvasAssistantReadContext(BaseModel):
     scope: Literal['selection', 'canvas']
     target_card_ids: list[str]
     cards: list[dict]
+    observed_card_ids: list[str] | None = Field(default=None, exclude_if=lambda value: value is None)
     layout_positions: dict[str, CanvasAssistantPoint] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 

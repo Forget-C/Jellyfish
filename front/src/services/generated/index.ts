@@ -353,6 +353,7 @@ export type { DialogueReferencePayload } from './models/DialogueReferencePayload
 export type { DirectingTaskRead } from './models/DirectingTaskRead';
 export type { Direction_Input } from './models/Direction_Input';
 export type { Direction_Output } from './models/Direction_Output';
+export type { DisconnectCardsEdit } from './models/DisconnectCardsEdit';
 export type { DivisionAnalysisDetail } from './models/DivisionAnalysisDetail';
 export type { DivisionBaseline } from './models/DivisionBaseline';
 export type { DivisionDraft } from './models/DivisionDraft';

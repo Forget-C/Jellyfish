@@ -26,7 +26,8 @@ from app.services.generation_canvas.catalog import CARD_TITLES, canvas_card_mode
 from app.services.generation_canvas.connection_policy import connection_policy
 
 
-def _card_configuration(operation, card_id):
+def assistant_card_configuration(operation, card_id):
+    """Build the same initial card for preview and commit."""
     if isinstance(operation, AddCatalogCard):
         card_model = canvas_card_models().get(operation.card_type)
         if card_model:
@@ -91,7 +92,7 @@ def structural_preview_tool(draft, kind: str, sources):
             preview = preview_shot_movement(draft, change)
             title = '只修改所选镜头的运镜'
         elif isinstance(change, ConnectCards):
-            preview = _preview_connection(draft, change)
+            preview = preview_assistant_connection(draft, change)
             title = '连接卡片'
         elif isinstance(change, AdoptFirstFrame):
             media = sources.get(change.file_id)
@@ -118,7 +119,7 @@ def structural_preview_tool(draft, kind: str, sources):
             title = '建卡、连线并更换首帧' if replaced else '建卡、连线并采用首帧'
         else:
             try:
-                card, text = _card_configuration(change, uuid4().hex)
+                card, text = assistant_card_configuration(change, uuid4().hex)
             except ValueError as exc:
                 raise ToolException('Choose a catalog card that can be created with its default values') from exc
             if kind == 'free' and card.type not in FREE_CARD_TYPES:
@@ -152,7 +153,7 @@ async def apply_structural_change(store, canvas, document: CanvasDocument, edit:
         document.input_order.setdefault(edge.target_card, {}).setdefault(edge.target_port, []).append(edge.id)
         return True
     if isinstance(change, AddCanvasCardTarget):
-        card, _ = _card_configuration(change.card, edit.card_id)
+        card, _ = assistant_card_configuration(change.card, edit.card_id)
         if card.id in existing or card.id in canvas.card_types:
             return False
         document.cards.append(card)
@@ -175,7 +176,8 @@ async def _apply_frame_change(store, canvas, document, existing, edit):
     return True
 
 
-def _preview_connection(draft, change: ConnectCards) -> CanvasAssistantChange:
+def preview_assistant_connection(draft, change: ConnectCards) -> CanvasAssistantChange:
+    """Resolve and validate a proposed connection against the scoped in-memory document."""
     identity = uuid4().hex
     edge = _candidate_edge(change, identity, draft.visible_document, draft.saved_cards)
     if edge is None:

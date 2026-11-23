@@ -7,6 +7,7 @@ import httpx
 from PIL import Image
 import pytest
 
+from app.models.llm import Model
 from tests.canvas_urls import append_canvas_path, canvas_url, seed_scene_canvas
 from tests.test_canvas_assistant_edit_api import assistant_edit_model  # pylint: disable=unused-import
 from tests.test_canvas_assistant_media_api import recorded_media_storage  # pylint: disable=unused-import
@@ -57,6 +58,87 @@ async def approve_structure(client, url, canvas, proposal):
         'action': 'approve', 'expected_revision': canvas['revision'], 'group_ids': [proposal['groups'][0]['id']],
     })
 
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures('assistant_edit_model')
+@pytest.mark.parametrize('native_tools,field_conflict', [(True, False), (False, False), (True, True)])
+async def test_batch_proposal_edits_creates_and_connects_atomically(canvas_client, monkeypatch, native_tools, field_conflict):
+    if not native_tools:
+        async with canvas_client.canvas_sessions.begin() as db:
+            model = await db.get(Model, 'canvas-text')
+            model.capability_profile = {'tool_calling': {'declaration': 'unsupported'}}
+    canvas = (await canvas_client.post('/canvases', json={'name': '画布'})).json()['data']
+    url = f"/canvases/{canvas['id']}"
+    document = dict(canvas['document'], cards=[
+        {'id': 'notes', 'type': 'content.text', 'text': '初稿'}, {'id': 'target', 'type': 'model.text'},
+    ])
+    saved = await canvas_client.put(url, json={
+        'request_id': 'setup', 'expected_revision': canvas['revision'], 'document': document,
+    })
+    assert saved.status_code == 200, saved.text
+    canvas = (await canvas_client.get(url)).json()['data']
+    groups = [{'title': '整理说明与参考来源', 'changes': [
+        {'kind': 'edit_field', 'change': {'card_id': 'notes', 'target': {'kind': 'card_text'}, 'text': '定稿'}},
+        {'kind': 'add_card', 'reference': 'new-notes', 'card': {'kind': 'add_text_card', 'text': '新增参考'}},
+        {'kind': 'connect_cards', 'source_card': 'new-notes', 'source_port': 'text',
+         'target_card': 'target', 'target_port': 'text'},
+    ]}]
+    real_send = httpx.AsyncClient.send
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await real_send(client, request, **kwargs)
+        body = json.loads(request.content)
+        completed = [m.get('tool_call_id') for m in body['messages'] if m['role'] == 'tool']
+        answer = {'role': 'assistant', 'content': '事项请确认'}
+        if not native_tools:
+            assert not body.get('tools')
+            answer['content'] = json.dumps({'reply': '事项请确认', 'groups': groups}, ensure_ascii=False)
+        elif 'batch' not in completed:
+            tool = ('batch', 'propose_canvas_changes', {'groups': groups}) if completed else ('read', 'read_canvas_context', {})
+            answer = {'role': 'assistant', 'tool_calls': [{
+                'id': tool[0], 'type': 'function', 'function': {'name': tool[1], 'arguments': json.dumps(tool[2])},
+            }]}
+        return httpx.Response(200, request=request, json={
+            'id': 'response', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+            'choices': [{'index': 0, 'finish_reason': 'tool_calls' if 'tool_calls' in answer else 'stop', 'message': answer}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    exchange = await send_structure(canvas_client, url, canvas, '把笔记改成定稿，加一张参考卡并连到文本模型')
+    proposal = exchange['proposal']
+    assert proposal is not None
+    changes = proposal['groups'][0]['edits']
+    assert [item['target']['kind'] for item in changes] == ['card_text', 'add_canvas_card', 'connect_cards']
+    new_card_id = changes[1]['card_id']
+    assert changes[2]['target']['source_card'] == new_card_id
+    assert exchange['reply'] == '事项请确认'
+    assert (await canvas_client.get(url)).json()['data']['document'] == canvas['document']
+
+    if field_conflict:
+        document['cards'][0]['text'] = '用户手改'
+        changed = await canvas_client.put(url, json={
+            'request_id': 'manual', 'expected_revision': canvas['revision'], 'document': document,
+        })
+        assert changed.status_code == 200, changed.text
+        canvas = (await canvas_client.get(url)).json()['data']
+
+    approved = await approve_structure(canvas_client, url, canvas, proposal)
+    assert approved.status_code == 200, approved.text
+    result = approved.json()['data']
+    actual = (await canvas_client.get(url)).json()['data']
+    if field_conflict:
+        assert result['receipt'] is None
+        assert [conflict['current'] for conflict in result['conflicts']] == ['用户手改']
+        assert actual['document'] == canvas['document']
+    else:
+        assert actual['revision'] == canvas['revision'] + 1
+        assert {card['id']: card.get('text') for card in actual['document']['cards']} == {
+            'notes': '定稿', 'target': None, new_card_id: '新增参考',
+        }
+        edge, = actual['document']['edges']
+        assert edge['source_card'] == new_card_id and edge['target_card'] == 'target'
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures('assistant_edit_model')

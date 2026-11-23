@@ -7,16 +7,20 @@ from pydantic import ValidationError
 from app.models.canvas_assistant import CanvasAssistantSession, CanvasAssistantTurn
 from app.models.generation_canvas import GenerationCanvas
 from app.schemas.canvas_assistant import CanvasAssistantExchange
+from app.schemas.canvas_assistant_edit import CanvasAssistantProposal
 from app.schemas.canvas_assistant_draft import CanvasDraftSave, DraftAssistantMessage
-from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, AddModelCard, AddTextCard
+from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, ConnectCardsTarget
 from app.schemas.generation_canvas import CanvasDocument
+from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
 from app.services.generation_canvas.assistant import CanvasAssistant
 from app.services.generation_canvas.assistant_context import resolve_assistant_context
 from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
 from app.services.generation_canvas.assistant_media import (
     describe_assistant_media, resolve_assistant_media, retain_assistant_media,
 )
-from app.services.generation_canvas.assistant_structure import apply_structural_change, structural_preview_tool
+from app.services.generation_canvas.assistant_structure import (
+    apply_structural_change, assistant_card_configuration, structural_preview_tool,
+)
 
 
 class DraftCanvasAssistant(CanvasAssistant):
@@ -48,25 +52,50 @@ class DraftCanvasAssistant(CanvasAssistant):
             command.text, command.attachment_file_ids, sources, capability=capability,
         )
         messages.append(HumanMessage(content=content))
-        reply, skills = await self._reply(
+        reply, skills, observed = await self._reply(
             client, messages, context, edit_draft, supports_tools=capability.tool_calling, structure_tool=structure_tool,
             max_input_tokens=capability.max_input_tokens,
         )
+        if context is not None:
+            context.observed_card_ids = observed
         return CanvasAssistantExchange(request_id=command.request_id, text=command.text, context=context,
             sequence=len(command.turns) + 1, model_id=model_id, reply=reply, attachments=attachments,
             skills=skills or None, proposal=edit_draft.proposal if edit_draft else None, revises=command.revises)
 
 
-def _valid_proposal(proposal) -> bool:
-    """Unsaved conversations can only bring forward proposed card creation."""
-    if not proposal or not proposal.groups or len(proposal.groups) != 1 or len(proposal.groups[0].edits) != 1:
+def _valid_free_card(target: AddCanvasCardTarget, card_id: str) -> bool:
+    try:
+        card, _ = assistant_card_configuration(target.card, card_id)
+    except ValueError:
         return False
-    target = proposal.groups[0].edits[0].target
-    return isinstance(target, AddCanvasCardTarget) and isinstance(target.card, (AddTextCard, AddModelCard))
+    return card.type in FREE_CARD_TYPES
+
+
+def _valid_proposal(proposal: CanvasAssistantProposal | None) -> bool:
+    """Check that a browser-owned first-save proposal only adds independent free-canvas groups."""
+    groups = proposal.groups if proposal else None
+    if not groups or len({group.id for group in groups}) != len(groups):
+        return False
+    added = set()
+    for group in groups:
+        local = set()
+        for edit in group.edits:
+            target = edit.target
+            if isinstance(target, AddCanvasCardTarget):
+                if edit.card_id in added or not _valid_free_card(target, edit.card_id):
+                    return False
+                local.add(edit.card_id)
+                added.add(edit.card_id)
+            elif (not isinstance(target, ConnectCardsTarget) or edit.card_id != target.target_card
+                  or {target.source_card, target.target_card} - local):
+                return False
+        if not local:
+            return False
+    return True
 
 
 async def prepare_draft_approval(store, canvas, command: CanvasDraftSave):
-    """Apply only the selected card creation to the first-save document."""
+    """Apply selected independent groups in the same transaction as the new canvas."""
     approval = command.assistant_approval
     if approval is None:
         return None
@@ -75,16 +104,20 @@ async def prepare_draft_approval(store, canvas, command: CanvasDraftSave):
     proposal = selected.proposal if selected else None
     if not _valid_proposal(proposal):
         raise HTTPException(422, 'Select a draft card creation proposal')
-    group, = proposal.groups
-    if approval.group_ids != [group.id] or proposal.state != 'pending' or group.state != 'pending':
+    pending = {group.id for group in proposal.groups if group.state == 'pending'}
+    selected_ids = set(approval.group_ids)
+    if (proposal.state != 'pending' or len(selected_ids) != len(approval.group_ids)
+            or not selected_ids <= pending):
         raise HTTPException(409, 'The draft assistant proposal cannot be approved')
     try:
         document = CanvasDocument.model_validate(command.document)
     except ValidationError as error:
         raise HTTPException(422, 'Invalid draft canvas document') from error
-    edit, = group.edits
-    if not await apply_structural_change(store, canvas, document, edit):
-        raise HTTPException(409, 'The proposed card already exists')
+    for group in proposal.groups:
+        if group.id in selected_ids:
+            for edit in group.edits:
+                if not await apply_structural_change(store, canvas, document, edit):
+                    raise HTTPException(409, 'The proposed card or connection is no longer valid')
     return document.model_dump(mode='json')
 
 
@@ -105,10 +138,16 @@ async def attach_draft_conversation(store, command: CanvasDraftSave, receipt: di
     for turn in turns:
         proposal = turn.proposal if _valid_proposal(turn.proposal) else None
         approved = bool(approval and turn.request_id == approval.source_id)
-        if proposal and approved:
-            proposal.state = proposal.groups[0].state = 'applied'
-        elif proposal and proposal.state == 'applied':
-            proposal.state = proposal.groups[0].state = 'pending'
+        if proposal and (approved or proposal.state == 'applied' or any(
+            group.state == 'applied' for group in proposal.groups
+        )):
+            for group in proposal.groups:
+                if approved and group.id in approval.group_ids:
+                    group.state = 'applied'
+                elif group.state == 'applied':
+                    group.state = 'pending'
+            states = {group.state for group in proposal.groups}
+            proposal.state = 'pending' if 'pending' in states else 'applied' if 'applied' in states else 'rejected'
         audit = [{'source_id': turn.request_id, 'mode': 'manual', 'action': 'approve',
                   'outcome': 'applied', 'group_ids': approval.group_ids}] if approved else None
         store.db.add(CanvasAssistantTurn(canvas_id=canvas_id, request_id=turn.request_id, sequence=turn.sequence,

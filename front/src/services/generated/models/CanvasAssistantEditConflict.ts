@@ -9,6 +9,7 @@ import type { CardTextEdit } from './CardTextEdit';
 import type { ConnectCardsTarget } from './ConnectCardsTarget';
 import type { DeleteCardEdit } from './DeleteCardEdit';
 import type { DesignTextFieldEdit } from './DesignTextFieldEdit';
+import type { DisconnectCardsEdit } from './DisconnectCardsEdit';
 import type { ModelPromptSegmentEdit } from './ModelPromptSegmentEdit';
 import type { MovementFieldEdit } from './MovementFieldEdit';
 import type { ReleaseBindingEdit } from './ReleaseBindingEdit';
@@ -19,6 +20,6 @@ import type { VideoPromptSegmentEdit } from './VideoPromptSegmentEdit';
 export type CanvasAssistantEditConflict = {
     group_id: string;
     card_id: string;
-    target: (VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit | DeleteCardEdit | ReleaseBindingEdit | AddCanvasCardTarget | AdoptFirstFrameTarget | AdjustShotMovementTarget | ConnectCardsTarget);
+    target: (VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit | DeleteCardEdit | ReleaseBindingEdit | DisconnectCardsEdit | AddCanvasCardTarget | AdoptFirstFrameTarget | AdjustShotMovementTarget | ConnectCardsTarget);
     current: (string | null);
 };

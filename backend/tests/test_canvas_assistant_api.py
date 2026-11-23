@@ -101,13 +101,25 @@ async def test_assistant_switches_model_without_losing_visible_card_scope(canvas
         if body['model'] == 'canvas-text':
             assert not body.get('tools')
             supplied = next(item['content'] for item in reversed(messages) if item['role'] == 'user')
-            assert '只在编辑器可见' in supplied and '实际采用' in supplied
-            assert '另一个同名模型卡' not in supplied
+            if '分析 camera-note' not in supplied:
+                assert '只在编辑器可见' in supplied and '实际采用' in supplied
+                assert '另一个同名模型卡' not in supplied
             assert '当前画布支持的卡片' in supplied
             assert ('direction.movement（' in supplied) == scene_owned
+        elif messages[-1].get('content') == '检查第二页':
+            answer = {'role': 'assistant', 'tool_calls': [{
+                'id': 'read-second-page', 'type': 'function',
+                'function': {'name': 'read_canvas_context', 'arguments': '{"offset":1,"limit":2}'},
+            }]}
+            reason = 'tool_calls'
+        elif tool_result and tool_result.get('tool_call_id') == 'read-second-page':
+            page = json.loads(tool_result['content'])
+            assert [card['id'] for card in page['cards']] == ['basis', 'filler-00']
+            assert page['next_offset'] == 3
         elif tool_result is None:
             assert {tool['function']['name'] for tool in body['tools']} == {
                 'read_canvas_context', 'load_canvas_skill', 'read_canvas_skill_example', 'propose_canvas_structure',
+                'propose_canvas_changes',
             }
             answer = {'role': 'assistant', 'tool_calls': [{
                 'id': 'call-context', 'type': 'function',
@@ -173,6 +185,39 @@ async def test_assistant_switches_model_without_losing_visible_card_scope(canvas
     assert (await canvas_client.post(assistant, json=whole_canvas)).status_code == 200
     assert (await canvas_client.get(url)).json()['data']['document'] == canvas['document']
     assert (await canvas_client.get(append_canvas_path(url, '/runtime'))).json()['data']['runs'] == []
+
+    # A bounded read must still include the named card, even at the end of the canvas.
+    chosen = await canvas_client.patch(append_canvas_path(url, '/assistant/model'), json={'model_id': 'canvas-text'})
+    assert chosen.status_code == 200, chosen.text
+    large = dict(draft, cards=[
+        *draft['cards'][:2],
+        *[{'id': f'filler-{index:02}', 'type': 'content.text', 'text': '其他草稿' * (2500 if index == 0 else 1)}
+          for index in range(30)],
+        {'id': 'camera-note', 'type': 'content.text', 'text': '最后一张的实际内容'},
+    ])
+    async with canvas_client.canvas_sessions.begin() as db:
+        model = await db.get(Model, 'canvas-text')
+        model.capability_profile = {'max_input_tokens': 4096}
+    limited = dict(turn, request_id='large-text', text='分析 camera-note', context=dict(turn['context'], draft=large, scope='canvas'))
+    result = await canvas_client.post(assistant, json=limited)
+    assert result.status_code == 200, result.text
+    supplied = next(item['content'] for item in reversed(requests[-1]['messages']) if item['role'] == 'user')
+    assert '最后一张的实际内容' in supplied
+    assert 'filler-00' not in supplied
+    assert result.json()['data']['context']['observed_card_ids'] == ['camera-note', 'target', 'basis']
+    assert '本轮读取 3/33' in result.json()['data']['reply']
+    assert (await canvas_client.post(assistant, json=limited)).json() == result.json()
+
+    chosen = await canvas_client.patch(append_canvas_path(url, '/assistant/model'), json={'model_id': 'tool-model'})
+    assert chosen.status_code == 200, chosen.text
+    result = await canvas_client.post(assistant, json=dict(
+        limited, request_id='native-page', text='检查第二页',
+        context=dict(limited['context'], scope='selection', card_ids=['target', 'basis', 'filler-00', 'filler-01']),
+    ))
+    assert result.status_code == 200, result.text
+    assert result.json()['data']['context']['observed_card_ids'] == ['basis', 'filler-00']
+    assert '本轮读取 2/4' in result.json()['data']['reply']
+
 
 
 @pytest.mark.asyncio
@@ -304,3 +349,51 @@ async def test_assistant_model_context_limit_keeps_current_request_and_drops_old
     assert (await canvas_client.patch(assistant + '/model', json={'model_id': 'large-window'})).status_code == 200
     retried = (await canvas_client.post(assistant, json=history['pending_request'])).json()['data']
     assert retried['request_id'] == 'long2' and retried['model_id'] == 'large-window'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('native_tools', [True, False])
+async def test_explicit_plan_uses_named_skills_without_available_writes(canvas_client, monkeypatch, native_tools):
+    from app.models.llm import Model
+
+    async with canvas_client.canvas_sessions.begin() as db:
+        provider = await db.get(Provider, 'canvas-provider')
+        provider.api_key = 'local-test-key'
+        model = await db.get(Model, 'canvas-text')
+        model.capability_profile = {'tool_calling': {'declaration': 'supported' if native_tools else 'unsupported'}}
+        db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
+    original = httpx.AsyncClient.send
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original(client, request, **kwargs)
+        body = json.loads(request.content)
+        assert all(not tool['function']['name'].startswith('propose_') for tool in body.get('tools', []))
+        system = next(message['content'] for message in body['messages'] if message['role'] == 'system')
+        assert '当前轮仅给出只读方案' in system
+        assert '[专业技能 script-planning]' in system and '[专业技能 shot-staging]' in system
+        answer = {'role': 'assistant', 'content': '保留 4 秒全景、7 秒动作、4 秒反应，合计 15 秒。'}
+        if native_tools and not any(message['role'] == 'tool' for message in body['messages']):
+            answer = {'role': 'assistant', 'tool_calls': [{
+                'id': 'context', 'type': 'function', 'function': {'name': 'read_canvas_context', 'arguments': '{}'},
+            }]}
+        return httpx.Response(200, request=request, json={
+            'id': 'plan', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+            'choices': [{'index': 0, 'finish_reason': 'tool_calls' if 'tool_calls' in answer else 'stop',
+                         'message': answer}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    canvas = (await canvas_client.post('/canvases', json={'name': '计划'})).json()['data']
+    url = f"/canvases/{canvas['id']}"
+    response = await canvas_client.post(url + '/assistant', json={
+        'request_id': 'read-only-plan', 'text': '/plan /script-planning /shot-staging 把这一场压到 15 秒',
+        'context': {'draft': canvas['document'], 'revision': canvas['revision'], 'scope': 'canvas'},
+    })
+    assert response.status_code == 200, response.text
+    turn = response.json()['data']
+    assert turn['proposal'] is None and turn['generation'] is None
+    assert [(skill['id'], skill['version']) for skill in turn['skills']] == [
+        ('script-planning', '1.0.0'), ('shot-staging', '1.0.0'),
+    ]
+    assert (await canvas_client.get(url)).json()['data']['revision'] == canvas['revision']

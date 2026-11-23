@@ -126,7 +126,7 @@ export function AssistantEditGroups({ groups, selected, onSelectionChange, curre
                 <><dt>{uiText('当前值')}</dt><dd>{currentText(currentDraft, edit) ?? '—'}</dd></>}
               <dt>{uiText('拟议值')}</dt><dd>{edit.after}</dd>
             </dl>
-            if ('edge_id' in target) return <dl key={target.edge_id}>
+            if ('reference_card_id' in target) return <dl key={target.edge_id}>
               <dt>{uiText('参考素材')}</dt><dd>{target.file_name}</dd>
               <dt>{uiText('新建卡片')}</dt><dd>{uiText('图片内容卡')} · {target.reference_card_id.slice(0, 8)}</dd>
               <dt>{uiText('连线目标')}</dt><dd>{uiText(edit.card_name)} · <span title={edit.card_id}>{edit.card_id.slice(0, 8)}</span></dd>
@@ -142,7 +142,7 @@ export function AssistantEditGroups({ groups, selected, onSelectionChange, curre
               {edit.after && <><dt>{uiText('拟议值')}</dt><dd>{edit.after}</dd></>}
             </dl>
             const currentValue = currentText(currentDraft, edit)
-            const removal = edit.target.kind === 'delete_card' || edit.target.kind === 'release_binding'
+            const removal = ['delete_card', 'release_binding', 'disconnect_cards'].includes(edit.target.kind)
             const changed = !removal && pending.includes(group) && currentValue !== edit.before
             return <dl key={edit.card_id + JSON.stringify(edit.target)}>
               <dt>{uiText(edit.card_name)} · {edit.card_id.slice(0, 8)} · {removal ? uiText(edit.after)

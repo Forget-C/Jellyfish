@@ -436,3 +436,11 @@
   .canvas-settings-cover { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .canvas-settings-cover-actions { display: flex; flex-wrap: wrap; gap: 4px; }
 }
+
+.generation-card[data-assistant-highlight="true"] .generation-card-body,
+.generation-group[data-assistant-highlight="true"] {
+  box-shadow: 0 0 0 3px rgb(21 170 146 / 60%), 0 0 16px rgb(21 170 146 / 34%);
+}
+.generation-edges [data-assistant-highlight="true"] .canvas-edge-line {
+  filter: drop-shadow(0 0 3px #15aa92) drop-shadow(0 0 2px #15aa92);
+}

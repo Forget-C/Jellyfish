@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from functools import cache
 import json
+import re
 from pathlib import Path
 
 from langchain_core.tools import tool
@@ -21,6 +22,10 @@ class ProductSkill:
     name: str
     description: str
     version: str
+
+    def instructions(self) -> str:
+        """Load this version of the skill from its bundled package."""
+        return self.path.read_text(encoding='utf-8').split('---', 2)[2].strip()
 
     def receipt(self) -> CanvasAssistantSkillUse:
         """Identify the exact product instructions consulted for a turn."""
@@ -60,6 +65,35 @@ def skill_guidance() -> str:
     )
 
 
+def requested_skills(text: str) -> list[ProductSkill]:
+    """Resolve slash mentions from the user's message against the bundled catalog."""
+    catalog = skill_catalog()
+    mentions = dict.fromkeys(re.findall(r'(?<![\w/])/(?P<skill>[a-z][a-z-]*)(?![\w-])', text))
+    return [catalog[mention] for mention in mentions if mention in catalog]
+
+
+def planning_request(text: str) -> bool:
+    """Honor explicit read-only planning before making proposal tools available."""
+    return re.search(r'(?<![\w/])/plan(?![\w-])', text) is not None or '先给方案' in text
+
+
+def text_skill_context(text: str, *, planning: bool) -> list[ProductSkill]:
+    """Select a narrow evidence-based set of instructions for models without tools."""
+    explicit = requested_skills(text)
+    if explicit:
+        return explicit
+    catalog = skill_catalog()
+    topics = {
+        'script-planning': ('剧本', '方案', '时长', '节奏', '秒'),
+        'shot-staging': ('镜头', '分镜', '摄影', '调度', '机位'),
+        'image-generation': ('生图', '图片', '首帧'),
+        'video-generation': ('生视频', '视频', '运镜'),
+        'footage-review': ('审看', '成片', '质量', '粗剪'),
+    }
+    return [catalog[skill_id] for skill_id, keywords in topics.items()
+            if (planning and skill_id == 'script-planning') or any(keyword in text for keyword in keywords)]
+
+
 def skill_tools(used: dict[str, CanvasAssistantSkillUse]) -> list:
     """Expose product guidance and track successfully loaded versions for this reply."""
     catalog = skill_catalog()
@@ -70,7 +104,7 @@ def skill_tools(used: dict[str, CanvasAssistantSkillUse]) -> list:
         if skill_id not in catalog:
             return 'Unknown canvas skill. Choose an identifier from the supplied catalog.'
         skill = catalog[skill_id]
-        body = skill.path.read_text(encoding='utf-8').split('---', 2)[2].strip()
+        body = skill.instructions()
         receipt = skill.receipt()
         used[skill_id] = receipt
         return json.dumps({**receipt.model_dump(), 'instructions': body}, ensure_ascii=False)

@@ -11,5 +11,6 @@ export type CanvasAssistantReadContext = {
     scope: 'selection' | 'canvas';
     target_card_ids: Array<string>;
     cards: Array<Record<string, any>>;
+    observed_card_ids?: (Array<string> | null);
     layout_positions?: (Record<string, CanvasAssistantPoint> | null);
 };

@@ -9,6 +9,7 @@ import type { CardTextEdit } from './CardTextEdit';
 import type { ConnectCardsTarget } from './ConnectCardsTarget';
 import type { DeleteCardEdit } from './DeleteCardEdit';
 import type { DesignTextFieldEdit } from './DesignTextFieldEdit';
+import type { DisconnectCardsEdit } from './DisconnectCardsEdit';
 import type { ModelPromptSegmentEdit } from './ModelPromptSegmentEdit';
 import type { MovementFieldEdit } from './MovementFieldEdit';
 import type { ReleaseBindingEdit } from './ReleaseBindingEdit';
@@ -19,7 +20,7 @@ import type { VideoPromptSegmentEdit } from './VideoPromptSegmentEdit';
 export type CanvasAssistantChange = {
     card_id: string;
     card_name: string;
-    target: (VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit | DeleteCardEdit | ReleaseBindingEdit | AddCanvasCardTarget | AdoptFirstFrameTarget | AdjustShotMovementTarget | ConnectCardsTarget);
+    target: (VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit | DeleteCardEdit | ReleaseBindingEdit | DisconnectCardsEdit | AddCanvasCardTarget | AdoptFirstFrameTarget | AdjustShotMovementTarget | ConnectCardsTarget);
     before: string;
     after: string;
     impact_fingerprint?: (string | null);

@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from app.models.llm import ModelSettings, Provider
+from tests.test_canvas_assistant_edit_api import assistant_edit_model  # pylint: disable=unused-import
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # pylint: disable=unused-import
 
 
@@ -118,3 +119,76 @@ async def test_approved_first_card_and_reference_are_promoted_once(canvas_client
     assert history[0]['attachments'][0]['file_id'] == file_id
     assert len((await canvas_client.get(f'/files/{file_id}')).json()['data']['usages']) == 1
     assert (await canvas_client.get('/canvases')).json()['data']['pagination']['total'] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures('assistant_edit_model')
+@pytest.mark.parametrize('canvas_client', [None, 'mysql'], indirect=True)
+async def test_first_save_applies_only_selected_batch_and_replays(canvas_client, monkeypatch):
+    from copy import deepcopy
+
+    groups = [
+        {'title': '分镜结构', 'changes': [
+            {'kind': 'add_card', 'reference': 'notes', 'card': {'kind': 'add_text_card', 'text': '逆光'}},
+            {'kind': 'add_card', 'reference': 'model', 'card': {'kind': 'add_model_card', 'modality': 'text'}},
+            {'kind': 'connect_cards', 'source_card': 'notes', 'target_card': 'model',
+             'source_port': 'text', 'target_port': 'text'},
+        ]},
+        {'title': '备用方案', 'changes': [
+            {'kind': 'add_card', 'reference': 'alternate', 'card': {'kind': 'add_text_card', 'text': '侧光'}},
+        ]},
+    ]
+    original = httpx.AsyncClient.send
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original(client, request, **kwargs)
+        body = json.loads(request.content)
+        completed = {message['tool_call_id'] for message in body['messages'] if message['role'] == 'tool'}
+        answer = {'role': 'assistant', 'content': '请确认分镜和备用方案'}
+        if 'batch' not in completed:
+            call = ('batch', 'propose_canvas_changes', {'groups': groups}) if completed else (
+                'read', 'read_canvas_context', {},
+            )
+            answer = {'role': 'assistant', 'tool_calls': [{
+                'id': call[0], 'type': 'function',
+                'function': {'name': call[1], 'arguments': json.dumps(call[2])},
+            }]}
+        return httpx.Response(200, request=request, json={
+            'id': 'draft-batch', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+            'choices': [{'index': 0, 'finish_reason': 'tool_calls' if 'tool_calls' in answer else 'stop',
+                         'message': answer}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    draft_id = str(uuid4())
+    url = f'/canvases/drafts/{draft_id}'
+    document = (await canvas_client.get(url)).json()['data']['document']
+    exchange = await canvas_client.post(url + '/assistant', json={
+        'request_id': 'draft-batch', 'text': '新建两张卡并连接，另给备用方案',
+        'context': {'draft': document, 'revision': 0, 'scope': 'canvas'},
+    })
+    assert exchange.status_code == 200, exchange.text
+    turn = exchange.json()['data']
+    assert [len(group['edits']) for group in turn['proposal']['groups']] == [3, 1]
+    command = {'request_id': 'approve-batch', 'expected_revision': 0, 'document': document,
+               'assistant': {'turns': [turn]}, 'assistant_approval': {'source_id': 'draft-batch', 'group_ids': ['1']}}
+    invalid = deepcopy(command)
+    invalid['assistant']['turns'][0]['proposal']['groups'][0]['edits'][2]['target']['target_port'] = 'invalid'
+    response = await canvas_client.put(url, json=invalid)
+    assert response.status_code == 409, response.text
+    assert (await canvas_client.get(url)).json()['data']['revision'] == -1
+
+    saved = await canvas_client.put(url, json=command)
+    assert saved.status_code == 200, saved.text
+    assert (await canvas_client.put(url, json=command)).json() == saved.json()
+    result = saved.json()['data']['document']
+    assert [card['type'] for card in result['cards']] == ['content.text', 'model.text']
+    assert len(result['edges']) == 1
+    assert (result['edges'][0]['source_card'], result['edges'][0]['target_card']) == tuple(
+        card['id'] for card in result['cards']
+    )
+    history = (await canvas_client.get(f'/canvases/{draft_id}/assistant')).json()['data']['turns']
+    assert len(history) == 1
+    assert [group['state'] for group in history[0]['proposal']['groups']] == ['applied', 'pending']
+    assert [row['group_ids'] for row in history[0]['approval_audit']] == [['1']]

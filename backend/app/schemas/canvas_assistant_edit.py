@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationRead
 from app.schemas.canvas_assistant_structure import (
-    AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCardsTarget, MovementFieldName,
+    AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCards, ConnectCardsTarget, MovementFieldName,
 )
 from app.schemas.generation_canvas import CanvasRead, CanvasSaved
 
@@ -63,14 +63,22 @@ class ReleaseBindingEdit(BaseModel):
     binding_id: str = Field(min_length=1, max_length=128)
 
 
+class DisconnectCardsEdit(BaseModel):
+    """Remove a candidate edge while leaving adopted inputs intact."""
+
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['disconnect_cards']
+    edge_id: str = Field(min_length=1, max_length=128)
+
+
 CanvasAssistantFieldTarget = Annotated[
     VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit,
     Field(discriminator='kind'),
 ]
-CanvasAssistantRemovalTarget = Annotated[DeleteCardEdit | ReleaseBindingEdit, Field(discriminator='kind')]
+CanvasAssistantRemovalTarget = Annotated[DeleteCardEdit | ReleaseBindingEdit | DisconnectCardsEdit, Field(discriminator='kind')]
 CanvasAssistantEditTarget = Annotated[
     VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit
-    | DeleteCardEdit | ReleaseBindingEdit | AddCanvasCardTarget | AdoptFirstFrameTarget
+    | DeleteCardEdit | ReleaseBindingEdit | DisconnectCardsEdit | AddCanvasCardTarget | AdoptFirstFrameTarget
     | AdjustShotMovementTarget | ConnectCardsTarget,
     Field(discriminator='kind'),
 ]
@@ -164,3 +172,43 @@ class ProposedEditGroup(BaseModel):
     model_config = ConfigDict(extra='forbid')
     title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
     edits: list[ProposedFieldEdit] = Field(min_length=1, max_length=8)
+
+
+class ProposedBatchField(BaseModel):
+    """Edit an existing scoped field as part of a batch."""
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['edit_field']
+    change: ProposedFieldEdit
+
+
+class ProposedBatchCard(AddCanvasCardTarget):
+    """Name a new card within an approval group so subsequent changes can connect it."""
+    kind: Literal['add_card']
+    reference: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[A-Za-z0-9_-]+$')]
+
+
+class ProposedBatchRemoval(BaseModel):
+    """Remove a card or release an adopted source within the selected scope."""
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['remove']
+    card_id: str
+    target: CanvasAssistantRemovalTarget
+
+
+class ProposedCanvasBatchGroup(BaseModel):
+    """One independently executable set of dependent changes."""
+    model_config = ConfigDict(extra='forbid')
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    changes: list[Annotated[
+        ProposedBatchField | ProposedBatchCard | ProposedBatchRemoval | ConnectCards, Field(discriminator='kind'),
+    ]] = Field(min_length=1, max_length=8)
+
+
+ProposedCanvasBatch = Annotated[list[ProposedCanvasBatchGroup], Field(min_length=1, max_length=8)]
+
+
+class TextCanvasBatchResponse(BaseModel):
+    """Structured output from a text model. It describes a preview only."""
+    model_config = ConfigDict(extra='forbid')
+    reply: CanvasAssistantEditText
+    groups: ProposedCanvasBatch
