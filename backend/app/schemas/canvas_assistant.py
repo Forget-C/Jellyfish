@@ -67,6 +67,22 @@ class CanvasAssistantMessage(BaseModel):
         return self
 
 
+class CanvasAssistantQuestion(BaseModel):
+    """One creative decision requested by a paused assistant turn."""
+
+    id: str
+    text: str
+    options: list[str]
+
+
+class CanvasAssistantQuestionAnswer(BaseModel):
+    """An answer belongs to exactly one creative question within a turn."""
+
+    model_config = ConfigDict(extra='forbid')
+    question_id: Annotated[str, StringConstraints(min_length=1, max_length=128)]
+    answer: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+
+
 class CanvasAssistantExchange(BaseModel):
     """A completed turn in the order visible to the user."""
 
@@ -87,6 +103,8 @@ class CanvasAssistantExchange(BaseModel):
     generation: CanvasAssistantGenerationRead | None = None
     stopped: bool = False
     layout: CanvasAssistantLayout | None = None
+    question: CanvasAssistantQuestion | None = None
+    question_answers: list[CanvasAssistantQuestionAnswer] | None = None
 
 
 class CanvasAssistantPendingRequest(CanvasAssistantMessage):
@@ -104,6 +122,7 @@ class CanvasAssistantHistory(BaseModel):
     capabilities: tuple[InteractionCapability, ...]
     turns: list[CanvasAssistantExchange]
     pending_request: CanvasAssistantPendingRequest | None = None
+    pending_question: CanvasAssistantQuestion | None = None
     model_id: str | None = None
     approval_mode: Literal['manual', 'automatic'] = 'manual'
 

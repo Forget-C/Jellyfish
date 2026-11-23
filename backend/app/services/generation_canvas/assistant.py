@@ -13,14 +13,17 @@ from langchain.agents.middleware import wrap_model_call
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import ToolException, tool
 from pydantic import Field, ValidationError
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.canvas_assistant import CanvasAssistantGeneration, CanvasAssistantSession, CanvasAssistantTurn
+from app.models.canvas_assistant import (
+    CanvasAssistantEvent, CanvasAssistantGeneration, CanvasAssistantSession, CanvasAssistantTurn,
+)
 from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.models.llm import ModelCategoryKey
 from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
-                                          CanvasAssistantModelSelection, CanvasAssistantReadContext, CanvasAssistantSkillUse, InteractionEvent)
+                                          CanvasAssistantModelSelection, CanvasAssistantQuestion, CanvasAssistantQuestionAnswer,
+                                          CanvasAssistantReadContext, CanvasAssistantSkillUse, InteractionEvent)
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposal, TextCanvasBatchResponse
 from app.schemas.canvas_assistant_layout import CanvasAssistantLayout
 from app.schemas.generation_canvas import CanvasDocument
@@ -31,6 +34,10 @@ from app.services.generation_canvas.assistant_context import (
 )
 from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
 from app.services.generation_canvas.assistant_approval import automatic_approval_allowed
+from app.services.generation_canvas.assistant_questions import (
+    CreativeQuestionPending, ask_canvas_question, check_new_question, resume_question,
+)
+from app.services.generation_canvas.assistant_events import event_read, publish_events
 from app.services.generation_canvas.assistant_layout import CanvasAssistantLayoutDraft
 from app.services.generation_canvas.assistant_generation import (
     freeze_generation_basis, generation_authorization, read_generation, update_generation_for_decision,
@@ -102,10 +109,11 @@ class CanvasAssistant:
             pending = None
         return CanvasAssistantHistory(
             session_id=canvas_id,
-            cursor=turns[-1].sequence if turns else 0,
+            cursor=session.event_cursor if session else 0,
             capabilities=('snapshot', 'send', 'events', 'stop', 'approval'),
             turns=[await self._exchange(turn) for turn in turns],
             pending_request=pending,
+            pending_question=session.pending_request.get('question') if pending and session else None,
             model_id=session.model_id if session else None,
             approval_mode=session.approval_mode if session else 'manual',
         )
@@ -113,16 +121,28 @@ class CanvasAssistant:
     async def events(self, canvas_id: str, after: int) -> list[InteractionEvent[CanvasAssistantExchange]]:
         """Read a bounded page of committed turns after the subscriber's cursor."""
         await self.store.get(canvas_id)
-        turns = await self.db.scalars(select(CanvasAssistantTurn).where(
+        first_event = await self.db.scalar(select(func.min(CanvasAssistantEvent.cursor)).where(
+            CanvasAssistantEvent.canvas_id == canvas_id,
+        ))
+        legacy = select(CanvasAssistantTurn).where(
             CanvasAssistantTurn.canvas_id == canvas_id, CanvasAssistantTurn.sequence > after,
-        ).order_by(CanvasAssistantTurn.sequence).limit(50))
-        return [
+        )
+        if first_event is not None:
+            legacy = legacy.where(CanvasAssistantTurn.sequence < first_event)
+        legacy_turns = list(await self.db.scalars(legacy.order_by(CanvasAssistantTurn.sequence).limit(50)))
+        events = [
             InteractionEvent[CanvasAssistantExchange](
                 session_id=canvas_id, turn_id=turn.request_id, cursor=turn.sequence,
                 type='turn.completed', payload=await self._exchange(turn),
             )
-            for turn in turns
+            for turn in legacy_turns
         ]
+        if len(events) < 50:
+            updates = await self.db.scalars(select(CanvasAssistantEvent).where(
+                CanvasAssistantEvent.canvas_id == canvas_id, CanvasAssistantEvent.cursor > after,
+            ).order_by(CanvasAssistantEvent.cursor).limit(50 - len(events)))
+            events.extend(event_read(event) for event in updates)
+        return events
 
     async def set_approval(self, canvas_id: str, choice: CanvasAssistantApprovalSetting) -> CanvasAssistantApprovalSetting:
         """Save the approval preference for the verified canvas."""
@@ -168,6 +188,9 @@ class CanvasAssistant:
                 if entry.review_state in ('waiting', 'reviewing'):
                     entry.review_state, entry.review_token, entry.review_lease_until = 'stopped', None, None
             await self.db.flush()
+            exchange = await self._exchange(turn)
+            publish_events(self.db, session, exchange, 'turn.stopped')
+            return exchange
         return await self._exchange(turn)
 
     async def _stop_pending(self, session: CanvasAssistantSession, source_id: str) -> CanvasAssistantExchange:
@@ -185,7 +208,9 @@ class CanvasAssistant:
         session.pending_request = session.pending_checkpoint = None
         self.db.add(turn)
         await self.db.flush()
-        return await self._exchange(turn)
+        exchange = await self._exchange(turn)
+        publish_events(self.db, session, exchange, 'turn.completed')
+        return exchange
 
     async def set_model(self, canvas_id: str, choice: CanvasAssistantModelSelection) -> CanvasAssistantModelSelection:
         """Persist a conversation-only model choice after checking its text capability."""
@@ -193,6 +218,8 @@ class CanvasAssistant:
         if choice.model_id is not None:
             await self._resolve_model(choice.model_id)
         session = await self._lock_session(canvas_id)
+        if session.model_id != choice.model_id and session.pending_request and session.pending_request.get('question'):
+            raise HTTPException(409, 'Answer the current creative question before changing the model')
         if (session.model_id != choice.model_id and session.pending_request
                 and (session.pending_until is None or session.pending_until <= datetime.now(UTC).replace(tzinfo=None))):
             session.pending_request = {**session.pending_request, 'reselect_model': True}
@@ -242,7 +269,23 @@ class CanvasAssistant:
             raise HTTPException(404, 'Canvas not found')
         return session
 
-    async def send(self, canvas_id: str, command: CanvasAssistantMessage) -> CanvasAssistantExchange:
+    async def answer(self, canvas_id: str, source_id: str,
+                     answer: CanvasAssistantQuestionAnswer) -> CanvasAssistantExchange:
+        """Continue the original turn for a known question, or replay the accepted answer."""
+        await self.store.get(canvas_id)
+        session = await self._lock_session(canvas_id)
+        completed = await self.db.get(CanvasAssistantTurn, (canvas_id, source_id))
+        if completed:
+            if answer.model_dump() in (completed.question_answers or []):
+                return await self._exchange(completed, session.approval_mode)
+            raise HTTPException(409, 'The assistant question is no longer accepting answers')
+        pending = session.pending_request
+        if not pending or pending['command']['request_id'] != source_id:
+            raise HTTPException(404, 'Canvas assistant question not found')
+        return await self.send(canvas_id, CanvasAssistantMessage.model_validate(pending['command']), answer=answer)
+
+    async def send(self, canvas_id: str, command: CanvasAssistantMessage, *,
+                   answer: CanvasAssistantQuestionAnswer | None = None) -> CanvasAssistantExchange:
         """Append one ordered exchange, or replay a previously completed request."""
         await self._ensure_session(canvas_id)
         session = await self._lock_session(canvas_id)
@@ -274,6 +317,18 @@ class CanvasAssistant:
         resuming = pending is not None and pending['command']['request_id'] == command.request_id
         if resuming and (pending['command'] != request or pending['context'] != context):
             raise HTTPException(409, 'Request already used for a different assistant message')
+        question = pending.get('question') if pending else None
+        answers = list(pending.get('answers', ())) if resuming else []
+        if question:
+            if not resuming:
+                raise HTTPException(409, 'Answer the ongoing creative question before sending a new turn')
+            if answer is None:
+                return self._question_exchange(command, session, pending, CanvasAssistantQuestion.model_validate(question))
+            if answer.question_id != question['id']:
+                raise HTTPException(409, 'The assistant is waiting on a different question')
+            answers.append(answer.model_dump())
+        elif answer is not None and answer.model_dump() not in answers:
+            raise HTTPException(409, 'The assistant is not waiting on this question')
         model, provider, capability = await self._resolve_model(
             pending['model_id'] if resuming and not pending.get('reselect_model') else session.model_id,
         )
@@ -291,6 +346,8 @@ class CanvasAssistant:
         session.pending_token = token
         session.pending_until = now + timedelta(seconds=TURN_LEASE_SECONDS)
         session.pending_request = {'command': request, 'model_id': model_id, 'context': context}
+        if answers:
+            session.pending_request = {**session.pending_request, 'answers': answers}
         if not resuming:
             session.pending_checkpoint = None
         snapshot = session.pending_checkpoint
@@ -307,8 +364,10 @@ class CanvasAssistant:
                 edit_draft, supports_tools=capability.tool_calling, structure_tool=structure_tool,
                 layout_draft=layout_draft,
                 checkpoint=CanvasCheckpointer(self.db, canvas_id, command.request_id, token, snapshot, content),
-                max_input_tokens=capability.max_input_tokens,
+                max_input_tokens=capability.max_input_tokens, question_answers=answers,
             )
+        except CreativeQuestionPending as pause:
+            return await self._pause_question(canvas_id, command, token, pause.question)
         except HTTPException:
             await self.db.rollback()
             await self.db.execute(update(CanvasAssistantSession).where(
@@ -342,6 +401,7 @@ class CanvasAssistant:
                                         else group for group in superseded['groups']]
             revised_proposal.proposal = superseded
             await update_generation_for_decision(self.db, canvas_id, command.revises, 'superseded')
+            publish_events(self.db, session, await self._exchange(revised_proposal), 'proposal.superseded')
         session.sequence += 1
         await retain_assistant_media(self.db, self.store.project_id, canvas_id, sources)
         if context is not None and observed is not None:
@@ -349,7 +409,7 @@ class CanvasAssistant:
         turn = CanvasAssistantTurn(
             canvas_id=canvas_id, sequence=session.sequence, request_id=command.request_id,
             model_id=model_id, text=command.text, reply=reply, context=context, attachments=attachments,
-            skills=[skill.model_dump() for skill in skills],
+            skills=[skill.model_dump() for skill in skills], question_answers=answers or None,
             proposal=proposal.model_dump(mode='json') if proposal else None, revises=command.revises,
             layout=layout_draft.proposal.model_dump(mode='json') if layout_draft and layout_draft.proposal else None,
         )
@@ -363,11 +423,36 @@ class CanvasAssistant:
                 await self.db.flush()
                 if authorization.state == 'queued':
                     await freeze_generation_basis(self.db, self.store.project_id, authorization)
-        return await self._exchange(turn, session.approval_mode)
+        exchange = await self._exchange(turn, session.approval_mode)
+        publish_events(self.db, session, exchange, 'turn.completed')
+        if exchange.proposal:
+            publish_events(self.db, session, exchange, 'proposal.created')
+        return exchange
+
+    async def _pause_question(self, canvas_id, command, token, question):
+        session = await self._lock_session(canvas_id)
+        if session.pending_token != token:
+            stopped = await self._stopped_exchange(canvas_id, command.request_id)
+            if stopped is not None:
+                return stopped
+            raise HTTPException(409, 'Canvas assistant reply lease expired')
+        session.pending_token = session.pending_until = None
+        session.pending_request = {**session.pending_request, 'question': question.model_dump()}
+        exchange = self._question_exchange(command, session, session.pending_request, question)
+        publish_events(self.db, session, exchange, 'question.asked')
+        await self.db.flush()
+        return exchange
 
     async def _stopped_exchange(self, canvas_id, request_id):
         turn = await self.db.get(CanvasAssistantTurn, (canvas_id, request_id), populate_existing=True)
         return await self._exchange(turn) if turn is not None and turn.stopped else None
+
+    @staticmethod
+    def _question_exchange(command, session, pending, question):
+        return CanvasAssistantExchange(
+            request_id=command.request_id, text=command.text, sequence=session.sequence + 1,
+            model_id=pending['model_id'], reply='', question=question, question_answers=pending.get('answers'),
+        )
 
     async def _revised_proposal(self, canvas_id, source_id, edit_draft, *, lock=False):
         if source_id is None:
@@ -402,6 +487,7 @@ class CanvasAssistant:
                      edit_draft: CanvasAssistantEditDraft | None, *, supports_tools: bool, structure_tool=None,
                      layout_draft: CanvasAssistantLayoutDraft | None = None,
                      checkpoint: CanvasCheckpointer | None = None, max_input_tokens: int | None = None,
+                     question_answers: list[dict] | None = None,
                      ) -> tuple[str, list[CanvasAssistantSkillUse], list[str] | None]:
         request_text = messages[-1].text
         planning = planning_request(request_text)
@@ -442,6 +528,10 @@ class CanvasAssistant:
                                                SystemMessage(content=CANVAS_ASSISTANT_PROMPT + guidance + professional), max_input_tokens)
         if supports_tools:
             tools.extend(skill_tools(used_skills))
+            if checkpoint is not None:
+                tools.append(ask_canvas_question)
+                guidance += ('当不同创作方向会实质改变交付且信息不足时，用 ask_canvas_question 提问，'
+                             '独立调用该工具并等待答复。创作问题的回答不代表用户批准画布写入或生成。')
             guidance += skill_guidance()
             if structure_tool and not planning:
                 tools.append(structure_tool)
@@ -477,9 +567,9 @@ class CanvasAssistant:
                     state = await agent.ainvoke({'messages': messages})
                 else:
                     state = await CanvasAssistant._resume_reply(
-                        agent, checkpoint, messages, used_skills, edit_draft, layout_draft,
+                        agent, checkpoint, messages, used_skills, edit_draft, layout_draft, question_answers or [],
                     )
-        except HTTPException:
+        except (HTTPException, CreativeQuestionPending):
             raise
         except Exception as exc:
             logger.warning('Canvas assistant model failed: %s', type(exc).__name__)
@@ -509,11 +599,13 @@ class CanvasAssistant:
 
 
     @staticmethod
-    async def _resume_reply(agent, checkpoint, messages, skills, edits, layout):
+    async def _resume_reply(agent, checkpoint, messages, skills, edits, layout, answers):
         config = checkpoint.config
         try:
             prior = await agent.aget_state(config)
-        except CheckpointMediaUnavailable:
+        except CheckpointMediaUnavailable as error:
+            if answers:
+                raise HTTPException(409, 'The original creative question evidence is no longer available') from error
             # The current request still has its own scoped inputs. Never carry a
             # previous media observation across a changed or missing attachment.
             checkpoint.delete_thread(config['configurable']['thread_id'])
@@ -523,7 +615,9 @@ class CanvasAssistant:
         if prior.values and not prior.next:
             state = prior.values
         else:
-            state = await agent.ainvoke(None if prior.values else {'messages': messages}, config, durability='sync')
+            input_ = resume_question(prior, answers) if prior.values else {'messages': messages}
+            state = await agent.ainvoke(input_, config, durability='sync')
+        check_new_question(state)
         _restore_tool_receipts(state['messages'], skills, edits, layout)
         return state
 

@@ -18,7 +18,7 @@ type StoryboardApplicationReceipt = { taskId: string; before: CanvasDocument }
 export type StoryboardReviewPreparation = { revision: number; appliedTaskId?: string }
 export type CanvasSettingsChanges = Partial<Pick<CanvasDocument, 'name' | 'cover_file_id'>>
 export type CanvasArrangementChange = { undo: () => void; redo: () => void }
-type HistoryEntry = { document: CanvasDocument; scene?: StoryboardScope; arrangement?: CanvasArrangementChange } | { apply: () => void; reverse: () => void }
+type HistoryEntry = { document: CanvasDocument; scene?: StoryboardScope; arrangement?: CanvasArrangementChange; assistantKeys?: string[] } | { apply: () => void; reverse: () => void }
 type HistorySide = 'past' | 'future'
 // 仅同标签页的工作台应用交接，刷新自然清空；修订不符时丢弃。
 const storyboardHandoffs = new Map<string, { revision: number; entry: HistoryEntry; receipt?: StoryboardApplicationReceipt }>()
@@ -143,11 +143,15 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     arrangement?.redo(); setDocument(s.document); persist()
   }
   const [, refreshHistory] = useState(0)
+  const [undoLabels, setUndoLabels] = useState<{ key: string; ids: string[] }>()
   // 普通保存保留会话历史，刷新恢复先清空历史，再按同一条命令重建一步。
-  const recordConfirmedSave = (command: PendingSave, before: CanvasDocument, after: CanvasDocument) => {
+  const recordConfirmedSave = (command: PendingSave, before: CanvasDocument, after: CanvasDocument, appliedGroups?: string[]) => {
     const applied = storyboardApplicationReceipt(command, before, after)
     if (applied) setStoryboardApplication(applied)
-    const entry = { document: before, scene: command.scene }
+    const source = command.assistantProposalId ?? command.draftAssistantApproval?.source_id
+    const ids = appliedGroups ?? command.draftAssistantApproval?.group_ids ?? ['']
+    const assistantKeys = source ? ids.map(id => source + ':' + id) : undefined
+    const entry = { document: before, scene: command.scene, assistantKeys }
     const action = command.scene?.action
     if (action === 'undo' || action === 'redo') {
       const from = action === 'undo' ? 'past' : 'future'
@@ -194,11 +198,19 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       h[direction === 'past' ? 'future' : 'past'].push({ apply: next.reverse, reverse: next.apply })
       next.apply(); refreshHistory(value => value + 1); return 'layout' as const
     }
-    h[direction === 'past' ? 'future' : 'past'].push({ document: s.document, arrangement: next.arrangement })
+    h[direction === 'past' ? 'future' : 'past'].push({
+      document: s.document, arrangement: next.arrangement, assistantKeys: next.assistantKeys,
+    })
+    const assistantKeys = next.assistantKeys
+    if (assistantKeys?.length) setUndoLabels(previous => {
+      const ids = previous?.key === key ? previous.ids : []
+      return { key, ids: direction === 'past' ? [...new Set([...ids, ...assistantKeys])] :
+        ids.filter(id => !assistantKeys.includes(id)) }
+    })
     next.arrangement?.[direction === 'past' ? 'undo' : 'redo']()
     s.document = cleaner.current!(next.document); setDocument(s.document); persist(); return 'document' as const
   }
-  const send = async (canvas: CanvasRead, command: PendingSave): Promise<CanvasRead & { assistantReceiptRevision?: number }> => {
+  const send = async (canvas: CanvasRead, command: PendingSave): Promise<CanvasRead & { assistantReceiptRevision?: number; assistantAppliedGroups?: string[] }> => {
     if (command.assistantProposalId) {
       const { data } = await Canvases.canvasAssistantDecideProposal({
         projectId, canvasId: canvas.id, sourceId: command.assistantProposalId,
@@ -206,7 +218,9 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
           approval_mode: command.assistantAutomatic ? 'automatic' : 'manual' },
       })
       if (!data?.canvas || (data.receipt ? data.receipt.canvas_id !== canvas.id : !data.conflicts?.length)) throw new Error('invalid assistant edit receipt')
-      return { ...data.canvas, assistantReceiptRevision: data.receipt?.revision }
+      return { ...data.canvas, assistantReceiptRevision: data.receipt?.revision,
+        assistantAppliedGroups: data.proposal.groups?.filter(group => group.state === 'applied' &&
+          command.assistantGroupIds?.includes(group.id)).map(group => group.id) }
     }
     const scene = command.scene
     if (scene) {
@@ -252,7 +266,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
           if (s !== state.current) return false
           if (s.initialBefore) {
             if (!command.assistantProposalId || committed.revision === committed.assistantReceiptRevision && committed.revision === command.expected_revision + 1) {
-              recordConfirmedSave(command, s.initialBefore, committed.document)
+              recordConfirmedSave(command, s.initialBefore, committed.document, committed.assistantAppliedGroups)
             } else if (committed.revision !== s.current?.revision) {
               // An approval replay can return a newer canvas after other edits.
               history.current = { scope: key, past: [], future: [] }
@@ -545,6 +559,6 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   }
   const past = history.current.past
   const lastChange = history.current.scope === key ? past[past.length - 1] : undefined
-  return { handoffStoryboardApplication, canUndoArrangement: !!lastChange && 'document' in lastChange && !!lastChange.arrangement, saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, storyboardApplication, applyInitialCandidate, applyReviewedCandidate, prepareReview, prepareCommittedEdit, commitVisualContinuity, commitAssistantLayoutGroup, commitAssistantProposal, dirty, error: error === '此画布已不可用' ? uiText(error) : error, storageError: storageError === '本地恢复记录无法读取；未覆盖服务器内容' ? uiText(storageError) : storageError, recovery, conflict, restore, reload, ownership, requestLeave, needsLeaveProtection, renameSceneCanvas, pendingRename, commitSettings, pendingSettings, settingsDraft, clearSettingsDraft: () => setSettingsDraft(undefined),
+  return { assistantUndone: undoLabels?.key === key ? undoLabels.ids : [], handoffStoryboardApplication, canUndoArrangement: !!lastChange && 'document' in lastChange && !!lastChange.arrangement, saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, storyboardApplication, applyInitialCandidate, applyReviewedCandidate, prepareReview, prepareCommittedEdit, commitVisualContinuity, commitAssistantLayoutGroup, commitAssistantProposal, dirty, error: error === '此画布已不可用' ? uiText(error) : error, storageError: storageError === '本地恢复记录无法读取；未覆盖服务器内容' ? uiText(storageError) : storageError, recovery, conflict, restore, reload, ownership, requestLeave, needsLeaveProtection, renameSceneCanvas, pendingRename, commitSettings, pendingSettings, settingsDraft, clearSettingsDraft: () => setSettingsDraft(undefined),
     undo: () => travel('past'), redo: () => travel('future'), canUndo: history.current.scope === key && !!history.current.past.length, canRedo: history.current.scope === key && !!history.current.future.length }
 }

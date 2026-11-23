@@ -7,12 +7,14 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.canvas_assistant import CanvasAssistantGeneration, CanvasAssistantTurn
+from app.models.canvas_assistant import CanvasAssistantGeneration, CanvasAssistantSession, CanvasAssistantTurn
 from app.models.generation_canvas import CanvasPreview, CanvasRun, CanvasRunNode, CanvasRunReceipt, CanvasScopeOccupancy, GenerationCanvas
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposalDecision, CanvasAssistantProposalResult
 from app.schemas.canvas_assistant_generation import (CanvasAssistantGenerationRead, CanvasAssistantGenerationReview,
                                                        CanvasAssistantGenerationVersion)
 from app.schemas.generation_canvas import CanvasDocument, CanvasPrecheckRequest, CanvasRunSubmit
+from app.schemas.canvas_assistant import CanvasAssistantExchange
+from app.services.generation_canvas.assistant_events import publish_events
 from app.services.generation_canvas.assistant_edits import resolve_assistant_proposal
 from app.services.generation_canvas.assistant_targets import shot_request_matches
 from app.services.generation_canvas.runtime import CanvasRuntime
@@ -141,6 +143,15 @@ async def decide_assistant_generation_edit(
     if entry and entry.state == 'queued' and entry.basis_hash is None:
         await freeze_generation_basis(db, project_id, entry)
     result.generation = await read_generation(db, canvas_id, source_id)
+    session = await db.get(CanvasAssistantSession, canvas_id, with_for_update=True, populate_existing=True)
+    turn = await db.get(CanvasAssistantTurn, (canvas_id, source_id))
+    exchange = CanvasAssistantExchange.model_validate(turn)
+    exchange.generation = result.generation
+    publish_events(db, session, exchange, 'proposal.decided')
+    if result.receipt:
+        publish_events(db, session, exchange, 'proposal.applied')
+    if result.conflicts:
+        publish_events(db, session, exchange, 'proposal.blocked')
     return result
 
 

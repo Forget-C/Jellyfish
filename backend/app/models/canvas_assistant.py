@@ -18,6 +18,7 @@ class CanvasAssistantSession(Base):
         ForeignKey('generation_canvases.id', ondelete='CASCADE'), primary_key=True,
     )
     sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    event_cursor: Mapped[int] = mapped_column(Integer, nullable=False, server_default='0')
     pending_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
     pending_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     pending_request: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -51,8 +52,23 @@ class CanvasAssistantTurn(Base):
     skills: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     attachments: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     approval_audit: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    question_answers: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     stopped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     layout: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class CanvasAssistantEvent(Base):
+    """An immutable update ordered within one assistant conversation."""
+
+    __tablename__ = 'canvas_assistant_events'
+
+    canvas_id: Mapped[str] = mapped_column(
+        ForeignKey('canvas_assistant_sessions.canvas_id', ondelete='CASCADE'), primary_key=True,
+    )
+    cursor: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
 
 
 class CanvasAssistantGeneration(Base):

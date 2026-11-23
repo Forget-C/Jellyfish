@@ -119,7 +119,7 @@ async def test_assistant_switches_model_without_losing_visible_card_scope(canvas
         elif tool_result is None:
             assert {tool['function']['name'] for tool in body['tools']} == {
                 'read_canvas_context', 'load_canvas_skill', 'read_canvas_skill_example', 'propose_canvas_structure',
-                'propose_canvas_changes',
+                'propose_canvas_changes', 'ask_canvas_question',
             }
             answer = {'role': 'assistant', 'tool_calls': [{
                 'id': 'call-context', 'type': 'function',
@@ -397,3 +397,61 @@ async def test_explicit_plan_uses_named_skills_without_available_writes(canvas_c
         ('script-planning', '1.0.0'), ('shot-staging', '1.0.0'),
     ]
     assert (await canvas_client.get(url)).json()['data']['revision'] == canvas['revision']
+
+
+@pytest.mark.asyncio
+async def test_creative_question_resumes_original_turn_and_replays_answer(canvas_client, monkeypatch):
+    from app.models.llm import Model
+
+    async with canvas_client.canvas_sessions.begin() as db:
+        provider = await db.get(Provider, 'canvas-provider')
+        provider.api_key = 'local-test-key'
+        model = await db.get(Model, 'canvas-text')
+        model.capability_profile = {'tool_calling': {'declaration': 'supported'}}
+        db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
+    original = httpx.AsyncClient.send
+    model_calls = []
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original(client, request, **kwargs)
+        body = json.loads(request.content)
+        model_calls.append(body['messages'])
+        tool_messages = [item for item in body['messages'] if item['role'] == 'tool']
+        if tool_messages:
+            assert '紧张逼近' in tool_messages[-1]['content']
+            answer = {'role': 'assistant', 'content': '保留紧张逼近的镜头。'}
+        else:
+            answer = {'role': 'assistant', 'tool_calls': [{
+                'id': 'ask-dramatic-intent', 'type': 'function',
+                'function': {'name': 'ask_canvas_question', 'arguments': json.dumps({
+                    'question': '这一段采用哪种情绪？', 'options': ['紧张逼近', '保持疏离'],
+                }, ensure_ascii=False)},
+            }]}
+        return httpx.Response(200, request=request, json={
+            'id': 'choice', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+            'choices': [{'index': 0, 'finish_reason': 'tool_calls' if 'tool_calls' in answer else 'stop',
+                         'message': answer}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    canvas = (await canvas_client.post('/canvases', json={'name': '选择叙事方向'})).json()['data']
+    url = f"/canvases/{canvas['id']}/assistant"
+    started = await canvas_client.post(url, json={'request_id': 'same-turn', 'text': '设置场景情绪'})
+    assert started.status_code == 200, started.text
+    question = started.json()['data']['question']
+    assert question['options'] == ['紧张逼近', '保持疏离']
+    history = (await canvas_client.get(url)).json()['data']
+    assert history['pending_question'] == question and not history['turns']
+
+    body = {'question_id': question['id'], 'answer': '紧张逼近'}
+    accepted = await canvas_client.post(url + '/turns/same-turn/answer', json=body)
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()['data']['request_id'] == 'same-turn'
+    assert accepted.json()['data']['reply'] == '保留紧张逼近的镜头。'
+    assert (await canvas_client.post(url + '/turns/same-turn/answer', json=body)).json() == accepted.json()
+    assert (await canvas_client.post(url + '/turns/same-turn/answer',
+                                     json={**body, 'answer': '保持疏离'})).status_code == 409
+    history = (await canvas_client.get(url)).json()['data']
+    assert history['pending_question'] is None and len(history['turns']) == 1
+    assert len(model_calls) == 2

@@ -7,6 +7,8 @@ import type { CanvasAssistantAttachment } from './CanvasAssistantAttachment';
 import type { CanvasAssistantGenerationRead } from './CanvasAssistantGenerationRead';
 import type { CanvasAssistantLayout } from './CanvasAssistantLayout';
 import type { CanvasAssistantProposal } from './CanvasAssistantProposal';
+import type { CanvasAssistantQuestion } from './CanvasAssistantQuestion';
+import type { CanvasAssistantQuestionAnswer } from './CanvasAssistantQuestionAnswer';
 import type { CanvasAssistantReadContext } from './CanvasAssistantReadContext';
 import type { CanvasAssistantSkillUse } from './CanvasAssistantSkillUse';
 /**
@@ -28,4 +30,6 @@ export type CanvasAssistantExchange = {
     generation?: (CanvasAssistantGenerationRead | null);
     stopped?: boolean;
     layout?: (CanvasAssistantLayout | null);
+    question?: (CanvasAssistantQuestion | null);
+    question_answers?: (Array<CanvasAssistantQuestionAnswer> | null);
 };

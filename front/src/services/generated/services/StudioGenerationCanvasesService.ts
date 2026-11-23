@@ -35,6 +35,7 @@ import type { CanvasAssistantLayoutDecision } from '../models/CanvasAssistantLay
 import type { CanvasAssistantMessage } from '../models/CanvasAssistantMessage';
 import type { CanvasAssistantModelSelection } from '../models/CanvasAssistantModelSelection';
 import type { CanvasAssistantProposalDecision } from '../models/CanvasAssistantProposalDecision';
+import type { CanvasAssistantQuestionAnswer } from '../models/CanvasAssistantQuestionAnswer';
 import type { CanvasCheckRecheckRequest } from '../models/CanvasCheckRecheckRequest';
 import type { CanvasCheckRequest } from '../models/CanvasCheckRequest';
 import type { CanvasCreate } from '../models/CanvasCreate';
@@ -1246,6 +1247,40 @@ export class StudioGenerationCanvasesService {
             mediaType: 'application/json',
             errors: {
                 422: `Unprocessable Entity`,
+            },
+        });
+    }
+    /**
+     * Answer Assistant Question
+     * Resume a paused creative question on its original canvas assistant turn.
+     * @returns ApiResponse_CanvasAssistantExchange_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantAnswer({
+        canvasId,
+        sourceId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        requestBody: CanvasAssistantQuestionAnswer,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantExchange_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/turns/{source_id}/answer',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
             },
         });
     }

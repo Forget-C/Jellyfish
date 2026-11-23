@@ -13,6 +13,7 @@ from app.schemas.common import PaginatedData, paginated_response, ApiResponse, c
 from app.schemas.generation_canvas import CanvasRename, CanvasSummary, CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError, CanvasModelCapability, CanvasCompiledInput
 from app.services.generation_canvas.store import CanvasStore
 from app.services.generation_canvas.capabilities import model_capability
+from app.schemas.canvas_assistant import CanvasAssistantQuestionAnswer
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposalDecision, CanvasAssistantProposalResult
 from app.services.generation_canvas.assistant import CanvasAssistant
 from app.schemas.canvas_assistant_layout import CanvasAssistantLayout, CanvasAssistantLayoutDecision
@@ -108,6 +109,14 @@ async def set_assistant_approval(canvas_id: str, body: CanvasAssistantApprovalSe
                                  db: AsyncSession = Depends(get_db, scope='function')):
     """Set the assistant approval mode for this canvas."""
     return success_response(await CanvasAssistant(db, project_id).set_approval(canvas_id, body))
+
+
+@router.post('/{canvas_id}/assistant/turns/{source_id}/answer', response_model=ApiResponse[CanvasAssistantExchange],
+             operation_id='canvas_assistant_answer')
+async def answer_assistant_question(canvas_id: str, source_id: str, body: CanvasAssistantQuestionAnswer,
+                                    project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
+    """Resume a paused creative question on its original canvas assistant turn."""
+    return success_response(await CanvasAssistant(db, project_id).answer(canvas_id, source_id, body))
 
 
 @router.post('/{canvas_id}/assistant/turns/{source_id}/stop', response_model=ApiResponse[CanvasAssistantExchange],

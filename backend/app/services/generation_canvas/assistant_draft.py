@@ -15,6 +15,7 @@ from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
 from app.services.generation_canvas.assistant import CanvasAssistant
 from app.services.generation_canvas.assistant_context import resolve_assistant_context
 from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
+from app.services.generation_canvas.assistant_events import publish_events
 from app.services.generation_canvas.assistant_media import (
     describe_assistant_media, resolve_assistant_media, retain_assistant_media,
 )
@@ -127,8 +128,8 @@ async def attach_draft_conversation(store, command: CanvasDraftSave, receipt: di
     if not conversation or not conversation.turns:
         return
     canvas_id = receipt['canvas_id']
-    store.db.add(CanvasAssistantSession(canvas_id=canvas_id, sequence=len(conversation.turns),
-                                        model_id=conversation.model_id))
+    session = CanvasAssistantSession(canvas_id=canvas_id, sequence=len(conversation.turns), model_id=conversation.model_id)
+    store.db.add(session)
     await store.db.flush()
     turns = conversation.validated_turns()
     files = {item.file_id for turn in turns for item in (turn.attachments or [])}
@@ -157,4 +158,8 @@ async def attach_draft_conversation(store, command: CanvasDraftSave, receipt: di
             attachments=[item.model_dump(mode='json') for item in (turn.attachments or [])
                          if item.file_id in sources],
             proposal=proposal.model_dump(mode='json') if proposal else None, approval_audit=audit))
+        exchange = CanvasAssistantExchange.model_validate({
+            **turn.model_dump(mode='json'), 'proposal': proposal, 'approval_audit': audit,
+        })
+        publish_events(store.db, session, exchange, 'turn.completed')
     await store.db.flush()

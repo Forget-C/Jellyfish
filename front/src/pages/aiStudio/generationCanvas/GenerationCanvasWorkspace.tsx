@@ -316,7 +316,7 @@ export function GenerationCanvasWorkspace({
         runtime={{ outputs: runtime.snapshot.current_outputs, outputsVerified: runtime.outputsVerified, runs: runtime.snapshot.runs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
           disabled: uncreated || runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => { if (!promptEditors.size) void runtime.precheck(cardId) } }} /></PromptEditingActiveContext.Provider></PromptDraftContext.Provider></PromptEditingContext.Provider>
       {canvasId && current.id === canvasId &&
-        <CanvasAssistant key={scope} document={document} highlight={assistantHighlight}
+        <CanvasAssistant key={scope} assistantUndone={editor.assistantUndone} document={document} highlight={assistantHighlight}
           onHighlight={value => { storeAssistantHighlight(scope, value); setAssistantMarks({ scope, value }) }}
           onLocate={cardId => setAssistantTarget({ scope, cardId, serial: Date.now() })}
           canvasId={canvasId} projectId={projectId} storyboard={Boolean(projectId)} cards={document.cards ?? []} localDraft={uncreated} draftPromoting={uncreated && saving}

@@ -12,8 +12,9 @@ const movementFields = {
 } as const
 
 /** A stored edit preview with explicit apply and reject actions. */
-export function AssistantProposal({ proposal, current, editDisabled, revise, decide }: {
+export function AssistantProposal({ proposal, undone, current, editDisabled, revise, decide }: {
   proposal: CanvasAssistantProposal
+  undone: boolean
   current: () => Record<string, unknown>
   editDisabled: boolean
   revise: () => void
@@ -53,14 +54,15 @@ export function AssistantProposal({ proposal, current, editDisabled, revise, dec
     </div>}
     {pending && editDisabled && <small>{uiText('请完成当前编辑并取得画布编辑权后再确认。')}</small>}
     {pending && error && <Alert type="warning" message={uiText('未能完成审批，请核对画布状态后重试。')} />}
-    {!pending && <small>{proposal.state === 'applied' ? uiText('已写入画布') :
+    {!pending && <small>{proposal.state === 'applied' ? uiText(undone ? '曾写入，后已撤销' : '已写入画布') :
       proposal.state === 'rejected' ? uiText('建议已拒绝') : uiText('建议已被修订替代')}</small>}
   </section>
 }
 
 /** Select independent groups while preserving a single save and undo for the chosen set. */
-export function AssistantEditGroups({ groups, selected, onSelectionChange, current, editDisabled, revise, decide }: {
+export function AssistantEditGroups({ groups, undone, selected, onSelectionChange, current, editDisabled, revise, decide }: {
   groups: CanvasAssistantEditGroup[]
+  undone: string[]
   selected: string[]
   onSelectionChange: (ids: string[]) => void
   current: () => Record<string, unknown>
@@ -109,7 +111,7 @@ export function AssistantEditGroups({ groups, selected, onSelectionChange, curre
         </Checkbox>}
         <details open={isPending && (group.id === firstGroupId || conflict)}>
           <summary>{isPending ? conflict ? uiText('与当前画布冲突') : uiText('查看差异')
-            : <>{uiText(group.title)} · <span>{uiText(group.state === 'applied' ? '已写入画布'
+            : <>{uiText(group.title)} · <span>{uiText(group.state === 'applied' ? (undone.includes(group.id) ? '曾写入，后已撤销' : '已写入画布')
               : group.state === 'rejected' ? '建议已拒绝' : '建议已被修订替代')}</span></>}</summary>
           {group.edits.map(edit => {
             const { target } = edit
