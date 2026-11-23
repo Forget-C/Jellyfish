@@ -4,7 +4,7 @@ import { Alert, Select, Spin } from 'antd'
 import { Bubble, Sender, ThoughtChain } from '@ant-design/x'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasDocument, CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantInstruction, CanvasAssistantLayout, CanvasAssistantMessage, CanvasAssistantQuestion, CanvasAssistantQueueItem, FileRead, ModelRead } from '../../../services/generated'
+import type { CanvasDocument, CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantFieldRevision, CanvasAssistantInstruction, CanvasAssistantLayout, CanvasAssistantMessage, CanvasAssistantQuestion, CanvasAssistantQueueItem, FileRead, ModelRead } from '../../../services/generated'
 import { AssistantEditGroups, AssistantProposal } from './AssistantProposal'
 import { AssistantLayout } from './AssistantLayout'
 import type { AssistantLayoutOutcome } from './assistantLayoutEditor'
@@ -28,12 +28,23 @@ type AssistantScope = NonNullable<CanvasAssistantMessage['context']>['scope'] | 
 function appendExchange(turns: CanvasAssistantExchange[], incoming: CanvasAssistantExchange) {
   if (turns.some(turn => turn.request_id === incoming.request_id)) return turns
   const combined = [...turns, incoming]
-  const revised = new Set(combined.filter(turn => turn.proposal && turn.revises).map(turn => turn.revises))
-  return combined.map(turn => turn.proposal && revised.has(turn.request_id) && turn.proposal.state !== 'superseded'
-    ? { ...turn, proposal: { ...turn.proposal, state: 'superseded' as const,
-      groups: turn.proposal.groups?.map(group => (group.state ?? 'pending') === 'pending'
-        ? { ...group, state: 'superseded' as const } : group) } } : turn)
-    .sort((left, right) => left.sequence - right.sequence)
+  const revisions = new Map<string, (CanvasAssistantFieldRevision | null)[]>()
+  for (const turn of combined) {
+    if (!turn.proposal || !turn.revises) continue
+    const changes = revisions.get(turn.revises) ?? []
+    revisions.set(turn.revises, [...changes, turn.revises_field ?? null])
+  }
+  return combined.map(turn => {
+    const revisionsForTurn = revisions.get(turn.request_id)
+    if (!turn.proposal || !revisionsForTurn || turn.proposal.state === 'superseded') return turn
+    const whole = revisionsForTurn.includes(null)
+    const groups = turn.proposal.groups?.map(group => (group.state ?? 'pending') === 'pending' &&
+      (whole || revisionsForTurn.some(revision => revision?.group_id === group.id))
+      ? { ...group, state: 'superseded' as const } : group)
+    return { ...turn, proposal: { ...turn.proposal,
+      state: groups?.some(group => (group.state ?? 'pending') === 'pending') ? 'pending' as const : 'superseded' as const,
+      groups } }
+  }).sort((left, right) => left.sequence - right.sequence)
 }
 
 function updateQueue(queue: CanvasAssistantQueueItem[], item: CanvasAssistantQueueItem) {
@@ -84,6 +95,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const [referenceFiles, setReferenceFiles] = useState<FileRead[]>([])
   const [uploadingReference, setUploadingReference] = useState(false)
   const [revising, setRevising] = useState<CanvasAssistantExchange>()
+  const [revisingField, setRevisingField] = useState<CanvasAssistantFieldRevision>()
   const [selectedGroups, setSelectedGroups] = useState<Record<string, string[]>>({})
   const [confirmationHint, setConfirmationHint] = useState<string>()
   const composer = useRef<HTMLFormElement>(null)
@@ -402,11 +414,13 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         setDraft('')
         setReferenceFiles([])
         setRevising(undefined)
+        setRevisingField(undefined)
         setCardReferences([])
         setReferenceGroups([])
       }
       if (revising?.request_id === sourceId) {
         setRevising(undefined)
+        setRevisingField(undefined)
         pending.current = undefined
       }
     } catch { setStopError(true) }
@@ -495,6 +509,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     }
     if (replyInProgress && intent === 'revise') return
     let revision = enqueue ? undefined : revising
+    let fieldRevision = enqueue ? undefined : revisingField
     if (intent) {
       const candidates = turns.filter(turn => !turn.stopped && turn.proposal &&
         (turn.proposal.state ?? 'pending') === 'pending')
@@ -509,7 +524,10 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           : uiText('当前没有可以确认的修改建议，请核对最新对话。'))
         return
       }
-      if (intent === 'revise') revision = target
+      if (intent === 'revise') {
+        revision = target
+        if (target.request_id !== revising?.request_id) fieldRevision = undefined
+      }
       else {
         const available = target.proposal.groups?.filter(group => (group.state ?? 'pending') === 'pending')
           .map(group => group.id)
@@ -545,7 +563,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     if (!resume && ((!enqueue && pendingQuestion) || referenceIsMissing || awaitingSelection && !revision)) return
     const explicitReferences = /(?:当前选区|当前选择)/.test(text) ? [] : referenceIds
     const revisionTargets = revision?.proposal?.groups
-      ? [...new Set(revision.proposal.groups.filter(group => group.state === 'pending')
+      ? [...new Set(revision.proposal.groups.filter(group => group.state === 'pending' &&
+        (!fieldRevision || group.id === fieldRevision.group_id))
         .flatMap(group => group.edits.filter(edit => edit.target.kind !== 'add_canvas_card').map(edit => edit.card_id)))]
       : revision?.proposal ? [revision.proposal.card_id] : []
     const requestBody: CanvasAssistantMessage = resume ?? (enqueue && queuedRequest.current?.text === text
@@ -556,6 +575,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           attachment_file_ids: referenceFiles.length ? referenceFiles.map(file => file.id) :
             revision?.attachments?.map(file => file.file_id) ?? [],
           revises: revision?.request_id,
+          revises_field: fieldRevision,
           context: revision?.proposal ? {
             ...readDraft(), scope: revisionTargets.length ? 'selection' : 'canvas', card_ids: revisionTargets,
           } : explicitReferences.length ? {
@@ -611,6 +631,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         setTurns(updated)
       } else setTurns(current => appendExchange(current || [], turn))
       setRevising(undefined)
+      setRevisingField(undefined)
       setDraft(current => current.trim() === text ? '' : current)
       setReferenceFiles([])
       setCardReferences([])
@@ -879,9 +900,14 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             selected={selectedGroups[turn.request_id] ?? []}
             onSelectionChange={ids => setSelectedGroups(current => ({ ...current, [turn.request_id]: ids }))}
             current={() => readDraft().draft}
+            reviseField={!localDraft ? (groupId, index) => {
+              setRevising(turn); setRevisingField({ group_id: groupId, change_index: index })
+              pending.current = undefined; setSendError(undefined)
+              composer.current?.querySelector('textarea')?.focus()
+            } : undefined}
             editDisabled={approvalDisabled || sending && !activeRequestId}
             revise={() => {
-              setRevising(turn); pending.current = undefined; setSendError(undefined)
+              setRevising(turn); setRevisingField(undefined); pending.current = undefined; setSendError(undefined)
               composer.current?.querySelector('textarea')?.focus()
             }}
             decide={async (action, groupIds) => {
@@ -897,18 +923,23 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
               return await rejectProposal(turn.request_id, groupIds) && await refreshDecision(turn.request_id)
             }} /> : turn.proposal && <AssistantProposal proposal={turn.proposal} undone={assistantUndone.includes(turn.request_id + ':')} current={() => readDraft().draft} editDisabled={approvalDisabled || sending && !activeRequestId}
             revise={() => {
-              setRevising(turn); pending.current = undefined; setSendError(undefined)
+              setRevising(turn); setRevisingField(undefined); pending.current = undefined; setSendError(undefined)
               composer.current?.querySelector('textarea')?.focus()
             }} decide={async action => {
               if (action === 'approve') return approveProposal(turn.request_id)
               return await rejectProposal(turn.request_id) && await refreshDecision(turn.request_id)
             }} />}
-          {turn.approval_audit?.map((entry, index) => <small key={index}>
-            {uiText(entry.mode === 'automatic' ? '自动审批明确请求' : '人工审批')} · {
-              uiText(entry.outcome === 'rejected' ? '建议已拒绝' : entry.outcome === 'conflict'
-                ? '与当前画布冲突' : entry.outcome === 'partial' ? '部分建议已写入' : '已写入画布')
-            }
-          </small>)}
+          {turn.approval_audit?.map((entry, index) => <div key={index}>
+            <small>{uiText(entry.mode === 'automatic' ? '自动审批明确请求' : '人工审批')} · {
+              uiText(entry.outcome === 'manual_required' ? '等待人工审批' :
+                entry.outcome === 'rejected' ? '建议已拒绝' : entry.outcome === 'conflict'
+                  ? '与当前画布冲突' : entry.outcome === 'partial' ? '部分建议已写入' : '已写入画布')
+            }</small>
+            {entry.review && <details><summary>{uiText('独立审批复核')}</summary>
+              <p>{entry.review.reason}</p>
+              <small>{[entry.review.policy, entry.review.reviewer_model_id, entry.group_ids?.join('、')].filter(Boolean).join(' · ')}</small>
+            </details>}
+          </div>)}
           {!!turn.skills?.length && <ThoughtChain items={[{
             key: 'skills', title: uiText("本轮使用的技能"), status: 'success',
             collapsible: true, content: <ul>{turn.skills.map(skill => <li key={skill.id}>
@@ -951,9 +982,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           setReadingEarlier(false)
         }}>{uiText('返回最新进展')}</WorkbenchButton>}
         {revising?.proposal && <div className="canvas-assistant-edit-actions">
-          <span>{uiText("正在修订修改建议")} · {uiText(revising.proposal.card_name)}</span>
+          <span>{uiText(revisingField ? '正在修订所选字段' : '正在修订修改建议')} · {uiText(revising.proposal.card_name)}</span>
           <WorkbenchButton variant="quiet" disabled={sending} onClick={() => {
-            setRevising(undefined); pending.current = undefined
+            setRevising(undefined); setRevisingField(undefined); pending.current = undefined
           }}>{uiText("取消修订")}</WorkbenchButton>
         </div>}
         {!!queue.length && <section aria-label={uiText('下一轮队列')}>

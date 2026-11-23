@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { CanvasAssistantDraftContext } from './CanvasAssistantDraftContext';
+import type { CanvasAssistantFieldRevision } from './CanvasAssistantFieldRevision';
 /**
  * Reply without storing a conversation or requiring a saved canvas.
  */
@@ -16,5 +17,6 @@ export type DraftAssistantMessage = {
     text: string;
     context?: (CanvasAssistantDraftContext | null);
     revises?: (string | null);
+    revises_field?: (CanvasAssistantFieldRevision | null);
     attachment_file_ids?: Array<string>;
 };

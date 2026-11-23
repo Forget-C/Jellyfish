@@ -60,7 +60,7 @@ export function AssistantProposal({ proposal, undone, current, editDisabled, rev
 }
 
 /** Select independent groups while preserving a single save and undo for the chosen set. */
-export function AssistantEditGroups({ groups, undone, selected, onSelectionChange, current, editDisabled, revise, decide }: {
+export function AssistantEditGroups({ groups, undone, selected, onSelectionChange, current, editDisabled, revise, reviseField, decide }: {
   groups: CanvasAssistantEditGroup[]
   undone: string[]
   selected: string[]
@@ -68,6 +68,7 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
   current: () => Record<string, unknown>
   editDisabled: boolean
   revise: () => void
+  reviseField?: (groupId: string, index: number) => void
   decide: (action: Decision, groupIds: string[]) => Promise<boolean>
 }) {
   const uiText = useUiText()
@@ -100,7 +101,7 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
       const isPending = pending.includes(group)
       const conflict = isPending && group.edits.some(edit => {
         const { target } = edit
-        return (target.kind === 'card_text' || 'movement_card_id' in target || 'field' in target || 'field_name' in target || 'segment_id' in target)
+        return (target.kind === 'card_text' || target.kind === 'video_duration' || 'movement_card_id' in target || 'field' in target || 'field_name' in target || 'segment_id' in target)
           && currentText(currentDraft, edit) !== edit.before
       })
       return <div key={group.id} className="canvas-assistant-edit-group">
@@ -113,7 +114,7 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
           <summary>{isPending ? conflict ? uiText('与当前画布冲突') : uiText('查看差异')
             : <>{uiText(group.title)} · <span>{uiText(group.state === 'applied' ? (undone.includes(group.id) ? '曾写入，后已撤销' : '已写入画布')
               : group.state === 'rejected' ? '建议已拒绝' : '建议已被修订替代')}</span></>}</summary>
-          {group.edits.map(edit => {
+          {group.edits.map((edit, index) => {
             const { target } = edit
             if ('movement_card_id' in target) return <dl key={target.connection_id}>
               <dt>{uiText('已采用运镜')} · {uiText(movementFields[target.movement_field])}</dt>
@@ -148,10 +149,13 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
             const changed = !removal && pending.includes(group) && currentValue !== edit.before
             return <dl key={edit.card_id + JSON.stringify(edit.target)}>
               <dt>{uiText(edit.card_name)} · {edit.card_id.slice(0, 8)} · {removal ? uiText(edit.after)
-                : 'field' in edit.target ? uiText(movementFields[edit.target.field]) : uiText('视频提示词')}</dt>
+                : fieldLabel(edit.target, uiText)}</dt>
               <dt>{uiText(removal ? '影响范围' : '原值')}</dt><dd>{edit.before || '—'}</dd>
               {changed && <><dt>{uiText('当前值')}</dt><dd>{currentValue ?? '—'}</dd></>}
-              {!removal && <><dt>{uiText('拟议值')}</dt><dd>{edit.after}</dd></>}
+              {!removal && <><dt>{uiText('拟议值')}</dt><dd><span>{edit.after}</span>
+                {isPending && reviseField && <WorkbenchButton variant="quiet" disabled={!!busy}
+                  onClick={() => reviseField(group.id, index)}>{uiText('修订此字段')}</WorkbenchButton>}
+              </dd></>}
             </dl>
           })}
         </details>
@@ -174,6 +178,7 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
 }
 
 function fieldLabel(target: CanvasAssistantChange['target'], uiText: ReturnType<typeof useUiText>) {
+  if (target.kind === 'video_duration') return uiText('时长（秒）')
   if ('field' in target) return uiText(movementFields[target.field])
   if ('field_name' in target) return target.field_name
   return target.kind === 'card_text' ? uiText('文本内容') : uiText('提示词')
@@ -186,6 +191,9 @@ function currentText(draft: Record<string, unknown>, edit: CanvasAssistantChange
   const card = document.cards?.find(item => item.id === cardId)
   if ('movement_card_id' in target) return card?.type === 'direction.movement' && 'fields' in card
     ? card.fields?.[target.movement_field]?.text : undefined
+  if (target.kind === 'video_duration' && card && 'config' in card && 'seconds' in (card.config ?? {})) {
+    return String((card.config as { seconds?: number }).seconds ?? '')
+  }
   if (target.kind === 'card_text') return card && 'text' in card ? card.text : undefined
   if ('field' in target || 'field_name' in target) {
     if (!card) return undefined

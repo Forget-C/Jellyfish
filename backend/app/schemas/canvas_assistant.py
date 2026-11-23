@@ -49,6 +49,14 @@ class CanvasAssistantApprovalSetting(BaseModel):
     approval_mode: Literal['manual', 'automatic']
 
 
+class CanvasAssistantFieldRevision(BaseModel):
+    """Point to an immutable change in an existing proposal group."""
+
+    model_config = ConfigDict(extra='forbid')
+    group_id: str = Field(min_length=1, max_length=64)
+    change_index: int = Field(ge=0, le=7)
+
+
 class CanvasAssistantMessage(BaseModel):
     """Send a turn with a stable request identity for retries."""
 
@@ -56,12 +64,15 @@ class CanvasAssistantMessage(BaseModel):
     text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16000)]
     context: CanvasAssistantDraftContext | None = None
     revises: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')] | None = None
+    revises_field: CanvasAssistantFieldRevision | None = None
     attachment_file_ids: list[Annotated[str, StringConstraints(min_length=1, max_length=64)]] = Field(
         default_factory=list, max_length=4,
     )
 
     @model_validator(mode='after')
     def check_attachment_identity(self):
+        if self.revises_field is not None and self.revises is None:
+            raise ValueError('A field revision must identify a source proposal')
         if len(set(self.attachment_file_ids)) != len(self.attachment_file_ids):
             raise ValueError('Assistant attachments must be distinct')
         return self
@@ -105,6 +116,7 @@ class CanvasAssistantExchange(BaseModel):
     reply: str
     proposal: CanvasAssistantProposal | None = None
     revises: str | None = None
+    revises_field: CanvasAssistantFieldRevision | None = None
     skills: list[CanvasAssistantSkillUse] | None = None
     automatic_approval: bool = False
     approval_audit: list[CanvasAssistantApprovalAudit] | None = None

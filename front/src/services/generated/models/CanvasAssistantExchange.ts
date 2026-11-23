@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { CanvasAssistantApprovalAudit } from './CanvasAssistantApprovalAudit';
 import type { CanvasAssistantAttachment } from './CanvasAssistantAttachment';
+import type { CanvasAssistantFieldRevision } from './CanvasAssistantFieldRevision';
 import type { CanvasAssistantGenerationRead } from './CanvasAssistantGenerationRead';
 import type { CanvasAssistantInstruction } from './CanvasAssistantInstruction';
 import type { CanvasAssistantLayout } from './CanvasAssistantLayout';
@@ -25,6 +26,7 @@ export type CanvasAssistantExchange = {
     reply: string;
     proposal?: (CanvasAssistantProposal | null);
     revises?: (string | null);
+    revises_field?: (CanvasAssistantFieldRevision | null);
     skills?: (Array<CanvasAssistantSkillUse> | null);
     automatic_approval?: boolean;
     approval_audit?: (Array<CanvasAssistantApprovalAudit> | null);

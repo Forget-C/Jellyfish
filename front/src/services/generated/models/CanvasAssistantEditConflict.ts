@@ -13,6 +13,7 @@ import type { DisconnectCardsEdit } from './DisconnectCardsEdit';
 import type { ModelPromptSegmentEdit } from './ModelPromptSegmentEdit';
 import type { MovementFieldEdit } from './MovementFieldEdit';
 import type { ReleaseBindingEdit } from './ReleaseBindingEdit';
+import type { VideoDurationEdit } from './VideoDurationEdit';
 import type { VideoPromptSegmentEdit } from './VideoPromptSegmentEdit';
 /**
  * Current field value which prevents a group from being applied.
@@ -20,6 +21,6 @@ import type { VideoPromptSegmentEdit } from './VideoPromptSegmentEdit';
 export type CanvasAssistantEditConflict = {
     group_id: string;
     card_id: string;
-    target: (VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit | DeleteCardEdit | ReleaseBindingEdit | DisconnectCardsEdit | AddCanvasCardTarget | AdoptFirstFrameTarget | AdjustShotMovementTarget | ConnectCardsTarget);
+    target: (VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit | VideoDurationEdit | DeleteCardEdit | ReleaseBindingEdit | DisconnectCardsEdit | AddCanvasCardTarget | AdoptFirstFrameTarget | AdjustShotMovementTarget | ConnectCardsTarget);
     current: (string | null);
 };

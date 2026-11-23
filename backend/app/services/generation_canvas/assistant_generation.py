@@ -15,7 +15,8 @@ from app.schemas.canvas_assistant_generation import (CanvasAssistantGenerationRe
 from app.schemas.generation_canvas import CanvasDocument, CanvasPrecheckRequest, CanvasRunSubmit
 from app.schemas.canvas_assistant import CanvasAssistantExchange
 from app.services.generation_canvas.assistant_events import publish_events
-from app.services.generation_canvas.assistant_edits import resolve_assistant_proposal
+from app.services.generation_canvas.assistant_auto_review import conduct_review
+from app.services.generation_canvas.assistant_edits import automatic_targets_current, resolve_assistant_proposal
 from app.services.generation_canvas.assistant_targets import shot_request_matches
 from app.services.generation_canvas.runtime import CanvasRuntime
 from app.services.generation_canvas.store import CanvasStore
@@ -130,7 +131,8 @@ async def decide_assistant_generation_edit(
     db: AsyncSession, project_id: str, canvas_id: str, source_id: str, body: CanvasAssistantProposalDecision,
 ) -> CanvasAssistantProposalResult:
     """An edit decision and its effect on a waiting generation commit together."""
-    result = await resolve_assistant_proposal(db, project_id, canvas_id, source_id, body)
+    review = await conduct_review(db, project_id, canvas_id, source_id, body, automatic_targets_current)
+    result = await resolve_assistant_proposal(db, project_id, canvas_id, source_id, body, automatic_review=review)
     if result.replayed:
         result.generation = await read_generation(db, canvas_id, source_id)
         return result
@@ -147,7 +149,8 @@ async def decide_assistant_generation_edit(
     turn = await db.get(CanvasAssistantTurn, (canvas_id, source_id))
     exchange = CanvasAssistantExchange.model_validate(turn)
     exchange.generation = result.generation
-    publish_events(db, session, exchange, 'proposal.decided')
+    needs_manual = result.automatic_review and result.automatic_review.status in ('manual_required', 'unavailable')
+    publish_events(db, session, exchange, 'proposal.reviewed' if needs_manual else 'proposal.decided')
     if result.receipt:
         publish_events(db, session, exchange, 'proposal.applied')
     if result.conflicts:

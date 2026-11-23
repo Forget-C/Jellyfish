@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { CanvasAssistantEditConflict } from './CanvasAssistantEditConflict';
 import type { CanvasAssistantGenerationRead } from './CanvasAssistantGenerationRead';
+import type { CanvasAssistantIndependentReview } from './CanvasAssistantIndependentReview';
 import type { CanvasAssistantProposal } from './CanvasAssistantProposal';
 import type { CanvasRead } from './CanvasRead';
 import type { CanvasSaved } from './CanvasSaved';
@@ -16,4 +17,5 @@ export type CanvasAssistantProposalResult = {
     canvas?: (CanvasRead | null);
     conflicts?: Array<CanvasAssistantEditConflict>;
     generation?: (CanvasAssistantGenerationRead | null);
+    automatic_review?: (CanvasAssistantIndependentReview | null);
 };

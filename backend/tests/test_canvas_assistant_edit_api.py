@@ -390,6 +390,13 @@ async def test_auto_approval_follows_user_words_and_preserves_conflicts(canvas_c
         if request.url.host != 'example.test':
             return await original_send(client, request, **kwargs)
         body = json.loads(request.content)
+        if any('独立的画布审批复核员' in item['content'] for item in body['messages'] if item['role'] == 'system'):
+            assert not body.get('tools')
+            return httpx.Response(200, request=request, json={
+                'id': 'independent-review', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+                'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant',
+                    'content': '{"decision":"approve","reason":"用户明确指定了原操作"}'}}],
+            })
         count = sum(message['role'] == 'tool' for message in body['messages'])
         call = 'read_canvas_context' if count == 0 else name if count == 1 else None
         message = {'role': 'assistant', 'content': '准备了修改建议'}
@@ -440,3 +447,92 @@ async def test_auto_approval_follows_user_words_and_preserves_conflicts(canvas_c
         assert output['cards'][0]['input_bindings'] == []
         assert len(output['edges']) == 1
     assert (await canvas_client.get(url + '/runtime')).json()['data']['runs'] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures('assistant_edit_model')
+@pytest.mark.parametrize('case', ['unavailable', 'reject', 'withdraw', 'new-revision'])
+async def test_independent_review_does_not_override_user_or_canvas_changes(canvas_client, monkeypatch, case):
+    from asyncio import Event, create_task, wait_for
+
+    canvas = (await canvas_client.post('/canvases', json={'name': '独立复核'})).json()['data']
+    url = f"/canvases/{canvas['id']}"
+    assistant = url + '/assistant'
+    proposal_url = assistant + '/proposals/reviewable'
+    document = {**canvas['document'], 'cards': [{
+        'id': 'target', 'type': 'model.video', 'prompt': {'segments': [
+            {'kind': 'text', 'id': 'first', 'text': '快速推近'},
+        ]},
+    }]}
+    saved = await canvas_client.put(url, json={
+        'request_id': 'init', 'expected_revision': canvas['revision'], 'document': document,
+    })
+    revision = saved.json()['data']['revision']
+    await canvas_client.patch(assistant + '/approval', json={'approval_mode': 'automatic'})
+    real_send = httpx.AsyncClient.send
+    reviewer_entered, release_reviewer = Event(), Event()
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await real_send(client, request, **kwargs)
+        body = json.loads(request.content)
+        messages = body['messages']
+        tools = {item['tool_call_id'] for item in messages if item['role'] == 'tool'}
+        answer = {'role': 'assistant', 'content': '修改建议已准备'}
+        if any('独立的画布审批复核员' in item['content'] for item in messages if item['role'] == 'system'):
+            assert not body.get('tools')
+            reviewer_entered.set()
+            await release_reviewer.wait()
+            answer['content'] = '无效复核结果' if case == 'unavailable' else '{"decision":"approve","reason":"命中指定字段"}'
+        elif 'edit' not in tools:
+            name = 'propose_canvas_edit' if tools else 'read_canvas_context'
+            args = {'card_id': 'target', 'target': {'kind': 'video_prompt_segment', 'segment_id': 'first'},
+                    'text': '缓慢推近'} if tools else {}
+            answer = {'role': 'assistant', 'tool_calls': [{
+                'id': 'edit' if tools else 'context', 'type': 'function',
+                'function': {'name': name, 'arguments': json.dumps(args)},
+            }]}
+        return httpx.Response(200, request=request, json={
+            'id': 'review-answer', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+            'choices': [{'index': 0, 'finish_reason': 'tool_calls' if 'tool_calls' in answer else 'stop',
+                         'message': answer}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    preview = await canvas_client.post(assistant, json={
+        'request_id': 'reviewable', 'text': '把这张卡的推近放慢',
+        'context': {'revision': revision, 'draft': document, 'scope': 'selection', 'card_ids': ['target']},
+    })
+    assert preview.json()['data']['automatic_approval']
+    choice = {'action': 'approve', 'approval_mode': 'automatic', 'decision_id': 'automatic-1',
+              'expected_revision': revision}
+    reviewing = create_task(canvas_client.post(proposal_url, json=choice))
+    try:
+        await wait_for(reviewer_entered.wait(), timeout=4)
+        if case == 'reject':
+            assert (await canvas_client.post(proposal_url, json={
+                **choice, 'action': 'reject', 'approval_mode': 'manual', 'decision_id': 'manual-rejection',
+            })).status_code == 200
+        elif case == 'withdraw':
+            assert (await canvas_client.patch(assistant + '/approval', json={'approval_mode': 'manual'})).status_code == 200
+        elif case == 'new-revision':
+            assert (await canvas_client.put(url, json={
+                'request_id': 'edit-during-review', 'expected_revision': revision,
+                'document': {**document, 'name': '用户先改了画布'},
+            })).status_code == 200
+    finally:
+        release_reviewer.set()
+        result = await reviewing
+    current = (await canvas_client.get(url)).json()['data']
+    assert current['document']['cards'][0]['prompt']['segments'][0]['text'] == '快速推近'
+    if case == 'unavailable':
+        assert result.status_code == 200, result.text
+        assert result.json()['data']['automatic_review']['status'] == 'unavailable'
+        assert (await canvas_client.post(proposal_url, json=choice)).json() == result.json()
+        assert (await canvas_client.post(proposal_url, json={
+            **choice, 'approval_mode': 'manual', 'decision_id': 'manual-approval',
+        })).json()['data']['proposal']['state'] == 'applied'
+    else:
+        assert result.status_code == 409, result.text
+        proposal = (await canvas_client.get(assistant)).json()['data']['turns'][0]['proposal']
+        assert proposal['state'] == ('rejected' if case == 'reject' else 'pending')

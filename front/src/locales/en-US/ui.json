@@ -1,4 +1,8 @@
 {
+  "等待人工审批": "Waiting for manual approval",
+  "独立审批复核": "Independent approval review",
+  "修订此字段": "Revise this field",
+  "正在修订所选字段": "Revising the selected field",
   "本轮已接收补充指令": "Instruction received for this turn",
   "本轮补充指令": "Additional instructions for this turn",
   "本轮已结束或正在等待回答，补充指令未接收。": "The turn finished or is waiting for an answer, so the instruction was not accepted.",

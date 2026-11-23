@@ -281,3 +281,94 @@ async def test_catalog_limits_assistant_card_creation(canvas_client, monkeypatch
     assert created['type'] == expected
     if expected == 'direction.movement':
         assert created['fields']['movement_speed']['text'] == '慢推'
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures('assistant_edit_model')
+async def test_revise_one_duration_keeps_dependent_changes_and_independent_decisions(canvas_client, monkeypatch):
+    canvas = (await canvas_client.post('/canvases', json={'name': '字段修订'})).json()['data']
+    url = f"/canvases/{canvas['id']}"
+    document = {**canvas['document'], 'cards': [
+        {'id': 'shot', 'type': 'model.video', 'config': {'seconds': 8}, 'prompt': {
+            'segments': [{'kind': 'text', 'id': 'prompt', 'text': '继续推进'}],
+        }},
+        {'id': 'notes', 'type': 'content.text', 'text': '初稿'},
+    ]}
+    saved = await canvas_client.put(url, json={
+        'request_id': 'setup-duration', 'expected_revision': canvas['revision'], 'document': document,
+    })
+    assert saved.status_code == 200, saved.text
+    canvas = (await canvas_client.get(url)).json()['data']
+    duration = {'kind': 'edit_field', 'change': {
+        'card_id': 'shot', 'target': {'kind': 'video_duration'}, 'text': '5',
+    }}
+    independent = {'kind': 'edit_field', 'change': {
+        'card_id': 'notes', 'target': {'kind': 'card_text'}, 'text': '定稿',
+    }}
+    dependent = {'kind': 'edit_field', 'change': {
+        'card_id': 'shot', 'target': {'kind': 'video_prompt_segment', 'segment_id': 'prompt'}, 'text': '减速推进',
+    }}
+    real_send = httpx.AsyncClient.send
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await real_send(client, request, **kwargs)
+        body = json.loads(request.content)
+        messages = body['messages']
+        text = [message['content'] for message in messages if message['role'] == 'user'][-1]
+        completed = {m['tool_call_id'] for m in messages if m['role'] == 'tool'}
+        groups = [{'title': '时长及提示词', 'changes': [duration, dependent]},
+                  {'title': '笔记', 'changes': [independent]}]
+        if text == '改为 6 秒':
+            groups = [{'title': '时长', 'changes': [{
+                **duration, 'change': {**duration['change'], 'text': '6'},
+            }]}]
+        answer = {'role': 'assistant', 'content': '请核对差异'}
+        if 'batch-duration' not in completed:
+            call = ('batch-duration', 'propose_canvas_changes', {'groups': groups}) if completed else (
+                'read-duration', 'read_canvas_context', {},
+            )
+            answer = {'role': 'assistant', 'tool_calls': [{
+                'id': call[0], 'type': 'function',
+                'function': {'name': call[1], 'arguments': json.dumps(call[2])},
+            }]}
+        return httpx.Response(200, request=request, json={
+            'id': 'duration', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+            'choices': [{'index': 0, 'finish_reason': 'tool_calls' if 'tool_calls' in answer else 'stop',
+                         'message': answer}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    original = await send_structure(canvas_client, url, canvas, '缩短时长并更新提示词，同步笔记')
+    assert original['proposal']['groups'][0]['edits'][0]['before'] == '8'
+    decide = f"{url}/assistant/proposals/{original['request_id']}"
+    approved = await canvas_client.post(decide, json={
+        'action': 'approve', 'expected_revision': canvas['revision'], 'group_ids': ['2'],
+    })
+    assert approved.status_code == 200, approved.text
+    canvas = (await canvas_client.get(url)).json()['data']
+    revision = await canvas_client.post(url + '/assistant', json={
+        'request_id': 'field-revision', 'text': '改为 6 秒', 'revises': original['request_id'],
+        'revises_field': {'group_id': '1', 'change_index': 0},
+        'context': {'draft': canvas['document'], 'revision': canvas['revision'], 'scope': 'selection',
+                    'card_ids': ['shot']},
+    })
+    assert revision.status_code == 200, revision.text
+    revised = revision.json()['data']
+    group, = revised['proposal']['groups']
+    assert [(edit['before'], edit['after']) for edit in group['edits']] == [
+        ('8', '6'), ('继续推进', '减速推进'),
+    ]
+    history = (await canvas_client.get(url + '/assistant')).json()['data']['turns']
+    assert [group['state'] for group in history[0]['proposal']['groups']] == ['superseded', 'applied']
+    assert (await canvas_client.post(decide, json={
+        'action': 'approve', 'expected_revision': canvas['revision'], 'group_ids': ['1'],
+    })).status_code == 409
+    written = await canvas_client.post(url + '/assistant/proposals/field-revision', json={
+        'action': 'approve', 'expected_revision': canvas['revision'], 'group_ids': [group['id']],
+    })
+    assert written.status_code == 200, written.text
+    cards = written.json()['data']['canvas']['document']['cards']
+    assert cards[0]['config']['seconds'] == 6
+    assert cards[0]['prompt']['segments'][0]['text'] == '减速推进'
+    assert cards[1]['text'] == '定稿'

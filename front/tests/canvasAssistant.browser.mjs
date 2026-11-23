@@ -56,6 +56,16 @@ const provider = createHttpServer(async (request, response) => {
     return
   }
   const { model, messages, tools, stream } = JSON.parse(Buffer.concat(chunks).toString())
+  if (messages.some(message => message.role === 'system' && message.content.includes('独立的画布审批复核员'))) {
+    assert.equal(tools, undefined)
+    response.writeHead(200, { 'Content-Type': 'application/json' })
+    response.end(JSON.stringify({
+      id: 'approval-review', object: 'chat.completion', created: 1, model,
+      choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant',
+        content: '{"decision":"approve","reason":"删除请求明确指向当前卡片"}' } }],
+    }))
+    return
+  }
   const evidence = messages.flatMap(message => Array.isArray(message.content) ? message.content : [])
     .find(part => part.type === 'video_url' || part.type === 'image_url')
   const isReview = messages.some(message => Array.isArray(message.content)

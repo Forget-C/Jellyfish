@@ -1,6 +1,7 @@
 """Preview and approve the assistant's narrow, user-authorized canvas edits."""
 
 from copy import copy
+from dataclasses import dataclass
 import hashlib
 from uuid import uuid4
 from typing import Annotated
@@ -12,25 +13,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.generation_canvas import DesignField
 from app.models.canvas_assistant import CanvasAssistantSession, CanvasAssistantTurn
-from app.schemas.canvas_assistant import CanvasAssistantReadContext
+from app.schemas.canvas_assistant import CanvasAssistantFieldRevision, CanvasAssistantReadContext
 from app.schemas.canvas_assistant_edit import (
     CanvasAssistantChange, CanvasAssistantEditConflict, CanvasAssistantEditGroup,
     CanvasAssistantApprovalAudit, CanvasAssistantEditTarget, CanvasAssistantEditText, CanvasAssistantFieldTarget,
     CanvasAssistantProposal, CanvasAssistantProposalDecision, CanvasAssistantProposalResult,
     CanvasAssistantRemovalTarget, CardTextEdit, DeleteCardEdit, DesignTextFieldEdit, DisconnectCardsEdit, ModelPromptSegmentEdit,
     MovementFieldEdit, ProposedBatchCard, ProposedBatchField, ProposedBatchRemoval, ProposedCanvasBatch, ProposedEditGroup, ReleaseBindingEdit,
-    VideoPromptSegmentEdit,
+    VideoDurationEdit, VideoPromptSegmentEdit,
 )
 from app.schemas.canvas_assistant_structure import (
     AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCardsTarget,
 )
 from app.schemas.generation_canvas import (
     CanvasDocument, CanvasSave, CreativeBasisCard, ModelCard, MovementCard, ObjectDescriptionCard, PromptText,
-    TextContentCard, VideoModelCard,
+    TextContentCard, VideoModelCard, VideoModelConfig,
 )
 from app.services.generation_canvas.catalog import CARD_TITLES, design_fields
 from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
 from app.services.generation_canvas.assistant_approval import automatic_approval_allowed
+from app.services.generation_canvas.assistant_auto_review import AutomaticReview, review_basis
 from app.services.generation_canvas.assistant_removals import apply_removal, removal_impact
 from app.services.generation_canvas.assistant_structure import (
     apply_structural_change, assistant_card_configuration, preview_assistant_connection,
@@ -41,7 +43,22 @@ from app.services.generation_canvas.store import CanvasStore
 _TEXT_CONTENT = (TextContentCard, CreativeBasisCard, ObjectDescriptionCard)
 
 
+@dataclass
+class _VideoDuration:
+    config: VideoModelConfig
+
+    @property
+    def text(self) -> str:
+        return str(self.config.seconds or '')
+
+    @text.setter
+    def text(self, value: str) -> None:
+        self.config.seconds = int(value)
+
+
 def _editable_text(card, target: CanvasAssistantEditTarget):
+    if isinstance(target, VideoDurationEdit) and isinstance(card, VideoModelCard):
+        return _VideoDuration(card.config)
     if isinstance(target, CardTextEdit) and isinstance(card, _TEXT_CONTENT):
         return card
     if isinstance(target, MovementFieldEdit) and isinstance(card, MovementCard):
@@ -86,6 +103,13 @@ class CanvasAssistantEditDraft:
             raise ToolException('Choose an existing card in the locked scope')
         card = type(saved).model_validate(self.cards[card_id])
         field = _editable_text(card, target)
+        if isinstance(target, VideoDurationEdit):
+            try:
+                if int(text) < 1:
+                    raise ValueError
+                text = str(int(text))
+            except ValueError as error:
+                raise ToolException('Enter the duration as a positive number of seconds') from error
         if field is None or field.text == text:
             raise ToolException('Choose an existing plain-text field and provide different text')
         return CanvasAssistantChange(
@@ -232,8 +256,51 @@ class CanvasAssistantEditDraft:
         return propose_canvas_removal
 
 
+def revision_field(proposal: dict, reference: CanvasAssistantFieldRevision):
+    """Resolve a pending field without relying on the model to identify its source."""
+    current = CanvasAssistantProposal.model_validate(proposal)
+    group = next((item for item in current.groups or [] if item.id == reference.group_id and item.state == 'pending'), None)
+    if group is None or reference.change_index >= len(group.edits):
+        raise HTTPException(409, 'The requested field revision is no longer pending')
+    change = group.edits[reference.change_index]
+    if not isinstance(change.target, (CardTextEdit, DesignTextFieldEdit, ModelPromptSegmentEdit, MovementFieldEdit,
+                                      VideoDurationEdit, VideoPromptSegmentEdit)):
+        raise HTTPException(422, 'Choose an editable field to revise')
+    return current, group, change
+
+
+async def replace_proposed_field(store, canvas, original, reference, proposal, visible_document):
+    """Keep the original dependent edits and verify the rebuilt group before replacing it."""
+    previous, group, selected = revision_field(original, reference)
+    changes = [change for entry in proposal.groups for change in entry.edits] if proposal.groups else [proposal]
+    if len(changes) != 1 or changes[0].card_id != selected.card_id or changes[0].target != selected.target:
+        raise HTTPException(422, 'The revision must change only the selected field')
+    edits = list(group.edits)
+    replacement = changes[0]
+    edits[reference.change_index] = CanvasAssistantChange.model_validate(replacement.model_dump(exclude={'groups', 'state'}))
+    revised = group.model_copy(update={'edits': edits})
+    if await _apply_group(store, canvas, visible_document.model_copy(deep=True), revised):
+        raise HTTPException(409, 'The revised group needs to be previewed against the latest canvas')
+    group.state = 'superseded'
+    if all(item.state != 'pending' for item in previous.groups):
+        previous.state = 'superseded'
+    return CanvasAssistantProposal(**edits[0].model_dump(), groups=[revised]), previous.model_dump(mode='json')
+
+
+def automatic_targets_current(document: CanvasDocument, proposal: CanvasAssistantProposal) -> bool:
+    """Compare the guarded field or removal impact before consulting the reviewer."""
+    change = proposal.groups[0].edits[0] if proposal.groups else proposal
+    if isinstance(change.target, (DeleteCardEdit, ReleaseBindingEdit, DisconnectCardsEdit)):
+        impact = removal_impact(document, change.card_id, change.target)
+        return impact is not None and impact[1] == change.impact_fingerprint
+    card = next((item for item in document.cards if item.id == change.card_id), None)
+    field = _editable_text(card, change.target)
+    return field is not None and field.text == change.before
+
+
 async def resolve_assistant_proposal(
     db: AsyncSession, project_id: str, canvas_id: str, source_id: str, decision: CanvasAssistantProposalDecision,
+    *, automatic_review: AutomaticReview | None = None,
 ) -> CanvasAssistantProposalResult:
     """Record the decision with the ordinary canvas CAS save in one transaction."""
     store = CanvasStore(db, project_id)
@@ -256,24 +323,46 @@ async def resolve_assistant_proposal(
                 or not automatic_approval_allowed(
                     turn.text, turn.context, proposal, CanvasDocument.model_validate(canvas.document), decision.group_ids)):
             raise HTTPException(409, 'Automatic approval requires an explicit user request for this change')
+        if automatic_review is None or automatic_review.basis != review_basis(canvas, turn, decision.group_ids):
+            raise HTTPException(409, 'The proposal or its authorization changed during automatic review')
+        if automatic_review.receipt.status in ('manual_required', 'unavailable'):
+            _record_decision(turn, decision, 'manual_required', automatic_review.receipt)
+            result = CanvasAssistantProposalResult(
+                proposal=proposal, canvas=await store.read(canvas_id), automatic_review=automatic_review.receipt,
+            )
+            if decision_key:
+                _store_decision_receipt(turn, decision_key, command, result)
+            return result
     if decision.expected_revision > canvas.revision:
         raise HTTPException(409, 'Canvas revision does not exist')
     if proposal.groups:
         result = await _resolve_groups(store, canvas, turn, proposal, decision, decision_key)
     else:
         result = await _resolve_single(store, canvas, turn, proposal, decision)
+    if automatic_review is not None and not result.replayed:
+        if automatic_review.receipt.status == 'blocked' and result.receipt:
+            raise HTTPException(409, 'Automatic review did not authorize this execution')
+        result.automatic_review = automatic_review.receipt
+        audit = turn.approval_audit or []
+        if audit:
+            turn.approval_audit = [*audit[:-1], {**audit[-1], 'review': automatic_review.receipt.model_dump(mode='json')}]
     if decision_key:
-        turn.proposal_receipt = {
-            **(turn.proposal_receipt or {}),
-            decision_key: {
-                'command': command,
-                'state': result.proposal.state,
-                'group_states': {group.id: group.state for group in result.proposal.groups or []},
-                'receipt': result.receipt.model_dump(mode='json') if result.receipt else None,
-                'conflicts': [item.model_dump(mode='json') for item in result.conflicts],
-            },
-        }
+        _store_decision_receipt(turn, decision_key, command, result)
     return result
+
+
+def _store_decision_receipt(turn, key, command, result):
+    turn.proposal_receipt = {
+        **(turn.proposal_receipt or {}),
+        key: {
+            'command': command,
+            'state': result.proposal.state,
+            'group_states': {group.id: group.state for group in result.proposal.groups or []},
+            'receipt': result.receipt.model_dump(mode='json') if result.receipt else None,
+            'conflicts': [item.model_dump(mode='json') for item in result.conflicts],
+            'automatic_review': result.automatic_review.model_dump(mode='json') if result.automatic_review else None,
+        },
+    }
 
 
 async def _resolve_single(store, canvas, turn, proposal, decision):
@@ -323,7 +412,7 @@ def _apply_text(card, field, change: CanvasAssistantChange) -> None:
         field.authorship = 'user'
         field.extraction_context = None
         field.extraction_reason = None
-    elif isinstance(card, VideoModelCard) and card.generated_prompt:
+    elif isinstance(card, VideoModelCard) and card.generated_prompt and not isinstance(change.target, VideoDurationEdit):
         card.generated_prompt.edit_confirmed = True
 
 
@@ -370,15 +459,16 @@ async def _replay_decision(store, canvas_id, proposal, recorded):
             group.state = recorded['group_states'][group.id]
     return CanvasAssistantProposalResult(
         proposal=proposal, receipt=recorded['receipt'], conflicts=recorded['conflicts'],
-        canvas=await store.read(canvas_id) if recorded['receipt'] or recorded['conflicts'] else None,
+        canvas=await store.read(canvas_id) if recorded['receipt'] or recorded['conflicts'] or recorded.get('automatic_review') else None,
+        automatic_review=recorded.get('automatic_review'),
         replayed=True,
     )
 
 
-def _record_decision(turn, decision, outcome):
+def _record_decision(turn, decision, outcome, review=None):
     audit = CanvasAssistantApprovalAudit(source_id=turn.request_id, mode=decision.approval_mode,
                                        action=decision.action, outcome=outcome, group_ids=decision.group_ids,
-                                       decision_id=decision.decision_id)
+                                       decision_id=decision.decision_id, review=review)
     entry = audit.model_dump(mode='json')
     previous = turn.approval_audit or []
     if entry not in previous:

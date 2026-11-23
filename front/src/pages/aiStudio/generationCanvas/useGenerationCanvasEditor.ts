@@ -217,7 +217,11 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
         requestBody: { action: 'approve', decision_id: command.assistantDecisionId, expected_revision: command.expected_revision, group_ids: command.assistantGroupIds,
           approval_mode: command.assistantAutomatic ? 'automatic' : 'manual' },
       })
-      if (!data?.canvas || (data.receipt ? data.receipt.canvas_id !== canvas.id : !data.conflicts?.length)) throw new Error('invalid assistant edit receipt')
+      const manualReview = data?.automatic_review?.status === 'manual_required' ||
+        data?.automatic_review?.status === 'unavailable'
+      if (!data?.canvas || (data.receipt ? data.receipt.canvas_id !== canvas.id : !data.conflicts?.length && !manualReview)) {
+        throw new Error('invalid assistant edit receipt')
+      }
       return { ...data.canvas, assistantReceiptRevision: data.receipt?.revision,
         assistantAppliedGroups: data.proposal.groups?.filter(group => group.state === 'applied' &&
           command.assistantGroupIds?.includes(group.id)).map(group => group.id) }

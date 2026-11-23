@@ -48,6 +48,13 @@ class MovementFieldEdit(BaseModel):
     field: MovementFieldName
 
 
+class VideoDurationEdit(BaseModel):
+    """Set the duration in seconds for one video model card."""
+
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['video_duration'] = Field(json_schema_extra={'enum': ['video_duration']})
+
+
 class DeleteCardEdit(BaseModel):
     """Remove one saved card and its incidental connections."""
 
@@ -72,12 +79,12 @@ class DisconnectCardsEdit(BaseModel):
 
 
 CanvasAssistantFieldTarget = Annotated[
-    VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit,
+    VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit | VideoDurationEdit,
     Field(discriminator='kind'),
 ]
 CanvasAssistantRemovalTarget = Annotated[DeleteCardEdit | ReleaseBindingEdit | DisconnectCardsEdit, Field(discriminator='kind')]
 CanvasAssistantEditTarget = Annotated[
-    VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit
+    VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit | VideoDurationEdit
     | DeleteCardEdit | ReleaseBindingEdit | DisconnectCardsEdit | AddCanvasCardTarget | AdoptFirstFrameTarget
     | AdjustShotMovementTarget | ConnectCardsTarget,
     Field(discriminator='kind'),
@@ -96,13 +103,23 @@ class CanvasAssistantChange(BaseModel):
 ProposalState = Literal['pending', 'rejected', 'applied', 'superseded']
 
 
+class CanvasAssistantIndependentReview(BaseModel):
+    """Audit details from the independently prompted approval model."""
+
+    status: Literal['approved', 'manual_required', 'unavailable', 'blocked']
+    reviewer_model_id: str | None = None
+    policy: Literal['canvas-approval-v1'] = 'canvas-approval-v1'
+    reason: str
+
+
 class CanvasAssistantApprovalAudit(BaseModel):
     """A decision associated with the message on which it was taken."""
 
     source_id: str
     mode: Literal['manual', 'automatic']
     action: Literal['approve', 'reject']
-    outcome: Literal['applied', 'rejected', 'partial', 'conflict']
+    outcome: Literal['applied', 'rejected', 'partial', 'conflict', 'manual_required']
+    review: CanvasAssistantIndependentReview | None = Field(default=None, exclude_if=lambda value: value is None)
     group_ids: list[str] | None = None
     decision_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
 
@@ -151,6 +168,7 @@ class CanvasAssistantProposalResult(BaseModel):
     canvas: CanvasRead | None = None
     conflicts: list[CanvasAssistantEditConflict] = Field(default_factory=list)
     generation: CanvasAssistantGenerationRead | None = None
+    automatic_review: CanvasAssistantIndependentReview | None = None
     replayed: bool = Field(default=False, exclude=True)
 
 

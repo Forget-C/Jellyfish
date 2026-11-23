@@ -147,6 +147,13 @@ async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypa
         if request.url.host != 'frozen.test':
             return await original_send(client, request, **kwargs)
         body = json.loads(request.content)
+        if any('独立的画布审批复核员' in item['content'] for item in body['messages'] if item['role'] == 'system'):
+            assert not body.get('tools')
+            return httpx.Response(200, request=request, json={
+                'id': 'independent-review', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+                'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant',
+                    'content': '{"decision":"approve","reason":"用户明确指定了原操作"}'}}],
+            })
         results = [item for item in body['messages'] if item['role'] == 'tool']
         if len(results) < 2:
             name = 'read_canvas_context' if not results else 'propose_canvas_edit'

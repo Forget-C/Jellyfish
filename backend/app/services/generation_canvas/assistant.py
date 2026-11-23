@@ -33,7 +33,7 @@ from app.services.generation_canvas.assistant_checkpoint import CanvasCheckpoint
 from app.services.generation_canvas.assistant_context import (
     CANVAS_PAGE_SIZE, context_page, prioritize_context_cards, read_context_coverage, read_text_context_coverage, resolve_assistant_context,
 )
-from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
+from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft, replace_proposed_field, revision_field
 from app.services.generation_canvas.assistant_approval import automatic_approval_allowed
 from app.services.generation_canvas.assistant_questions import (
     CreativeQuestionPending, ask_canvas_question, check_new_question, resume_question,
@@ -68,7 +68,7 @@ TEXT_PROPOSAL_PROMPT = (
     '仅在用户明确要求变更时返回 JSON 对象，不使用 Markdown 围栏，字段为 reply 和 groups。'
     'groups 是数组，每组有 title 与 changes。change.kind 为 edit_field 时，change.change 包含 card_id、'
     'target 和 text，target.kind 为 card_text、design_text_field（field_name）、'
-    'movement_field（field）或 model_prompt_segment（segment_id）。'
+    'movement_field（field）、model_prompt_segment（segment_id）或 video_duration（text 填秒数）。'
     'add_card 包含组内 reference 和 card，card.kind 为 add_text_card（text）、'
     'add_model_card（modality、prompt）、add_movement_card（movement_speed）或 add_catalog_card（card_type）。'
     'connect_cards 包含 source_card、target_card、source_port、target_port，可以引用同组已创建的 reference。'
@@ -208,7 +208,7 @@ class CanvasAssistant:
         turn = CanvasAssistantTurn(
             canvas_id=session.canvas_id, request_id=source_id, sequence=session.sequence, text=command['text'],
             model_id=pending['model_id'], reply='', stopped=True, context=pending['context'], revises=command['revises'],
-            instructions=pending.get('instructions'),
+            instructions=pending.get('instructions'), revises_field=command.get('revises_field'),
             attachments=[{'file_id': file_id, 'observation': 'unavailable'} for file_id in command['attachment_file_ids']],
         )
         session.pending_token = session.pending_until = None
@@ -409,10 +409,12 @@ class CanvasAssistant:
             if scoped.layout_positions:
                 layout_draft = CanvasAssistantLayoutDraft(scoped, edit_draft.visible_document)
         previous = await self.db.get(CanvasAssistantTurn, (canvas_id, command.request_id))
+        field_reference = command.revises_field.model_dump() if command.revises_field else None
         if previous is not None:
             attached_ids = [attachment['file_id'] for attachment in (previous.attachments or [])]
             if (previous.text != command.text or (without_observed_cards(previous.context)) != context
-                    or previous.revises != command.revises or attached_ids != command.attachment_file_ids):
+                    or previous.revises != command.revises or previous.revises_field != field_reference
+                    or attached_ids != command.attachment_file_ids):
                 raise HTTPException(409, 'Request already used for a different assistant message')
             return await self._exchange(previous, session.approval_mode)
 
@@ -423,7 +425,8 @@ class CanvasAssistant:
         request = command.model_dump(mode='json')
         pending = session.pending_request
         resuming = pending is not None and pending['command']['request_id'] == command.request_id
-        if resuming and (pending['command'] != request or pending['context'] != context):
+        if resuming and (CanvasAssistantMessage.model_validate(pending['command']).model_dump(mode='json') != request
+                         or pending['context'] != context):
             raise HTTPException(409, 'Request already used for a different assistant message')
         question = pending.get('question') if pending else None
         answers = list(pending.get('answers', ())) if resuming else []
@@ -447,7 +450,11 @@ class CanvasAssistant:
         for turn in await self._turns(canvas_id):
             messages.extend([HumanMessage(content=turn.text), AIMessage(content=turn.reply)])
         if revised_proposal:
-            messages.append(revision_subject(revised_proposal.proposal))
+            revision = revised_proposal.proposal
+            if command.revises_field:
+                _, _, target = revision_field(revision, command.revises_field)
+                revision = {'rule': '只提出此字段的新值，组内其他改动由服务保留。', 'field': target.model_dump(mode='json')}
+            messages.append(revision_subject(revision))
         sources = await resolve_assistant_media(self.db, self.store.project_id, command.attachment_file_ids)
         structure_tool = structural_preview_tool(edit_draft, canvas.kind, sources) if edit_draft else None
 
@@ -491,7 +498,7 @@ class CanvasAssistant:
                 return stopped
             raise
 
-        await self.store.get(canvas_id, lock=True)
+        locked_canvas = await self.store.get(canvas_id, lock=True)
         session = await self._lock_session(canvas_id)
         if session.pending_token != token:
             stopped = await self._stopped_exchange(canvas_id, command.request_id)
@@ -507,10 +514,20 @@ class CanvasAssistant:
             except HTTPException:
                 await self.db.commit()
                 raise
-            superseded = {**revised_proposal.proposal, 'state': 'superseded'}
-            if superseded.get('groups'):
-                superseded['groups'] = [{**group, 'state': 'superseded'} if group['state'] == 'pending'
-                                        else group for group in superseded['groups']]
+            if command.revises_field:
+                try:
+                    proposal, superseded = await replace_proposed_field(
+                        self.store, locked_canvas, revised_proposal.proposal, command.revises_field,
+                        proposal, edit_draft.visible_document,
+                    )
+                except HTTPException:
+                    await self.db.commit()
+                    raise
+            else:
+                superseded = {**revised_proposal.proposal, 'state': 'superseded'}
+                if superseded.get('groups'):
+                    superseded['groups'] = [{**group, 'state': 'superseded'} if group['state'] == 'pending'
+                                            else group for group in superseded['groups']]
             revised_proposal.proposal = superseded
             await update_generation_for_decision(self.db, canvas_id, command.revises, 'superseded')
             publish_events(self.db, session, await self._exchange(revised_proposal), 'proposal.superseded')
@@ -522,7 +539,7 @@ class CanvasAssistant:
             canvas_id=canvas_id, sequence=session.sequence, request_id=command.request_id,
             model_id=model_id, text=command.text, reply=reply, context=context, attachments=attachments,
             skills=[skill.model_dump() for skill in skills], question_answers=answers or None,
-            instructions=instructions or None,
+            instructions=instructions or None, revises_field=field_reference,
             proposal=proposal.model_dump(mode='json') if proposal else None, revises=command.revises,
             layout=layout_draft.proposal.model_dump(mode='json') if layout_draft and layout_draft.proposal else None,
         )
@@ -652,7 +669,7 @@ class CanvasAssistant:
                 tools.append(structure_tool)
                 if edit_draft is not None:
                     tools.append(edit_draft.batch_tool())
-                    guidance += '混合编辑、建卡和连接使用 propose_canvas_changes。'
+                    guidance += '混合编辑、建卡和连接使用 propose_canvas_changes。视频秒数使用 video_duration。'
                 guidance += ('用户明确要求建卡、连接候选卡片、使用本次附图作首帧，或调整所选镜头实际采用的运镜时，使用 propose_canvas_structure。'
                              '局部调整采用运镜卡的视频镜头使用 adjust_shot_movement，避免直接改变共享运镜或覆盖视频提示词。'
                              '如果没有采用运镜卡，可以改实际使用的视频提示词。工具仅预览，用户确认后才写入。')

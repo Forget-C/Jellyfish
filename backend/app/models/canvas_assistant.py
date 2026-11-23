@@ -18,7 +18,7 @@ class CanvasAssistantSession(Base):
         ForeignKey('generation_canvases.id', ondelete='CASCADE'), primary_key=True,
     )
     sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    event_cursor: Mapped[int] = mapped_column(Integer, nullable=False, server_default='0')
+    event_cursor: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default='0')
     pending_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
     pending_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     pending_request: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -49,12 +49,13 @@ class CanvasAssistantTurn(Base):
     proposal: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     proposal_receipt: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     revises: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    revises_field: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     skills: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     attachments: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     approval_audit: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     question_answers: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     instructions: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
-    stopped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    stopped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default='0')
     layout: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
