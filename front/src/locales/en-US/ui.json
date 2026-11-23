@@ -3844,5 +3844,16 @@
   "（选填）": "(optional)",
   "，请重新选择": ". Select again.",
   "；完整代号确认后绑定": ". Confirm the full token to bind it.",
-  "＠ 引用与指令": "@ References and instructions"
+  "＠ 引用与指令": "@ References and instructions",
+  "项目信息": "Project details",
+  "尚未填写项目简介": "No project description yet",
+  "数量待确认": "Count unavailable",
+  "最近新增": "Recently added",
+  "重试读取资源": "Retry resources",
+  "暂无项目资源": "No project resources yet",
+  "暂无可展示的最近资源": "No recent resources to display",
+  "划分场次后，可在这里继续制作": "Divide a chapter into scenes to continue production here",
+  "选择章节": "Select chapter",
+  "原文已变更": "Source changed",
+  "{{count}} 章": "{{count}} chapters"
 }

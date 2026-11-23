@@ -21,6 +21,8 @@ export type TabKey =
   | 'files'
   | 'settings'
 
+export const projectResourceKinds = { actors: 'actor', roles: 'character', scenes: 'scene', props: 'prop', costumes: 'costume' } as const
+
 export const DEFAULT_TAB: TabKey = 'dashboard'
 
 type ProjectNavigationItem = { key: TabKey; label: string; icon: ReactNode }

@@ -9,10 +9,10 @@ import {
   ArrowLeftOutlined,
 } from '@ant-design/icons'
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { DEFAULT_TAB, projectTabLabel, projectTabLocation, resolveProjectTab, type TabKey } from './constants'
+import { DEFAULT_TAB, projectTabLabel, projectTabLocation, projectResourceKinds, resolveProjectTab, type TabKey } from './constants'
 import { DashboardTab } from './tabs/DashboardTab'
 import { ChaptersTab } from './tabs/ChaptersTab'
-import { ProjectResourcesTab, type ProjectResourceKind, type ProjectResourcePageResult } from './tabs/ProjectResourcesTab'
+import { ProjectResourcesTab, type ProjectResourcePageResult } from './tabs/ProjectResourcesTab'
 import { FilesTab } from './tabs/FilesTab'
 import { SettingsTab } from './tabs/SettingsTab'
 import { useProject, useChapters } from './hooks/useProjectData'
@@ -25,10 +25,6 @@ import { ProjectToolbarProvider } from './ProjectContentToolbar'
 import './project-production.css'
 
 const TAB_PARAM = 'tab'
-const resourceKinds: Partial<Record<TabKey, ProjectResourceKind>> = {
-  actors: 'actor', roles: 'character', scenes: 'scene', props: 'prop', costumes: 'costume',
-}
-
 const ProjectWorkbench: FC = () => {
   const uiText = useUiText()
   const { projectId } = useParams<{ projectId: string }>()
@@ -36,13 +32,14 @@ const ProjectWorkbench: FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabFromUrl = searchParams.get(TAB_PARAM)
   const activeTab = resolveProjectTab(tabFromUrl)
-  const resourceKind = resourceKinds[activeTab]
+  const resourceKind = projectResourceKinds[activeTab as keyof typeof projectResourceKinds]
   const resourceResults = useRef(new Map<string, ProjectResourcePageResult>())
   const productionPage = activeTab === 'dashboard' || activeTab === 'chapters'
 
   const { project, loading: projectLoading, saving, saveProject } = useProject(projectId)
   usePageTitle(project?.id === projectId ? project?.name : undefined)
-  const { chapters } = useChapters(projectId)
+  const chapterData = useChapters(projectId)
+  const { chapters } = chapterData
 
   const [recentDestination, setRecentDestination] = useState<string>()
   useEffect(() => {
@@ -124,7 +121,9 @@ const ProjectWorkbench: FC = () => {
           className="app-page-content project-workbench-content animate-fadeIn"
           style={{ animation: 'fadeIn 0.25s ease-out' }}
         >
-          {activeTab === 'dashboard' && <DashboardTab />}
+          {activeTab === 'dashboard' && projectId && <DashboardTab key={projectId} projectId={projectId}
+            project={project?.id === projectId ? project : null} projectLoading={projectLoading || project?.id !== projectId}
+            chapterData={chapterData} />}
 
           {activeTab === 'chapters' && <ChaptersTab />}
 
