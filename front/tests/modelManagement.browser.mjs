@@ -1,4 +1,3 @@
-import { assertDetailDrawerLayout } from './detailLayout.assertions.mjs'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -34,6 +33,7 @@ const settings = {
   id: 1, default_text_model_id: model.id, default_image_model_id: null, default_video_model_id: null,
 }
 let defaultSaveFails = true
+let defaultOptionsFail = false
 let editFails = true
 let deleteFails = true
 let deleteRequests = 0
@@ -93,28 +93,29 @@ try {
     if (pathname.endsWith('/providers')) return respond({ items: [provider], pagination: { total: 1 } })
     if (pathname.endsWith('/providers/provider1/models/catalog')) {
       return respond({
-        provider_id: provider.id, provider_key: 'fixture', source: 'provider_catalog', models: [],
+        provider_id: provider.id, provider_key: 'fixture', source: 'provider_catalog', models: [{ name: '目录模型', category: 'text', description: '目录描述', params: { temperature: 0.5 } }],
       })
     }
     if (pathname.endsWith('/providers/provider1/models/import') && route.request().method() === 'POST') {
       createRequests += 1
       const { models } = route.request().postDataJSON()
-      assert.equal(models.length, 1)
-      assert.equal(models[0].name, '新增验收模型')
-      assert.equal(models[0].category, 'text')
-      assert.deepEqual(models[0].params, {})
-      assert.deepEqual(models[0].capability_profile.tool_calling, {
-        declaration: 'supported', source: '验收依据',
-      })
+      const declarations = models.map(({ capability_profile }) => capability_profile)
+      assert.deepEqual(models.map(({ capability_profile: _, ...entry }) => entry), [
+        { name: '新增验收模型', category: 'text', params: {}, description: '手填描述' },
+        { name: '目录模型', category: 'text', description: '目录描述', params: { temperature: 0.5 } },
+      ])
+      for (const declaration of declarations) {
+        assert.deepEqual(declaration.tool_calling, { declaration: 'supported', source: '验收依据' })
+      }
       const created = { ...models[0], id: 'new-model', provider_id: provider.id }
       rows.push(created)
-      return respond({ created: [created], skipped: [] })
+      return respond({ created: [created], skipped: [models[1]] })
     }
     if (pathname.endsWith('/models')) {
       await initialLoad
       const query = Object.fromEntries(searchParams)
       loadedQueries.push(query)
-      if (listFails) return route.fulfill({ status: 500, json: { message: '读取失败' } })
+      if (listFails || defaultOptionsFail) return route.fulfill({ status: 500, json: { message: '读取失败' } })
       const matching = rows.filter(row =>
         (!query.category || row.category === query.category) && (!query.q || row.name.includes(query.q)))
       const start = (Number(query.page) - 1) * Number(query.page_size)
@@ -126,9 +127,10 @@ try {
     if (pathname.endsWith('/supported')) return respond([{ key: 'openai', display_name: 'OpenAI', supported_categories: ['text', 'image', 'video'] }])
     if (pathname.endsWith('/model-settings')) {
       if (route.request().method() === 'PUT') {
-        assert.deepEqual(route.request().postDataJSON(), { default_image_model_id: 'image105' })
+        const body = route.request().postDataJSON()
+        assert.deepEqual(body, { default_image_model_id: settings.default_image_model_id === 'image105' ? null : 'image105' })
         if (defaultSaveFails) return route.fulfill({ status: 500, json: { message: '保存失败' } })
-        settings.default_image_model_id = 'image105'
+        settings.default_image_model_id = body.default_image_model_id
       }
       return respond(settings)
     }
@@ -148,34 +150,39 @@ try {
   await page.getByText('共 107 个模型', { exact: true }).waitFor()
 
   const name = page.getByRole('button', { name: model.name, exact: true })
+  await page.setViewportSize({ width: 1366, height: 768 })
   await name.focus()
   await page.keyboard.press('Enter')
-  const details = page.getByRole('dialog').filter({ hasText: '模型详情' })
-  await details.getByText(model.description, { exact: true }).waitFor()
-  await assertDetailDrawerLayout(details)
-  await details.getByText(model.created_by, { exact: true }).waitFor()
-  await details.getByRole('table', { name: '模型能力' }).getByText('未知', { exact: true }).first().waitFor()
-  await details.getByText('分镜检查可读取图片和视频静帧，当前接入无法读取连续视频。').waitFor()
+  const editor = page.getByRole('dialog', { name: '编辑模型' })
+  await editor.screenshot({ path: output + '/model-editor-desktop.png', animations: 'disabled' })
+  assert.equal((await editor.boundingBox()).width, 720)
+  assert.ok(await editor.locator('.ant-drawer-body').evaluate(node => node.scrollHeight <= node.clientHeight))
+  const modelDescription = editor.getByRole('textbox', { name: '描述', exact: true })
+  await editor.getByText(model.created_by, { exact: false }).waitFor()
+  assert.equal(await modelDescription.inputValue(), model.description)
+  assert.match(await editor.getByRole('textbox', { name: '参数（JSON）' }).inputValue(), /abcdefghijklmnopqrstuvwxyz/)
+  await editor.locator('summary').getByText('模型能力', { exact: true }).click()
+  await editor.getByRole('table', { name: '模型能力' }).getByText('未知', { exact: true }).first().waitFor()
+  await editor.getByText('分镜检查可读取图片和视频静帧，当前接入无法读取连续视频。').waitFor()
   assert.equal(capabilityVerifications.length, 0)
-  await details.getByRole('button', { name: '验证连续视频输入', exact: true }).click()
-  await details.getByText('未确认模型读取到该项内容').waitFor()
-  await details.getByText('此前保存的型号').waitFor()
-  await details.getByText('https://example.invalid/chat/completions').waitFor()
-  await details.getByText('当前配置', { exact: true }).waitFor()
-  const parameters = details.getByLabel('完整参数 JSON')
-  assert.match(await parameters.innerText(), /abcdefghijklmnopqrstuvwxyz/)
-  const codeGeometry = await parameters.evaluate(element => ({
-    width: element.clientWidth, scrollWidth: element.scrollWidth, parentWidth: element.parentElement.clientWidth,
-    whiteSpace: getComputedStyle(element).whiteSpace, overflowX: getComputedStyle(element).overflowX,
-  }))
-  assert.ok(codeGeometry.scrollWidth > codeGeometry.width, JSON.stringify(codeGeometry))
-  assert.ok(await details.evaluate(element => element.scrollWidth <= element.clientWidth + 1))
-  await details.screenshot({ path: output + '/model-details.png', animations: 'disabled' })
+  await editor.getByRole('button', { name: '验证连续视频输入', exact: true }).click()
+  await editor.getByText('未确认模型读取到该项内容').waitFor()
+  await editor.getByText('此前保存的型号').waitFor()
+  await editor.getByText('当前配置', { exact: true }).waitFor()
+  await editor.locator('summary').getByText('模型能力', { exact: true }).click()
+  await modelDescription.fill('未保存的描述')
   await page.keyboard.press('Escape')
-  await details.waitFor({ state: 'hidden' })
+  const discard = page.getByRole('dialog', { name: '放弃未保存的修改？' })
+  await discard.getByRole('button', { name: '继续编辑' }).click()
+  await discard.waitFor({ state: 'hidden' })
+  assert.equal(await modelDescription.inputValue(), '未保存的描述')
+  await editor.getByRole('button', { name: '返回' }).click()
+  await discard.getByRole('button', { name: '放弃修改' }).click()
+  await editor.waitFor({ state: 'hidden' })
   await name.and(page.locator(':focus')).waitFor()
+  await page.setViewportSize({ width: 1440, height: 900 })
   const modelRow = page.getByRole('row').filter({ has: name })
-  assert.equal(await modelRow.getByRole('button', { name: /测试.*暂未接入/ }).isDisabled(), true)
+  assert.equal(await modelRow.getByRole('button', { name: /测试|编辑/ }).count(), 0)
   await modelRow.getByText('默认', { exact: true }).waitFor()
   await page.getByRole('button', { name: '筛选', exact: true }).click()
   const filters = page.getByRole('dialog').filter({ has: page.getByText('筛选', { exact: true }) })
@@ -215,37 +222,99 @@ try {
   omitTotal = false
 
   const defaults = page.getByRole('button', { name: '默认模型', exact: true })
+  defaultOptionsFail = true
   await defaults.click()
-  const defaultDrawer = page.getByRole('dialog').filter({ hasText: '全局默认模型' })
-  const imageDefault = defaultDrawer.getByRole('combobox', { name: '默认图片生成' })
+  const defaultModal = page.getByRole('dialog', { name: '全局默认模型' })
+  const checkDefaultModalLayout = async (viewportWidth, viewportHeight) => {
+    await defaultModal.waitFor()
+    await defaultModal.evaluate(async dialog => {
+      await Promise.all(dialog.getAnimations().map(animation => animation.finished))
+    })
+    const box = await defaultModal.boundingBox()
+    const width = Math.min(viewportWidth - 32, 480)
+    assert.ok(Math.abs(box.width - width) <= 1, JSON.stringify(box))
+    assert.ok(Math.abs(box.x - (viewportWidth - width) / 2) <= 1, JSON.stringify(box))
+    assert.ok(Math.abs(box.y + box.height / 2 - viewportHeight / 2) <= 2, JSON.stringify(box))
+  }
+  await checkDefaultModalLayout(1440, 900)
+  const imageChoice = { name: '图片生成' }
+  const imageDefault = defaultModal.getByRole('combobox', imageChoice)
+  const optionsError = defaultModal.getByRole('alert').filter({ hasText: '默认模型选项读取失败' })
+  await optionsError.waitFor()
+  assert.ok(await imageDefault.isDisabled())
+  defaultOptionsFail = false
+  await optionsError.getByRole('button', { name: /重\s*试/ }).click()
+  await optionsError.waitFor({ state: 'hidden' })
   const targetOption = page.getByText('验收图片模型 105 · 验收供应商（OpenAI）', { exact: true })
+  await imageDefault.fill('验收图片模型 105')
+  await targetOption.waitFor()
+  await page.keyboard.press('Escape')
+  await targetOption.waitFor({ state: 'hidden' })
+  await defaultModal.waitFor()
   await imageDefault.fill('验收图片模型 105')
   await targetOption.click()
   await page.getByText('更新默认模型失败').waitFor()
   assert.equal(settings.default_image_model_id, null)
-  await defaultDrawer.getByText('选择默认图片生成', { exact: true }).waitFor()
+  await defaultModal.getByText('选择图片生成', { exact: true }).waitFor()
   defaultSaveFails = false
   await imageDefault.fill('验收图片模型 105')
   await targetOption.click()
-  await defaultDrawer.getByTitle('验收图片模型 105 · 验收供应商（OpenAI）', { exact: true }).waitFor()
-  await defaultDrawer.getByRole('button', { name: 'Close' }).focus()
+  await defaultModal.getByTitle('验收图片模型 105 · 验收供应商（OpenAI）', { exact: true }).waitFor()
+  await defaultModal.getByRole('button', { name: 'Close' }).focus()
   await page.keyboard.press('Escape')
-  await defaultDrawer.waitFor({ state: 'hidden' })
+  await defaultModal.waitFor({ state: 'hidden' })
   await defaults.and(page.locator(':focus')).waitFor()
   assert.equal(await search.inputValue(), '供应商未找到')
   await search.fill('验收图片模型 105')
   const defaultRow = page.getByRole('row').filter({ hasText: '验收图片模型 105' })
   await defaultRow.getByText('默认', { exact: true }).waitFor()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await defaults.click()
+  await checkDefaultModalLayout(390, 844)
+  await defaultModal.getByTitle('验收图片模型 105 · 验收供应商（OpenAI）', { exact: true }).waitFor()
+  const imageSelect = defaultModal.locator('.ant-select').filter({ has: page.getByRole('combobox', imageChoice) })
+  await imageSelect.hover()
+  await imageSelect.locator('.ant-select-clear').click()
+  await defaultModal.getByText('选择图片生成', { exact: true }).waitFor()
+  assert.equal(settings.default_image_model_id, null)
+  await page.mouse.click(4, 4)
+  await defaultModal.waitFor({ state: 'hidden' })
+  await defaults.and(page.locator(':focus')).waitFor()
+  await defaultRow.getByText('默认', { exact: true }).waitFor({ state: 'hidden' })
+  await page.setViewportSize({ width: 1440, height: 900 })
 
   omitTotal = false
   await search.fill('验收文本模型')
   await page.getByRole('button', { name: '用户与语言设置' }).click()
   await page.getByRole('menuitem', { name: 'English', exact: true }).click()
-  await modelRow.getByRole('button', { name: `Edit ${model.name}`, exact: true }).press('Enter')
+  await page.getByRole('tab', { name: 'Model', exact: true }).waitFor()
+  for (const width of [1440, 1024, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    const layout = await page.getByRole('tablist').evaluate(async nav => {
+      const heading = nav.closest('.management-heading')
+      const title = heading.querySelector('h1')
+      const table = document.querySelector('.management-table')
+      let previous, stableFrames = 0
+      for (let frame = 0; frame < 60 && stableFrames < 12; frame++) {
+        await new Promise(requestAnimationFrame)
+        const sample = [nav.getBoundingClientRect().width, table.getBoundingClientRect().top].join(',')
+        stableFrames = sample === previous ? stableFrames + 1 : 0
+        previous = sample
+      }
+      const tabs = nav.getBoundingClientRect(), label = title.getBoundingClientRect()
+      return { stableFrames, belowTitle: tabs.top >= label.bottom, besideTitle: tabs.left >= label.right && tabs.top < label.bottom,
+        fillsRow: Math.abs(tabs.left - label.left) < 1 && Math.abs(tabs.right - heading.getBoundingClientRect().right
+          + parseFloat(getComputedStyle(heading).paddingRight)) < 1 }
+    })
+    assert.equal(layout.stableFrames, 12, `英文页签和表格在 ${width}px 下应连续 12 帧保持稳定`)
+    assert.ok(width === 390 ? layout.belowTitle && layout.fillsRow : layout.besideTitle, JSON.stringify(layout))
+  }
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await name.click()
   const edit = page.getByRole('dialog', { name: 'Edit model' })
   const description = edit.getByRole('textbox', { name: 'Description', exact: true })
   await description.fill('更新后的完整描述')
-  const save = edit.getByRole('button', { name: 'OK' })
+  const save = edit.getByRole('button', { name: 'Save' })
   await save.click()
   await page.getByText('Save failed').waitFor()
   assert.equal(await description.inputValue(), '更新后的完整描述')
@@ -257,6 +326,7 @@ try {
   await modelRow.getByText('更新后的完整描述', { exact: true }).waitFor()
 
   await modelRow.getByRole('button', { name: `${model.name}的更多操作` }).click()
+  assert.equal(await page.getByRole('menuitem', { name: /复制/ }).count(), 0)
   await page.getByRole('menuitem', { name: /删除/ }).click()
   const confirm = page.getByRole('dialog').filter({ hasText: model.name })
   await confirm.getByText('同时清除文本生成的全局默认模型配置', { exact: false }).waitFor()
@@ -275,47 +345,79 @@ try {
   assert.equal(deleteRequests, 2)
   await search.fill('')
   const create = page.getByRole('button', { name: /添加模型$/ })
+  await page.setViewportSize({ width: 390, height: 844 })
   await create.click()
   const add = page.getByRole('dialog', { name: '添加模型' })
-  await add.getByRole('combobox', { name: '供应商', exact: true }).click()
+  const supplier = add.getByRole('combobox', { name: '供应商', exact: true })
+  await supplier.click()
+  await page.getByText('验收供应商（OpenAI）', { exact: true }).filter({ visible: true }).last().waitFor()
+  await page.keyboard.press('Escape')
+  assert.equal(await add.isVisible(), true)
+  assert.equal(await supplier.getAttribute('aria-expanded'), 'false')
+  await supplier.click()
   await page.getByText('验收供应商（OpenAI）', { exact: true }).filter({ visible: true }).last().click()
   await add.getByRole('combobox', { name: '类别', exact: true }).click()
   await page.getByText('文本生成', { exact: true }).filter({ visible: true }).last().click()
+  const supplierField = add.getByRole('combobox', { name: '供应商', exact: true })
+  const categoryField = add.getByRole('combobox', { name: '类别', exact: true })
+  assert.ok((await categoryField.boundingBox()).y > (await supplierField.boundingBox()).y)
+  assert.ok(await add.evaluate(node => node.scrollWidth <= node.clientWidth))
+  await add.screenshot({ path: output + '/model-editor-narrow.png', animations: 'disabled' })
   const modelNames = add.getByRole('combobox', { name: '模型名称', exact: true })
   await modelNames.fill('新增验收模型')
   await modelNames.press('Enter')
+  await modelNames.fill('目录')
+  await page.getByText('目录模型 · 目录描述', { exact: true }).filter({ visible: true }).last().click()
+  await add.getByRole('textbox', { name: '描述', exact: true }).fill('手填描述')
+  await add.getByText('高级参数', { exact: true }).click()
+  const json = add.getByRole('textbox', { name: '参数（JSON）' })
+  await json.fill('[]')
+  await add.getByText('高级参数', { exact: true }).click()
+  const submit = add.getByRole('button', { name: /^添\s*加$/ })
+  await submit.click()
+  await add.getByText('参数必须为 JSON 对象').waitFor()
+  await json.and(page.locator(':focus')).waitFor()
+  assert.equal(createRequests, 0)
+  await json.fill('{}')
+  await add.locator('summary').getByText('模型能力', { exact: true }).click()
   await add.getByRole('combobox', { name: '工具调用' }).click()
   await page.getByText('支持', { exact: true }).filter({ visible: true }).last().click()
   await add.getByRole('textbox', { name: '工具调用来源' }).fill('验收依据')
-  await add.getByRole('button', { name: /确\s*定/ }).click()
+  await submit.click()
   await add.waitFor({ state: 'hidden' })
   assert.equal(createRequests, 1)
+  await page.getByText('已添加 1 个模型，跳过 1 个已存在模型', { exact: true }).waitFor()
+  await page.setViewportSize({ width: 1366, height: 768 })
   await search.fill('新增验收模型')
   const created = page.getByRole('button', { name: '新增验收模型', exact: true })
   await created.waitFor()
   await created.click()
-  const toolRow = details.getByRole('row').filter({ hasText: '工具调用' })
+  await editor.locator('summary').getByText('模型能力', { exact: true }).click()
+  const toolRow = editor.getByRole('row').filter({ hasText: '工具调用' })
   await toolRow.getByText('支持', { exact: true }).waitFor()
   await toolRow.getByText('验收依据', { exact: true }).waitFor()
-  await page.keyboard.press('Escape')
-  await details.waitFor({ state: 'hidden' })
+  assert.equal(await editor.getByRole('textbox', { name: '工具调用来源' }).inputValue(), '验收依据')
+  await editor.getByRole('button', { name: '返回' }).click()
+  await editor.waitFor({ state: 'hidden' })
   const addedRow = page.getByRole('row').filter({ has: created })
-  await addedRow.getByRole('button', { name: '编辑 新增验收模型', exact: true }).click()
-  const reopened = page.getByRole('dialog', { name: '编辑模型' })
-  assert.equal(await reopened.getByRole('textbox', { name: '工具调用来源' }).inputValue(), '验收依据')
-  await reopened.getByRole('button', { name: /取\s*消/ }).click()
-  await reopened.waitFor({ state: 'hidden' })
-  await addedRow.getByRole('button', { name: '新增验收模型的更多操作' }).click()
-  await page.getByRole('menuitem', { name: /复制/ }).click()
+  const copy = addedRow.getByRole('button', { name: /^复\s*制$/ })
+  await copy.click()
   await add.getByText('新增验收模型-复制', { exact: true }).waitFor()
-  await add.getByRole('button', { name: /取\s*消/ }).click()
+  await add.getByRole('button', { name: '返回' }).click()
   await add.waitFor({ state: 'hidden' })
+  await copy.and(page.locator(':focus')).waitFor()
   assert.equal(createRequests, 1)
+  await copy.press('Enter')
+  await add.getByText('新增验收模型-复制', { exact: true }).waitFor()
+  await modelNames.fill('尚未回车的模型名')
+  await page.mouse.click(20, 100)
+  await discard.getByRole('button', { name: '放弃修改' }).click()
+  await add.waitFor({ state: 'hidden' })
 
   await search.fill('')
   await page.getByText('共 107 个模型', { exact: true }).waitFor()
   await search.blur()
-  await page.getByText('已添加 1 个模型', { exact: true }).waitFor({ state: 'hidden' })
+  await page.getByText('已添加 1 个模型，跳过 1 个已存在模型', { exact: true }).waitFor({ state: 'hidden' })
   for (const appearance of ['gradient', 'solid']) {
     for (const [width, height] of [[1440, 900], [1366, 768], [1024, 768], [1023, 768], [375, 812]]) {
       await page.setViewportSize({ width, height })
@@ -356,7 +458,7 @@ try {
   await page.getByRole('tab', { name: '模型', exact: true }).click()
   await page.getByText('暂无模型', { exact: true }).waitFor()
   await page.getByRole('button', { name: /添加第一个模型/ }).waitFor()
-  process.stdout.write('模型管理：主题、视口、列表状态、详情、默认配置、添加、复制、编辑和删除通过。\n')
+  process.stdout.write('模型管理：主题、视口、列表状态、抽屉布局与草稿保护、默认配置、添加、复制、编辑和删除通过。\n')
 } finally {
   await cleanup()
 }

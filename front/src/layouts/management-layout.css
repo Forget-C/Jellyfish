@@ -77,6 +77,10 @@
   flex-shrink: 0;
 }
 
+.management-model-header .management-tabs {
+  flex: 1 1 0%;
+}
+
 .app-shell .app-page-toolbar.management-heading,
 .app-shell .app-page-toolbar.management-toolbar {
   min-height: 52px;

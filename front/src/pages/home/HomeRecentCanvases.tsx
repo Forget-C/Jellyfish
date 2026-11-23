@@ -60,9 +60,9 @@ export function HomeRecentCanvases() {
             </p>
           </div>
         </article>)}
-        <HomePlaceholders kind="canvas" filled={canvases.length} loading={result.status === 'loading'} />
+        {result.status === 'loading' && <HomePlaceholders kind="canvas" />}
       </div>
-      {!canvases.length && <HomeRecentFeedback status={result.status} label={uiText("画布")} onRetry={retry} />}
+      {!canvases.length && <HomeRecentFeedback status={result.status} label={uiText("画布")} emptyText={uiText("暂无最近更新的画布")} onRetry={retry} />}
     </div>
   </section>
 }

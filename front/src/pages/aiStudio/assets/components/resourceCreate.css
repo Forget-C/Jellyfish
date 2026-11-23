@@ -5,13 +5,18 @@
 .resource-create-choices > button > span:last-child { color:#667085; font-size:12px; }
 .resource-upload-form,.resource-import-form { padding:20px; border-radius:12px; background:white; }
 .resource-upload-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.resource-upload-heading span,.resource-upload-hint { color:#667085; font-size:12px; }
+.resource-upload-form { font-size:13px; }
+.resource-upload-heading strong { font-weight:600; }
+.resource-upload-heading span,.resource-upload-hint { color:var(--app-muted,#536174); font-size:12px; }
 .resource-upload-form .ant-upload-wrapper { min-width:0; }
 .resource-upload-form .ant-upload-drag { min-height:168px; }
+.resource-upload-form .ant-upload-wrapper .ant-upload-drag .ant-upload-text { font-size:14px; font-weight:600; }
+.resource-upload-form .ant-upload-wrapper .ant-upload-drag .ant-upload-hint { font-size:12px; }
+.resource-upload-form .ant-upload-list-item-name { min-width:0; }
 .resource-upload-item-controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:8px 12px; }
 .resource-upload-item-controls label:not(.ant-checkbox-wrapper) { display:flex; align-items:center; gap:8px; margin-right:auto; }
 .resource-upload-item-controls .ant-select { min-width:88px; }
-.resource-upload-item-controls .ant-tag { margin:0; }
+.resource-upload-item-controls .ant-tag { margin:0; font-size:12px; }
 .resource-upload-form .ant-upload-list-item-image { object-fit:contain; }
 .resource-upload-hint { margin:0; }
 .resource-import-form > p { margin:0; color:#667085; }
@@ -21,7 +26,14 @@
 .resource-import-pictures .ant-image { display:block; width:100%; }
 .resource-import-pictures .ant-image img { width:100%; height:96px; object-fit:contain; background:#f2f6fc; border-radius:6px; }
 .resource-import-pictures figcaption { font-size:12px; color:#667085; margin-top:4px; }
-@media(max-width:479px) { .resource-upload-form,.resource-import-form { padding:16px; } }
+@media (max-width:767px) {
+  .resource-editor-drawer .resource-upload-drawer :is(.resource-editor-page-heading,.resource-editor-page-actions) { width:auto; }
+  .resource-upload-drawer .resource-editor-page-actions { margin-inline-start:auto; }
+}
+@media(max-width:479px) {
+  .resource-upload-form { padding:12px; }
+  .resource-import-form { padding:16px; }
+}
 @media(max-width:479px) { .resource-create-choices { grid-template-columns:1fr; } }
 
 .object-resource-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }

@@ -34,9 +34,10 @@ export function useHomeRecentList<T>(load: () => CancelablePromise<{ data?: T[] 
   return { result, retry: () => setRevision(value => value + 1) }
 }
 
-export function HomeRecentFeedback({ status, label, onRetry }: {
+export function HomeRecentFeedback({ status, label, emptyText, onRetry }: {
   status: RecentList<never>['status']
   label: string
+  emptyText?: string
   onRetry: () => void
 }) {
   const uiText = useUiText()
@@ -44,5 +45,5 @@ export function HomeRecentFeedback({ status, label, onRetry }: {
     <span>{uiText("读取{{label}}失败", { label })}</span>
     <button type="button" className="home-text-action" onClick={onRetry}>{uiText("重试")}</button>
   </div>
-  return <p className="home-feedback" role="status">{status === 'loading' ? uiText("正在读取{{label}}…", { label }) : uiText("暂无{{label}}", { label })}</p>
+  return <p className={status === 'loading' ? 'home-feedback home-feedback-loading' : 'home-feedback'} role="status">{status === 'loading' ? uiText("正在读取{{label}}…", { label }) : emptyText ?? uiText("暂无{{label}}", { label })}</p>
 }

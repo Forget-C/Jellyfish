@@ -15,6 +15,8 @@ export type ProviderSupportedRead = {
      * 供应商展示名
      */
     display_name: string;
+    test_prompts?: Record<string, string>;
+    live_model_catalog?: boolean;
     /**
      * 可识别别名
      */

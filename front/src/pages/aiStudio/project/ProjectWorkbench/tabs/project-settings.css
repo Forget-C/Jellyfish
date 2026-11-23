@@ -29,3 +29,34 @@
   .project-settings-basic-fields { grid-template-columns: minmax(0, 1fr); }
   .project-settings-cover { width: min(100%, 320px); }
 }
+
+.settings-create-drawer {
+  --app-text: #263244;
+  --app-muted: #536174;
+}
+
+.settings-create-drawer .resource-editor-page-actions {
+  text-align: right;
+}
+
+@media (max-width: 767px) {
+  .settings-create-drawer .resource-editor-page-heading,
+  .settings-create-drawer .resource-editor-page-actions {
+    width: auto;
+  }
+
+  .settings-create-drawer .resource-editor-page-actions {
+    margin-inline-start: auto;
+  }
+}
+
+.settings-create-drawer .project-settings-short-fields:has(+ .ant-form-item) {
+  margin-bottom: 16px;
+}
+.settings-create-drawer .project-settings-short-fields > .ant-form-item {
+  margin-bottom: 0;
+}
+
+@media (min-width: 600px) {
+  .provider-create-identity { grid-template-columns: repeat(2, minmax(0, 1fr)) 110px; }
+}

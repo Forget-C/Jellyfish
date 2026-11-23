@@ -41,8 +41,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/forget-c/jellyfish-backend
+          flavor: latest=false
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
             type=sha,format=short,prefix=sha-
 
       - name: Build and push (backend)
@@ -80,8 +82,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/forget-c/jellyfish-front
+          flavor: latest=false
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
             type=sha,format=short,prefix=sha-
 
       - name: Build and push (front)

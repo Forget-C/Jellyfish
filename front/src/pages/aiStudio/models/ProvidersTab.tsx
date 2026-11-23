@@ -4,11 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Alert,
   Button,
-  Descriptions,
-  Drawer,
   Dropdown,
   Empty,
   Form,
+  Grid,
   Input,
   Modal,
   Select,
@@ -16,6 +15,8 @@ import {
   Space,
   Table,
   Tag,
+  Typography,
+  Tooltip,
   message,
 } from 'antd'
 import type { TableColumnsType } from 'antd'
@@ -23,8 +24,14 @@ import { DeleteOutlined, DownOutlined, MoreOutlined, PlusOutlined, SearchOutline
 import { PageToolbar, WorkspaceScrollPanel } from '../../../components'
 import { LlmService } from '../../../services/generated/services/LlmService'
 import { ApiError } from '../../../services/generated'
-import type { ProviderRead, ProviderSupportedRead } from '../../../services/generated'
+import type { ProviderCreate, ProviderRead, ProviderSupportedRead } from '../../../services/generated'
 import { PROVIDER_STATUS_MAP, SORT_OPTIONS, maskUrl } from './constants'
+
+import { DrawerDiscardDialog } from '../../../components/layout/DrawerDiscardDialog'
+import { ResourceEditorFrame } from '../assets/components/ResourceEditorFrame'
+import '../assets/components/resourceEditor.css'
+import '../project/ProjectWorkbench/tabs/project-settings.css'
+import { ProviderTestPanel } from './ProviderTestPanel'
 
 const PAGE_SIZE = 20
 
@@ -51,13 +58,16 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
   const [page, setPage] = useState(1)
   const [supportedSpecs, setSupportedSpecs] = useState<ProviderSupportedRead[]>([])
   const [supportedLoading, setSupportedLoading] = useState(true)
-  const [selectedProvider, setSelectedProvider] = useState<ProviderRead | null>(null)
-  const [detailPanelOpen, setDetailPanelOpen] = useState(false)
-  const detailTrigger = useRef<HTMLElement | null>(null)
-  const [providerModalOpen, setProviderModalOpen] = useState(false)
+  const desktopTest = !!Grid.useBreakpoint().md
+  const [testing, setTesting] = useState<string | null>(null)
+  const [testSubmitting, setTestSubmitting] = useState(false)
+  const [discardOpen, setDiscardOpen] = useState(false)
+  const [providerEditorOpen, setProviderEditorOpen] = useState(false)
   const [providerEditing, setProviderEditing] = useState<ProviderRead | null>(null)
   const [credentialsLoading, setCredentialsLoading] = useState(false)
   const credentialsRequest = useRef<ReturnType<typeof LlmService.getProviderCredentialsApiV1LlmProvidersProviderIdCredentialsGet> | null>(null)
+  const initialFields = useRef<Record<string, string | null | undefined>>({})
+  const advanced = useRef<HTMLDetailsElement>(null)
   const [saving, setSaving] = useState(false)
   const saveInFlight = useRef(false)
   const deleteInFlight = useRef(false)
@@ -147,21 +157,22 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
     } else apply()
   }
 
-  const closeProviderModal = () => {
+  const closeProviderEditor = () => {
     credentialsRequest.current?.cancel()
     credentialsRequest.current = null
     setCredentialsLoading(false)
-    setProviderModalOpen(false)
+    initialFields.current = {}
+    setDiscardOpen(false)
+    setProviderEditorOpen(false)
     setProviderEditing(null)
     form.resetFields()
   }
 
-  const handleSaveProvider = async () => {
+  const handleSaveProvider = async (values: Omit<ProviderCreate, 'id'>) => {
     if (saveInFlight.current || credentialsLoading) return
     saveInFlight.current = true
     setSaving(true)
     try {
-      const values = await form.validateFields()
       const sharedFields = {
         name: values.name.trim(),
         base_url: values.base_url,
@@ -193,10 +204,9 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         })
         message.success(uiText("供应商已添加"))
       }
-      closeProviderModal()
+      closeProviderEditor()
       reload()
     } catch (error) {
-      if (error && typeof error === 'object' && 'errorFields' in error) return
       if (error instanceof ApiError && error.status === 409) {
         form.setFields([{ name: 'name', errors: [uiText("该供应商下已存在同名配置")] }])
       } else message.error(uiText("保存供应商失败，请重试"))
@@ -251,13 +261,14 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
     }
   }
 
-  /** 真实凭据仅通过原编辑流程读取，列表和只读详情不请求凭据。 */
-  const openProviderModal = async (provider?: ProviderRead) => {
+  /** 真实凭据仅通过原编辑流程读取，列表不请求凭据。 */
+  const openProviderEditor = async (provider?: ProviderRead) => {
     setProviderEditing(provider ?? null)
     form.resetFields()
-    setProviderModalOpen(true)
+    setProviderEditorOpen(true)
+    initialFields.current = { status: 'active' }
     if (!provider) return
-    form.setFieldsValue({
+    initialFields.current = {
       provider_key: provider.provider_key,
       name: provider.name,
       base_url: provider.base_url,
@@ -265,14 +276,17 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
       video_base_url: provider.video_base_url,
       description: provider.description,
       status: provider.status ?? 'active',
-    })
+    }
+    form.setFieldsValue(initialFields.current)
     setCredentialsLoading(true)
     const request = LlmService.getProviderCredentialsApiV1LlmProvidersProviderIdCredentialsGet({ providerId: provider.id })
     credentialsRequest.current = request
     try {
       const response = await request
       if (credentialsRequest.current === request) {
-        form.setFieldsValue({ api_key: response.data?.api_key ?? '', api_secret: response.data?.api_secret ?? '' })
+        const credentials = { api_key: response.data?.api_key ?? '', api_secret: response.data?.api_secret ?? '' }
+        Object.assign(initialFields.current, credentials)
+        form.setFieldsValue(credentials)
       }
     } catch {
       if (credentialsRequest.current === request) message.error(uiText("加载供应商密钥失败，可留空或重新填写后保存"))
@@ -293,11 +307,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
     {
       title: uiText("名称"), dataIndex: 'name', key: 'name', width: 180,
       render: (name: string, record) => (
-        <Button type="link" className="management-name" title={name} onClick={event => {
-          detailTrigger.current = event.currentTarget
-          setSelectedProvider(record)
-          setDetailPanelOpen(true)
-        }}>{name}</Button>
+        <Button type="link" className="management-name" title={name} aria-haspopup="dialog" onClick={() => void openProviderEditor(record)}>{name}</Button>
       ),
     },
     { title: uiText("供应商"), dataIndex: 'provider_key', render: (key: string) => supportedSpecs.find(spec => spec.key === key)?.display_name ?? key },
@@ -317,10 +327,19 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
     },
     {
       title: uiText("操作"), key: 'action', width: 224,
-      render: (_, record) => (
-        <Space size={4}>
-          <Button type="text" size="small" aria-label={uiText("编辑 {{name}}", { name: record.name })} onClick={() => void openProviderModal(record)}>{uiText("编辑")}</Button>
-          <Button type="text" size="small" disabled>{uiText("测试（暂未接入）")}</Button>
+      render: (_, record) => {
+        const spec = supportedSpecs.find(item => item.key === record.provider_key)
+        const reason = record.status === 'disabled' ? '供应商配置已禁用'
+          : !Object.keys(spec?.test_prompts ?? {}).length ? '该供应商暂不支持测试调用' : ''
+        return <Space size={4}>
+          {reason ? <Tooltip title={uiText(reason)} trigger={['hover', 'focus', 'click']}>
+            <span tabIndex={0} aria-label={uiText(reason)}><Button disabled type="text" size="small">{uiText('测试调用')}</Button></span>
+          </Tooltip> : testing === record.id && spec ? <ProviderTestPanel provider={record} spec={spec} endpointLabel={endpointLabel}
+            desktop={desktopTest} busy={testSubmitting} onSubmitting={setTestSubmitting} onClose={restoreFocus => {
+              setTesting(null)
+              if (restoreFocus) requestAnimationFrame(() => document.getElementById(`provider-test-${record.id}`)?.focus())
+            }} /> : <Button id={`provider-test-${record.id}`} type="text" size="small" aria-haspopup="dialog" disabled={testSubmitting}
+              onClick={() => setTesting(record.id)}>{uiText('测试调用')}</Button>}
           <Dropdown trigger={['click']} menu={{ items: [{
             key: 'delete', label: uiText("删除"), danger: true, icon: <DeleteOutlined />,
             disabled: confirmingDelete,
@@ -329,9 +348,90 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
             <Button type="text" size="small" icon={<MoreOutlined />} aria-label={uiText("{{name}}的更多操作", { name: record.name })} />
           </Dropdown>
         </Space>
-      ),
+      },
     },
   ]
+
+  const configName = (
+    <Form.Item name="name" label={uiText("配置名称")} rules={[{ required: true, whitespace: true }]}>
+      <Input maxLength={255} />
+    </Form.Item>
+  )
+  const preset = (
+    <Form.Item name="provider_key" label={uiText("供应商")} rules={[{ required: true, message: uiText("请选择供应商") }]}>
+      <Select
+        aria-label={uiText("供应商")}
+        showSearch
+        optionFilterProp="label"
+        loading={supportedLoading}
+        placeholder={supportedLoading ? uiText("加载供应商清单…") : uiText("选择供应商")}
+        disabled={!!providerEditing}
+        options={presetOptions}
+        notFoundContent={supportedLoading ? uiText("加载中…") : uiText("暂无数据")}
+        onChange={changePreset}
+      />
+    </Form.Item>
+  )
+  const endpoint = (
+    <Form.Item
+      name="base_url"
+      label={uiText("文本/通用 Base URL")}
+      rules={[{ required: true }, { type: 'url', message: uiText("请输入有效 URL") }]}
+    >
+      <Input placeholder="https://api.openai.com/v1" />
+    </Form.Item>
+  )
+  const imageEndpoint = (
+    <Form.Item name="image_base_url" label={uiText("图片 Base URL（可选覆盖）")} rules={[{ type: 'url', message: uiText("请输入有效 URL") }]}>
+      <Input placeholder={uiText("留空则回退到文本/通用 Base URL")} />
+    </Form.Item>
+  )
+  const videoEndpoint = (
+    <Form.Item name="video_base_url" label={uiText("视频 Base URL（可选覆盖）")} rules={[{ type: 'url', message: uiText("请输入有效 URL") }]}>
+      <Input placeholder={uiText("留空则回退到文本/通用 Base URL")} />
+    </Form.Item>
+  )
+  const apiKey = (
+    <Form.Item
+      name="api_key"
+      label={<>
+        API Key
+        {selectedSpec?.requires_api_key && <Typography.Text type="secondary" className="ml-2 text-xs">{uiText("调用时必需")}</Typography.Text>}
+        {!providerEditing && <Typography.Text type="secondary" className="ml-2 text-xs">{uiText("请勿分享密钥")}</Typography.Text>}
+      </>}
+      help={providerEditing ? uiText("留空则不修改") : undefined}
+    >
+      <Input.Password placeholder="AK" disabled={credentialsLoading} />
+    </Form.Item>
+  )
+  const apiSecret = (
+    <Form.Item
+      name="api_secret"
+      label={<>
+        API Secret
+        {selectedSpec?.requires_api_secret && <Typography.Text type="secondary" className="ml-2 text-xs">{uiText("调用时必需")}</Typography.Text>}
+      </>}
+      help={providerEditing ? uiText("留空则不修改") : undefined}
+    >
+      <Input.Password placeholder="SK" disabled={credentialsLoading} />
+    </Form.Item>
+  )
+  const description = (
+    <Form.Item name="description" label={uiText("描述")}>
+      <Input.TextArea rows={2} placeholder={uiText("支持 GPT 系列模型")} />
+    </Form.Item>
+  )
+  const status = (
+    <Form.Item name="status" label={uiText("状态")} initialValue="active">
+      <Select
+        options={[
+          { label: uiText("活跃"), value: 'active' },
+          { label: uiText("测试中"), value: 'testing' },
+          { label: uiText("禁用"), value: 'disabled' },
+        ]}
+      />
+    </Form.Item>
+  )
 
   return (
     <>
@@ -366,7 +466,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
             {result.total === undefined ? uiText("已加载 {{length}} 个供应商", { length: result.providers.length }) : uiText("共 {{total}} 个供应商", { total: result.total })}
           </span>}
         </div>
-        <Button className="management-primary" type="primary" icon={<PlusOutlined />} onClick={() => void openProviderModal()}>
+        <Button className="management-primary" type="primary" icon={<PlusOutlined />} onClick={() => void openProviderEditor()}>
           {uiText("添加供应商")}
         </Button>
       </PageToolbar>
@@ -394,7 +494,7 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
                 <Empty description={search.trim() ? uiText("无匹配结果") : uiText("暂无供应商")}>
                   {search.trim()
                     ? <Button onClick={() => changeSearch('')}>{uiText("清除搜索")}</Button>
-                    : <Button onClick={() => void openProviderModal()}>{uiText("添加第一个供应商")}</Button>}
+                    : <Button onClick={() => void openProviderEditor()}>{uiText("添加第一个供应商")}</Button>}
                 </Empty>
               ),
             }}
@@ -403,95 +503,51 @@ export default function ProvidersTab({ header }: { header: ReactNode }) {
         </div>}
       </WorkspaceScrollPanel>
 
-      <Drawer
-        className="app-detail-drawer"
-        title={uiText("供应商详情")}
-        aria-label={uiText("供应商详情")}
-        open={detailPanelOpen}
-        placement="right"
-        width="min(100vw, 420px)"
-        onClose={() => setDetailPanelOpen(false)}
-        afterOpenChange={open => {
-          if (!open) {
-            setSelectedProvider(null)
-            requestAnimationFrame(() => detailTrigger.current?.focus({ preventScroll: true }))
-          }
-        }}
-      >
-        {selectedProvider && <Descriptions className="management-details" column={1} layout="vertical" size="small" items={[
-          { key: 'name', label: uiText("名称"), children: selectedProvider.name },
-          { key: 'url', label: uiText("文本/通用 Base URL"), children: endpointLabel(selectedProvider.base_url) },
-          { key: 'image', label: uiText("图片 Base URL"), children: selectedProvider.image_base_url ? endpointLabel(selectedProvider.image_base_url) : uiText("回退到文本/通用") },
-          { key: 'video', label: uiText("视频 Base URL"), children: selectedProvider.video_base_url ? endpointLabel(selectedProvider.video_base_url) : uiText("回退到文本/通用") },
-          { key: 'credentials', label: uiText("凭据配置状态"), children: uiText("未知") },
-          { key: 'status', label: uiText("状态"), children: selectedProvider.status ? uiText(PROVIDER_STATUS_MAP[selectedProvider.status]?.text ?? "未知") : uiText("未知") },
-          { key: 'description', label: uiText("描述"), children: selectedProvider.description || '—' },
-          { key: 'created', label: uiText("创建人"), children: selectedProvider.created_by || '—' },
-        ]} />}
-      </Drawer>
-
       {modalContext}
-      <Modal
-        title={providerEditing ? uiText("编辑供应商") : uiText("添加供应商")}
-        open={providerModalOpen}
-        onCancel={() => { if (!saving) closeProviderModal() }}
-        onOk={() => void handleSaveProvider()}
-        confirmLoading={saving}
-        okButtonProps={{ disabled: credentialsLoading }}
-        cancelButtonProps={{ disabled: saving }}
-        width={560}
-        destroyOnClose
+      {providerEditorOpen && <ResourceEditorFrame
+        id="provider-editor-drawer" className="settings-create-drawer" open drawer drawerWidth={720}
+        title={providerEditing ? uiText("编辑供应商") : uiText("添加供应商")} backLabel={uiText("返回")} onClose={() => {
+          if (saveInFlight.current) return
+          const changed = Object.entries(form.getFieldsValue()).some(([field, value]) =>
+            (value ?? '') !== (initialFields.current[field] ?? ''))
+          if (!changed) closeProviderEditor()
+          else setDiscardOpen(true)
+        }}
+        actions={<Button type="primary" form="provider-editor-form" htmlType="submit" disabled={credentialsLoading} loading={saving}>
+          {providerEditing ? uiText("保存") : uiText("创建")}
+        </Button>}
       >
-        <Form form={form} layout="vertical" className="pt-2">
-          <Form.Item name="provider_key" label={uiText("供应商")} rules={[{ required: true, message: uiText("请选择供应商") }]}>
-            <Select
-              aria-label={uiText("供应商")}
-              showSearch
-              optionFilterProp="label"
-              loading={supportedLoading}
-              placeholder={supportedLoading ? uiText("加载供应商清单…") : uiText("选择供应商")}
-              disabled={!!providerEditing}
-              options={presetOptions}
-              notFoundContent={supportedLoading ? uiText("加载中…") : uiText("暂无数据")}
-              onChange={changePreset}
-            />
-          </Form.Item>
-          <Form.Item name="name" label={uiText("配置名称")} rules={[{ required: true, whitespace: true }]}>
-            <Input maxLength={255} />
-          </Form.Item>
-          <Form.Item
-            name="base_url"
-            label={uiText("文本/通用 Base URL")}
-            rules={[{ required: true }, { type: 'url', message: uiText("请输入有效 URL") }]}
-          >
-            <Input placeholder="https://api.openai.com/v1" />
-          </Form.Item>
-          <Form.Item name="image_base_url" label={uiText("图片 Base URL（可选覆盖）")} rules={[{ type: 'url', message: uiText("请输入有效 URL") }]}>
-            <Input placeholder={uiText("留空则回退到文本/通用 Base URL")} />
-          </Form.Item>
-          <Form.Item name="video_base_url" label={uiText("视频 Base URL（可选覆盖）")} rules={[{ type: 'url', message: uiText("请输入有效 URL") }]}>
-            <Input placeholder={uiText("留空则回退到文本/通用 Base URL")} />
-          </Form.Item>
-          <Form.Item name="api_key" label="API Key" extra={selectedSpec?.requires_api_key && uiText("调用时必需")} help={providerEditing ? uiText("留空则不修改") : uiText("请勿分享密钥")}>
-            <Input.Password placeholder="AK" disabled={credentialsLoading} />
-          </Form.Item>
-          <Form.Item name="api_secret" label="API Secret" extra={selectedSpec?.requires_api_secret && uiText("调用时必需")} help={providerEditing ? uiText("留空则不修改") : undefined}>
-            <Input.Password placeholder="SK" disabled={credentialsLoading} />
-          </Form.Item>
-          <Form.Item name="description" label={uiText("描述")}>
-            <Input.TextArea rows={2} placeholder={uiText("支持 GPT 系列模型")} />
-          </Form.Item>
-          <Form.Item name="status" label={uiText("状态")} initialValue="active">
-            <Select
-              options={[
-                { label: uiText("活跃"), value: 'active' },
-                { label: uiText("测试中"), value: 'testing' },
-                { label: uiText("禁用"), value: 'disabled' },
-              ]}
-            />
-          </Form.Item>
+        <DrawerDiscardDialog open={discardOpen} drawerId="provider-editor-drawer"
+          onContinue={() => setDiscardOpen(false)} onDiscard={closeProviderEditor} />
+        <Form id="provider-editor-form" form={form} layout="vertical" className="app-settings-form project-settings-form"
+          disabled={saving} onFinish={handleSaveProvider} onFinishFailed={({ errorFields }) => {
+            const first = errorFields[0]?.name
+            if (!first) return
+            if (['image_base_url', 'video_base_url'].includes(String(first[0])) && advanced.current) advanced.current.open = true
+            requestAnimationFrame(() => {
+              form.scrollToField(first)
+              form.getFieldInstance(first)?.focus?.()
+            })
+          }}>
+          <section className="project-settings-group">
+            <h2>{uiText("基本信息")}</h2>
+            <div className="project-settings-short-fields provider-create-identity">{configName}{preset}{status}</div>
+            {description}
+          </section>
+          <section className="project-settings-group">
+            <h2>{uiText("调用地址")}</h2>
+            {endpoint}
+            <details ref={advanced}>
+              <summary>{uiText("高级设置")}</summary>
+              {imageEndpoint}{videoEndpoint}
+            </details>
+          </section>
+          <section className="project-settings-group">
+            <h2>{uiText("访问凭据")}</h2>
+            <div className="project-settings-short-fields">{apiKey}{apiSecret}</div>
+          </section>
         </Form>
-      </Modal>
+      </ResourceEditorFrame>}
     </>
   )
 }

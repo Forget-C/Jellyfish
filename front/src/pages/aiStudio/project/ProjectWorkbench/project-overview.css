@@ -1,0 +1,187 @@
+.project-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  padding-bottom: var(--app-page-gutter);
+  --overview-info-height: 108px;
+  --overview-scenes-height: 282px;
+  --overview-resources-height: 278px;
+}
+.project-overview[hidden] { display: none; }
+
+.overview-panel, .overview-project-header {
+  min-width: 0;
+  padding: 16px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  background: #fff;
+}
+.overview-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 8px; }
+.overview-panel:has(#project-overview-sequences) { height: var(--overview-scenes-height); }
+.overview-panel:has(#project-overview-resources) { height: var(--overview-resources-height); }
+.overview-project-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  height: var(--overview-info-height);
+}
+.overview-settings { align-self: start; white-space: nowrap; }
+.overview-panel > header, .overview-selected-chapter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.overview-panel h2, .overview-panel h3, .overview-project-copy h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.overview-project-copy h3 { font-size: 16px; }
+.project-overview p { margin: 0; color: var(--app-muted); font-size: 12px; }
+.project-overview a, .project-overview button { font-size: 13px; }
+.project-overview a { color: var(--app-accent); text-decoration: none; }
+.project-overview a:hover { text-decoration: underline; }
+.project-overview :is(a, button):focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
+.overview-panel ul { list-style: none; margin: 0; padding: 0; }
+
+.overview-info-body { display: flex; align-items: center; min-width: 0; gap: 12px; }
+.overview-info-body > :only-child { flex: 1; }
+.overview-project-cover {
+  width: clamp(68px, 9vw, 112px);
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.overview-project-copy { display: grid; gap: 3px; flex: 1; min-width: 0; }
+.overview-project-copy :is(h3, p), .overview-current-heading h3,
+.overview-chapter-options button > span, .overview-scene-copy :is(strong, small),
+.overview-recent-resources strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+  height: 100%;
+  color: var(--app-muted);
+  text-align: center;
+  font-size: 13px;
+}
+.overview-message[role="alert"] span { color: #a93434; overflow-wrap: anywhere; }
+
+.overview-scenes-body, .overview-scenes-layout, .overview-resource-body { min-width: 0; min-height: 0; }
+.overview-scenes-layout { display: grid; gap: 8px; height: 100%; grid-template-rows: auto minmax(0, 1fr); }
+.overview-chapter-options { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); align-content: start; gap: 4px; }
+.overview-chapter-options button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  background: #f5f7fa;
+  text-align: start;
+  color: var(--app-text);
+  cursor: pointer;
+}
+.overview-chapter-options button:hover,
+.overview-chapter-options button[aria-pressed="true"] { background: var(--app-selected); color: var(--app-accent); }
+.overview-chapter-options small { flex: none; font-size: 10px; }
+.overview-scene-preview { display: flex; flex-direction: column; gap: 4px; min-width: 0; min-height: 0; }
+.overview-current-heading { min-width: 0; }
+.overview-current-heading p { display: flex; align-items: center; gap: 6px; }
+.overview-selected-chapter > button { flex: none; }
+.overview-no-scenes { padding-block: 8px; }
+.overview-scene-links a {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+}
+.overview-scene-copy { display: grid; min-width: 0; }
+.overview-scene-title { display: flex; gap: 6px; min-width: 0; }
+.overview-scene-copy small { color: var(--app-muted); font-size: 12px; }
+.overview-scene-title small { flex: none; color: #774708; }
+.overview-all-scenes { align-self: flex-start; }
+
+.overview-resource-body { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px; }
+.overview-resource-toolbar { display: grid; gap: 4px; min-width: 0; }
+.overview-resource-filters {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-inline: 2px;
+  border-bottom: 1px solid #e7edf5;
+}
+.overview-resource-filters button {
+  flex: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 4px 2px;
+  color: var(--app-text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.overview-resource-filters button:focus-visible { outline-offset: -2px; }
+.overview-resource-filters button[aria-pressed="true"] { color: var(--app-accent); border-bottom-color: currentColor; }
+.overview-resource-filters span, .overview-resource-actions { color: var(--app-muted); font-size: 12px; }
+.overview-resource-filters .ant-skeleton-input { width: 14px; min-width: 14px; height: 12px; }
+.overview-resource-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; min-height: 24px; white-space: nowrap; }
+.overview-resource-actions .ant-btn { padding-inline: 2px; }
+.overview-recent-resources { min-width: 0; }
+.overview-recent-resources ul { display: grid; gap: 6px; align-content: start; }
+.overview-recent-resources button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--app-text);
+  background: transparent;
+  text-align: start;
+  cursor: pointer;
+}
+.overview-recent-resources button:hover { background: var(--app-selected); }
+.overview-recent-resources button > span:last-child { display: grid; min-width: 0; }
+.overview-recent-resources small { color: var(--app-muted); font-size: 12px; }
+.overview-resource-thumb, .overview-recent-resources .ant-skeleton-avatar {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 42px;
+  flex: none;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #eaf0f9;
+  color: var(--app-muted);
+}
+.overview-resource-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+@media (min-width: 1024px) {
+  .project-overview {
+    gap: 20px;
+    --overview-info-height: 96px;
+    --overview-scenes-height: 240px;
+    --overview-resources-height: 176px;
+  }
+  .overview-scenes-layout { grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 20px; }
+  .overview-chapter-options { grid-auto-flow: row; }
+  .overview-resource-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .overview-recent-resources ul { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .overview-resource-thumb, .overview-recent-resources .ant-skeleton-avatar { width: 88px; height: 64px; }
+}

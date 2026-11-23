@@ -15,6 +15,7 @@ import type { ApiResponse_ProviderCredentialsRead_ } from '../models/ApiResponse
 import type { ApiResponse_ProviderModelCatalogRead_ } from '../models/ApiResponse_ProviderModelCatalogRead_';
 import type { ApiResponse_ProviderModelImportResult_ } from '../models/ApiResponse_ProviderModelImportResult_';
 import type { ApiResponse_ProviderRead_ } from '../models/ApiResponse_ProviderRead_';
+import type { ApiResponse_ProviderTestResult_ } from '../models/ApiResponse_ProviderTestResult_';
 import type { ApiResponse_VideoGenerationOptionsRead_ } from '../models/ApiResponse_VideoGenerationOptionsRead_';
 import type { ModelCapabilityVerificationRequest } from '../models/ModelCapabilityVerificationRequest';
 import type { ModelCategoryKey } from '../models/ModelCategoryKey';
@@ -23,6 +24,7 @@ import type { ModelSettingsUpdate } from '../models/ModelSettingsUpdate';
 import type { ModelUpdate } from '../models/ModelUpdate';
 import type { ProviderCreate } from '../models/ProviderCreate';
 import type { ProviderModelImportRequest } from '../models/ProviderModelImportRequest';
+import type { ProviderTestCall } from '../models/ProviderTestCall';
 import type { ProviderUpdate } from '../models/ProviderUpdate';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -137,6 +139,31 @@ export class LlmService {
             path: {
                 'provider_id': providerId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 发起一次可能产生费用的供应商测试调用
+     * @returns ApiResponse_ProviderTestResult_ Successful Response
+     * @throws ApiError
+     */
+    public static testProviderCallApiV1LlmProvidersProviderIdTestCallPost({
+        providerId,
+        requestBody,
+    }: {
+        providerId: string,
+        requestBody: ProviderTestCall,
+    }): CancelablePromise<ApiResponse_ProviderTestResult_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/llm/providers/{provider_id}/test-call',
+            path: {
+                'provider_id': providerId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

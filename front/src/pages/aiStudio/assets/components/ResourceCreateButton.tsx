@@ -1,6 +1,6 @@
 import { useUiText } from '../../../../uiText'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { Alert, Button, Image, Input, Popover, Select, Tag, Upload, message, type UploadFile } from 'antd'
+import { Alert, Button, ConfigProvider, Image, Input, Popover, Select, Tag, Upload, message, type UploadFile } from 'antd'
 import { FileAddOutlined, ImportOutlined, InboxOutlined, UploadOutlined } from '@ant-design/icons'
 import { StudioEntitiesService, StudioFilesService, type ImageSourceRequest } from '../../../../services/generated'
 import { ResourceSelectionDrawer } from './ResourceSelectionDrawer'
@@ -31,6 +31,11 @@ export function ResourceCreateButton({ kind, projectId, onCreate, onCreated, onO
   </div>}><span ref={trigger} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setChoosing(false); trigger.current?.querySelector('button')?.focus() } }}>{children}</span></Popover>
     {imagesOpen && projectId && !projectUpload ? <LibraryImportDrawer kind={kind} projectId={projectId} onClose={close} onCreated={onCreated} /> : imagesOpen && <ResourceImageSourceDrawer kind={kind} projectId={projectId} projectUpload={projectUpload} initialName={initialName} onClose={close} onCreated={onCreated} />}
   </>
+}
+
+const uploadFormTheme = {
+  token: { fontSize: 13 },
+  components: { Input: { controlHeight: 36 }, Select: { controlHeight: 36 } },
 }
 
 type UploadRow = { id: string; file: File; angle: string; fileId?: string; uploading: boolean; error?: string }
@@ -74,11 +79,12 @@ export function ResourceImageSourceDrawer({ kind, projectId, onClose, onCreated,
   const host = useWorkspaceDraftStatus()
   useWorkspaceDraft({ name: '上传资源', dirty, busy: busy || uploading, save, discard: onClose })
   const close = () => { if (dirty || busy || uploading) setCloseRequested(true); else onClose() }
-  return <><ResourceEditorFrame id={id} open drawer drawerWidth={600} title={uiText("上传图片创建")} backLabel={uiText("返回")} onClose={close}
+  return <><ResourceEditorFrame id={id} className="resource-upload-drawer" open drawer drawerWidth={720} title={uiText("上传图片创建")} backLabel={uiText("返回")} onClose={close}
     actions={<Button aria-label={accepted.current ? projectUpload ? uiText("重试选用") : uiText("重试刷新") : uiText("创建")} type="primary" loading={busy} disabled={uploading || !accepted.current && (!name.trim() || (!rows.length || rows.some(row => !row.fileId)))} onClick={async () => { if (await save()) onClose() }}>{accepted.current ? projectUpload ? uiText("重试选用") : uiText("重试刷新") : uiText("创建")}</Button>}>
-    <div className="resource-editor-fields resource-upload-form">
-      <label>{uiText("名称")}<Input aria-label={uiText("名称")} maxLength={255} value={name} disabled={busy || accepted.current} onChange={event => setName(event.target.value)} /></label>
-      {error && <Alert type="error" message={error} />}
+    <ConfigProvider theme={uploadFormTheme}>
+      <div className="resource-editor-fields resource-upload-form">
+        <label>{uiText("名称")}<Input aria-label={uiText("名称")} maxLength={255} value={name} disabled={busy || accepted.current} onChange={event => setName(event.target.value)} /></label>
+        {error && <Alert type="error" message={error} />}
         <div className="resource-upload-heading"><strong>{uiText("图片")}</strong><span>{rows.length ? uiText("已上传 {{value1}} / {{value2}} 张", { value1: rows.filter(row => row.fileId).length, value2: rows.length }) : uiText("至少上传一张图片")}</span></div>
         <Upload.Dragger multiple accept="image/*" height={168} listType="picture" disabled={busy || accepted.current}
           fileList={rows.map(row => ({ uid: row.id, name: row.file.name, type: row.file.type, status: row.uploading ? 'uploading' : row.error ? 'error' : 'done', url: row.fileId ? buildFileDownloadUrl(row.fileId) : undefined, originFileObj: row.file as UploadFile['originFileObj'], error: row.error ? new Error(row.error) : undefined }))}
@@ -104,7 +110,8 @@ export function ResourceImageSourceDrawer({ kind, projectId, onClose, onCreated,
         </Upload.Dragger>
         <p className="resource-upload-hint">{uiText("列表首张图片作为主图；创建后可继续管理图片和补充详情。")}</p>
         <Image wrapperStyle={{ display: 'none' }} src={preview} preview={{ visible: !!preview, onVisibleChange: visible => { if (!visible) setPreview(undefined) } }} />
-    </div>
+      </div>
+    </ConfigProvider>
   </ResourceEditorFrame>
     <AssetDetailLeaveGuard navigationManaged={host.managed} dirty={dirty} busy={busy || uploading} detecting={false} canCancelDetection={false} cancellingDetection={false} partialSave={false}
       closeRequested={closeRequested} onContinue={() => setCloseRequested(false)} onClose={onClose} save={save} cancelDetection={async () => true} />

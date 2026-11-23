@@ -10,7 +10,7 @@ const output = await browserOutput('jellyfish-management-navigation-')
 const origin = 'http://127.0.0.1:4196'
 const sections = [
   ['模型管理', '/models'], ['资产库', '/assets'], ['提示词模板', '/prompts'],
-  ['文件管理', '/files'], ['Agent 管理', '/agents'],
+  ['文件管理', '/files'],
 ]
 const list = items => ({
   items, total: items.length, page: 1, page_size: 100,
@@ -45,6 +45,8 @@ try {
   })
 
   await page.goto(origin)
+  await page.evaluate(() => localStorage.setItem('jellyfish_last_management_page', '/agents'))
+  await page.reload()
   const primary = page.getByRole('navigation', { name: '主导航', exact: true })
   const enterManagement = primary.getByRole('link', { name: '管理', exact: true })
   await enterManagement.click()
@@ -84,17 +86,18 @@ try {
 
   await page.goto(origin + '/agents/agent1/edit')
   const agents = secondary.getByRole('link', { name: 'Agent 管理', exact: true })
-  assert.equal(await agents.getAttribute('aria-current'), 'page')
   await page.getByRole('textbox').first().waitFor()
+  assert.equal(await agents.count(), 0)
+  assert.equal(await enterManagement.getAttribute('aria-current'), 'page')
   await primary.getByRole('link', { name: '首页', exact: true }).click()
   await page.reload()
   await enterManagement.click()
-  await page.waitForURL(origin + '/agents')
+  await page.waitForURL(url => url.pathname === '/assets')
   await page.goBack()
   await page.waitForURL(origin + '/')
   await page.goForward()
-  await page.waitForURL(origin + '/agents')
-  assert.equal(await agents.getAttribute('aria-current'), 'page')
+  await page.waitForURL(url => url.pathname === '/assets')
+  await page.goto(origin + '/agents')
   await page.getByRole('cell', { name: '验收 Agent', exact: true }).waitFor()
   await page.getByRole('button', { name: '类型筛选', exact: true }).click()
   const agentFilters = page.getByRole('dialog').filter({ has: page.getByText('类型筛选', { exact: true }) })
@@ -142,7 +145,8 @@ try {
   }
   await page.getByRole('button', { name: 'Open management navigation' }).click()
   const englishNav = page.getByRole('navigation', { name: 'Management navigation' })
-  for (const name of ['Model management', 'Prompt templates', 'Agent management', 'File manager', 'Asset library']) {
+  assert.equal(await englishNav.getByRole('link', { name: 'Agent management', exact: true }).count(), 0)
+  for (const name of ['Model management', 'Prompt templates', 'File manager', 'Asset library']) {
     await englishNav.getByRole('link', { name, exact: true }).waitFor()
   }
   await englishNav.getByRole('link', { name: 'Prompt templates' }).click()

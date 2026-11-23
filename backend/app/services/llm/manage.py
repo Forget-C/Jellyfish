@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.llm.provider_test_call import PATHS, PROMPTS
 from app.api.utils import apply_keyword_filter, apply_order, paginate
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider
 from app.core.integrations.image_capabilities import (
@@ -484,6 +485,8 @@ def list_supported_providers(*, category: ModelCategoryKey | None) -> list[Provi
         ProviderSupportedRead(
             key=spec.key,
             display_name=spec.display_name,
+            test_prompts={c: PROMPTS[c] for c in PATHS.get(spec.key, {}) if c in spec.supported_categories},
+            live_model_catalog=spec.key in {"openai", "volcengine", "aliyun_bailian"},
             aliases=list(spec.aliases),
             supported_categories=list(spec.supported_categories),
             default_base_url=spec.default_base_url,

@@ -4,6 +4,7 @@ import { Navigate } from 'react-router-dom'
 import { Alert, Button, Form, Input, InputNumber, Select, Switch, message } from 'antd'
 import { StudioProjectsService, type ProjectCreate } from '../../../services/generated'
 import { apiErrorMessage } from '../../../services/apiErrorMessage'
+import { DrawerDiscardDialog } from '../../../components/layout/DrawerDiscardDialog'
 import { ResourceEditorFrame } from '../assets/components/ResourceEditorFrame'
 import { ProjectVisualStyleAndStyleFields } from './ProjectVisualStyleAndStyleFields'
 import type { useProjectStyleOptions } from './useProjectStyleOptions'
@@ -26,10 +27,20 @@ export function ProjectCreateDrawer({ styleOptions, onClose }: {
     unify_style: true,
     default_video_ratio: defaultVideoRatio,
   }))
+  const [discardOpen, setDiscardOpen] = useState(false)
   const pending = useRef(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [createdId, setCreatedId] = useState('')
+
+  function requestClose() {
+    if (pending.current) return
+    const baseline: Record<string, unknown> = defaults
+    const changed = Object.entries(form.getFieldsValue()).some(([key, value]) =>
+      (value ?? '') !== (baseline[key] ?? ''))
+    if (!changed) onClose()
+    else setDiscardOpen(true)
+  }
 
   async function create(values: Fields) {
     if (pending.current) return
@@ -53,9 +64,11 @@ export function ProjectCreateDrawer({ styleOptions, onClose }: {
 
   if (createdId) return <Navigate to={`/projects/${createdId}`} />
   return (
-    <ResourceEditorFrame id="project-create-drawer" className="project-create-drawer" open drawer drawerWidth={720}
-      title={uiText("新建短剧项目")} backLabel={uiText("返回")} onClose={() => { if (!pending.current) onClose() }}
+    <ResourceEditorFrame id="project-create-drawer" className="settings-create-drawer" open drawer drawerWidth={720}
+      title={uiText("新建短剧项目")} backLabel={uiText("返回")} onClose={requestClose}
       actions={<Button type="primary" htmlType="submit" form="project-create-form" loading={saving}>{uiText("创建并进入")}</Button>}>
+      <DrawerDiscardDialog open={discardOpen} drawerId="project-create-drawer"
+        onContinue={() => setDiscardOpen(false)} onDiscard={onClose} />
       <Form id="project-create-form" className="app-settings-form project-settings-form" form={form}
         layout="vertical" initialValues={defaults} onFinish={create} disabled={saving} scrollToFirstError>
         {error && <Alert type="error" showIcon message={error} />}

@@ -1,13 +1,4 @@
-.project-overview, .project-overview-sequences { display: grid; gap: 20px; }
-.project-overview-grid { display: grid; gap: 20px; align-items: start; }
-.project-overview-grid > section { min-width: 0; }
-.project-section-title { margin: 0 0 12px; font-size: 16px; font-weight: 650; }
 .project-production-surface, .project-canvas-preview { min-width: 0; padding: 20px; border-radius: 12px; background: #fff; }
-.project-current-chapter { display: grid; justify-items: start; gap: 8px; }
-.project-current-chapter h3, .project-section-heading h3 { margin: 0; font-size: 16px; font-weight: 650; overflow-wrap: anywhere; }
-.project-current-chapter p { margin: 0 0 4px; color: var(--app-muted); }
-.project-section-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-.project-section-heading .project-section-title { margin: 0; }
 .chapter-production-state { display: inline-flex; border-radius: 4px; padding: 2px 7px; background: #edf1f5; color: #475569; font-size: 12px; font-weight: 500; }
 .chapter-production-state[data-tone="pending"] { background: #faedcf; color: #774708; }
 .chapter-production-state[data-tone="ready"] { background: #e6edfa; color: #28518e; }
@@ -24,10 +15,6 @@
 .chapter-list-production .chapter-title-link:hover { color: var(--app-accent); }
 .chapter-list-state { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
 .chapter-list-state .ant-btn { padding-inline: 0; }
-
-@media (min-width: 1024px) {
-  .project-overview-grid { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; }
-}
 
 @media (max-width: 767px) {
   .project-chapter-list .project-production-surface { padding: 12px; }
@@ -54,18 +41,3 @@
   .project-content-toolbar-leading { flex: 1 1 100%; }
   .project-chapter-list .chapter-table .ant-table-cell { padding: 12px 8px; }
 }
-
-.project-overview .project-section-title, .project-overview .project-section-heading h3 { font-size: 14px; font-weight: 600; }
-.project-overview .project-current-chapter h3 { font-size: 14px; font-weight: 600; }
-.project-overview .project-production-surface { padding: 16px; }
-.project-overview a { color: var(--app-accent); font-size: 13px; text-decoration: none; }
-.project-overview a:hover { color: var(--app-accent); text-decoration: underline; }
-.project-overview a:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 3px; border-radius: 4px; }
-.project-overview-scene-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.project-overview-scene-list a { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 8px; }
-.project-overview-scene-list a span:first-child { min-width: 0; overflow-wrap: anywhere; }
-.project-overview-scene-list a .anticon { flex-shrink: 0; }
-.project-overview .ant-btn { font-size: 13px; }
-
-.project-overview .project-overview-grid { gap: 20px; }
-.project-overview .project-current-chapter p { font-size: 12px; }

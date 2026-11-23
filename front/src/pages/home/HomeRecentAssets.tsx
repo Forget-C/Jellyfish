@@ -66,19 +66,23 @@ export function HomeRecentAssets() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [preview, setPreview] = useState<HomeRecentAsset>()
 
+  const feedback = !assets.length && <HomeRecentFeedback status={result.status} label={uiText("资产")}
+    emptyText={uiText("暂无最近资产")} onRetry={retry} />
+
   return <>
     <section className="home-recent-assets" aria-labelledby="home-recent-assets">
       <header className="home-section-heading home-assets-heading">
         <h2 id="home-recent-assets">{uiText("最近资产")}</h2>
         {assets.length ? <button type="button" className="home-text-action home-assets-open" aria-haspopup="dialog" onClick={() => setDrawerOpen(true)}>
           {uiText("查看最近资产")}
-        </button> : <HomeRecentFeedback status={result.status} label={uiText("资产")} onRetry={retry} />}
+        </button> : feedback}
         <Link className="home-text-action home-assets-library" to="/assets">{uiText("查看资产库")}<ArrowRightOutlined aria-hidden /></Link>
       </header>
-      <div className="home-assets-inline">
+      <div className="home-assets-inline home-slot-frame">
         <AssetCards assets={assets} onSelect={setPreview}>
-          <HomePlaceholders kind="asset" filled={assets.length} loading={result.status === 'loading'} />
+          {result.status === 'loading' && <HomePlaceholders kind="asset" />}
         </AssetCards>
+        {feedback}
       </div>
     </section>
     <Drawer title={uiText("最近资产")} width="min(560px, 100vw)" open={drawerOpen} onClose={() => setDrawerOpen(false)} className="home-assets-drawer app-detail-drawer">

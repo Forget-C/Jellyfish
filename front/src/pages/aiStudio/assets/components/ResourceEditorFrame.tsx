@@ -37,6 +37,7 @@ export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel
   }, [drawer, open, body])
   const anchor = useRef<HTMLSpanElement>(null)
   const panel = useRef<HTMLDivElement>(null)
+  const outside = useRef<HTMLDivElement>(null)
   const [bounds, setBounds] = useState<DOMRect | null>(null)
   useLayoutEffect(() => {
     if (!drawer || !open) return
@@ -70,12 +71,28 @@ export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel
   useEffect(() => {
     if (drawer && open && positioned) panel.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
   }, [drawer, open, positioned])
+  useEffect(() => {
+    if (!drawer || !open || !positioned) return
+    // Keyboard and assistive activation target the background control directly, bypassing the pointer layer.
+    const exitFromBackground = (event: MouseEvent) => {
+      if (event.detail !== 0 || !(event.target instanceof Element) || !event.target.closest('.app-shell')) return
+      const layers = document.querySelectorAll('.resource-editor-outside')
+      if (layers[layers.length - 1] !== outside.current) return
+      event.preventDefault()
+      event.stopPropagation()
+      onClose()
+    }
+    document.addEventListener('click', exitFromBackground, true)
+    return () => document.removeEventListener('click', exitFromBackground, true)
+  }, [drawer, open, positioned, onClose])
   const toolbar = <>
     <div className="resource-editor-page-heading"><Button type="text" icon={<ArrowLeftOutlined />} aria-label={backLabel} onClick={onClose}>{backLabel}</Button>
       <h1 className="app-page-title" title={title}>{title}</h1>{titleExtra}</div>
     <div ref={actionsRef} className="resource-editor-page-actions">{actions}</div>
   </>
   if (drawer) return <><span ref={anchor} hidden />{open && bounds && createPortal(
+    <>
+    <div ref={outside} className="resource-editor-outside" aria-hidden="true" onMouseDown={event => event.preventDefault()} onClick={event => { event.stopPropagation(); onClose() }} />
     <div className={`resource-editor-drawer ant-drawer resource-editor-appearance-${appearance}${scrollEdges.top ? ' resource-editor-scrolled' : ''}${scrollEdges.bottom ? ' resource-editor-more' : ''}${left > 0 ? '' : ' resource-editor-no-side'}`}
       style={{ top: bounds.y, left, width, height: bounds.height, maxWidth: `calc(100vw - ${left}px)`, maxHeight: `calc(100dvh - ${bounds.y}px)` }}>
       <div className="ant-drawer-content-wrapper">
@@ -90,7 +107,7 @@ export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel
           <div className="ant-drawer-body"><div className="resource-editor-drawer-content" ref={captureBody}>{children}</div></div>
         </div>
       </div>
-    </div>, document.body)}</>
+    </div></>, document.body)}</>
   if (!open) return null
   const escape = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape' && escapeToParent && !event.defaultPrevented) { event.stopPropagation(); onClose() }

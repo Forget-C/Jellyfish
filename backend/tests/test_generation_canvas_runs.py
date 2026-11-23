@@ -36,7 +36,7 @@ async def runtime(tmp_path, request):
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     async with sessions.begin() as db:
         db.add(Project(id=project_id, name='project', style='真人都市'))
-        db.add(Provider(id=provider_id, provider_key='openai', name='openai', api_key='private-secret', base_url='https://frozen.test/v1'))
+        db.add(Provider(id=provider_id, provider_key='openai', name=provider_id, api_key='private-secret', base_url='https://frozen.test/v1'))
         await db.flush()
         db.add(Model(id=model_id, name='frozen-model', category='text', provider_id=provider_id, params={'temperature': 0.3, 'default_headers': {'Authorization': 'Bearer model-private-secret'}}))
     real_app = getattr(request, 'param', None) == 'app-handler'

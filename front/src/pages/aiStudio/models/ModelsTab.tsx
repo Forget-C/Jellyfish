@@ -1,18 +1,22 @@
 import { uiText, useUiText } from '../../../uiText'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { DrawerDiscardDialog } from '../../../components/layout/DrawerDiscardDialog'
+import { ResourceEditorFrame } from '../assets/components/ResourceEditorFrame'
+import '../assets/components/resourceEditor.css'
+import '../project/ProjectWorkbench/tabs/project-settings.css'
 import { WorkspaceFilter } from '../../../components/layout/WorkspaceFilter'
 import {
   Alert,
-  Descriptions,
   Input,
   InputNumber,
   Button,
   Table,
   Tag,
   Space,
+  Typography,
   Tree,
   Dropdown,
-  Drawer,
+  ConfigProvider,
   Modal,
   Form,
   Select,
@@ -24,7 +28,6 @@ import type { TableColumnsType } from 'antd'
 import {
   PlusOutlined,
   DeleteOutlined,
-  CopyOutlined,
   MoreOutlined,
   SearchOutlined,
   DownOutlined,
@@ -53,6 +56,7 @@ import {
 
 const PAGE_SIZE = 20
 const OPTIONS_PAGE_SIZE = 100
+const defaultModelTheme = { components: { Select: { controlHeight: 36 } } }
 const DEFAULT_MODEL_FIELD_BY_CATEGORY = {
   text: 'default_text_model_id',
   image: 'default_image_model_id',
@@ -183,15 +187,16 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
   const defaultSaveInFlight = useRef(false)
   const defaultTrigger = useRef<HTMLButtonElement | null>(null)
   const [savingDefaultCategory, setSavingDefaultCategory] = useState<ModelCategoryKey | null>(null)
-  const [defaultModelsDrawerOpen, setDefaultModelsDrawerOpen] = useState(false)
+  const [defaultModelsModalOpen, setDefaultModelsModalOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'updated' | 'name' | 'category'>('updated')
-  const [selectedModel, setSelectedModel] = useState<ModelRead | null>(null)
-  const [detailPanelOpen, setDetailPanelOpen] = useState(false)
-  const detailTrigger = useRef<HTMLElement | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<ModelCategoryKey | null>(null)
-  const [modelModalOpen, setModelModalOpen] = useState(false)
+  const [modelEditorOpen, setModelEditorOpen] = useState(false)
+  const initialFields = useRef<Partial<ModelFormValues>>({})
+  const pendingName = useRef('')
+  const advanced = useRef<HTMLDetailsElement>(null)
+  const [discardOpen, setDiscardOpen] = useState(false)
   const [modelEditing, setModelEditing] = useState<ModelRead | null>(null)
   const [providerOptionsLoading, setProviderOptionsLoading] = useState(true)
   const [providerOptionsFailed, setProviderOptionsFailed] = useState(false)
@@ -295,7 +300,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
   }, [modelSettingsRevision])
 
   useEffect(() => {
-    if (!defaultModelsDrawerOpen) return
+    if (!defaultModelsModalOpen) return
     let active = true
     setDefaultOptionsLoading(true)
     setDefaultOptionsFailed(false)
@@ -308,7 +313,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
         if (active) setDefaultOptionsLoading(false)
       })
     return () => { active = false }
-  }, [defaultModelsDrawerOpen, defaultOptionsRevision])
+  }, [defaultModelsModalOpen, defaultOptionsRevision])
 
 
   const renderDefaultModel = (model: ModelRead) => {
@@ -360,7 +365,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
 
   /** 新增模型使用当前供应商的目录，切换供应商后忽略旧请求。 */
   useEffect(() => {
-    if (!modelModalOpen || modelEditing || !selectedFormProviderId) return
+    if (!modelEditorOpen || modelEditing || !selectedFormProviderId) return
     let active = true
     setFormCatalog(null)
     setFormCatalogLoading(true)
@@ -382,22 +387,37 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
       active = false
       request.cancel()
     }
-  }, [modelModalOpen, modelEditing, selectedFormProviderId])
+  }, [modelEditorOpen, modelEditing, selectedFormProviderId])
 
-  const handleSaveModel = async () => {
+  const closeModelEditor = () => {
+    pendingName.current = ''
+    setDiscardOpen(false)
+    setModelEditorOpen(false)
+    setModelEditing(null)
+    setFormCatalog(null)
+    setFormCatalogLoading(false)
+    form.resetFields()
+  }
+
+  const requestClose = () => {
+    if (modelSaveInFlight.current) return
+    const current = form.getFieldsValue()
+    const baseline = initialFields.current
+    const normalize = (value: unknown) => JSON.stringify(value ?? '')
+    const changed = (Object.keys({ ...baseline, ...current }) as (keyof ModelFormValues)[]).some(field =>
+      field === 'names'
+        ? JSON.stringify(current.names ?? []) !== JSON.stringify(baseline.names ?? [])
+        : normalize(current[field]) !== normalize(baseline[field]))
+    if (changed || pendingName.current.trim()) setDiscardOpen(true)
+    else closeModelEditor()
+  }
+
+  const handleSaveModel = async (values: ModelFormValues) => {
     if (modelSaveInFlight.current) return
     modelSaveInFlight.current = true
     setSavingModel(true)
     try {
-      const values = await form.validateFields()
-      let params: Record<string, unknown> = {}
-      try {
-        if (values.params && String(values.params).trim())
-          params = JSON.parse(String(values.params))
-      } catch {
-        message.error(uiText("参数格式需为合法 JSON"))
-        return
-      }
+      const params = values.params?.trim() ? JSON.parse(values.params) as Record<string, unknown> : {}
       const capabilities = values.capability_profile
       const hasCapabilities = capabilities && (
         typeof capabilities.max_input_tokens === 'number' || MODEL_CAPABILITIES.some(([key]) => {
@@ -449,14 +469,11 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
         })
         const createdCount = response.data?.created?.length ?? 0
         const skippedCount = response.data?.skipped?.length ?? 0
-        message.success(uiText("已添加 {{createdCount}} 个模型{{value2}}", { createdCount, value2: skippedCount ? `，跳过 ${skippedCount} 个已存在模型` : '' }))
+        message.success(uiText("已添加 {{createdCount}} 个模型{{value2}}", { createdCount, value2: skippedCount ? uiText("，跳过 {{count}} 个已存在模型", { count: skippedCount }) : '' }))
       }
-      setModelModalOpen(false)
-      setModelEditing(null)
-      form.resetFields()
+      closeModelEditor()
       reload()
-    } catch (e) {
-      if (e && typeof e === 'object' && 'errorFields' in e) return
+    } catch {
       message.error(modelEditing ? uiText("保存失败") : uiText("添加模型失败"))
     } finally {
       modelSaveInFlight.current = false
@@ -498,38 +515,20 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
     }
   }
 
-  const openModelModal = (m?: ModelRead) => {
-    setModelEditing(m ?? null)
-    form.resetFields()
-    if (m) {
-      form.setFieldsValue({
-        name: m.name,
-        category: m.category,
-        provider_id: m.provider_id,
-        description: m.description,
-        params: JSON.stringify(m.params ?? {}, null, 2),
-        capability_profile: m.capability_profile,
-      })
-    } else {
-      setFormCatalog(null)
-    }
-    setModelModalOpen(true)
-  }
-
-  /** 基于已有模型打开「添加模型」浮窗，预填字段，名称追加「-复制」。 */
-  const openCopyModelModal = (source: ModelRead) => {
-    setModelEditing(null)
+  const openModelEditor = (model?: ModelRead, copy = false) => {
+    setModelEditing(copy ? null : model ?? null)
     setFormCatalog(null)
     form.resetFields()
-    form.setFieldsValue({
-      names: [`${source.name}-复制`],
-      category: source.category,
-      provider_id: source.provider_id,
-      description: source.description ?? '',
-      params: JSON.stringify(source.params ?? {}, null, 2),
-      capability_profile: source.capability_profile,
-    })
-    setModelModalOpen(true)
+    initialFields.current = model ? {
+      ...(copy ? { names: [`${model.name}-复制`] } : { name: model.name }),
+      category: model.category,
+      provider_id: model.provider_id,
+      description: model.description ?? '',
+      params: JSON.stringify(model.params ?? {}, null, 2),
+      capability_profile: model.capability_profile ?? undefined,
+    } : {}
+    form.setFieldsValue(initialFields.current)
+    setModelEditorOpen(true)
   }
 
   const changeSearch = (value: string) => {
@@ -547,11 +546,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
     {
       title: uiText("名称"), dataIndex: 'name', key: 'name', width: '24%',
       render: (name: string, record) => (
-        <Button type="link" className="management-name" title={name || uiText("未知名称")} onClick={event => {
-          detailTrigger.current = event.currentTarget
-          setSelectedModel(record)
-          setDetailPanelOpen(true)
-        }}>{name || uiText("未知名称")}</Button>
+        <Button type="link" className="management-name" title={name || uiText("未知名称")} aria-haspopup="dialog" onClick={() => openModelEditor(record)}>{name || uiText("未知名称")}</Button>
       ),
     },
     {
@@ -567,21 +562,20 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
     { title: uiText("默认标记"), key: 'default', width: 86, render: (_, model) => renderDefaultModel(model) },
     { title: uiText("简述"), dataIndex: 'description', key: 'description', ellipsis: true, render: (description?: string) => description || '—' },
     {
-      title: uiText("操作"), key: 'action', width: 224,
+      title: uiText("操作"), key: 'action', width: 108,
       render: (_, record) => (
         <Space size={4}>
-          <Button type="text" size="small" aria-label={uiText("编辑 {{name}}", { name: record.name })} onClick={() => openModelModal(record)}>{uiText("编辑")}</Button>
-          <Button type="text" size="small" disabled>{uiText("测试（暂未接入）")}</Button>
-          <Dropdown trigger={['click']} menu={{ items: [
-            { key: 'copy', label: uiText("复制"), icon: <CopyOutlined />, onClick: () => openCopyModelModal(record) },
-            {
-              key: 'delete', label: uiText("删除"), danger: true, icon: <DeleteOutlined />,
-              onClick: () => {
-                setDeleteError('')
-                setModelToDelete(record)
-              },
+          <Button type="text" size="small" aria-haspopup="dialog" onClick={event => {
+            event.currentTarget.focus()
+            openModelEditor(record, true)
+          }}>{uiText("复制")}</Button>
+          <Dropdown trigger={['click']} menu={{ items: [{
+            key: 'delete', label: uiText("删除"), danger: true, icon: <DeleteOutlined />,
+            onClick: () => {
+              setDeleteError('')
+              setModelToDelete(record)
             },
-          ] }}>
+          }] }}>
             <Button type="text" size="small" icon={<MoreOutlined />} aria-label={uiText("{{name}}的更多操作", { name: record.name })} />
           </Dropdown>
         </Space>
@@ -625,15 +619,15 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
           }}>
             <Button icon={<DownOutlined />}>{uiText("排序：{{label}}", { label: uiText(SORT_OPTIONS.find(option => option.value === sortBy)?.label ?? '') })}</Button>
           </Dropdown>
-          <Button ref={defaultTrigger} aria-label={uiText("默认模型")} icon={<SettingOutlined />} onClick={() => {
+          <Button ref={defaultTrigger} aria-label={uiText("默认模型")} aria-haspopup="dialog" icon={<SettingOutlined />} onClick={() => {
             setDefaultOptionsLoading(true)
-            setDefaultModelsDrawerOpen(true)
+            setDefaultModelsModalOpen(true)
           }}>{uiText("默认模型")}</Button>
           {result && <span className="management-count">
             {result.total === undefined ? uiText("已加载 {{length}} 个模型", { length: result.models.length }) : uiText("共 {{total}} 个模型", { total: result.total })}
           </span>}
         </div>
-        <Button className="management-primary" type="primary" icon={<PlusOutlined />} onClick={() => openModelModal()}>
+        <Button className="management-primary" type="primary" icon={<PlusOutlined />} onClick={() => openModelEditor()}>
           {uiText("添加模型")}
         </Button>
       </PageToolbar>
@@ -668,7 +662,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
                 {hasFilters
                   ? <Button onClick={() => { changeSearch(''); changeCategory(null) }}>{uiText("清除筛选")}</Button>
                   : providers.length > 0
-                    ? <Button onClick={() => openModelModal()}>{uiText("添加第一个模型")}</Button>
+                    ? <Button onClick={() => openModelEditor()}>{uiText("添加第一个模型")}</Button>
                     : providerOptionsLoading
                       ? uiText("正在读取供应商")
                       : providerOptionsFailed ? uiText("供应商暂不可用，可在添加模型时重试") : uiText("请先添加供应商后再添加模型")}
@@ -679,60 +673,26 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
         </div>}
       </WorkspaceScrollPanel>
 
-      <Drawer
-        className="app-detail-drawer"
-        title={<h2 className="m-0 text-base font-semibold">{uiText("模型详情")}</h2>}
-        open={detailPanelOpen}
-        placement="right"
-        width="min(100vw, 480px)"
-        onClose={() => setDetailPanelOpen(false)}
-        afterOpenChange={open => {
-          if (!open) {
-            setSelectedModel(null)
-            requestAnimationFrame(() => detailTrigger.current?.focus({ preventScroll: true }))
-          }
-        }}
-      >
-        {selectedModel && <Descriptions className="management-details" column={1} layout="vertical" size="small" items={[
-          { key: 'name', label: uiText("名称"), children: selectedModel.name || uiText("未知") },
-          { key: 'category', label: uiText("类别"), children: uiText(categoryLabelMap[selectedModel.category] ?? '未知') },
-          { key: 'provider', label: uiText("关联供应商"), children: getProviderName(selectedModel.provider_id) },
-          { key: 'default', label: uiText("默认标记"), children: renderDefaultModel(selectedModel) },
-          { key: 'description', label: uiText("完整描述"), children: <span className="whitespace-pre-wrap">{selectedModel.description || '—'}</span> },
-          { key: 'created', label: uiText("创建人"), children: selectedModel.created_by || '—' },
-          { key: 'capabilities', label: uiText('模型能力'), children: <ModelCapabilities model={selectedModel} /> },
-          { key: 'verification', label: uiText('模型能力验证'), children: (
-            <ModelCapabilityVerifications key={selectedModel.id} modelId={selectedModel.id}
-              canVerify={selectedModel.category === 'text'} />
-          ) },
-          { key: 'params', label: uiText("参数（JSON）"), children: (selectedModel.params === undefined || selectedModel.params === null) ? '—' : (
-            <pre className="w-full min-w-0 max-w-full overflow-x-auto whitespace-pre rounded-md bg-slate-50 p-3 text-xs" tabIndex={0} aria-label={uiText("完整参数 JSON")}>{JSON.stringify(selectedModel.params, null, 2)}</pre>
-          ) },
-        ]} />}
-      </Drawer>
-
-      <Drawer
-        className="app-detail-drawer"
-        title={<h2 className="m-0 text-base font-semibold">{uiText("全局默认模型")}</h2>}
-        placement="right"
-        open={defaultModelsDrawerOpen}
+      <Modal
+        title={uiText("全局默认模型")}
+        centered
+        footer={null}
+        focusTriggerAfterClose={false}
+        open={defaultModelsModalOpen}
         keyboard={savingDefaultCategory === null}
         maskClosable={savingDefaultCategory === null}
         closable={savingDefaultCategory === null}
-        onClose={() => {
-          if (!defaultSaveInFlight.current) setDefaultModelsDrawerOpen(false)
+        onCancel={() => {
+          if (!defaultSaveInFlight.current) setDefaultModelsModalOpen(false)
         }}
         afterOpenChange={open => {
           if (!open) requestAnimationFrame(() => defaultTrigger.current?.focus({ preventScroll: true }))
         }}
-        width="min(100vw, 400px)"
+        width="min(480px, calc(100vw - 32px))"
       >
-        <Alert
-          type="info"
-          showIcon
-          className="mb-5"
-          message={uiText("默认模型用于未显式指定模型的生成请求；修改会立即生效。")}
-        />
+        <Typography.Paragraph type="secondary" className="text-[13px]">
+          {uiText("生成时未指定模型，将使用以下默认值。修改后立即生效。")}
+        </Typography.Paragraph>
         <div className="space-y-4">
           {modelSettingsFailed && <Alert
             type="error"
@@ -748,7 +708,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
           />}
           {MODEL_CATEGORIES.map(category => {
             const defaultId = modelSettings?.[DEFAULT_MODEL_FIELD_BY_CATEGORY[category.key]]
-            const label = uiText("默认{{label}}", { label: uiText(category.label) })
+            const label = uiText(category.label)
             const options = defaultOptions.filter(model => model.category === category.key).map(model => ({
               label: `${model.name} · ${getProviderName(model.provider_id)}`,
               value: model.id,
@@ -758,45 +718,45 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
             }
             return (
               <div key={category.key}>
-                <div className="mb-1.5 text-sm font-medium text-gray-700">{label}</div>
-                <Select<string | null>
-                  aria-label={label}
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  className="w-full"
-                  value={defaultId ?? null}
-                  placeholder={defaultId === undefined ? uiText("未知") : uiText("选择{{label}}", { label })}
-                  loading={modelSettingsLoading || defaultOptionsLoading || savingDefaultCategory === category.key}
-                  disabled={modelSettingsLoading || defaultOptionsLoading || modelSettingsFailed || defaultOptionsFailed || savingDefaultCategory !== null}
-                  options={options}
-                  onChange={modelId => void updateDefaultModel(category.key, modelId ?? undefined)}
-                />
+                <div className="mb-1.5 text-[13px] font-medium">{label}</div>
+                <ConfigProvider theme={defaultModelTheme}>
+                  <Select<string | null>
+                    aria-label={label}
+                    allowClear
+                    showSearch
+                    optionFilterProp="label"
+                    className="w-full"
+                    value={defaultId ?? null}
+                    placeholder={defaultId === undefined ? uiText("未知") : uiText("选择{{label}}", { label })}
+                    loading={modelSettingsLoading || defaultOptionsLoading || savingDefaultCategory === category.key}
+                    disabled={modelSettingsLoading || defaultOptionsLoading || modelSettingsFailed || defaultOptionsFailed || savingDefaultCategory !== null}
+                    options={options}
+                    onChange={modelId => void updateDefaultModel(category.key, modelId ?? undefined)}
+                  />
+                </ConfigProvider>
               </div>
             )
           })}
         </div>
-      </Drawer>
+      </Modal>
 
-      <Modal
-        title={modelEditing ? uiText("编辑模型") : uiText("添加模型")}
-        open={modelModalOpen}
-        maskClosable={false}
-        keyboard={!savingModel}
-        closable={!savingModel}
-        confirmLoading={savingModel}
-        cancelButtonProps={{ disabled: savingModel }}
-        onCancel={() => {
-          if (modelSaveInFlight.current) return
-          setModelModalOpen(false)
-          setModelEditing(null)
-          form.resetFields()
-        }}
-        onOk={() => void handleSaveModel()}
-        width={560}
-        destroyOnClose
-      >
-        <Form form={form} layout="vertical" className="pt-2">
+      {modelEditorOpen && <ResourceEditorFrame id="model-editor-drawer" className="settings-create-drawer" open drawer drawerWidth={720}
+        title={modelEditing ? uiText("编辑模型") : uiText("添加模型")} backLabel={uiText("返回")} onClose={requestClose}
+        actions={<Button type="primary" htmlType="submit" form="model-editor-form" loading={savingModel}>
+          {modelEditing ? uiText("保存") : uiText("添加")}
+        </Button>}>
+        <DrawerDiscardDialog open={discardOpen} drawerId="model-editor-drawer"
+          onContinue={() => setDiscardOpen(false)} onDiscard={closeModelEditor} />
+        <Form id="model-editor-form" form={form} layout="vertical" className="app-settings-form project-settings-form"
+          disabled={savingModel} onFinish={handleSaveModel} onFinishFailed={({ errorFields }) => {
+            const first = errorFields[0]?.name
+            if (!first) return
+            if (first[0] === 'params' && advanced.current) advanced.current.open = true
+            requestAnimationFrame(() => {
+              form.scrollToField(first)
+              form.getFieldInstance(first)?.focus?.()
+            })
+          }}>
           {providerOptionsFailed && <Alert
             showIcon
             type="warning"
@@ -810,79 +770,114 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
             className="mb-4"
             message={uiText("未能读取供应商支持的类别，保存时仍会校验")}
           />}
-          <Form.Item
-            name="provider_id"
-            label={uiText("供应商")}
-            rules={[{ required: true, message: uiText("请选择供应商") }]}
-          >
-            <Select
-              aria-label={uiText("供应商")}
-              loading={providerOptionsLoading}
-              placeholder={uiText("选择供应商（请先添加供应商）")}
-              options={providerSelectOptions}
-              notFoundContent={providerOptionsLoading ? uiText("加载中…") : providerOptionsFailed ? uiText("读取失败") : uiText("暂无供应商")}
-              onChange={() => {
-                setFormCatalog(null)
-                form.setFieldsValue({ category: undefined, names: [] })
-              }}
-            />
-          </Form.Item>
-          <Form.Item name="category" label={uiText("类别")} rules={[{ required: true, message: uiText("请选择类别") }]}>
-            <Select
-              aria-label={uiText("类别")}
-              disabled={!selectedFormProviderId}
-              placeholder={selectedFormProviderId ? uiText("选择模型类别") : uiText("请先选择供应商")}
-              options={categorySelectOptions}
-              onChange={() => form.setFieldsValue({ names: [] })}
-            />
-          </Form.Item>
-          {modelEditing ? (
-            <Form.Item name="name" label={uiText("模型名称")} rules={[{ required: true, message: uiText("请输入模型名称") }]}>
-              <Input placeholder={uiText("例如：GPT-4")} />
-            </Form.Item>
-          ) : (
-            <Form.Item name="names" label={uiText("模型名称")} rules={[{ required: true, message: uiText("请选择或输入至少一个模型名称") }]}>
-              <Select
-                aria-label={uiText("模型名称")}
-                mode="tags"
-                tokenSeparators={[',', '，']}
-                loading={formCatalogLoading}
-                disabled={!selectedFormCategory}
-                placeholder={selectedFormCategory ? uiText("可多选目录模型，或直接输入模型名称后回车") : uiText("请先选择供应商和类别")}
-                options={(formCatalog?.models ?? [])
-                  .filter((candidate) => candidate.category === selectedFormCategory)
-                  .map((candidate) => ({
-                    value: candidate.name,
-                    label: candidate.description ? `${candidate.name} · ${candidate.description}` : candidate.name,
-                  }))}
+          <section className="project-settings-group">
+            <h2>{uiText("基本信息")}</h2>
+            <div className="project-settings-short-fields">
+              <Form.Item
+                name="provider_id"
+                label={uiText("供应商")}
+                rules={[{ required: true, message: uiText("请选择供应商") }]}
+              >
+                <Select
+                  aria-label={uiText("供应商")}
+                  loading={providerOptionsLoading}
+                  placeholder={uiText("选择供应商（请先添加供应商）")}
+                  options={providerSelectOptions}
+                  notFoundContent={providerOptionsLoading ? uiText("加载中…") : providerOptionsFailed ? uiText("读取失败") : uiText("暂无供应商")}
+                  onChange={() => {
+                    setFormCatalog(null)
+                    form.setFieldsValue({ category: undefined, names: [] })
+                  }}
+                />
+              </Form.Item>
+              <Form.Item name="category" label={uiText("类别")} rules={[{ required: true, message: uiText("请选择类别") }]}>
+                <Select
+                  aria-label={uiText("类别")}
+                  disabled={!selectedFormProviderId}
+                  placeholder={selectedFormProviderId ? uiText("选择模型类别") : uiText("请先选择供应商")}
+                  options={categorySelectOptions}
+                  onChange={() => form.setFieldsValue({ names: [] })}
+                />
+              </Form.Item>
+            </div>
+            {modelEditing ? (
+              <Form.Item name="name" label={uiText("模型名称")} rules={[{ required: true, message: uiText("请输入模型名称") }]}>
+                <Input placeholder={uiText("例如：GPT-4")} />
+              </Form.Item>
+            ) : (
+              <Form.Item name="names" label={uiText("模型名称")} rules={[{ required: true, message: uiText("请选择或输入至少一个模型名称") }]}>
+                <Select
+                  aria-label={uiText("模型名称")}
+                  mode="tags"
+                  onSearch={value => { pendingName.current = value }}
+                  onBlur={() => { pendingName.current = '' }}
+                  onChange={() => { pendingName.current = '' }}
+                  tokenSeparators={[',', '，']}
+                  loading={formCatalogLoading}
+                  disabled={!selectedFormCategory}
+                  placeholder={selectedFormCategory ? uiText("可多选目录模型，或直接输入模型名称后回车") : uiText("请先选择供应商和类别")}
+                  options={(formCatalog?.models ?? [])
+                    .filter((candidate) => candidate.category === selectedFormCategory)
+                    .map((candidate) => ({
+                      value: candidate.name,
+                      label: candidate.description ? `${candidate.name} · ${candidate.description}` : candidate.name,
+                    }))}
+                />
+              </Form.Item>
+            )}
+            {!modelEditing && formCatalog && (
+              <Alert
+                type="info"
+                showIcon
+                className="mb-4"
+                message={formCatalog.source === 'provider_api' ? uiText("模型名称来自供应商 API，也可手动输入。") : uiText("供应商未提供模型列表 API，已加载官方目录；仍可手动输入。")}
               />
+            )}
+            {unsupportedProviderWarning && (
+              <Alert
+                type="warning"
+                showIcon
+                className="mb-4"
+                message={unsupportedProviderWarning}
+              />
+            )}
+            <Form.Item name="description" label={uiText("描述")}>
+              <Input.TextArea rows={2} />
             </Form.Item>
-          )}
-          {!modelEditing && formCatalog && (
-            <Alert
-              type="info"
-              showIcon
-              className="mb-4"
-              message={formCatalog.source === 'provider_api' ? uiText("模型名称来自供应商 API，也可手动输入。") : uiText("供应商未提供模型列表 API，已加载官方目录；仍可手动输入。")}
-            />
-          )}
-          {unsupportedProviderWarning && (
-            <Alert
-              type="warning"
-              showIcon
-              className="mb-4"
-              message={unsupportedProviderWarning}
-            />
-          )}
-          <Form.Item name="params" label={uiText("参数（JSON）")}>
-            <Input.TextArea rows={3} placeholder='{"max_tokens": 4096, "temperature": 0.7}' />
-          </Form.Item>
-          <ModelCapabilityFields />
-          <Form.Item name="description" label={uiText("描述")}>
-            <Input.TextArea rows={2} />
-          </Form.Item>
+            {!modelEditing && formCatalog?.models?.some(candidate => candidate.category === selectedFormCategory) &&
+              <Typography.Text type="secondary">{uiText("描述和参数仅用于手动填写的模型。目录模型沿用目录中的值。")}</Typography.Text>}
+          </section>
+          <section className="project-settings-group">
+            <details ref={advanced} open={Boolean(initialFields.current.params && initialFields.current.params !== '{}')}>
+              <summary>{uiText("高级参数")}</summary>
+              <Form.Item name="params" label={uiText("参数（JSON）")} rules={[{
+                validator: async (_, value?: string) => {
+                  if (!value?.trim()) return
+                  let parsed: unknown
+                  try { parsed = JSON.parse(value) } catch { throw new Error(uiText("参数格式需为合法 JSON")) }
+                  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                    throw new Error(uiText("参数必须为 JSON 对象"))
+                  }
+                },
+              }]}>
+                <Input.TextArea rows={3} placeholder='{"max_tokens": 4096, "temperature": 0.7}' />
+              </Form.Item>
+            </details>
+          </section>
+          <section className="project-settings-group">
+            <details>
+              <summary>{uiText('模型能力')}</summary>
+              {modelEditing && <>
+                <ModelCapabilities model={modelEditing} />
+                <ModelCapabilityVerifications key={modelEditing.id} modelId={modelEditing.id}
+                  canVerify={modelEditing.category === 'text'} />
+              </>}
+              <ModelCapabilityFields />
+            </details>
+          </section>
+          {modelEditing && <Typography.Text type="secondary">{uiText("创建人")} · {modelEditing.created_by || '—'}</Typography.Text>}
         </Form>
-      </Modal>
+      </ResourceEditorFrame>}
 
       <Modal
         title={uiText("删除模型")}
