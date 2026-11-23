@@ -31,7 +31,7 @@ export function ChapterSourcePanel({ projectId, chapterId, onChanged, onEdit, re
   const [interaction, setInteraction] = useState<DivisionInteractionStatus>({ dirty: false })
   const interactionChanged = useCallback((status: DivisionInteractionStatus) => { epoch.current++; setInteraction(status) }, [])
   const [preparationOpen, setPreparationOpen] = useState(false)
-  const preparationTrigger = useRef<HTMLElement>(null)
+  const preparationTrigger = useRef<HTMLButtonElement>(null)
   const [sourceChoosing, setSourceChoosing] = useState(false)
   const [sourceChoice, setSourceChoice] = useState<ChapterSequences>()
   const [chapter, setChapter] = useState<ChapterSequences>()

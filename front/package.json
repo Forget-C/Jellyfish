@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
-    "antd": "^5.10.0",
+    "antd": "^5.29.3",
     "axios": "^1.13.6",
     "fflate": "^0.8.3",
     "i18next": "^23.11.4",
