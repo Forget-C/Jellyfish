@@ -104,8 +104,8 @@ try {
   await history.getByRole('link', { name: '本地参考' }).waitFor()
   await history.getByRole('link', { name: '文件库参考' }).waitFor()
   assert.equal(await history.getByText('已读取图片', { exact: true }).count(), 2)
-  await panel.getByTitle('browser-assistant-model', { exact: true }).click()
-  await page.getByTitle('qwen3.8-omni-flash · 可读画布 · 可读连续画面及音轨', { exact: true }).click()
+  await panel.getByRole('combobox', { name: '助手模型' }).click()
+  await page.locator('.ant-select-item-option').getByText(/qwen3\.8-omni-flash.*可读连续画面及音轨/).click()
   const clip = execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=128x128:r=10:d=3',
     '-f', 'lavfi', '-i', 'sine=frequency=600:sample_rate=16000:duration=3',
     '-c:v', 'libx264', '-bf', '0', '-threads', '1', '-c:a', 'aac',
