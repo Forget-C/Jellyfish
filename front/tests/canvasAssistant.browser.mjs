@@ -466,7 +466,7 @@ try {
       const setMode = async name => {
         await panel.getByTitle(name === '手动审批' ? '自动审批明确请求' : '手动审批', { exact: true }).click()
         await page.getByTitle(name, { exact: true }).click()
-        await panel.getByText(name, { exact: true }).waitFor()
+        await panel.getByTitle(name, { exact: true }).waitFor()
       }
       await setMode('自动审批明确请求')
       await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('把这张卡的推近放慢')
