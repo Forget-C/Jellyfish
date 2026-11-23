@@ -33,6 +33,7 @@ const assetRows = ['actor', 'scene', 'prop', 'costume', 'actor', 'scene'].map((t
   id: String(index), type, name: '真实资产 ' + index, updated_at,
   thumbnail: index === 2 ? null : '/api/v1/studio/files/home-image/download',
 }))
+const singleAsset = { ...assetRows[2], name: '长安城门道具参考'.repeat(16) }
 let state = 'loaded'
 let pendingActivity
 let failedHome = ''
@@ -51,6 +52,7 @@ try {
     const visibleRows = rows => state === 'empty' ? [] : state === 'single' ? rows.slice(0, 1) : rows
     const respond = data => route.fulfill({ json: { code: 200, data } })
     const fail = () => route.fulfill({ status: 503, json: { detail: '暂时不可用' } })
+    if (state === 'single' && pathname.endsWith('/recent-assets')) return respond([singleAsset])
     if (pathname.endsWith('/recent-canvases')) return state === 'error' || failedHome === 'canvases' ? fail() : respond(state === 'media' ? mediaCanvases : visibleRows(canvasRows))
     if (pathname.endsWith('/recent-assets')) return state === 'error' || failedHome === 'assets' ? fail() : respond(visibleRows(assetRows))
     const corners = pathname.match(/\/files\/corners-(\d)\/download$/)
@@ -363,10 +365,13 @@ try {
       let release
       pendingActivity = new Promise(resolve => { release = resolve })
       await page.reload({ waitUntil: 'domcontentloaded' })
+      const checkSingle = next === 'single' && (width === 1366 || width === 390)
+      let loadingAssetHeight
       try {
         await progress.getByRole('status').waitFor()
         await checkPlaceholders([compact ? 1 : 3, 3, 3, assetSlots], !compact)
         const loadingLayout = await measureHome()
+        if (checkSingle) loadingAssetHeight = (await assets.locator('.home-slot:visible').first().boundingBox()).height
         if (compact) compactLayout = loadingLayout
         else assert.deepEqual(loadingLayout, expectedLayout, '请求中保持区块和底部入口的位置')
       } finally {
@@ -377,9 +382,31 @@ try {
         await progress.getByRole('link', { name: project.name }).waitFor()
         await sessions.getByText(session.title).waitFor()
         await canvases.getByRole('heading', { name: canvasRows[0].name }).waitFor()
-        await assetEntry.waitFor()
+        const assetName = assetButton.getByText(singleAsset.name, { exact: true })
+        if (height === 440) await assetEntry.waitFor()
+        else await assetName.waitFor()
         await checkPlaceholders([0, 0, 0, 0], false)
         assert.equal(await canvases.getByRole('article').count(), 1)
+        if (checkSingle) {
+          const noPreview = assetButton.getByText('暂无预览', { exact: true })
+          await noPreview.waitFor()
+          const [region, card, placeholder, title] = await Promise.all([assets, assetButton, noPreview, assetName].map(node => node.boundingBox()))
+          assert.ok(Math.abs(card.width - region.width) <= 1, '单张资产卡应占满区块')
+          assert.ok(Math.abs(card.height - loadingAssetHeight) <= 1, '单张资产卡应与加载骨架等高')
+          assert.ok(compact ? title.y >= placeholder.y + placeholder.height : title.x >= placeholder.x + placeholder.width,
+            '单张资产卡在桌面图左文右，窄屏图上文下')
+          assert.ok(await assetName.evaluate(node => node.scrollWidth > node.clientWidth && getComputedStyle(node).textOverflow === 'ellipsis'),
+            '长名称应在卡内省略')
+          singleAsset.thumbnail = '/api/v1/studio/files/corners-1/download'
+          await page.reload()
+          const portrait = assetButton.locator('img')
+          await portrait.evaluate(img => img.decode())
+          assert.equal((await inspectCover(portrait)).corners, 4, '道具资产的竖图应完整显示四角')
+          assert.ok(Math.abs((await assetButton.boundingBox()).height - loadingAssetHeight) <= 1)
+          assert.ok(await page.getByRole('main').evaluate(node => node.scrollWidth <= node.clientWidth + 1))
+          await assets.screenshot({ path: output + '/' + width + '-single-asset.png' })
+          singleAsset.thumbnail = null
+        }
       } else {
         await Promise.all([progress, sessions, canvases, assets].map(region =>
           region.getByRole(next === 'error' ? 'alert' : 'status')
@@ -399,6 +426,17 @@ try {
         await page.screenshot({ path: output + '/' + width + '-home-empty.png', fullPage: true })
       }
     }
+  }
+  state = 'single'
+  await page.reload()
+  const singleName = assetButton.getByText(singleAsset.name, { exact: true })
+  await singleName.waitFor()
+  for (const width of [1023, 1024]) {
+    await page.setViewportSize({ width, height: 768 })
+    const [region, card, name, media] = await Promise.all([assets, assetButton, singleName,
+      assetButton.getByText('暂无预览', { exact: true })].map(node => node.boundingBox()))
+    if (width === 1023) assert.ok(card.width <= region.width / 2 && name.y >= media.y + media.height)
+    else assert.ok(Math.abs(card.width - region.width) <= 1 && name.x >= media.x + media.width)
   }
   state = 'empty'
   await page.reload()
