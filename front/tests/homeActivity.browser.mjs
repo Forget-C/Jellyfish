@@ -344,10 +344,11 @@ try {
       ), animated))
     }
   }
-  for (const [width, height] of [[1440, 900], [1024, 440], [375, 812]]) {
+  for (const [width, height] of [[1366, 768], [1440, 900], [1024, 440], [390, 844]]) {
     await page.setViewportSize({ width, height })
-    const assetSlots = height === 440 ? 0 : 6
-    await page.emulateMedia({ reducedMotion: width === 375 ? 'reduce' : 'no-preference' })
+    const compact = width < 1024
+    const assetSlots = height === 440 ? 0 : compact ? 1 : width >= 1400 ? 6 : 4
+    await page.emulateMedia({ reducedMotion: compact ? 'reduce' : 'no-preference' })
     const assetEntry = assets.getByRole('button', { name: height === 440 ? '查看最近资产' : assetRows[0].name, exact: true })
     state = 'loaded'
     await page.reload()
@@ -356,6 +357,7 @@ try {
     await canvases.getByRole('heading', { name: canvasRows[0].name }).waitFor()
     await assetEntry.waitFor()
     const expectedLayout = await measureHome()
+    let compactLayout
     for (const next of ['single', 'empty', 'error']) {
       state = next
       let release
@@ -363,8 +365,10 @@ try {
       await page.reload({ waitUntil: 'domcontentloaded' })
       try {
         await progress.getByRole('status').waitFor()
-        await checkPlaceholders([3, 3, 3, assetSlots], width !== 375)
-        assert.deepEqual(await measureHome(), expectedLayout, '请求中保持区块和底部入口的位置')
+        await checkPlaceholders([compact ? 1 : 3, 3, 3, assetSlots], !compact)
+        const loadingLayout = await measureHome()
+        if (compact) compactLayout = loadingLayout
+        else assert.deepEqual(loadingLayout, expectedLayout, '请求中保持区块和底部入口的位置')
       } finally {
         release()
         pendingActivity = undefined
@@ -374,21 +378,32 @@ try {
         await sessions.getByText(session.title).waitFor()
         await canvases.getByRole('heading', { name: canvasRows[0].name }).waitFor()
         await assetEntry.waitFor()
-        await checkPlaceholders([2, 2, 2, Math.max(0, assetSlots - 1)], false)
+        await checkPlaceholders([0, 0, 0, 0], false)
         assert.equal(await canvases.getByRole('article').count(), 1)
       } else {
         await Promise.all([progress, sessions, canvases, assets].map(region =>
           region.getByRole(next === 'error' ? 'alert' : 'status')
             .filter({ hasText: next === 'error' ? /失败/ : /暂无/ }).waitFor()))
-        await checkPlaceholders([3, 3, 3, assetSlots], false)
+        await checkPlaceholders([0, 0, 0, 0], false)
       }
-      assert.deepEqual(await measureHome(), expectedLayout, next + ' 状态保持首页布局')
+      assert.deepEqual(await measureHome(), compact ? compactLayout : expectedLayout, next + ' 状态保持首页布局')
+      if (next === 'empty' && (width === 1366 || width === 390)) {
+        for (const region of [canvases, progress, sessions, assets]) {
+          const empty = region.getByRole('status')
+          const style = await empty.evaluate(node => {
+            const { backgroundColor, justifyContent } = getComputedStyle(node)
+            return { backgroundColor, justifyContent }
+          })
+          assert.deepEqual(style, { backgroundColor: 'rgb(255, 255, 255)', justifyContent: 'center' })
+        }
+        await page.screenshot({ path: output + '/' + width + '-home-empty.png', fullPage: true })
+      }
     }
   }
   state = 'empty'
   await page.reload()
-  await canvases.getByText('暂无画布', { exact: true }).waitFor()
-  await assets.getByText('暂无资产', { exact: true }).waitFor()
+  await canvases.getByText('暂无最近更新的画布', { exact: true }).waitFor()
+  await assets.getByRole('status').filter({ hasText: /^暂无最近资产$/ }).waitFor()
   await progress.getByText('暂无项目', { exact: true }).waitFor()
   await sessions.getByText('暂无实验室会话', { exact: true }).waitFor()
   state = 'partial-error'

@@ -2046,6 +2046,8 @@
   "暂不确定": "Undecided",
   "暂无": "None yet",
   "暂无 Agent": "No agents yet",
+  "暂无最近更新的画布": "No recently updated canvases",
+  "暂无最近资产": "No recent assets",
   "暂无{{label}}": "No {{label}} yet",
   "暂无{{label}}资产": "No {{label}} assets yet",
   "暂无会话，从右上方新建开始": "No sessions yet. Use New to start one.",

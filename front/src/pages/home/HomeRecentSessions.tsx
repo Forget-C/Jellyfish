@@ -71,7 +71,7 @@ export function HomeRecentSessions() {
                 </Link>
               </li>
             })}
-            <HomePlaceholders kind="activity" filled={sessions.length} loading={!activity} />
+            {!activity && <HomePlaceholders kind="activity" />}
           </ul>
           {!sessions.length && !activity?.failedTypes && <HomeRecentFeedback status={activity ? 'ready' : 'loading'}
             label={uiText("实验室会话")} onRetry={() => setRetry(value => value + 1)} />}

@@ -77,7 +77,7 @@ export function HomeProjectProgress() {
               </Link>}
             </li>
             })}
-            <HomePlaceholders kind="activity" filled={rows.length} loading={activity.status === 'loading'} />
+            {activity.status === 'loading' && <HomePlaceholders kind="activity" />}
           </ul>
           {!rows.length && <HomeRecentFeedback status={activity.status} label={uiText("项目")} onRetry={() => setRetry(value => value + 1)} />}
         </div>
