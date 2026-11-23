@@ -12,7 +12,7 @@ const server = await createServer({ root, server: { host: '127.0.0.1', port: 463
 const template = {
   id: 'custom', category: 'video_prompt', name: '创作模板', preview: '简短的内容简介',
   content: Array.from({ length: 70 }, (_, index) => `第 ${index + 1} 行：请描述 {{subject}} 的动作。`).join('\n'),
-  variables: ['subject'], variable_defaults: { subject: '主角' }, version: 1,
+  variables: ['subject'], variable_defaults: { subject: '主角', note: 'LongValue'.repeat(36) + '\n"保留引号"' }, version: 1,
   is_default: true, is_system: false, created_at: '2026-11-10', updated_at: '2026-11-10',
 }
 let browser
@@ -24,16 +24,21 @@ let patches = 0
 let deletes = 0
 let lastPage = 1
 const listRequests = []
-const system = { ...template, id: 'system', name: '系统模板', is_system: true, is_default: false }
+const system = { ...template, id: 'system', name: '系统模板（用于验证窄屏下长标题与属性标签自动换行）', content: '短正文', variables: [], variable_defaults: {}, is_system: true, is_default: false }
 const lateMatch = { ...template, is_default: false, id: 'late-match', name: '后续页模板', preview: '只在后续页简介出现的关键字' }
 const allTemplates = [template, system, ...Array.from({ length: 10 }, (_, i) => ({ ...template, is_default: false, id: `extra-${i}`, name: i === 9 ? '长模板名称'.repeat(18) : `其他模板 ${i}`, category: 'bgm' })), ...Array.from({ length: 88 }, (_, i) => ({ ...template, is_default: false, id: `more-${i}`, name: `补充模板 ${i}` })), lateMatch]
+// The first service result belongs to a later visual group.
+allTemplates.unshift(...allTemplates.splice(2, 1))
 const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
-  const page = await browser.newPage({ locale: 'zh-CN', reducedMotion: 'reduce', viewport: { width: 1440, height: 900 } })
+  const page = await browser.newPage({ locale: 'zh-CN', reducedMotion: 'reduce', viewport: { width: 1366, height: 768 } })
   page.setDefaultTimeout(6000)
-  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
+  await page.addInitScript(() => {
+    window.__ENV = { BACKEND_URL: location.origin }
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: async text => { window.copiedPromptJson = text } } })
+  })
   await page.route('**/api/**', async route => {
     const { pathname, searchParams } = new URL(route.request().url())
     const respond = data => route.fulfill({ json: { code: 200, data } })
@@ -87,9 +92,18 @@ try {
   })
   await page.goto(origin + '/prompts')
   await page.getByRole('textbox', { name: '搜索模板名称或简介' }).waitFor()
-  await page.getByText('选择模板阅读正文', { exact: true }).waitFor()
   const name = page.getByRole('button', { name: template.name, exact: true })
   const other = page.getByRole('button', { name: system.name, exact: true })
+  const reader = page.getByRole('region', { name: '模板阅读' })
+  await reader.getByRole('heading', { name: template.name, exact: true }).waitFor()
+  assert.equal(await name.getAttribute('aria-pressed'), 'true')
+  const title = reader.getByRole('heading', { name: template.name, exact: true })
+  const defaultTag = reader.getByText('默认提示词', { exact: true })
+  assert.ok(Math.abs((await title.boundingBox()).y - (await defaultTag.boundingBox()).y) <= 6)
+  assert.equal(await reader.getByText(template.preview, { exact: true }).evaluate(node => getComputedStyle(node).fontSize), '13px')
+  assert.equal(await reader.getByRole('heading', { name: '正文', exact: true }).evaluate(node => getComputedStyle(node).fontSize), '14px')
+  await reader.getByRole('button', { name: /^复制 JSON$/ }).click()
+  await page.waitForFunction(expected => window.copiedPromptJson === expected, JSON.stringify(template.variable_defaults, null, 2))
   let releaseDetail
   const heldDetail = new Promise(resolve => { releaseDetail = resolve })
   await page.route('**/prompts/custom', async route => {
@@ -101,6 +115,12 @@ try {
   await detailStarted
   await other.click()
   await page.getByRole('heading', { name: system.name, exact: true }).waitFor()
+  for (const [heading, minHeight] of [['正文', 120], ['变量', 64], ['变量默认值', 88]]) {
+    const box = await reader.getByRole('heading', { name: heading, exact: true }).evaluate(node => node.closest('section').getBoundingClientRect().height)
+    assert.ok(box >= minHeight)
+  }
+  await reader.getByText('暂无默认值', { exact: true }).waitFor()
+  assert.equal(await reader.getByRole('button', { name: '复制 JSON' }).count(), 0)
   const detailFinished = page.waitForEvent('requestfinished', request => request.url().endsWith('/prompts/custom'))
   releaseDetail()
   await detailFinished
@@ -110,7 +130,6 @@ try {
   await name.press('Enter')
   await page.getByText('无法读取模板详情').waitFor()
   await page.getByRole('alert').getByRole('button').click()
-  const reader = page.getByRole('region', { name: '模板阅读' })
   await reader.getByRole('heading', { name: template.name }).waitFor()
   assert.equal(await page.getByRole('dialog').count(), 0)
   const content = reader.getByText(template.content, { exact: true })
@@ -119,15 +138,30 @@ try {
   const list = page.getByRole('region', { name: '模板列表' })
   assert.equal(Math.round((await list.boundingBox()).width), 300)
   await page.screenshot({ path: `${output}/desktop.png` })
-  await page.setViewportSize({ width: 375, height: 812 })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.reload()
+  await name.and(page.locator('[aria-pressed="true"]')).waitFor()
   await reader.waitFor({ state: 'hidden' })
+  assert.equal(await page.getByRole('dialog').count(), 0, 'the initial mobile selection does not open the reader')
   await name.press('Enter')
   const drawer = page.getByRole('dialog').filter({ hasText: '模板阅读' })
   await drawer.getByRole('heading', { name: template.name }).waitFor()
   await assertDetailDrawerLayout(drawer)
+  const json = drawer.locator('pre').filter({ hasText: 'LongValue' })
+  assert.equal(await json.textContent(), JSON.stringify(template.variable_defaults, null, 2))
+  assert.equal(await json.evaluate(node => node.scrollWidth > node.clientWidth), false)
   await drawer.getByRole('button', { name: /Close|关闭/ }).press('Escape')
   await drawer.waitFor({ state: 'hidden' })
   await name.and(page.locator(':focus')).waitFor()
+  await other.press('Enter')
+  const systemTitle = drawer.getByRole('heading', { name: system.name, exact: true })
+  await systemTitle.waitFor()
+  const systemTag = drawer.getByText('系统预置', { exact: true })
+  assert.ok((await systemTag.boundingBox()).y > (await systemTitle.boundingBox()).y)
+  assert.equal(await drawer.locator('.ant-drawer-body').evaluate(body => body.scrollWidth > body.clientWidth), false)
+  await drawer.getByRole('button', { name: /Close|关闭/ }).press('Escape')
+  await drawer.waitFor({ state: 'hidden' })
+  await other.and(page.locator(':focus')).waitFor()
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
   await page.setViewportSize({ width: 1440, height: 900 })
   const search = page.getByRole('textbox', { name: '搜索模板名称或简介' })
@@ -157,7 +191,8 @@ try {
   }
   await search.fill('后续页简介')
   await search.press('Enter')
-  await page.getByRole('button', { name: lateMatch.name, exact: true }).waitFor()
+  await page.getByRole('button', { name: lateMatch.name, exact: true }).and(page.locator('[aria-pressed="true"]')).waitFor()
+  await reader.getByRole('heading', { name: lateMatch.name, exact: true }).waitFor()
   await page.getByText('共 1 项', { exact: true }).waitFor()
   assert.ok(listRequests.some(request => request.page === 1 && request.size === 10 && request.q === '后续页简介'))
   await search.fill('简短')
@@ -175,11 +210,13 @@ try {
   await search.fill('正文不会参与搜索')
   await search.press('Enter')
   await page.getByText('没有匹配的模板', { exact: true }).waitFor()
+  await reader.getByText('暂无模板可阅读', { exact: true }).waitFor()
   await page.getByRole('button', { name: '清除搜索' }).click()
   await name.waitFor()
   listFails = true
   await page.reload()
   await page.getByText('无法读取模板列表', { exact: true }).waitFor()
+  assert.equal(await reader.getByText('暂无模板可阅读', { exact: true }).count(), 0)
   assert.equal(await page.getByText('共 0 项', { exact: true }).count(), 0)
   assert.equal(await page.getByText('暂无提示词模板', { exact: true }).count(), 0)
   listFails = false

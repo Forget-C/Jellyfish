@@ -1,7 +1,7 @@
 import { useUiText } from '../../../uiText'
 import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../../../components'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FC } from 'react'
 import { Alert, Skeleton, Input, Tag, ConfigProvider, Pagination, Button, Drawer, Modal, Form, Select, Switch, message } from 'antd'
 import { DrawerDiscardDialog } from '../../../components/layout/DrawerDiscardDialog'
@@ -138,7 +138,6 @@ const PromptTemplateManager: FC = () => {
   const listRef = useRef<HTMLElement | null>(null)
   const [wide, setWide] = useState(() => window.matchMedia('(min-width: 1024px)').matches)
   const [readerOpen, setReaderOpen] = useState(false)
-  const selectedButton = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     const media = window.matchMedia('(min-width: 1024px)')
@@ -160,7 +159,7 @@ const PromptTemplateManager: FC = () => {
     setDetailError(false)
   }, [])
 
-  const loadDetail = async (id: string) => {
+  const loadDetail = useCallback(async (id: string) => {
     const request = ++detailRequest.current
     activeDetail.current = id
     setDetailId(id)
@@ -173,7 +172,7 @@ const PromptTemplateManager: FC = () => {
     } catch {
       if (request === detailRequest.current) setDetailError(true)
     }
-  }
+  }, [uiText])
 
   const loadTemplates = useCallback(async (nextPage: number, nextQuery: string) => {
     const requestId = ++requestIdRef.current
@@ -195,7 +194,17 @@ const PromptTemplateManager: FC = () => {
       }
 
       setTemplates(items)
-      if (activeDetail.current && !items.some(item => item.id === activeDetail.current)) clearDetail()
+      if (!items.length) clearDetail()
+      else if (!items.some(item => item.id === activeDetail.current)) {
+        // Match the sidebar's group order while preserving service order within each group.
+        for (const group of groupOrder) {
+          const first = items.find(item => getGroupKey(item.category) === group)
+          if (first) {
+            void loadDetail(first.id)
+            break
+          }
+        }
+      }
       setTotal(totalCount)
       setLoaded(true)
     } catch {
@@ -205,7 +214,7 @@ const PromptTemplateManager: FC = () => {
         setLoading(false)
       }
     }
-  }, [uiText, clearDetail])
+  }, [uiText, clearDetail, loadDetail])
 
   const loadCategories = async () => {
     try {
@@ -262,14 +271,8 @@ const PromptTemplateManager: FC = () => {
   }, [templates])
 
   const handleSearch = (value: string) => {
-    clearDetail()
     setPage(1)
     setQuery(value.trim())
-  }
-
-  const handlePageChange = (nextPage: number) => {
-    clearDetail()
-    setPage(nextPage)
   }
 
   const openEditor = (template?: PromptTemplateRead) => {
@@ -426,7 +429,6 @@ const PromptTemplateManager: FC = () => {
           message.success(uiText("提示词已删除"))
           if (activeDetail.current === template.id) {
             clearDetail()
-            selectedButton.current = null
             setReaderOpen(false)
           }
 
@@ -469,36 +471,69 @@ const PromptTemplateManager: FC = () => {
   }
 
   const restoreListFocus = () => {
-    const target = selectedButton.current?.isConnected ? selectedButton.current : listRef.current
+    const target = listRef.current?.querySelector<HTMLElement>('button[aria-pressed="true"]') ?? listRef.current
     target?.focus({ preventScroll: true })
+  }
+
+  const defaults = selected?.variable_defaults ?? {}
+  const defaultEntries = Object.entries(defaults)
+  const copyDefaults = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(defaults, null, 2))
+      message.success(uiText("JSON 已复制"))
+    } catch {
+      message.error(uiText("复制 JSON 失败"))
+    }
   }
 
   const readerContent = selected ? <>
     <div className="management-prompt-reader-heading">
-      <h2>{selected.name}</h2>
+      <div className="management-prompt-reader-identity">
+        <h2>{selected.name}</h2>
+        <div className="management-prompt-reader-tags">
+          <Tag bordered={false}>{uiText(categoryLabels[selected.category] || selected.category)}</Tag>
+          {selected.is_system && <Tag bordered={false} color="gold">{uiText("系统预置")}</Tag>}
+          {selected.is_default && <Tag bordered={false} color="blue">{uiText("默认提示词")}</Tag>}
+        </div>
+      </div>
       <div className="management-prompt-reader-actions">
         {!selected.is_system && <Button ref={editTrigger} size="small" onClick={() => openEditor(selected)}>{uiText("编辑")}</Button>}
         {selected.is_system && !selected.is_default && <Button size="small" onClick={() => void restoreSystemDefault(selected)}>{uiText("恢复默认")}</Button>}
         {!selected.is_system && <Button size="small" danger onClick={() => handleDeleteTemplate(selected)}>{uiText("删除")}</Button>}
       </div>
+      <p className="management-prompt-reader-summary">{selected.preview || uiText("暂无简介")}</p>
     </div>
-    <div className="management-prompt-reader-tags">
-      <Tag bordered={false}>{uiText(categoryLabels[selected.category] || selected.category)}</Tag>
-      {selected.is_system && <Tag bordered={false} color="gold">{uiText("系统预置")}</Tag>}
-      {selected.is_default && <Tag bordered={false} color="blue">{uiText("默认提示词")}</Tag>}
+    <div className="management-prompt-reader-sections">
+      <section className="management-prompt-reader-section prompt-reader-body">
+        <h3>{uiText("正文")}</h3>
+        <pre className="management-prompt-reader-content">{selected.content}</pre>
+      </section>
+      <section className="management-prompt-reader-section prompt-reader-variables">
+        <h3>{uiText("变量")}</h3>
+        {selected.variables.length
+          ? <p>{selected.variables.join(', ')}</p>
+          : <p className="management-prompt-reader-empty">{uiText("暂无变量")}</p>}
+      </section>
+      <section className="management-prompt-reader-section prompt-reader-defaults">
+        <div className="prompt-reader-section-heading">
+          <h3>{uiText("变量默认值")}</h3>
+          {defaultEntries.length > 0 && <Button type="text" size="small" onClick={() => void copyDefaults()}>{uiText("复制 JSON")}</Button>}
+        </div>
+        {defaultEntries.length > 0
+          ? <pre className="management-prompt-reader-defaults"><code>{'{\n'}{defaultEntries.map(([key, value], index) => (
+            <Fragment key={key}>
+              {'  '}<span className="prompt-json-key">{JSON.stringify(key)}</span>
+              {': '}<span className="prompt-json-value">{JSON.stringify(value)}</span>
+              {index < defaultEntries.length - 1 ? ',\n' : '\n'}
+            </Fragment>
+          ))}{'}'}</code></pre>
+          : <p className="management-prompt-reader-empty">{uiText("暂无默认值")}</p>}
+      </section>
     </div>
-    <p className="management-prompt-reader-summary">{selected.preview || uiText("暂无简介")}</p>
-    <h3>{uiText("正文")}</h3>
-    <pre className="management-prompt-reader-content">{selected.content}</pre>
-    <h3>{uiText("变量")}</h3>
-    <p>{selected.variables.length ? selected.variables.join(', ') : uiText("暂无变量")}</p>
-    <h3>{uiText("变量默认值")}</h3>
-    {Object.keys(selected.variable_defaults ?? {}).length
-      ? <pre className="management-prompt-reader-defaults">{JSON.stringify(selected.variable_defaults, null, 2)}</pre>
-      : <p>{uiText("暂无默认值")}</p>}
   </> : detailId ? (detailError
     ? <Alert type="error" message={uiText("无法读取模板详情")} action={<Button onClick={() => void loadDetail(detailId)}>{uiText("重试")}</Button>} />
-    : <Skeleton active />) : <p className="management-prompt-reader-empty">{uiText("选择模板阅读正文")}</p>
+    : <Skeleton active />) : loadError ? null : loading || !loaded ? <Skeleton active />
+    : <p className="management-prompt-reader-empty">{uiText("暂无模板可阅读")}</p>
 
   return (
     <WorkspaceLayout className="management-page prompt-manager">
@@ -526,15 +561,14 @@ const PromptTemplateManager: FC = () => {
             {templateGroups.map(group => <section key={group.key} className="prompt-group">
               <h2>{uiText(group.title)}</h2>
               {group.children.map(item => <button type="button" key={item.key} title={item.title}
-                aria-pressed={detailId === item.key} onClick={event => {
-                  selectedButton.current = event.currentTarget
+                aria-pressed={detailId === item.key} onClick={() => {
                   void loadDetail(item.key)
                   if (!wide) setReaderOpen(true)
                 }}>{item.title}</button>)}
             </section>)}
           </WorkspaceScrollPanel>
           {loaded && total !== undefined && <Pagination size="small" current={page} pageSize={PAGE_SIZE} total={total}
-            disabled={loading} showSizeChanger={false} onChange={handlePageChange} />}
+            disabled={loading} showSizeChanger={false} onChange={setPage} />}
         </section>
         {wide && <WorkspaceScrollPanel className="management-surface management-prompt-reader" role="region" aria-label={uiText("模板阅读")}>
           {readerContent}
