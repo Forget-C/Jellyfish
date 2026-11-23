@@ -1,3 +1,11 @@
+x-storage-env: &storage-env
+  S3_ENDPOINT_URL: http://rustfs:9000
+  S3_REGION_NAME: us-east-1
+  S3_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
+  S3_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
+  S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+  S3_ADDRESSING_STYLE: path
+
 services:
   mysql:
     image: mysql:9.0
@@ -28,6 +36,23 @@ services:
       - "${RUSTFS_CONSOLE_PORT:-9001}:9001"
     volumes:
       - rustfs_data:/data
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:9000/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  backend-init-storage:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/backend.Dockerfile
+    environment: *storage-env
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    command: [".venv/bin/python", "init_storage.py"]
+    restart: "no"
 
   backend-migrate:
     build:
@@ -65,11 +90,7 @@ services:
       DEBUG: "false"
       API_V1_PREFIX: /api/v1
       # S3 / RustFS
-      S3_ENDPOINT_URL: http://rustfs:9000
-      S3_REGION_NAME: us-east-1
-      S3_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
-      S3_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
-      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+      <<: *storage-env
       # CORS
       CORS_ORIGINS: http://localhost:7788,http://127.0.0.1:7788
       # 可选
@@ -80,6 +101,8 @@ services:
       mysql:
         condition: service_healthy
       backend-migrate:
+        condition: service_completed_successfully
+      backend-init-storage:
         condition: service_completed_successfully
       backend-seed-system-data:
         condition: service_completed_successfully
@@ -92,17 +115,15 @@ services:
       DATABASE_URL: mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
       DEBUG: "false"
       API_V1_PREFIX: /api/v1
-      S3_ENDPOINT_URL: http://rustfs:9000
-      S3_REGION_NAME: us-east-1
-      S3_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
-      S3_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
-      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+      <<: *storage-env
       CORS_ORIGINS: http://localhost:7788,http://127.0.0.1:7788
       OPENAI_API_KEY: ${OPENAI_API_KEY-}
     depends_on:
       mysql:
         condition: service_healthy
       backend-migrate:
+        condition: service_completed_successfully
+      backend-init-storage:
         condition: service_completed_successfully
       backend-seed-system-data:
         condition: service_completed_successfully
