@@ -8,6 +8,9 @@ import type { CanvasAssistantPendingRequest } from './CanvasAssistantPendingRequ
  * Persisted exchanges for the selected canvas.
  */
 export type CanvasAssistantHistory = {
+    session_id: string;
+    cursor: number;
+    capabilities: Array<'snapshot' | 'send' | 'events' | 'stop' | 'approval'>;
     turns: Array<CanvasAssistantExchange>;
     pending_request?: (CanvasAssistantPendingRequest | null);
     model_id?: (string | null);

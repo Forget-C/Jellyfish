@@ -84,6 +84,7 @@ export type { ApiResponse_list_ExperimentMessageRead__ } from './models/ApiRespo
 export type { ApiResponse_list_ExperimentSessionRead__ } from './models/ApiResponse_list_ExperimentSessionRead__';
 export type { ApiResponse_list_HomeRecentAsset__ } from './models/ApiResponse_list_HomeRecentAsset__';
 export type { ApiResponse_list_HomeRecentCanvas__ } from './models/ApiResponse_list_HomeRecentCanvas__';
+export type { ApiResponse_list_InteractionEvent_CanvasAssistantExchange___ } from './models/ApiResponse_list_InteractionEvent_CanvasAssistantExchange___';
 export type { ApiResponse_list_ModelCapabilityVerificationRead__ } from './models/ApiResponse_list_ModelCapabilityVerificationRead__';
 export type { ApiResponse_list_ProjectStyleRevision__ } from './models/ApiResponse_list_ProjectStyleRevision__';
 export type { ApiResponse_list_PromptCategoryOptionRead__ } from './models/ApiResponse_list_PromptCategoryOptionRead__';
@@ -426,6 +427,7 @@ export type { ImmutableFactCard } from './models/ImmutableFactCard';
 export type { ImmutableFactFields } from './models/ImmutableFactFields';
 export type { InFrameActivityCard } from './models/InFrameActivityCard';
 export type { InputBinding } from './models/InputBinding';
+export type { InteractionEvent_CanvasAssistantExchange_ } from './models/InteractionEvent_CanvasAssistantExchange_';
 export type { JsonValue } from './models/JsonValue';
 export type { KnowledgeCandidate_Input } from './models/KnowledgeCandidate_Input';
 export type { KnowledgeCandidate_Output } from './models/KnowledgeCandidate_Output';

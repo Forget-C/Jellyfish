@@ -26,6 +26,7 @@ import type { ApiResponse_CanvasStreamConnection_ } from '../models/ApiResponse_
 import type { ApiResponse_ImageContentCard_ } from '../models/ApiResponse_ImageContentCard_';
 import type { ApiResponse_list_CanvasCheckProduct__ } from '../models/ApiResponse_list_CanvasCheckProduct__';
 import type { ApiResponse_list_CanvasCheckReportRead__ } from '../models/ApiResponse_list_CanvasCheckReportRead__';
+import type { ApiResponse_list_InteractionEvent_CanvasAssistantExchange___ } from '../models/ApiResponse_list_InteractionEvent_CanvasAssistantExchange___';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_CanvasSummary__ } from '../models/ApiResponse_PaginatedData_CanvasSummary__';
 import type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from '../models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
@@ -343,6 +344,36 @@ export class StudioGenerationCanvasesService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Assistant Events
+     * Read the next page of committed assistant events for a saved canvas.
+     * @returns ApiResponse_list_InteractionEvent_CanvasAssistantExchange___ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantEvents({
+        canvasId,
+        after,
+        projectId = '',
+    }: {
+        canvasId: string,
+        after?: number,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_list_InteractionEvent_CanvasAssistantExchange___> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/events',
+            path: {
+                'canvas_id': canvasId,
+            },
+            query: {
+                'after': after,
+                'project_id': projectId,
+            },
             errors: {
                 422: `Validation Error`,
             },

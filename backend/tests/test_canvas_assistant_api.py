@@ -44,7 +44,11 @@ async def test_assistant_reopens_isolated_canvas_history_and_replays_turn(canvas
     scene_url = append_canvas_path(canvas_url(f"/canvases/p/{scene['id']}"), '/assistant')
     assert (await canvas_client.get(f"/canvases/{scene['id']}/assistant")).status_code == 404
     for url in (free_url, scene_url):
-        assert (await canvas_client.get(url)).json()['data']['turns'] == []
+        snapshot = (await canvas_client.get(url)).json()['data']
+        assert snapshot['turns'] == []
+        assert snapshot['cursor'] == 0
+        assert snapshot['session_id'] == url.split('?')[0].split('/')[-2]
+        assert snapshot['capabilities'] == ['snapshot', 'send', 'events', 'stop', 'approval']
     assert prompts == []
 
     async def send(url, request_id, text):
@@ -64,6 +68,19 @@ async def test_assistant_reopens_isolated_canvas_history_and_replays_turn(canvas
     ]
     turns = (await canvas_client.get(scene_url)).json()['data']['turns']
     assert [item['reply'] for item in turns] == ['答复 分镜一']
+
+    for url, replies in ((free_url, ['答复 自由一', '答复 自由二']), (scene_url, ['答复 分镜一'])):
+        snapshot = (await canvas_client.get(url)).json()['data']
+        events_url = append_canvas_path(url, '/events')
+        events = (await canvas_client.get(events_url)).json()['data']
+        assert [item['cursor'] for item in events] == list(range(1, len(replies) + 1))
+        assert [item['payload']['reply'] for item in events] == replies
+        assert all(item['session_id'] == snapshot['session_id'] and item['type'] == 'turn.completed'
+                   and item['turn_id'] == item['payload']['request_id'] for item in events)
+        assert snapshot['cursor'] == events[-1]['cursor']
+        cursor_url = str(events_url) + ('&' if '?' in events_url else '?') + 'after='
+        assert (await canvas_client.get(cursor_url + '1')).json()['data'] == events[1:]
+        assert (await canvas_client.get(cursor_url + str(snapshot['cursor']))).json()['data'] == []
 
 
 @pytest.mark.asyncio

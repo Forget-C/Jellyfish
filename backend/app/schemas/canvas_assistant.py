@@ -1,6 +1,6 @@
 """Public request and history contracts for the canvas assistant."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
@@ -92,10 +92,29 @@ class CanvasAssistantPendingRequest(CanvasAssistantMessage):
     """Original immutable command available to retry after reconnecting."""
 
 
+InteractionCapability = Literal['snapshot', 'send', 'events', 'stop', 'approval']
+
+
 class CanvasAssistantHistory(BaseModel):
     """Persisted exchanges for the selected canvas."""
 
+    session_id: str
+    cursor: int
+    capabilities: tuple[InteractionCapability, ...]
     turns: list[CanvasAssistantExchange]
     pending_request: CanvasAssistantPendingRequest | None = None
     model_id: str | None = None
     approval_mode: Literal['manual', 'automatic'] = 'manual'
+
+
+Payload = TypeVar('Payload')
+
+
+class InteractionEvent(BaseModel, Generic[Payload]):
+    """A committed interaction update with resume and deduplication identities."""
+
+    session_id: str
+    turn_id: str
+    cursor: int
+    type: str
+    payload: Payload

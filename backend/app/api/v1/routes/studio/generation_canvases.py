@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
 from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
-                                          CanvasAssistantModelSelection)
+                                          CanvasAssistantModelSelection, InteractionEvent)
 from app.schemas.canvas_assistant_draft import CanvasDraftSave, CanvasDraftSaved, DraftAssistantMessage
 from app.services.generation_canvas.assistant_draft import DraftCanvasAssistant
 from app.schemas.common import PaginatedData, paginated_response, ApiResponse, created_response, empty_response, success_response
@@ -75,6 +75,15 @@ async def get_assistant_history(canvas_id: str, project_id: str = '',
                                 db: AsyncSession = Depends(get_db, scope='function')):
     """Read the saved conversation for the requested canvas."""
     return success_response(await CanvasAssistant(db, project_id).history(canvas_id))
+
+
+@router.get('/{canvas_id}/assistant/events',
+            response_model=ApiResponse[list[InteractionEvent[CanvasAssistantExchange]]],
+            operation_id='canvas_assistant_events')
+async def get_assistant_events(canvas_id: str, after: Annotated[int, Query(ge=0)] = 0, project_id: str = '',
+                               db: AsyncSession = Depends(get_db, scope='function')):
+    """Read the next page of committed assistant events for a saved canvas."""
+    return success_response(await CanvasAssistant(db, project_id).events(canvas_id, after))
 
 
 @router.post('/{canvas_id}/assistant', response_model=ApiResponse[CanvasAssistantExchange],

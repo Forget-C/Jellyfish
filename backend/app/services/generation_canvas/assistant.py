@@ -18,7 +18,7 @@ from app.models.canvas_assistant import CanvasAssistantGeneration, CanvasAssista
 from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.models.llm import ModelCategoryKey
 from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
-                                          CanvasAssistantModelSelection, CanvasAssistantReadContext, CanvasAssistantSkillUse)
+                                          CanvasAssistantModelSelection, CanvasAssistantReadContext, CanvasAssistantSkillUse, InteractionEvent)
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposal
 from app.schemas.canvas_assistant_layout import CanvasAssistantLayout
 from app.schemas.generation_canvas import CanvasDocument
@@ -75,12 +75,33 @@ class CanvasAssistant:
         """Read the current conversation without initializing a model or session."""
         await self.store.get(canvas_id)
         session = await self.db.get(CanvasAssistantSession, canvas_id)
+        turns = await self._turns(canvas_id)
+        pending = session.pending_request['command'] if session and session.pending_request else None
+        if pending and any(turn.request_id == pending['request_id'] for turn in turns):
+            pending = None
         return CanvasAssistantHistory(
-            turns=[await self._exchange(turn) for turn in await self._turns(canvas_id)],
-            pending_request=session.pending_request['command'] if session and session.pending_request else None,
+            session_id=canvas_id,
+            cursor=turns[-1].sequence if turns else 0,
+            capabilities=('snapshot', 'send', 'events', 'stop', 'approval'),
+            turns=[await self._exchange(turn) for turn in turns],
+            pending_request=pending,
             model_id=session.model_id if session else None,
             approval_mode=session.approval_mode if session else 'manual',
         )
+
+    async def events(self, canvas_id: str, after: int) -> list[InteractionEvent[CanvasAssistantExchange]]:
+        """Read a bounded page of committed turns after the subscriber's cursor."""
+        await self.store.get(canvas_id)
+        turns = await self.db.scalars(select(CanvasAssistantTurn).where(
+            CanvasAssistantTurn.canvas_id == canvas_id, CanvasAssistantTurn.sequence > after,
+        ).order_by(CanvasAssistantTurn.sequence).limit(50))
+        return [
+            InteractionEvent[CanvasAssistantExchange](
+                session_id=canvas_id, turn_id=turn.request_id, cursor=turn.sequence,
+                type='turn.completed', payload=await self._exchange(turn),
+            )
+            for turn in turns
+        ]
 
     async def set_approval(self, canvas_id: str, choice: CanvasAssistantApprovalSetting) -> CanvasAssistantApprovalSetting:
         """Save the approval preference for the verified canvas."""

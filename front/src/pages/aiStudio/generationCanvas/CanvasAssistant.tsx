@@ -15,6 +15,17 @@ import './canvasAssistant.css'
 
 type AssistantScope = NonNullable<CanvasAssistantMessage['context']>['scope'] | 'text'
 
+function appendExchange(turns: CanvasAssistantExchange[], incoming: CanvasAssistantExchange) {
+  if (turns.some(turn => turn.request_id === incoming.request_id)) return turns
+  const combined = [...turns, incoming]
+  const revised = new Set(combined.filter(turn => turn.proposal && turn.revises).map(turn => turn.revises))
+  return combined.map(turn => turn.proposal && revised.has(turn.request_id) && turn.proposal.state !== 'superseded'
+    ? { ...turn, proposal: { ...turn.proposal, state: 'superseded' as const,
+      groups: turn.proposal.groups?.map(group => (group.state ?? 'pending') === 'pending'
+        ? { ...group, state: 'superseded' as const } : group) } } : turn)
+    .sort((left, right) => left.sequence - right.sequence)
+}
+
 /** Nonmodal conversation for one saved canvas. Closing it keeps the draft and in-flight reply. */
 export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTitles, localDraft, draftPromoting, selectedCards, readDraft, approve, approvalDisabled, applyLayout, openRun }: {
   canvasId: string
@@ -77,6 +88,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const activeRequest = useRef<ReturnType<typeof Canvases.canvasAssistantSend>>()
   const stoppedRequest = useRef<string>()
   const panel = useRef<HTMLElement>(null)
+  const snapshotCursor = useRef<{ canvasId: string; cursor: number }>()
   const history = useRef<HTMLDivElement>(null)
   const historyPosition = useRef({ top: 0, follow: true })
   const panelId = 'canvas-assistant-' + canvasId
@@ -173,7 +185,11 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       if (!response.data) throw new Error('missing assistant history')
       const saved = response.data.turns
       if (current) {
-        setTurns(previous => (previous?.[previous.length - 1]?.sequence ?? 0) > (saved[saved.length - 1]?.sequence ?? 0)
+        const checkpoint = snapshotCursor.current
+        const cursor = response.data.cursor
+        if (checkpoint?.canvasId === canvasId && checkpoint.cursor > cursor) return
+        snapshotCursor.current = { canvasId, cursor }
+        setTurns(previous => (previous?.[previous.length - 1]?.sequence ?? 0) > cursor
           ? previous : saved)
         setModelId(response.data.model_id ?? null)
         setPendingServerRequest(response.data.pending_request ?? undefined)
@@ -182,6 +198,33 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     }).catch(() => { if (current) setHistoryError(true) })
     return () => { current = false; request.cancel() }
   }, [open, canvasId, projectId, retryLoad, localDraft])
+
+  useEffect(() => {
+    if (!open || localDraft) return
+    let active = true
+    let request: ReturnType<typeof Canvases.canvasAssistantEvents> | undefined
+    const timer = window.setInterval(async () => {
+      const checkpoint = snapshotCursor.current
+      if (request || checkpoint?.canvasId !== canvasId) return
+      request = Canvases.canvasAssistantEvents({ canvasId, projectId, after: checkpoint.cursor })
+      try {
+        const { data } = await request
+        if (!active || !data?.length) return
+        const cursor = snapshotCursor.current?.cursor ?? 0
+        const updates = data.filter(event => event.session_id === canvasId && event.cursor > cursor)
+        if (!updates.length) return
+        snapshotCursor.current = { canvasId, cursor: updates[updates.length - 1].cursor }
+        setTurns(turns => updates.reduce<CanvasAssistantExchange[]>((history, event) =>
+          appendExchange(history, event.payload), turns ?? []))
+        setPendingServerRequest(pending => updates.some(event => event.turn_id === pending?.request_id) ? undefined : pending)
+      } catch {
+        // Retry with the same cursor after loss of the connection.
+      } finally {
+        request = undefined
+      }
+    }, 1500)
+    return () => { active = false; window.clearInterval(timer); request?.cancel() }
+  }, [open, canvasId, projectId, localDraft])
 
   useEffect(() => {
     if (!open) return
@@ -309,16 +352,11 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       }
       const { data: turn } = await request
       if (!turn) throw new Error('missing assistant reply')
-      const appendTurn = (current: CanvasAssistantExchange[]) => current.some(existing => existing.request_id === turn.request_id)
-        ? current : [...current.map(existing => turn.proposal && turn.revises === existing.request_id && existing.proposal
-          ? { ...existing, proposal: { ...existing.proposal, state: 'superseded' as const,
-            groups: existing.proposal.groups?.map(group => (group.state ?? 'pending') === 'pending'
-              ? { ...group, state: 'superseded' as const } : group) } } : existing), turn]
       if (localDraft) {
-        const updated = appendTurn(readDraftAssistant(canvasId).turns)
+        const updated = appendExchange(readDraftAssistant(canvasId).turns, turn)
         writeDraftAssistant(canvasId, { turns: updated, references: [] })
         setTurns(updated)
-      } else setTurns(current => appendTurn(current || []))
+      } else setTurns(current => appendExchange(current || [], turn))
       setRevising(undefined)
       setDraft('')
       setReferenceFiles([])
