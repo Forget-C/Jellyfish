@@ -5,10 +5,19 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
+from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
+                                          CanvasAssistantModelSelection)
+from app.schemas.canvas_assistant_draft import CanvasDraftSave, CanvasDraftSaved, DraftAssistantMessage
+from app.services.generation_canvas.assistant_draft import DraftCanvasAssistant
 from app.schemas.common import PaginatedData, paginated_response, ApiResponse, created_response, empty_response, success_response
 from app.schemas.generation_canvas import CanvasRename, CanvasSummary, CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError, CanvasModelCapability, CanvasCompiledInput
 from app.services.generation_canvas.store import CanvasStore
 from app.services.generation_canvas.capabilities import model_capability
+from app.schemas.canvas_assistant_edit import CanvasAssistantProposalDecision, CanvasAssistantProposalResult
+from app.services.generation_canvas.assistant import CanvasAssistant
+from app.schemas.canvas_assistant_layout import CanvasAssistantLayout, CanvasAssistantLayoutDecision
+from app.services.generation_canvas.assistant_layout import decide_assistant_layout
+from app.services.generation_canvas.assistant_generation import decide_assistant_generation_edit
 
 router = APIRouter()
 
@@ -33,11 +42,19 @@ async def read_free_draft(canvas_id: UUID, db: AsyncSession = Depends(get_db, sc
     return success_response(await CanvasStore(db, None).read_free_draft(str(canvas_id)))
 
 
-@router.put('/drafts/{canvas_id}', response_model=ApiResponse[CanvasSaved], operation_id='canvas_draft_save',
+@router.put('/drafts/{canvas_id}', response_model=ApiResponse[CanvasDraftSaved], operation_id='canvas_draft_save',
             responses={409: {'model': CanvasError}, 422: {'model': CanvasError}})
-async def save_free_draft(canvas_id: UUID, body: CanvasSave, db: AsyncSession = Depends(get_db, scope='function')):
+async def save_free_draft(canvas_id: UUID, body: CanvasDraftSave, db: AsyncSession = Depends(get_db, scope='function')):
     """原子创建并保存首份有效内容；未知结果可重放原请求。"""
     return success_response(await CanvasStore(db, None).save_free_draft(str(canvas_id), body))
+
+
+@router.post('/drafts/{canvas_id}/assistant', response_model=ApiResponse[CanvasAssistantExchange],
+             operation_id='canvas_draft_assistant_send')
+async def send_draft_assistant_message(canvas_id: UUID, body: DraftAssistantMessage,
+                                       db: AsyncSession = Depends(get_db, scope='function')):
+    """Reply to a browser-owned free canvas conversation without saving it."""
+    return success_response(await DraftCanvasAssistant(db, '').reply_to_draft(str(canvas_id), body))
 
 
 @router.patch('/{canvas_id}/name', response_model=ApiResponse[CanvasRead], operation_id='canvas_rename')
@@ -50,6 +67,62 @@ async def rename_canvas(canvas_id: str, body: CanvasRename, db: AsyncSession = D
 async def get_canvas(canvas_id: str, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """读取当前文档。"""
     return success_response(await CanvasStore(db, project_id).read(canvas_id))
+
+
+@router.get('/{canvas_id}/assistant', response_model=ApiResponse[CanvasAssistantHistory],
+            operation_id='canvas_assistant_history')
+async def get_assistant_history(canvas_id: str, project_id: str = '',
+                                db: AsyncSession = Depends(get_db, scope='function')):
+    """Read the saved conversation for the requested canvas."""
+    return success_response(await CanvasAssistant(db, project_id).history(canvas_id))
+
+
+@router.post('/{canvas_id}/assistant', response_model=ApiResponse[CanvasAssistantExchange],
+             operation_id='canvas_assistant_send')
+async def send_assistant_message(canvas_id: str, body: CanvasAssistantMessage, project_id: str = '',
+                                 db: AsyncSession = Depends(get_db, scope='function')):
+    """Send a turn, replaying the receipt when the request already succeeded."""
+    return success_response(await CanvasAssistant(db, project_id).send(canvas_id, body))
+
+
+@router.patch('/{canvas_id}/assistant/model', response_model=ApiResponse[CanvasAssistantModelSelection],
+              operation_id='canvas_assistant_set_model')
+async def set_assistant_model(canvas_id: str, body: CanvasAssistantModelSelection, project_id: str = '',
+                              db: AsyncSession = Depends(get_db, scope='function')):
+    """Set the assistant model for this canvas independently of card generation."""
+    return success_response(await CanvasAssistant(db, project_id).set_model(canvas_id, body))
+
+
+@router.patch('/{canvas_id}/assistant/approval', response_model=ApiResponse[CanvasAssistantApprovalSetting],
+              operation_id='canvas_assistant_set_approval')
+async def set_assistant_approval(canvas_id: str, body: CanvasAssistantApprovalSetting, project_id: str = '',
+                                 db: AsyncSession = Depends(get_db, scope='function')):
+    """Set the assistant approval mode for this canvas."""
+    return success_response(await CanvasAssistant(db, project_id).set_approval(canvas_id, body))
+
+
+@router.post('/{canvas_id}/assistant/turns/{source_id}/stop', response_model=ApiResponse[CanvasAssistantExchange],
+             operation_id='canvas_assistant_stop')
+async def stop_assistant_turn(canvas_id: str, source_id: str, project_id: str = '',
+                              db: AsyncSession = Depends(get_db, scope='function')):
+    """Stop the remaining assistant work without canceling any accepted runs."""
+    return success_response(await CanvasAssistant(db, project_id).stop(canvas_id, source_id))
+
+
+@router.post('/{canvas_id}/assistant/proposals/{source_id}', response_model=ApiResponse[CanvasAssistantProposalResult],
+             operation_id='canvas_assistant_decide_proposal')
+async def decide_assistant_proposal(canvas_id: str, source_id: str, body: CanvasAssistantProposalDecision,
+                                    project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
+    """Approve a saved preview through the existing canvas save transaction, or reject it."""
+    return success_response(await decide_assistant_generation_edit(db, project_id, canvas_id, source_id, body))
+
+
+@router.post('/{canvas_id}/assistant/layout/{source_id}', response_model=ApiResponse[CanvasAssistantLayout],
+             operation_id='canvas_assistant_decide_layout')
+async def decide_layout(canvas_id: str, source_id: str, body: CanvasAssistantLayoutDecision,
+                        project_id: str = '', db: AsyncSession = Depends(get_db)):
+    """Approve a local layout or record the editing browser's result."""
+    return success_response(await decide_assistant_layout(db, project_id, canvas_id, source_id, body.action))
 
 
 @router.put('/{canvas_id}', response_model=ApiResponse[CanvasSaved], operation_id='canvas_save',

@@ -119,6 +119,7 @@ class Model(Base, TimestampMixin):
         comment="所属供应商 ID",
     )
     params: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, comment="模型参数（JSON）")
+    capability_profile: Mapped[dict[str, Any] | None] = mapped_column(JSON(none_as_null=True))
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="说明")
     created_by: Mapped[str] = mapped_column(String(64), nullable=False, default="", comment="创建人")
     provider: Mapped["Provider"] = relationship(back_populates="models")
@@ -126,6 +127,23 @@ class Model(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_models_updated_at", "updated_at"),
     )
+
+
+class ModelCapabilityVerification(Base, TimestampMixin):
+    """A probe outcome tied to the resolved connection at the time of the test."""
+
+    __tablename__ = "model_capability_verifications"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    model_id: Mapped[str] = mapped_column(ForeignKey("models.id", ondelete="CASCADE"), index=True)
+    configuration_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False)
+    capability: Mapped[str] = mapped_column(String(32), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    reason: Mapped[str] = mapped_column(String(32), nullable=False)
 
 
 class ModelSettings(Base):

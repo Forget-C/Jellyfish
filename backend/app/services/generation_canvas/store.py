@@ -24,6 +24,7 @@ from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.capabilities import model_capability
 
 if TYPE_CHECKING:
+    from app.schemas.canvas_assistant_draft import CanvasDraftSave
     from app.services.directing.storyboard_save import StoryboardSaveEvidence
 
 
@@ -159,7 +160,7 @@ class CanvasStore:
             return await self.read(canvas_id)
         return CanvasRead(id=canvas_id, revision=-1, document=CanvasDocument(id=canvas_id, name='未命名画布'))
 
-    async def save_free_draft(self, canvas_id: str, command: CanvasSave) -> dict:
+    async def save_free_draft(self, canvas_id: str, command: 'CanvasDraftSave') -> dict:
         """首次写入与正文校验共用事务；重复提交只接受原请求的回执。"""
         if command.expected_revision != 0:
             raise diagnostic('REVISION_CONFLICT', '新画布必须从初始修订保存', {'canvas_id': canvas_id}, status=409)
@@ -174,7 +175,13 @@ class CanvasStore:
             if receipt:
                 return receipt
             raise diagnostic('REVISION_CONFLICT', '画布已创建，请重新读取', {'canvas_id': canvas_id}, status=409) from None
-        return await self._write(canvas, command, digest, creating=True)
+        from app.services.generation_canvas.assistant_draft import attach_draft_conversation, prepare_draft_approval
+        document = await prepare_draft_approval(self, canvas, command)
+        write = command.model_copy(update={'document': document}) if document is not None else command
+        receipt = await self._write(canvas, write, digest, creating=not bool(command.assistant and command.assistant.turns),
+                                    include_document=document is not None)
+        await attach_draft_conversation(self, command, receipt)
+        return receipt
 
     async def save(self, canvas_id: str, command: CanvasSave) -> dict:
         """原回执优先于当前 revision；CAS 与回执在同一外层事务内落库。"""
@@ -206,7 +213,7 @@ class CanvasStore:
 
     async def _write(self, canvas: GenerationCanvas, command: CanvasSave, digest: str,
                      *, chapter_version: str | None = None, evidence: 'StoryboardSaveEvidence | None' = None,
-                     creating: bool = False) -> dict:
+                     creating: bool = False, include_document: bool = False) -> dict:
         canvas_id = canvas.id
         if canvas.revision != command.expected_revision:
             raise diagnostic('REVISION_CONFLICT', '服务端已有新修订，请重新读取', {'canvas_id': canvas_id}, status=409)
@@ -240,6 +247,8 @@ class CanvasStore:
             raise diagnostic('REVISION_CONFLICT', '服务端已有新修订，请重新读取', {'canvas_id': canvas_id}, status=409)
         await CanvasChecks(self.db, self.project_id).cancel_changed_targets(canvas_id, changed)
         response = {'request_id': command.request_id, 'canvas_id': canvas_id, 'revision': command.expected_revision + 1}
+        if include_document:
+            response['document'] = prepared.document.model_dump(mode='json')
         if chapter_version is not None:
             response['scene_canvas'] = CanvasRead(id=canvas_id, project_id=self.project_id,
                 revision=response['revision'], document=prepared.document,
@@ -309,7 +318,7 @@ class CanvasStore:
         await self.db.execute(delete(CanvasCheckReport).where(CanvasCheckReport.canvas_id == canvas_id))
         await self.db.execute(delete(CanvasSaveReceipt).where(CanvasSaveReceipt.canvas_id == canvas_id))
         await self.db.execute(delete(FileUsage).where(
-            FileUsage.project_id == self.project_id, FileUsage.usage_kind.in_(('canvas_content', 'canvas_storyboard_source', 'generation_upload')),
+            FileUsage.project_id == self.project_id, FileUsage.usage_kind.in_(('canvas_content', 'canvas_storyboard_source', 'generation_upload', 'canvas_assistant_attachment')),
             FileUsage.source_ref.like(f'{canvas_id}:%')))
         await self.db.delete(canvas)
         await self.db.flush()

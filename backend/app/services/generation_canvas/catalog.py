@@ -3,7 +3,7 @@ from typing import get_args
 from app.core.contracts.canvas_catalog import CanvasCatalog, CanvasCardTypeDefinition, CanvasInputPortDefinition, CanvasOutputPortDefinition, CanvasDesignFieldDefinition
 from app.core.contracts.generation_canvas import DesignField, ReferenceDesignField
 from app.schemas.generation_canvas import CanvasDocument, MovementCard, CompositionCard, CameraCard, LightingCard, FocusCard, SpatialDirectionCard, NarrativeDirectionCard, SoundDirectionCard, ConstraintDirectionCard, GuidanceDirectionCard, VisualStyleCard, ImageContentCard, VideoContentCard, AudioContentCard, NamedImageReferenceCard, ImageModelCard, VideoModelCard
-from app.services.generation_canvas import performance, spatial, narrative, sound, continuity, guidance, photography, visual_style, composition, movement
+from app.services.generation_canvas import performance, spatial, narrative, sound, continuity, guidance, photography, visual_style, composition
 
 CARD_TITLES = {'review.check': '检查卡', 'direction.movement': '运镜卡', 'direction.composition': '景别与构图卡', 'direction.creative_control': '创作控制卡', 'direction.guidance': '生成指导卡', 'direction.criterion': '验收要求卡', 'direction.space_rule': '空间规则卡', 'direction.continuity': '连续性设计卡', 'direction.fact': '不可改事实卡', 'direction.narrative': '叙事概览卡', 'direction.beat': '叙事节拍卡', 'direction.event': '事件与刺激卡', 'direction.shot': '镜头设计卡', 'direction.anchor': '空间锚点卡', 'direction.blocking': '站位与走位卡', 'direction.activity': '镜内活动卡', 'direction.environment': '环境活动与留白卡', 'direction.style': '画面风格卡', 'direction.camera': '机位与视角卡', 'direction.lighting': '光影与色彩卡', 'direction.focus': '焦点与成像卡', 'direction.dialogue': '对白卡', 'direction.sound': '声音安排卡', 'direction.situation': '角色情境卡', 'direction.performance': '人物表演卡', 'direction.performance_rule': '表演规则卡', 'reference.character': '角色参考卡', 'reference.place': '场所参考卡', 'reference.prop': '道具参考卡', 'reference.costume': '服装参考卡', 'content.character': '人物描述卡', 'content.prop': '道具描述卡', 'content.costume': '服装描述卡', 'content.place': '场所描述卡', 'content.text': '文本内容卡', 'content.basis': '原文／创作依据卡', 'content.image': '图片内容卡', 'content.video': '视频内容卡', 'content.audio': '音频内容卡', 'model.text': '文本模型卡', 'model.image': '图片模型卡', 'model.video': '视频模型卡'}
 
@@ -69,21 +69,29 @@ def design_fields(card_model):
     return definitions
 
 
+def canvas_card_models():
+    """Map the persisted card type IDs to the actual card schemas."""
+    return {
+        card_type: card_model
+        for card_model in get_args(get_args(CanvasDocument.model_fields['cards'].annotation)[0])
+        for card_type in get_args(card_model.model_fields['type'].annotation)
+    }
+
+
 def canvas_catalog(*, kind=None):
     """从文档联合类型发现实际卡类；六类设计具有各自真实类型。"""
     cards = []
-    for card_model in get_args(get_args(CanvasDocument.model_fields['cards'].annotation)[0]):
-        for card_type in get_args(card_model.model_fields['type'].annotation):
-            if kind == 'free':
-                from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
-                if card_type not in FREE_CARD_TYPES:
-                    continue
-            category = next((name for name, types in CATEGORIES.items() if card_type in types), None)
-            group = '导演工具箱' if category else '模型生成' if card_type.startswith('model.') else '基础内容'
-            modality = 'image' if issubclass(card_model, (ImageContentCard, NamedImageReferenceCard, ImageModelCard)) else 'video' if issubclass(card_model, (VideoContentCard, VideoModelCard)) else 'audio' if issubclass(card_model, AudioContentCard) else 'text'
-            cards.append(CanvasCardTypeDefinition(type=card_type, title=CARD_TITLES[card_type], group=group, category=category, modality=modality,
-                inputs=[input_definition(card_type, port) for port in card_model.input_ports],
-                outputs=[CanvasOutputPortDefinition(id=port, label=PORT_LABELS[port], value_kind=VALUE_KINDS[port], adoption='observation' if port == 'check_basis' else 'whole_card' if category and port == 'text' else 'object' if VALUE_KINDS[port] not in ('text', 'image', 'video', 'audio') else 'item') for port in card_model.output_ports],
-                fields=design_fields(card_model), entries=[]))
+    for card_type, card_model in canvas_card_models().items():
+        if kind == 'free':
+            from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
+            if card_type not in FREE_CARD_TYPES:
+                continue
+        category = next((name for name, types in CATEGORIES.items() if card_type in types), None)
+        group = '导演工具箱' if category else '模型生成' if card_type.startswith('model.') else '基础内容'
+        modality = 'image' if issubclass(card_model, (ImageContentCard, NamedImageReferenceCard, ImageModelCard)) else 'video' if issubclass(card_model, (VideoContentCard, VideoModelCard)) else 'audio' if issubclass(card_model, AudioContentCard) else 'text'
+        cards.append(CanvasCardTypeDefinition(type=card_type, title=CARD_TITLES[card_type], group=group, category=category, modality=modality,
+            inputs=[input_definition(card_type, port) for port in card_model.input_ports],
+            outputs=[CanvasOutputPortDefinition(id=port, label=PORT_LABELS[port], value_kind=VALUE_KINDS[port], adoption='observation' if port == 'check_basis' else 'whole_card' if category and port == 'text' else 'object' if VALUE_KINDS[port] not in ('text', 'image', 'video', 'audio') else 'item') for port in card_model.output_ports],
+            fields=design_fields(card_model), entries=[]))
     from app.services.generation_canvas.connection_policy import connection_policies
     return CanvasCatalog(cards=cards, connection_policies=connection_policies(cards))

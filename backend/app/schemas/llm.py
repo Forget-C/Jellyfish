@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, HttpUrl, f
 
 from pydantic.json_schema import SkipJsonSchema
 
+from app.core.contracts.model_capabilities import EffectiveModelCapabilities, ModelCapabilityProfile
 from app.core.contracts.model_catalog import ModelCatalogSource, ProviderModelCandidate
 from app.models.llm import LogLevel, ModelCategoryKey, ProviderStatus
 
@@ -193,6 +194,7 @@ class ModelCreate(ModelBase):
     """创建模型请求体。"""
 
     id: str = Field(..., description="模型 ID")
+    capability_profile: ModelCapabilityProfile | None = None
 
 
 class ModelUpdate(BaseModel):
@@ -203,6 +205,7 @@ class ModelUpdate(BaseModel):
     provider_id: str | None = Field(None, description="所属供应商 ID")
     params: dict[str, Any] | None = Field(None, description="模型参数（JSON）")
     description: str | None = Field(None, description="说明")
+    capability_profile: ModelCapabilityProfile | None = None
 
 
 class ModelRead(ModelBase):
@@ -211,6 +214,15 @@ class ModelRead(ModelBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: str = Field(..., description="模型 ID")
+    capability_profile: ModelCapabilityProfile = Field(default_factory=ModelCapabilityProfile)
+    effective_capabilities: EffectiveModelCapabilities = Field(default_factory=EffectiveModelCapabilities)
+    storyboard_inspection_capabilities: EffectiveModelCapabilities = Field(default_factory=EffectiveModelCapabilities)
+
+    @field_validator("capability_profile", mode="before")
+    @classmethod
+    def normalize_missing_capabilities(cls, value: object) -> object:
+        """Models saved before capability declarations have an unknown profile."""
+        return {} if value is None else value
 
 
 class ModelSettingsBase(BaseModel):

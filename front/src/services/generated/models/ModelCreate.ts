@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ModelCapabilityProfile } from './ModelCapabilityProfile';
 import type { ModelCategoryKey } from './ModelCategoryKey';
 /**
  * 创建模型请求体。
@@ -35,5 +36,6 @@ export type ModelCreate = {
      * 模型 ID
      */
     id: string;
+    capability_profile?: (ModelCapabilityProfile | null);
 };
 

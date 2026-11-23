@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ModelRead } from './ModelRead';
-import type { ProviderModelCandidate } from './ProviderModelCandidate';
+import type { ProviderModelCandidate_Output } from './ProviderModelCandidate_Output';
 /**
  * 模型批量导入结果，重复项不会重复创建。
  */
@@ -15,6 +15,6 @@ export type ProviderModelImportResult = {
     /**
      * 已存在而跳过的模型
      */
-    skipped?: Array<ProviderModelCandidate>;
+    skipped?: Array<ProviderModelCandidate_Output>;
 };
 

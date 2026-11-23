@@ -1,3 +1,5 @@
+import type { MutableRefObject } from 'react'
+import type { AssistantLayoutEditor } from './assistantLayoutEditor'
 import { useUiText } from '../../../uiText'
 import { PromptEditingActiveContext } from './PromptEditingContext'
 import type { CanvasArrangementChange } from './useGenerationCanvasEditor'
@@ -114,7 +116,7 @@ export interface CanvasModelCardActionContext {
 }
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument, layoutPolicy, renderModelCardAction, renderModelCardMenu, modelCardSources, onSelectVideoFrame }: { onSelectVideoFrame?: (source: VideoFrameSource) => void; renderModelCardMenu?: (context: CanvasModelCardMenuContext) => ReactNode; modelCardSources?: (card: GenerationCard, document: CanvasDocument) => CanvasSourceItem[]; layoutPolicy?: GenerationCanvasLayoutPolicy; history?: { canUndo?: boolean; canUndoArrangement?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument, arrangement?: CanvasArrangementChange) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; renderModelCardAction?: (context: CanvasModelCardActionContext) => ReactNode; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; outputsVerified?: boolean; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
+function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument, layoutPolicy, renderModelCardAction, renderModelCardMenu, modelCardSources, onSelectVideoFrame, assistantLayout, onAssistantSelection }: { assistantLayout?: MutableRefObject<AssistantLayoutEditor | undefined>; onAssistantSelection?: (ids: string[]) => void; onSelectVideoFrame?: (source: VideoFrameSource) => void; renderModelCardMenu?: (context: CanvasModelCardMenuContext) => ReactNode; modelCardSources?: (card: GenerationCard, document: CanvasDocument) => CanvasSourceItem[]; layoutPolicy?: GenerationCanvasLayoutPolicy; history?: { canUndo?: boolean; canUndoArrangement?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument, arrangement?: CanvasArrangementChange) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; renderModelCardAction?: (context: CanvasModelCardActionContext) => ReactNode; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; outputsVerified?: boolean; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
   const uiText = useUiText()
   const promptEditing = useContext(PromptEditingActiveContext)
   const [outputAction,setOutputAction] = useState<{mode:'cover'|'download';outputs:DownloadOutput[]}>()
@@ -184,6 +186,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const historicalPositions = useRef<Record<string, { x: number; y: number }>>({})
   const retainedPositions = useRef<Record<string, { x: number; y: number }>>({})
   const [selected, setSelected] = useState<string[]>([])
+  useLayoutEffect(() => { onAssistantSelection?.(selected) }, [onAssistantSelection, selected])
   const [movingIds, setMovingIds] = useState<readonly string[]>([])
   const [expandRequest, setExpandRequest] = useState<{id:string;serial:number}>()
   const [detailId, setRawDetailId] = useState<string | undefined>()
@@ -399,6 +402,38 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       focus: sizes => explicitLayout.focus(sizes, viewportWidth, container.current?.clientHeight || window.innerHeight) },
     validIds: [...new Set([...nodes.map(node => node.id), ...groups.map(group => group.id), ...cachedResultIds])], arrange: arrangeCards,
     onStorageError: setStorageError }, nodes, sizesReady ? cardSizes : {}, viewportWidth)
+  if (assistantLayout) assistantLayout.current = {
+    positions: () => layout.ready ? Object.fromEntries(visibleCardIds.flatMap(id => {
+      const point = layout.view.positions[id]
+      return point ? [[id, point]] : []
+    })) : undefined,
+    plan: (sourceId, proposal) => {
+      if (layout.view.assistantReceipts?.includes(sourceId)) return { outcome: 'applied' }
+      if (!layout.ready || !sizesReady || readonly || movingIds.length) return { outcome: 'deferred' }
+      const before = layout.view
+      const ids = Object.keys(proposal.before)
+      if (ids.some(id => !visibleCardIds.includes(id) || !before.positions[id])) return { outcome: 'stale' }
+      if (proposal.placement && ids.some(id => before.positions[id].x !== proposal.before[id].x
+        || before.positions[id].y !== proposal.before[id].y)) return { outcome: 'stale' }
+      let positions = before.positions
+      if (proposal.placement && 'positions' in proposal.placement) positions = { ...positions, ...proposal.placement.positions }
+      if (proposal.placement?.kind === 'arrange') {
+        const arranged = layout.arrangedView(before)
+        if (!arranged) return { outcome: 'deferred' }
+        positions = { ...positions, ...Object.fromEntries(ids.map(id => [id, arranged.positions[id]])) }
+      }
+      const after = { ...before, positions, manuallyPlaced: proposal.placement
+        ? [...new Set([...(before.manuallyPlaced || []), ...ids])] : before.manuallyPlaced }
+      return {
+        outcome: 'ready',
+        apply: () => layout.applyAssistantView(sourceId, after),
+        arrangement: {
+          undo: () => layout.restoreAssistantView(before),
+          redo: () => layout.restoreAssistantView(after),
+        },
+      }
+    },
+  }
   const arrangeDisabled = arrangementBlocked || !!explicitLayout?.organize && readonly
   const arrangeLayout = () => {
     if (arrangeDisabled) return

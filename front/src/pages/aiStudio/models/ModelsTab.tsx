@@ -8,6 +8,7 @@ import { WorkspaceFilter } from '../../../components/layout/WorkspaceFilter'
 import {
   Alert,
   Input,
+  InputNumber,
   Button,
   Table,
   Tag,
@@ -34,12 +35,14 @@ import {
 } from '@ant-design/icons'
 import { PageToolbar, WorkspaceScrollPanel } from '../../../components'
 import { ApiError, LlmService } from '../../../services/generated'
+import { ModelCapabilityVerifications } from './ModelCapabilityVerifications'
 import type {
   ModelRead,
+  ModelCapabilityProfile,
   ModelCategoryKey,
   ProviderRead,
   ProviderSupportedRead,
-  ProviderModelCandidate,
+  ProviderModelCandidate_Input,
   ProviderModelCatalogRead,
   ModelSettingsRead,
   ModelSettingsUpdate,
@@ -59,6 +62,86 @@ const DEFAULT_MODEL_FIELD_BY_CATEGORY = {
   image: 'default_image_model_id',
   video: 'default_video_model_id',
 } as const
+const MODEL_CAPABILITIES = [
+  ['text_inputs', '文本输入'],
+  ['image_inputs', '图片输入'],
+  ['video_inputs', '连续视频输入'],
+  ['audio_inputs', '音频输入'],
+  ['text_outputs', '文本输出'],
+  ['tool_calling', '工具调用'],
+] as const
+const DECLARATION_LABELS = {
+  supported: '支持',
+  unsupported: '不支持',
+  unknown: '未知',
+} as const
+
+function ModelCapabilities({ model }: { model: ModelRead }) {
+  return (
+    <div className="w-full min-w-0">
+      <table className="w-full table-fixed text-left text-xs" aria-label={uiText('模型能力')}>
+        <thead>
+          <tr className="border-b">
+            <th className="py-2 font-medium" scope="col">{uiText('能力')}</th>
+            <th className="py-2 font-medium" scope="col">{uiText('模型能力声明')}</th>
+            <th className="py-2 font-medium" scope="col">{uiText('当前接入可用')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {MODEL_CAPABILITIES.map(([key, label]) => {
+            const declaration = model.capability_profile?.[key]
+            const availableIn = [
+              ...(model.effective_capabilities?.[key] ? [uiText('文字对话')] : []),
+              ...(model.storyboard_inspection_capabilities?.[key] ? [uiText('分镜检查')] : []),
+            ]
+            return (
+              <tr key={key} className="border-b align-top">
+                <th scope="row" className="break-words py-2 pr-2 font-normal">{uiText(label)}</th>
+                <td className="break-words py-2 pr-2">
+                  <span>{uiText(DECLARATION_LABELS[declaration?.declaration ?? 'unknown'])}</span>
+                  {declaration?.source && <span className="block text-slate-600">{declaration.source}</span>}
+                </td>
+                <td className="break-words py-2">{availableIn.join(' · ') || '—'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      {!!model.capability_profile?.max_input_tokens && (
+        <p className="mt-2 text-xs">{uiText('上下文上限（tokens）')} {model.capability_profile.max_input_tokens}</p>
+      )}
+      {model.storyboard_inspection_capabilities?.image_inputs &&
+        !model.storyboard_inspection_capabilities.video_inputs && (
+          <p className="mt-2 text-xs">{uiText('分镜检查可读取图片和视频静帧，当前接入无法读取连续视频。')}</p>
+        )}
+    </div>
+  )
+}
+
+function ModelCapabilityFields() {
+  const options = Object.entries(DECLARATION_LABELS).map(([value, label]) => ({ value, label: uiText(label) }))
+  return (
+    <fieldset className="mb-4">
+      <legend className="mb-2 text-sm">{uiText('模型能力声明')}</legend>
+      {MODEL_CAPABILITIES.map(([key, label]) => (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" key={key}>
+          <Form.Item name={['capability_profile', key, 'declaration']} label={uiText(label)}>
+            <Select aria-label={uiText(label)} options={options} placeholder={uiText('未知')} />
+          </Form.Item>
+          <Form.Item name={['capability_profile', key, 'source']} label={uiText('声明来源')}>
+            <Input
+              aria-label={uiText('{{capability}}来源', { capability: uiText(label) })}
+              maxLength={255}
+            />
+          </Form.Item>
+        </div>
+      ))}
+      <Form.Item name={['capability_profile', 'max_input_tokens']} label={uiText('上下文上限（tokens）')}>
+        <InputNumber min={1} precision={0} className="w-full" />
+      </Form.Item>
+    </fieldset>
+  )
+}
 
 /** 选择器读取完整目录，独立于表格的搜索条件和当前页。 */
 async function loadOptions<T>(
@@ -81,6 +164,7 @@ interface ModelFormValues {
   names?: string[]
   description?: string
   params?: string
+  capability_profile?: ModelCapabilityProfile
 }
 
 export default function ModelsTab({ header }: { header: ReactNode }) {
@@ -334,6 +418,14 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
     setSavingModel(true)
     try {
       const params = values.params?.trim() ? JSON.parse(values.params) as Record<string, unknown> : {}
+      const capabilities = values.capability_profile
+      const hasCapabilities = capabilities && (
+        typeof capabilities.max_input_tokens === 'number' || MODEL_CAPABILITIES.some(([key]) => {
+          const capability = capabilities[key]
+          return capability?.declaration !== undefined || !!capability?.source
+        })
+      )
+      const capabilityProfile = hasCapabilities ? capabilities : undefined
       if (modelEditing) {
         if (!values.name?.trim()) {
           message.error(uiText("请输入模型名称"))
@@ -347,6 +439,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
             provider_id: values.provider_id,
             description: values.description ?? null,
             params,
+            capability_profile: capabilityProfile ?? null,
           },
         })
         message.success(uiText("模型已更新"))
@@ -361,11 +454,14 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
             .filter((candidate) => candidate.category === values.category)
             .map((candidate) => [candidate.name, candidate]),
         )
-        const candidates: ProviderModelCandidate[] = modelNames.map((name) => catalogByName.get(name) ?? ({
-          name,
-          category: values.category,
-          description: values.description?.trim() || undefined,
-          params,
+        const candidates: ProviderModelCandidate_Input[] = modelNames.map((name) => ({
+          ...(catalogByName.get(name) ?? {
+            name,
+            category: values.category,
+            description: values.description?.trim() || undefined,
+            params,
+          }),
+          ...(capabilityProfile ? { capability_profile: capabilityProfile } : {}),
         }))
         const response = await LlmService.importProviderModelsApiV1LlmProvidersProviderIdModelsImportPost({
           providerId: values.provider_id,
@@ -429,6 +525,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
       provider_id: model.provider_id,
       description: model.description ?? '',
       params: JSON.stringify(model.params ?? {}, null, 2),
+      capability_profile: model.capability_profile ?? undefined,
     } : {}
     form.setFieldsValue(initialFields.current)
     setModelEditorOpen(true)
@@ -765,6 +862,17 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
               }]}>
                 <Input.TextArea rows={3} placeholder='{"max_tokens": 4096, "temperature": 0.7}' />
               </Form.Item>
+            </details>
+          </section>
+          <section className="project-settings-group">
+            <details>
+              <summary>{uiText('模型能力')}</summary>
+              {modelEditing && <>
+                <ModelCapabilities model={modelEditing} />
+                <ModelCapabilityVerifications key={modelEditing.id} modelId={modelEditing.id}
+                  canVerify={modelEditing.category === 'text'} />
+              </>}
+              <ModelCapabilityFields />
             </details>
           </section>
           {modelEditing && <Typography.Text type="secondary">{uiText("创建人")} · {modelEditing.created_by || '—'}</Typography.Text>}

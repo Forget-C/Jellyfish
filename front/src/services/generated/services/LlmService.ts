@@ -3,7 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ApiResponse_ImageGenerationOptionsRead_ } from '../models/ApiResponse_ImageGenerationOptionsRead_';
+import type { ApiResponse_list_ModelCapabilityVerificationRead__ } from '../models/ApiResponse_list_ModelCapabilityVerificationRead__';
 import type { ApiResponse_list_ProviderSupportedRead__ } from '../models/ApiResponse_list_ProviderSupportedRead__';
+import type { ApiResponse_ModelCapabilityVerificationRead_ } from '../models/ApiResponse_ModelCapabilityVerificationRead_';
 import type { ApiResponse_ModelRead_ } from '../models/ApiResponse_ModelRead_';
 import type { ApiResponse_ModelSettingsRead_ } from '../models/ApiResponse_ModelSettingsRead_';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
@@ -15,6 +17,7 @@ import type { ApiResponse_ProviderModelImportResult_ } from '../models/ApiRespon
 import type { ApiResponse_ProviderRead_ } from '../models/ApiResponse_ProviderRead_';
 import type { ApiResponse_ProviderTestResult_ } from '../models/ApiResponse_ProviderTestResult_';
 import type { ApiResponse_VideoGenerationOptionsRead_ } from '../models/ApiResponse_VideoGenerationOptionsRead_';
+import type { ModelCapabilityVerificationRequest } from '../models/ModelCapabilityVerificationRequest';
 import type { ModelCategoryKey } from '../models/ModelCategoryKey';
 import type { ModelCreate } from '../models/ModelCreate';
 import type { ModelSettingsUpdate } from '../models/ModelSettingsUpdate';
@@ -455,6 +458,52 @@ export class LlmService {
             path: {
                 'model_id': modelId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 读取模型能力验证历史
+     * @returns ApiResponse_list_ModelCapabilityVerificationRead__ Successful Response
+     * @throws ApiError
+     */
+    public static getModelCapabilityVerificationsApiV1LlmModelsModelIdCapabilityVerificationsGet({
+        modelId,
+    }: {
+        modelId: string,
+    }): CancelablePromise<ApiResponse_list_ModelCapabilityVerificationRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/llm/models/{model_id}/capability-verifications',
+            path: {
+                'model_id': modelId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 验证已保存模型的单项能力
+     * @returns ApiResponse_ModelCapabilityVerificationRead_ Successful Response
+     * @throws ApiError
+     */
+    public static verifyModelCapabilityApiV1LlmModelsModelIdCapabilityVerificationsPost({
+        modelId,
+        requestBody,
+    }: {
+        modelId: string,
+        requestBody: ModelCapabilityVerificationRequest,
+    }): CancelablePromise<ApiResponse_ModelCapabilityVerificationRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/llm/models/{model_id}/capability-verifications',
+            path: {
+                'model_id': modelId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

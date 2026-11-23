@@ -1,17 +1,19 @@
+import type { AssistantLayoutEditor, AssistantLayoutOutcome } from './assistantLayoutEditor'
 import { useUiText } from '../../../uiText'
-import { PromptEditingContext, PromptEditingActiveContext } from './PromptEditingContext'
+import { PromptDraftContext, PromptEditingContext, PromptEditingActiveContext } from './PromptEditingContext'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Alert, Empty, Space } from 'antd'
 import { useBlocker, useNavigate } from 'react-router-dom'
 import { StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasCatalog, CanvasDocument, CanvasRead, TextContentCard, ImageContentCard, VideoContentCard, StoryboardApplication } from '../../../services/generated'
+import type { CanvasCatalog, CanvasDocument, CanvasRead, CanvasAssistantLayout, TextContentCard, ImageContentCard, VideoContentCard, StoryboardApplication } from '../../../services/generated'
 import { useGenerationCanvasEditor, type CanvasSettingsChanges, type StoryboardReviewPreparation, type StoryboardScope, type PendingSave } from './useGenerationCanvasEditor'
 import { GenerationCanvasGraph, type CanvasModelCardActionContext, type CanvasModelCardMenuContext } from './GenerationCanvasGraph'
 import type { GenerationCanvasLayoutPolicy } from './generationLayout'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
 import { RunPreview } from './RunPreview'
 import { RunHistory } from './RunHistory'
+import { CanvasAssistant } from './CanvasAssistant'
 import { SaveVideoFrameDialog, type VideoFrameSource } from './SaveVideoFrameDialog'
 import { CanvasAppearancePicker } from '../../../components/workbench/CanvasAppearancePicker'
 import { WorkbenchTheme } from '../../../components/workbench/WorkbenchTheme'
@@ -98,6 +100,8 @@ export function GenerationCanvasWorkspace({
   targetRun, targetNode, targetCheck: checkCardId, targetReport: checkReportId, onCloseRunHistory, layoutPolicy,
 }: GenerationCanvasWorkspaceProps) {
   const uiText = useUiText()
+  const [assistantHistoryTarget, setAssistantHistoryTarget] = useState<{ canvasId: string, runId: string }>()
+  const assistantRun = assistantHistoryTarget?.canvasId === canvasId ? assistantHistoryTarget?.runId : undefined
   const toolbar = useRef<HTMLElement>(null)
   useEffect(() => {
     const element = toolbar.current
@@ -113,6 +117,14 @@ export function GenerationCanvasWorkspace({
   const pendingInspect = useRef<CanvasInspectTarget>()
   const editor = useGenerationCanvasEditor(projectId, canvasId, true, sceneSave, freeDraft)
   const [promptEditors, setPromptEditors] = useState<Set<string>>(() => new Set())
+  const assistantLayout = useRef<AssistantLayoutEditor>()
+  const assistantGroupingBefore = useRef<{ sourceId: string, document: CanvasDocument }>()
+  const [selectedCards, setSelectedCards] = useState<string[]>([])
+  const activePromptDrafts = useRef(new Map<string, () => GenerationCard>())
+  const reportPromptDraft = useCallback((sessionId: string, readDraft?: () => GenerationCard) => {
+    if (readDraft) activePromptDrafts.current.set(sessionId, readDraft)
+    else activePromptDrafts.current.delete(sessionId)
+  }, [])
   const reportPromptEditing = useCallback((cardId: string, editing: boolean) => setPromptEditors(previous => {
     if (previous.has(cardId) === editing) return previous
     const next = new Set(previous)
@@ -197,13 +209,43 @@ export function GenerationCanvasWorkspace({
     settingsError: editor.error,
     saveSettings: changes => promptEditors.size ? Promise.resolve(false) : editor.commitSettings(changes),
   }
+  const applyAssistantLayout = async (sourceId: string, proposal: CanvasAssistantLayout, claim: () => Promise<void>): Promise<AssistantLayoutOutcome> => {
+    if (!document || promptEditors.size || !ownership.canEdit()) return 'deferred'
+    const prepared = await editor.prepareCommittedEdit()
+    if (!prepared || scope !== latestScope.current || !ownership.canEdit() || !assistantLayout.current) return 'deferred'
+    if (assistantLayout.current.plan(sourceId, proposal).outcome === 'deferred') return 'deferred'
+    await claim()
+    if (scope !== latestScope.current || !ownership.canEdit() || !assistantLayout.current) return 'deferred'
+    const { document: current } = prepared
+    const group = proposal.group
+    const existing = group && current.groups?.find(item => item.id === group.id)
+    if (existing && (existing.name !== group.name || JSON.stringify(existing.card_ids) !== JSON.stringify(group.card_ids))) return 'stale'
+    const memberships = new Map(current.groups?.flatMap(item => (item.card_ids || []).map(id => [id, item.id] as const)))
+    if (Object.entries(proposal.group_membership).some(([id, expected]) =>
+      !current.cards?.some(card => card.id === id) || (memberships.get(id) ?? null) !== (existing?.id ?? expected))) return 'stale'
+    const plan = assistantLayout.current.plan(sourceId, proposal)
+    if (plan.outcome !== 'ready') {
+      // A saved local receipt cannot recreate a group the user subsequently removed or undid.
+      return plan.outcome === 'applied' && group && !existing ? 'stale' : plan.outcome
+    }
+    if (group && !existing) {
+      assistantGroupingBefore.current = { sourceId, document: current }
+      if (!await editor.commitAssistantLayoutGroup(prepared.revision, group)) return 'deferred'
+      runtime.invalidate()
+    }
+    if (scope !== latestScope.current || !ownership.canEdit() || !plan.apply()) return 'deferred'
+    const undoGroup = assistantGroupingBefore.current
+    editor.recordAction(plan.arrangement.undo, plan.arrangement.redo, undoGroup?.sourceId === sourceId ? undoGroup.document : undefined)
+    assistantGroupingBefore.current = undefined
+    return 'applied'
+  }
   return <WorkbenchTheme adaptive><WorkbenchDetailsProvider><section className="canvas-workbench generation-workbench" aria-label={uiText("生成画布工作台")} onContextMenu={event => event.preventDefault()}>
     <header ref={toolbar} className="canvas-workbench-toolbar generation-workbench-header">
       <div className="canvas-toolbar-identity">
         <WorkbenchIconButton label={back.label} variant="quiet" icon={<ArrowLeftOutlined />} onClick={async () => { if (await requestLeave()) back.onClick() }} />
         <strong className="canvas-sequence-name">{document?.name || uiText("画布生成")}</strong>
         <span role="status" aria-label={uiText("画布保存状态")}>{saving ? uiText("保存中") : editor.conflict ? uiText("修订冲突") : !ownership.editable && canvasId ? uiText("只读") : dirty ? uiText("待保存") : uncreated ? uiText("尚未创建") : current ? uiText("已保存") : uiText("尚无画布")}</span>
-        {current && <WorkbenchIconButton label={uiText("保存画布")} variant={dirty ? 'primary' : 'quiet'} icon={<SaveOutlined />} onClick={() => void save()} loading={saving} disabled={!ownership.editable || !!editor.recovery || editor.conflict} />}
+        {current && <WorkbenchIconButton label={uiText("保存画布")} variant={dirty ? 'primary' : 'quiet'} icon={<SaveOutlined />} onClick={() => void save(true)} loading={saving} disabled={!ownership.editable || !!editor.recovery || editor.conflict} />}
         <div className="generation-browse-history-host">{canvasId && <CanvasHistoryControls key={scope} storageKey={`generation-canvas:${scope}`} requestLeave={requestLeave} />}</div>
       </div>
       <div className="generation-toolbar-center" />
@@ -212,7 +254,8 @@ export function GenerationCanvasWorkspace({
         {renderSceneActions?.({ ...management, document, prepareReview: editor.prepareReview,
           applyReview: editor.applyReviewedCandidate, reloadReview: editor.reload,
           editable: management.editable && !editor.recovery && !editor.conflict && !editor.initialApplying })}
-        {document && <RunHistory onClose={() => onCloseRunHistory?.()} key={document.id} runs={runtime.snapshot.runs} targetRun={targetRun} targetNode={targetNode}
+        {document && <RunHistory onClose={() => { setAssistantHistoryTarget(undefined); onCloseRunHistory?.() }}
+          key={document.id} runs={runtime.snapshot.runs} targetRun={assistantRun ?? targetRun} targetNode={assistantRun ? undefined : targetNode}
           disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onSelectVideoFrame={selectVideoFrame} onCancel={runtime.cancel} cancelling={runtime.cancelling} />}
         <CanvasAppearancePicker compact />
         <TaskCenter workbench />
@@ -247,7 +290,7 @@ export function GenerationCanvasWorkspace({
       source={frameSelection.source} disabled={frameDisabled} onSave={saveSelectedFrame} onClose={() => setFrameSelection(undefined)} />}
     {!!promptEditors.size && <Alert type="info" message={uiText("提示词正在编辑，请保存修改或取消编辑后再离开、预检或生成。")} />}
     {!document || !current ? <Empty className="generation-empty" description={uiText("创建或选择一张画布")} /> : <div className="generation-stage">
-      <PromptEditingContext.Provider value={reportPromptEditing}><PromptEditingActiveContext.Provider value={!!promptEditors.size}><GenerationCanvasGraph layoutPolicy={layoutPolicy?.(document, beforeApplication)} onCatalogReady={configureCatalog} history={{ canUndo: editor.canUndo, canUndoArrangement: editor.canUndoArrangement, record: editor.recordAction, undo: () => { if (!promptEditors.size && editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (!promptEditors.size && editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label={uiText("画布操作历史")}>
+      <PromptEditingContext.Provider value={reportPromptEditing}><PromptDraftContext.Provider value={reportPromptDraft}><PromptEditingActiveContext.Provider value={!!promptEditors.size}><GenerationCanvasGraph assistantLayout={assistantLayout} onAssistantSelection={setSelectedCards} layoutPolicy={layoutPolicy?.(document, beforeApplication)} onCatalogReady={configureCatalog} history={{ canUndo: editor.canUndo, canUndoArrangement: editor.canUndoArrangement, record: editor.recordAction, undo: () => { if (!promptEditors.size && editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (!promptEditors.size && editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label={uiText("画布操作历史")}>
         <WorkbenchIconButton label={uiText("撤销操作")} variant="quiet" icon={<UndoOutlined />} disabled={!!promptEditors.size || !ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { if (!promptEditors.size && editor.undo() === 'document') runtime.invalidate() }} />
         <WorkbenchIconButton label={uiText("重做操作")} variant="quiet" icon={<RedoOutlined />} disabled={!!promptEditors.size || !ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { if (!promptEditors.size && editor.redo() === 'document') runtime.invalidate() }} />
       </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={change} inspectTarget={inspectTarget} diagnostics={[...(runtime.preview?.diagnostics || []), ...(editor.saveDiagnostic ? [editor.saveDiagnostic] : [])]} editingStatus={editor.error || (editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : undefined)} readonly={!ownership.editable || !!editor.recovery || editor.initialApplying}
@@ -263,7 +306,26 @@ export function GenerationCanvasWorkspace({
           },
         }))}
         runtime={{ outputs: runtime.snapshot.current_outputs, outputsVerified: runtime.outputsVerified, runs: runtime.snapshot.runs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
-          disabled: uncreated || runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => { if (!promptEditors.size) void runtime.precheck(cardId) } }} /></PromptEditingActiveContext.Provider></PromptEditingContext.Provider>
+          disabled: uncreated || runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => { if (!promptEditors.size) void runtime.precheck(cardId) } }} /></PromptEditingActiveContext.Provider></PromptDraftContext.Provider></PromptEditingContext.Provider>
+      {canvasId && current.id === canvasId &&
+        <CanvasAssistant key={scope} canvasId={canvasId} projectId={projectId} localDraft={uncreated} draftPromoting={uncreated && saving}
+          applyLayout={applyAssistantLayout}
+          openRun={runId => setAssistantHistoryTarget({ canvasId, runId })}
+          approvalDisabled={!!promptEditors.size || !ownership.editable || !!editor.recovery || editor.conflict}
+          approve={async (sourceId, groupIds, automatic) => {
+            if (promptEditors.size || !ownership.canEdit()) return false
+            const saved = await editor.commitAssistantProposal(sourceId, groupIds, automatic)
+            if (saved) runtime.invalidate()
+            return saved
+          }}
+          selectedCards={selectedCards.filter(id => document.cards?.some(card => card.id === id))}
+          readDraft={() => {
+            const active = new Map([...activePromptDrafts.current.values()].map(read => {
+              const card = read()
+              return [card.id, card]
+            }))
+            return { revision: Math.max(0, current.revision), layout_positions: assistantLayout.current?.positions(), draft: { ...document, cards: document.cards?.map(card => active.get(card.id) || card) } }
+          }} />}
     </div>}
   </section></WorkbenchDetailsProvider></WorkbenchTheme>
 }
