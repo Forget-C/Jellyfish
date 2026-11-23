@@ -308,7 +308,8 @@ export function GenerationCanvasWorkspace({
         runtime={{ outputs: runtime.snapshot.current_outputs, outputsVerified: runtime.outputsVerified, runs: runtime.snapshot.runs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
           disabled: uncreated || runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => { if (!promptEditors.size) void runtime.precheck(cardId) } }} /></PromptEditingActiveContext.Provider></PromptDraftContext.Provider></PromptEditingContext.Provider>
       {canvasId && current.id === canvasId &&
-        <CanvasAssistant key={scope} canvasId={canvasId} projectId={projectId} localDraft={uncreated} draftPromoting={uncreated && saving}
+        <CanvasAssistant key={scope} canvasId={canvasId} projectId={projectId} storyboard={Boolean(projectId)} cards={document.cards ?? []} localDraft={uncreated} draftPromoting={uncreated && saving}
+          cardTitles={Object.fromEntries((catalog.current?.cards ?? []).map(card => [card.type, card.title]))}
           applyLayout={applyAssistantLayout}
           openRun={runId => setAssistantHistoryTarget({ canvasId, runId })}
           approvalDisabled={!!promptEditors.size || !ownership.editable || !!editor.recovery || editor.conflict}

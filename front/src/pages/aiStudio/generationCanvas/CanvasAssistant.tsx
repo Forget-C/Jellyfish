@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
-import { CommentOutlined, CloseOutlined } from '@ant-design/icons'
-import { Alert, Checkbox, Input, Select, Spin } from 'antd'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ArrowUpOutlined, CommentOutlined, CloseOutlined } from '@ant-design/icons'
+import { Alert, Input, Select, Spin } from 'antd'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantLayout, CanvasAssistantMessage, FileRead, ModelRead } from '../../../services/generated'
+import type { CanvasDocument, CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantLayout, CanvasAssistantMessage, FileRead, ModelRead } from '../../../services/generated'
 import { AssistantEditGroups, AssistantProposal } from './AssistantProposal'
 import { AssistantLayout } from './AssistantLayout'
 import type { AssistantLayoutOutcome } from './assistantLayoutEditor'
@@ -16,9 +16,12 @@ import './canvasAssistant.css'
 type AssistantScope = NonNullable<CanvasAssistantMessage['context']>['scope'] | 'text'
 
 /** Nonmodal conversation for one saved canvas. Closing it keeps the draft and in-flight reply. */
-export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromoting, selectedCards, readDraft, approve, approvalDisabled, applyLayout, openRun }: {
+export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTitles, localDraft, draftPromoting, selectedCards, readDraft, approve, approvalDisabled, applyLayout, openRun }: {
   canvasId: string
   projectId: string
+  storyboard: boolean
+  cardTitles: Readonly<Record<string, string>>
+  cards: NonNullable<CanvasDocument['cards']>
   localDraft?: boolean
   draftPromoting?: boolean
   selectedCards: string[]
@@ -52,18 +55,36 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
   const [savingApproval, setSavingApproval] = useState(false)
   const [approvalError, setApprovalError] = useState(false)
   const [scope, setScope] = useState<AssistantScope>()
+  const [starterScope, setStarterScope] = useState<AssistantScope>()
+  const [draftUsesSelection, setDraftUsesSelection] = useState(false)
   const pending = useRef<CanvasAssistantMessage>()
   const sendingNow = useRef(false)
   const [activeRequestId, setActiveRequestId] = useState<string>()
   const [pendingServerRequest, setPendingServerRequest] = useState<CanvasAssistantMessage>()
   const activeRequest = useRef<ReturnType<typeof Canvases.canvasAssistantSend>>()
   const stoppedRequest = useRef<string>()
-  const lastTurn = useRef<HTMLDivElement>(null)
+  const panel = useRef<HTMLElement>(null)
+  const history = useRef<HTMLDivElement>(null)
+  const historyPosition = useRef({ top: 0, follow: true })
   const panelId = 'canvas-assistant-' + canvasId
   const inputId = panelId + '-input'
   const canUseDraftTools = localDraft && models.some(model =>
     model.id === (modelId ?? defaultModelId) && model.effective_capabilities?.tool_calling)
-  const effectiveScope = scope ?? (selectedCards.length ? 'selection' : canUseDraftTools ? 'canvas' : 'text')
+  const selectionInDraft = selectedCards.length > 0 || (Boolean(draft.trim()) && draftUsesSelection)
+  const effectiveScope = scope ?? (selectionInDraft ? 'selection' : starterScope ?? (canUseDraftTools ? 'canvas' : 'text'))
+  const awaitingSelection = !revising && !pending.current && effectiveScope === 'selection' && !selectedCards.length
+  useLayoutEffect(() => {
+    if (!draft.trim()) setStarterScope(undefined)
+    if (!draft.trim() || selectedCards.length) {
+      setDraftUsesSelection(Boolean(draft.trim() && selectedCards.length))
+    }
+  }, [draft, selectedCards.length])
+
+  const updateDraft = (value: string) => {
+    setDraft(value)
+    pending.current = undefined
+    setSendError(undefined)
+  }
   const activeGeneration = turns?.some(({ generation }) => generation && (
     ['queued', 'running'].includes(generation.state)
     || ['waiting', 'reviewing'].includes(generation.review?.state ?? '')
@@ -172,9 +193,33 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
     return () => { current = false; settings.cancel(); firstPage.cancel() }
   }, [open, retryLoad])
 
+  useLayoutEffect(() => {
+    if (open) panel.current?.focus({ preventScroll: true })
+  }, [open])
+
+  useLayoutEffect(() => {
+    if (!history.current) return
+    const { follow, top } = historyPosition.current
+    history.current.scrollTop = follow ? history.current.scrollHeight : top
+  }, [open, turns, sending, referenceFiles.length])
+
   useEffect(() => {
-    if (open) lastTurn.current?.scrollIntoView({ block: 'nearest' })
-  }, [open, turns])
+    const element = panel.current
+    const viewport = window.visualViewport
+    if (!open || !element || !viewport) return
+    const resize = () => {
+      element.dataset.keyboard = String(window.innerHeight - viewport.height > 120 && viewport.scale === 1)
+      element.style.setProperty('--assistant-visual-top', `${viewport.offsetTop}px`)
+      element.style.setProperty('--assistant-visual-bottom', `${Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)}px`)
+    }
+    resize()
+    viewport.addEventListener('resize', resize)
+    viewport.addEventListener('scroll', resize)
+    return () => {
+      viewport.removeEventListener('resize', resize)
+      viewport.removeEventListener('scroll', resize)
+    }
+  }, [open])
 
   const stopTurn = async (sourceId: string) => {
     setStopping(sourceId)
@@ -209,13 +254,13 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
 
   const close = () => {
     setOpen(false)
-    trigger.current?.focus()
+    requestAnimationFrame(() => trigger.current?.focus())
   }
 
   const send = async (resume?: CanvasAssistantMessage) => {
     const text = (resume?.text ?? draft).trim()
     if (draftPromoting || sendingNow.current || savingModel || savingApproval || uploadingReference || !turns || !text) return
-    if (!resume && !revising && !pending.current && effectiveScope === 'selection' && !selectedCards.length) return
+    if (!resume && awaitingSelection) return
     const revisionTargets = revising?.proposal?.groups
       ? [...new Set(revising.proposal.groups.filter(group => group.state === 'pending')
         .flatMap(group => group.edits.filter(edit => edit.target.kind !== 'add_canvas_card').map(edit => edit.card_id)))]
@@ -234,6 +279,7 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
           },
         })
     pending.current = requestBody
+    historyPosition.current.follow = true
     sendingNow.current = true
     setSending(true)
     setSendError(undefined)
@@ -343,54 +389,77 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
     return [model.name, ...(modes.length ? modes : [uiText("仅文字对话")])].join(' · ')
   }
   const defaultModel = models.find(model => model.id === defaultModelId)
+  const selectedNames = selectedCards.map(id => {
+    const card = cards.find(entry => entry.id === id)
+    const name = (card && 'name' in card && card.name) || cardTitles[card?.type ?? ''] || uiText("卡片")
+    return uiText(name) + ' · ' + id.slice(0, 8)
+  })
+  const starters = storyboard
+    ? selectedCards.length ? ['帮我看看这个镜头的推进节奏', '帮我检查选中卡片的连续性']
+      : cards.length ? ['帮我梳理这场戏的镜头节奏', '看看哪些镜头还需要补充']
+        : ['帮我构思第一个镜头', '帮我确定这场戏的视觉基调']
+    : selectedCards.length ? ['帮我优化这张卡的提示词', '帮我看看选中的素材适合怎么用']
+      : cards.length ? ['帮我梳理画布上的素材和生成方向', '帮我检查当前画布的提示词']
+        : ['帮我构思一张起始画面', '帮我拟一版图片生成提示词']
+  const selectionLabel = selectedCards.length
+    ? uiText("选中 {{count}} 张卡", { count: selectedCards.length }) : uiText("请选择卡片")
   const scopeOptions = [
-    { label: uiText("仅对话"), value: 'text' },
-    { label: uiText("分析所选卡片"), value: 'selection', disabled: !selectedCards.length },
-    { label: uiText("审看整张画布"), value: 'canvas' },
+    { label: uiText("仅对话"), short: uiText("仅对话"), value: 'text' },
+    { label: <>{selectionLabel}{selectedNames.length > 0 &&
+        <small className="canvas-assistant-scope-cards">{selectedNames.join('、')}</small>}</>,
+      short: selectionLabel, value: 'selection', disabled: !selectedCards.length },
+    { label: uiText("审看整张画布"), short: uiText("审看整张画布"), value: 'canvas' },
   ]
 
-  return <div className="canvas-assistant-dock">
-    <WorkbenchIconButton ref={trigger} label={uiText("打开画布助手")} icon={<CommentOutlined />}
+  return <div className="canvas-assistant-dock" data-open={open}>
+    <WorkbenchIconButton ref={trigger} label={uiText(open ? "收起画布助手" : "打开画布助手")} icon={<CommentOutlined />}
       aria-expanded={open} aria-controls={open ? panelId : undefined}
       onClick={() => { if (open) close(); else { setHistoryError(false); setOpen(true) } }} />
-    {open && <aside id={panelId} className="canvas-assistant-panel" aria-label={uiText("画布助手")}
+    {open && <aside ref={panel} id={panelId} className="canvas-assistant-panel" tabIndex={-1} aria-label={uiText("画布助手")}
       onKeyDown={event => {
-        if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
+        if (event.key === 'Escape' && !event.nativeEvent.isComposing && !(event.target instanceof HTMLElement && event.target.getAttribute('aria-expanded') === 'true')) {
           event.stopPropagation()
           close()
         }
       }}>
       <header className="canvas-assistant-header">
-        <strong>{uiText("画布助手")}</strong>
+        <div><strong>{uiText("画布助手")}</strong><small>{uiText(storyboard ? "分镜画布" : "自由画布")}</small></div>
+        {!localDraft && <Select aria-label={uiText("审批模式")} value={automaticApproval ? 'automatic' : 'manual'}
+          disabled={sending || savingApproval || !turns} popupMatchSelectWidth={false}
+          onChange={value => { void chooseApproval(value === 'automatic') }}
+          options={[
+            { value: 'manual', label: uiText("手动审批") },
+            { value: 'automatic', label: uiText("自动审批明确请求") },
+          ]} />}
         <WorkbenchIconButton label={uiText("关闭画布助手")} icon={<CloseOutlined />} variant="quiet" onClick={close} />
       </header>
-      <div className="canvas-assistant-options">
-        <Select value={modelId ?? ''} aria-label={uiText("助手模型")} popupMatchSelectWidth={false}
-          disabled={draftPromoting || sending || savingModel || !turns} onChange={selected => { void chooseModel(selected) }}
-          options={[
-            { label: defaultModel ? uiText("默认模型") + ' · ' + modelLabel(defaultModel) : uiText("默认模型"), value: '' },
-            ...models.map(model => ({
-              label: modelLabel(model), value: model.id,
-              disabled: !model.effective_capabilities?.text_inputs || !model.effective_capabilities?.text_outputs,
-            })),
-          ]} />
-        <Select<AssistantScope> value={effectiveScope} aria-label={uiText("提问范围")} popupMatchSelectWidth={false}
-          disabled={sending} options={scopeOptions}
-          onChange={value => { setScope(value); pending.current = undefined; setSendError(undefined) }} />
-        {modelError && <span role="alert">{uiText("无法读取或切换助手模型")}</span>}
-        {!localDraft && <Checkbox checked={automaticApproval} disabled={sending || savingApproval || !turns}
-          onChange={event => { void chooseApproval(event.target.checked) }}>{uiText("自动审批明确请求")}</Checkbox>}
-        {approvalError && <span role="alert">{uiText("无法完成自动审批，请核对当前设置和修改建议")}</span>}
-      </div>
-      <div className="canvas-assistant-history" role="log" aria-live="polite">
+      <div ref={history} className="canvas-assistant-history" role="log" aria-live="polite" onScroll={event => {
+        const { scrollTop, scrollHeight, clientHeight } = event.currentTarget
+        historyPosition.current = { top: scrollTop, follow: scrollHeight - scrollTop - clientHeight < 40 }
+      }}>
+        {approvalError && <p role="alert">{uiText("无法完成自动审批，请核对当前设置和修改建议")}</p>}
+        {turns?.length === 0 && !pendingServerRequest && !sending && !draft.trim() &&
+          <div className="canvas-assistant-starters">
+            {starters.map(starter => <WorkbenchButton key={starter} onClick={() => {
+              setScope(undefined)
+              setStarterScope(cards.length ? 'canvas' : 'text')
+              updateDraft(uiText(starter))
+              composer.current?.querySelector('textarea')?.focus()
+            }}>{uiText(starter)}</WorkbenchButton>)}
+          </div>}
         {historyError && <Alert type="error" message={uiText("暂时无法读取助手对话")}
           action={<WorkbenchButton onClick={() => { setHistoryError(false); setRetryLoad(value => value + 1) }}>{uiText("重试")}</WorkbenchButton>} />}
         {stopError && <Alert type="error" message={uiText("暂时无法停止助手")} />}
         {!turns && !historyError && <Spin aria-label={uiText("正在读取助手对话")} />}
         {turns?.map(turn => <article className="canvas-assistant-turn" key={turn.request_id}>
-          <div className="canvas-assistant-question">{turn.text}</div>
-          {!!turn.attachments?.length && <CanvasAssistantEvidence attachments={turn.attachments} />}
+          <div className="canvas-assistant-question">
+            {turn.text}
+            {!!turn.attachments?.length && <div className="canvas-assistant-files">
+              {turn.attachments.map(file => <span key={file.file_id}>{file.name ?? uiText("素材不可用")}</span>)}
+            </div>}
+          </div>
           <div>{turn.reply}</div>
+            {!!turn.attachments?.length && <CanvasAssistantEvidence attachments={turn.attachments} />}
           {turn.generation && <AssistantGeneration generation={turn.generation}
             openRun={runId => { close(); openRun(runId) }} cancelRun={cancelRun} />}
           {turn.stopped && <small>{uiText("助手已停止")}</small>}
@@ -473,9 +542,10 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
                 ? '与当前画布冲突' : entry.outcome === 'partial' ? '部分建议已写入' : '已写入画布')
             }
           </small>)}
-          {!!turn.skills?.length && <small className="canvas-assistant-skills">
-            {turn.skills.map(skill => skill.name).join('、')}
-          </small>}
+          {!!turn.skills?.length && <details className="canvas-assistant-evidence">
+            <summary>{uiText("本轮使用的技能")}</summary>
+            <span>{turn.skills.map(skill => skill.name).join('、')}</span>
+          </details>}
         </article>)}
         {sending && <p role="status">{uiText("助手正在回复")}</p>}
         {activeRequestId && <WorkbenchButton variant="quiet" loading={stopping === activeRequestId}
@@ -485,7 +555,6 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
           <WorkbenchButton variant="quiet" loading={stopping === pendingServerRequest.request_id}
             onClick={() => { void stopTurn(pendingServerRequest.request_id) }}>{uiText("停止助手")}</WorkbenchButton>
         </div>}
-        <div ref={lastTurn} />
       </div>
       <form className="canvas-assistant-composer" ref={composer} onSubmit={event => { event.preventDefault(); void send() }}>
         {revising?.proposal && <div className="canvas-assistant-edit-actions">
@@ -499,14 +568,46 @@ export function CanvasAssistant({ canvasId, projectId, localDraft, draftPromotin
           : sendError === 'text' ? uiText("当前模型无法进行文字对话，请切换助手模型。")
           : sendError === 'context-limit' ? uiText("内容超出当前模型的上下文上限，请缩小分析范围或切换助手模型。")
             : uiText("未收到助手回复，请检查助手模型后重试")} />}
-        <Input.TextArea id={inputId} aria-label={uiText("给画布助手发消息")} value={draft} maxLength={16000}
-          autoSize={{ minRows: 2, maxRows: 5 }} disabled={sending}
-          onChange={event => { setDraft(event.target.value); pending.current = undefined; setSendError(undefined) }} />
         <CanvasAssistantAttachments projectId={projectId} files={referenceFiles} uploading={uploadingReference}
           setUploading={setUploadingReference} disabled={draftPromoting || sending || !turns}
-          onChange={files => { if (localDraft) writeDraftAssistant(canvasId, { references: files }); setReferenceFiles(files); pending.current = undefined; setSendError(undefined) }} />
-        <WorkbenchButton htmlType="submit" variant="primary" loading={sending}
-          disabled={draftPromoting || !turns || !draft.trim() || savingModel || savingApproval || uploadingReference || !revising && !pending.current && effectiveScope === 'selection' && !selectedCards.length}>{uiText("发送消息")}</WorkbenchButton>
+          onChange={files => {
+            if (localDraft) writeDraftAssistant(canvasId, { references: files })
+            setReferenceFiles(files)
+            pending.current = undefined
+            setSendError(undefined)
+          }}>
+          {(add, attachments) => <>
+            {!revising && <div className="canvas-assistant-context">
+              <Select<AssistantScope> value={effectiveScope} aria-label={uiText("提问范围")}
+                optionLabelProp="short" popupMatchSelectWidth={false} disabled={sending} options={scopeOptions}
+                onChange={value => { setScope(value); pending.current = undefined; setSendError(undefined) }} />
+            </div>}
+            {attachments}
+            <Input.TextArea id={inputId} aria-label={uiText("给画布助手发消息")} value={draft} maxLength={16000}
+              placeholder={uiText("输入想讨论的镜头、画面或提示词…")}
+              autoSize={{ minRows: 2, maxRows: 4 }} disabled={sending}
+              onChange={event => updateDraft(event.target.value)} />
+            {modelError && <span role="alert">{uiText("无法读取或切换助手模型")}</span>}
+            <div className="canvas-assistant-footer">
+              {add}
+              <div className="canvas-assistant-send-actions">
+                <Select value={modelId ?? ''} aria-label={uiText("助手模型")} popupMatchSelectWidth={false} optionLabelProp="short"
+                  disabled={draftPromoting || sending || savingModel || !turns} onChange={selected => { void chooseModel(selected) }}
+                  options={[
+                    { label: defaultModel ? uiText("默认模型") + ' · ' + modelLabel(defaultModel) : uiText("默认模型"),
+                      short: defaultModel?.name ?? uiText("默认模型"), value: '' },
+                    ...models.map(model => ({
+                      label: modelLabel(model), short: model.name, value: model.id,
+                      disabled: !model.effective_capabilities?.text_inputs || !model.effective_capabilities?.text_outputs,
+                    })),
+                  ]} />
+                <WorkbenchIconButton label={uiText("发送消息")} icon={<ArrowUpOutlined />}
+                  htmlType="submit" variant="primary" loading={sending}
+                  disabled={draftPromoting || !turns || !draft.trim() || savingModel || savingApproval || uploadingReference || awaitingSelection} />
+              </div>
+            </div>
+          </>}
+        </CanvasAssistantAttachments>
       </form>
     </aside>}
   </div>

@@ -241,6 +241,9 @@ try {
   await page.goto(base + '/canvases/' + free.id)
   await open()
   assert.deepEqual(prompts, [])
+  await panel.getByRole('button', { name: '帮我构思一张起始画面' }).click()
+  assert.equal(await panel.getByRole('textbox', { name: '给画布助手发消息' }).inputValue(), '帮我构思一张起始画面')
+  assert.deepEqual(prompts, [], 'a starter fills the draft without sending')
   await ask('自由一')
   await panel.getByRole('button', { name: '关闭画布助手' }).click()
   await panel.waitFor({ state: 'hidden' })
@@ -264,10 +267,28 @@ try {
   await askWhileEditing
   assert.deepEqual(prompts, [['自由一'], ['分镜一'], ['自由一', '自由二']])
   await page.screenshot({ path: join(output, 'assistant-desktop.png') })
+  for (const [theme, expected] of [
+    ['经典深色', 'rgb(27, 27, 27)'], ['雾蓝纯色', 'rgb(255, 255, 255)'], ['雾蓝微渐变', 'rgb(255, 255, 255)'],
+  ]) {
+    await page.getByRole('button', { name: '画布配色', exact: true }).click()
+    await page.getByRole('menuitemradio', { name: theme, exact: true }).click()
+    assert.equal(await panel.evaluate(element => getComputedStyle(element).backgroundColor), expected)
+  }
+  await page.mouse.move(120, 240)
   await page.setViewportSize({ width: 375, height: 720 })
   const narrow = await panel.boundingBox()
   assert.ok(narrow && narrow.x >= 0 && narrow.x + narrow.width <= 375, 'assistant fits the narrow viewport')
   await page.screenshot({ path: join(output, 'assistant-narrow.png') })
+  await page.evaluate(() => {
+    Object.defineProperty(visualViewport, 'height', { configurable: true, value: 380 })
+    visualViewport.dispatchEvent(new Event('resize'))
+  })
+  const sendWithKeyboard = await panel.getByRole('button', { name: '发送消息' }).boundingBox()
+  assert.ok(sendWithKeyboard && sendWithKeyboard.y + sendWithKeyboard.height <= 380, 'send remains above the keyboard')
+  await page.evaluate(() => {
+    Reflect.deleteProperty(visualViewport, 'height')
+    visualViewport.dispatchEvent(new Event('resize'))
+  })
   await page.setViewportSize({ width: 1440, height: 960 })
 
   for (const canvas of [free, scene]) {
@@ -303,7 +324,7 @@ try {
     assert.equal(await draft.textContent(), '只在本地编辑器看到')
     await open()
     assert.equal(await draft.textContent(), '只在本地编辑器看到')
-    await panel.getByText('分析所选卡片', { exact: true }).waitFor()
+    await panel.getByText('选中 1 张卡', { exact: true }).waitFor()
     await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('分析原卡片')
     await panel.getByRole('button', { name: '发送消息' }).click()
     await panel.getByText(/当前模型无法调用画布工具/).waitFor()
@@ -311,9 +332,9 @@ try {
     await panel.getByRole('button', { name: '关闭画布助手' }).click()
     await page.locator('[data-card-id="other"]').click()
     await open()
-    await panel.getByTitle('默认模型 · browser-assistant-model · 可读图片与视频静帧', { exact: true }).click()
+    await panel.getByTitle('browser-assistant-model', { exact: true }).click()
     await page.locator('.ant-select-item-option').getByText('browser-tool-model · 可读画布', { exact: true }).click()
-    await panel.getByTitle('browser-tool-model · 可读画布', { exact: true }).waitFor()
+    await panel.getByTitle('browser-tool-model', { exact: true }).waitFor()
     await panel.getByRole('button', { name: '发送消息' }).click()
     await panel.getByText('找到原先的草稿').waitFor()
     assert.deepEqual(observed.at(-1).target_card_ids, ['target'])
@@ -321,13 +342,35 @@ try {
     await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('只从摄影角度看')
     await panel.getByRole('button', { name: '发送消息' }).click()
     await panel.getByText('建议保持景别，再选择机位。', { exact: true }).waitFor()
+    await panel.getByText('本轮使用的技能', { exact: true }).last().click()
     await panel.getByText('镜头与场面调度', { exact: true }).waitFor()
+    await page.locator('[data-card-id="other"]').click()
+    await panel.getByText('选中 1 张卡', { exact: true }).waitFor()
+    const assistantDraft = panel.getByRole('textbox', { name: '给画布助手发消息' })
+    await assistantDraft.fill('继续检查这张卡')
+    const blank = await page.evaluate(() => {
+      const surface = document.querySelector('.generation-surface')
+      for (let y = 200; y < 800; y += 90) {
+        for (let x = 160; x < 900; x += 80) {
+          const target = document.elementFromPoint(x, y)
+          if (surface.contains(target) && !target.closest('[data-card-id], .generation-group, button, input, select, textarea, .canvas-edge-hit')) {
+            return { x, y }
+          }
+        }
+      }
+    })
+    assert.ok(blank, 'the assistant leaves blank canvas reachable')
+    await page.mouse.click(blank.x, blank.y)
+    await panel.getByText('请选择卡片', { exact: true }).waitFor()
+    assert.ok(await panel.getByRole('button', { name: '发送消息' }).isDisabled())
+    assert.equal(await assistantDraft.inputValue(), '继续检查这张卡')
+    await assistantDraft.fill('')
     const after = (await (await fetch(url)).json()).data
     assert.equal(after.document.cards.find(item => item.id === 'target').prompt.segments[0].text, '已保存正文')
     assert.equal(after.document.cards.find(item => item.id === 'target').model_id, 'original-video-generator')
     await page.reload()
     await open()
-    await panel.getByTitle('browser-tool-model · 可读画布', { exact: true }).waitFor()
+    await panel.getByTitle('browser-tool-model', { exact: true }).waitFor()
     await panel.getByRole('button', { name: '关闭画布助手' }).click()
     const target = canvas.project_id ? 'camera-movement' : 'target'
     await page.locator('[data-card-id="' + target + '"]').click()
@@ -345,8 +388,13 @@ try {
       return canvas.project_id ? edited.fields.movement_speed.text : edited.prompt.segments[0].text
     }
     assert.equal(await storedText(), original)
-    if (canvas.project_id) await proposal.getByRole('checkbox', { name: '推进轨迹' }).check()
-    await proposal.getByRole('button', { name: '确认写入', exact: true }).click()
+    if (canvas.project_id) {
+      assert.ok(await proposal.getByRole('button', { name: '写入所选 0 组' }).isDisabled())
+      await proposal.getByRole('checkbox', { name: '推进轨迹' }).check()
+      await proposal.getByRole('button', { name: '写入所选 1 组' }).click()
+    } else {
+      await proposal.getByRole('button', { name: '确认写入', exact: true }).click()
+    }
     await proposal.getByText('已写入画布', { exact: true }).waitFor()
     assert.equal(await storedText(), '缓慢推近')
     const storedMovement = async () => (await (await fetch(url)).json()).data.document.cards
@@ -372,7 +420,7 @@ try {
       await isolated.getByText('保留原运镜的卡片', { exact: true }).waitFor()
       await isolated.getByText('other', { exact: true }).waitFor()
       await isolated.getByRole('checkbox', { name: '只修改所选镜头的运镜' }).check()
-      await isolated.getByRole('button', { name: '确认写入', exact: true }).click()
+      await isolated.getByRole('button', { name: '写入所选 1 组' }).click()
       await isolated.getByText('已写入画布', { exact: true }).waitFor()
       const shotBindings = async () => {
         const current = (await (await fetch(url)).json()).data.document
@@ -398,7 +446,7 @@ try {
       await structure.getByText('首帧', { exact: true }).waitFor()
       await structure.getByRole('checkbox', { name: '建卡、连线并采用首帧' }).check()
       await page.screenshot({ path: join(output, 'assistant-first-frame-preview.png') })
-      await structure.getByRole('button', { name: '确认写入', exact: true }).click()
+      await structure.getByRole('button', { name: '写入所选 1 组' }).click()
       await structure.getByText('已写入画布', { exact: true }).waitFor()
       const inspectGraph = async () => (await (await fetch(url)).json()).data.document
       const adopted = await inspectGraph()
@@ -415,9 +463,12 @@ try {
     }
     if (!canvas.project_id) {
       await open()
-      const automatic = panel.getByRole('checkbox', { name: '自动审批明确请求' })
-      await automatic.click()
-      await panel.locator('input[type="checkbox"]:checked').and(automatic).waitFor()
+      const setMode = async name => {
+        await panel.getByTitle(name === '手动审批' ? '自动审批明确请求' : '手动审批', { exact: true }).click()
+        await page.getByTitle(name, { exact: true }).click()
+        await panel.getByText(name, { exact: true }).waitFor()
+      }
+      await setMode('自动审批明确请求')
       await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('把这张卡的推近放慢')
       await panel.getByRole('button', { name: '发送消息' }).click()
       await panel.getByText('自动审批明确请求 · 已写入画布', { exact: true }).waitFor()
@@ -429,12 +480,11 @@ try {
       await page.reload()
       await open()
       await panel.getByText('自动审批明确请求 · 已写入画布', { exact: true }).waitFor()
-      assert.ok(await automatic.isChecked())
-      await automatic.click()
-      await panel.locator('input[type="checkbox"]:not(:checked)').and(automatic).waitFor()
+      await panel.getByText('自动审批明确请求', { exact: true }).waitFor()
+      await setMode('手动审批')
     } else {
       await open()
-      assert.equal(await panel.getByRole('checkbox', { name: '自动审批明确请求' }).isChecked(), false)
+      await panel.getByText('手动审批', { exact: true }).waitFor()
     }
   }
   assert.equal(observed.length, 4)
@@ -620,7 +670,7 @@ try {
     await page.goto(base + (canvas.project_id ? storyboardCanvasPath(canvas) : '/canvases/' + canvas.id))
     await page.locator('[data-card-id="target"]').click()
     await open()
-    await panel.getByTitle('browser-tool-model · 可读画布', { exact: true }).click()
+    await panel.getByTitle('browser-tool-model', { exact: true }).click()
     await page.locator('.ant-select-item-option').getByText('qwen3.8-omni-flash', { exact: false }).click()
     await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill(journey)
     await panel.getByRole('button', { name: '发送消息' }).click()
@@ -634,7 +684,7 @@ try {
     } else {
       await proposal.getByText(target.prompt.segments[0].text, { exact: true }).waitFor()
     }
-    await proposal.getByRole('button', { name: '确认写入', exact: true }).click()
+    await proposal.getByRole('button', { name: canvas.project_id ? '写入所选 1 组' : '确认写入', exact: true }).click()
     await proposal.getByText('已写入画布', { exact: true }).waitFor()
     await panel.getByText('连续画面 0–2 秒为红色，没有音轨，无法判断声画同步。', { exact: true })
       .last().waitFor({ timeout: 30_000 })
@@ -689,7 +739,7 @@ try {
   const cardDraft = await newDraft()
   await open()
   assert.equal(await panel.getByText('答复 草稿里先聊', { exact: true }).count(), 0)
-  await panel.getByTitle(/默认模型 · browser-assistant-model/).click()
+  await panel.getByTitle('browser-assistant-model', { exact: true }).click()
   await page.locator('.ant-select-item-option').getByText('browser-tool-model · 可读画布', { exact: true }).click()
   await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('新增潮水文本卡')
   await panel.getByRole('button', { name: '发送消息' }).click()
@@ -708,7 +758,7 @@ try {
     await route.abort()
   })
   await draftProposal.getByRole('checkbox', { name: '新建文本', exact: false }).check()
-  await draftProposal.getByRole('button', { name: '确认写入', exact: true }).click()
+  await draftProposal.getByRole('button', { name: '写入所选 1 组' }).click()
   await page.getByText('请求结果未知，请重试核实原请求', { exact: true }).waitFor()
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByText('已保存', { exact: true }).waitFor()

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { CloseOutlined, FolderOpenOutlined, PaperClipOutlined } from '@ant-design/icons'
-import { Alert, Empty, Input, Pagination, Select, Spin } from 'antd'
+import type { ReactNode } from 'react'
+import { CloseOutlined, FolderOpenOutlined, PaperClipOutlined, PlusOutlined } from '@ant-design/icons'
+import { Alert, Dropdown, Empty, Input, Pagination, Select, Spin } from 'antd'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { WorkbenchModal } from '../../../components/workbench/WorkbenchModal'
 import { StudioFilesService } from '../../../services/generated'
@@ -12,13 +13,14 @@ const attachmentLimit = 4
 const pageSize = 12
 
 /** Add existing file identities to the pending message. */
-export function CanvasAssistantAttachments({ projectId, files, onChange, disabled, uploading, setUploading }: {
+export function CanvasAssistantAttachments({ projectId, files, onChange, disabled, uploading, setUploading, children }: {
   projectId: string
   files: FileRead[]
   onChange: (files: FileRead[]) => void
   disabled: boolean
   uploading: boolean
   setUploading: (uploading: boolean) => void
+  children: (add: ReactNode, attachments: ReactNode) => ReactNode
 }) {
   const uiText = useUiText()
   const input = useRef<HTMLInputElement>(null)
@@ -70,28 +72,39 @@ export function CanvasAssistantAttachments({ projectId, files, onChange, disable
   }
 
   const remove = (id: string) => onChange(files.filter(file => file.id !== id))
-  return <div className="canvas-assistant-reference-actions">
+  return <>
     <input ref={input} hidden type="file" accept="image/*,video/*" aria-label={uiText("上传对话参考素材")}
       disabled={unavailable} onChange={event => {
         const file = event.currentTarget.files?.[0]
         event.currentTarget.value = ''
         if (file) void upload(file)
       }} />
-    <div className="canvas-assistant-reference-toolbar">
-      <WorkbenchButton variant="quiet" icon={<PaperClipOutlined />} loading={uploading} disabled={unavailable}
-        onClick={() => input.current?.click()}>{uiText("上传素材")}</WorkbenchButton>
-      <WorkbenchButton variant="quiet" icon={<FolderOpenOutlined />} disabled={unavailable}
-        onClick={() => { setPage(1); setLibraryOpen(true) }}>{uiText("选择参考素材")}</WorkbenchButton>
-    </div>
-    {files.length > 0 && <ul className="canvas-assistant-reference-list">
-      {files.map(file => <li key={file.id}>
-        <span title={file.name}>{file.name}</span>
-        <WorkbenchIconButton label={uiText("移除") + ' ' + file.name} icon={<CloseOutlined />} variant="quiet"
-          disabled={disabled || uploading} onClick={() => remove(file.id)} />
-      </li>)}
-    </ul>}
-    {files.length >= attachmentLimit && <small>{uiText("每条消息最多添加 4 份参考素材")}</small>}
-    {error && <Alert type="error" message={uiText("参考素材上传失败，请选择图片或视频后重试")} />}
+    {children(
+      <Dropdown trigger={['click']} disabled={unavailable} menu={{
+        items: [
+          { key: 'upload', icon: <PaperClipOutlined />, label: uiText("上传素材") },
+          { key: 'library', icon: <FolderOpenOutlined />, label: uiText("选择参考素材") },
+        ],
+        onClick: ({ key }) => {
+          if (key === 'upload') input.current?.click()
+          else { setPage(1); setLibraryOpen(true) }
+        },
+      }}>
+        <WorkbenchIconButton label={uiText("添加参考素材")} icon={<PlusOutlined />} variant="quiet"
+          loading={uploading} disabled={unavailable} />
+      </Dropdown>,
+      <>
+        {files.length > 0 && <ul className="canvas-assistant-files">
+          {files.map(file => <li key={file.id}>
+            <span title={file.name}>{file.name}</span>
+            <WorkbenchIconButton label={uiText("移除") + ' ' + file.name} icon={<CloseOutlined />} variant="quiet"
+              disabled={disabled || uploading} onClick={() => remove(file.id)} />
+          </li>)}
+        </ul>}
+        {files.length >= attachmentLimit && <small>{uiText("每条消息最多添加 4 份参考素材")}</small>}
+        {error && <Alert type="error" message={uiText("参考素材上传失败，请选择图片或视频后重试")} />}
+      </>,
+    )}
     <WorkbenchModal title={uiText("选择对话参考素材")} open={libraryOpen} width={520}
       onCancel={() => setLibraryOpen(false)} footer={null}>
       <div className="canvas-assistant-reference-toolbar">
@@ -114,30 +127,31 @@ export function CanvasAssistantAttachments({ projectId, files, onChange, disable
       {result && result.total > pageSize && <Pagination current={page} pageSize={pageSize} total={result.total}
         showSizeChanger={false} onChange={setPage} />}
     </WorkbenchModal>
-  </div>
+  </>
+}
+
+function assistantObservation(attachment: CanvasAssistantAttachment, uiText: ReturnType<typeof useUiText>) {
+  const seconds = (value?: number | null) => ((value ?? 0) / 1000).toFixed(3)
+  const interval = (start?: number | null, end?: number | null) => seconds(start) + '–' + seconds(end) + ' s'
+  switch (attachment.observation) {
+    case 'image': return uiText("已读取图片")
+    case 'video_frame': return uiText("已读取视频静帧") + ' · ' + seconds(attachment.at_ms) + ' s'
+    case 'video_sequence': return uiText("已读取连续无声画面") + ' · ' + interval(attachment.start_ms, attachment.end_ms)
+    case 'video_with_audio': return uiText("已读取连续画面和音轨") + ' · ' + interval(attachment.start_ms, attachment.end_ms)
+      + ' · ' + uiText("声画重合时段") + ' ' + interval(attachment.audio_start_ms, attachment.audio_end_ms)
+    default: return uiText("本次未读取")
+  }
 }
 
 /** Display the attachment and the actual evidence accompanying a completed turn. */
 export function CanvasAssistantEvidence({ attachments }: { attachments: CanvasAssistantAttachment[] }) {
   const uiText = useUiText()
-  const seconds = (value?: number | null) => ((value ?? 0) / 1000).toFixed(3)
-  const interval = (start?: number | null, end?: number | null) => seconds(start) + '–' + seconds(end) + ' s'
-  function observation(attachment: CanvasAssistantAttachment) {
-    switch (attachment.observation) {
-      case 'image': return uiText("已读取图片")
-      case 'video_frame': return uiText("已读取视频静帧") + ' · ' + seconds(attachment.at_ms) + ' s'
-      case 'video_sequence': return uiText("已读取连续无声画面") + ' · ' + interval(attachment.start_ms, attachment.end_ms)
-      case 'video_with_audio': return uiText("已读取连续画面和音轨") + ' · ' + interval(attachment.start_ms, attachment.end_ms)
-        + ' · ' + uiText("声画重合时段") + ' ' + interval(attachment.audio_start_ms, attachment.audio_end_ms)
-      default: return uiText("本次未读取")
-    }
-  }
   return <ol className="canvas-assistant-reference-list" aria-label={uiText("对话参考素材")}>
     {attachments.map(attachment => <li key={attachment.file_id}>
       {attachment.name
         ? <a href={buildFileDownloadUrl(attachment.file_id)}>{attachment.name}</a>
         : <span>{uiText("素材不可用")}</span>}
-      <small>{observation(attachment)}</small>
+      <small>{assistantObservation(attachment, uiText)}</small>
     </li>)}
   </ol>
 }
