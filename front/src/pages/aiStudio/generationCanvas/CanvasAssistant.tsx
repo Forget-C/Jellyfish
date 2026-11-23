@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowUpOutlined, CommentOutlined, CloseOutlined } from '@ant-design/icons'
-import { Alert, Input, Select, Spin } from 'antd'
+import { Alert, Select, Spin } from 'antd'
+import { Bubble, Sender, ThoughtChain } from '@ant-design/x'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasDocument, CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantLayout, CanvasAssistantMessage, FileRead, ModelRead } from '../../../services/generated'
@@ -100,8 +101,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const snapshotCursor = useRef<{ canvasId: string; cursor: number }>()
   const history = useRef<HTMLDivElement>(null)
   const historyPosition = useRef({ top: 0, follow: true })
+  const [readingEarlier, setReadingEarlier] = useState(false)
   const panelId = 'canvas-assistant-' + canvasId
-  const inputId = panelId + '-input'
   const canUseDraftTools = localDraft && models.some(model =>
     model.id === (modelId ?? defaultModelId) && model.effective_capabilities?.tool_calling)
   const selectionInDraft = selectedCards.length > 0 || (Boolean(draft.trim()) && draftUsesSelection)
@@ -564,7 +565,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       </header>
       <div ref={history} className="canvas-assistant-history" role="log" aria-live="polite" onScroll={event => {
         const { scrollTop, scrollHeight, clientHeight } = event.currentTarget
-        historyPosition.current = { top: scrollTop, follow: scrollHeight - scrollTop - clientHeight < 40 }
+        const follow = scrollHeight - scrollTop - clientHeight < 40
+        historyPosition.current = { top: scrollTop, follow }
+        setReadingEarlier(!follow)
       }}>
         {approvalError && <p role="alert">{uiText("无法完成自动审批，请核对当前设置和修改建议")}</p>}
         {turns?.length === 0 && !pendingServerRequest && !sending && !draft.trim() &&
@@ -581,13 +584,20 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         {stopError && <Alert type="error" message={uiText("暂时无法停止助手")} />}
         {!turns && !historyError && <Spin aria-label={uiText("正在读取助手对话")} />}
         {turns?.map(turn => <article className="canvas-assistant-turn" key={turn.request_id}>
-          <div className="canvas-assistant-question">
-            {turn.text}
-            {!!turn.attachments?.length && <div className="canvas-assistant-files">
-              {turn.attachments.map(file => <span key={file.file_id}>{file.name ?? uiText("素材不可用")}</span>)}
-            </div>}
-          </div>
-          <div>{turn.reply}</div>
+          <Bubble.List autoScroll={false} styles={{ root: { gap: 8 } }} items={[
+            {
+              key: 'user', role: 'user', placement: 'end', variant: 'borderless',
+              classNames: { content: 'canvas-assistant-question' },
+              styles: { content: { background: 'var(--wb-raised)', color: 'var(--wb-text)' } },
+              content: <>{turn.text}{!!turn.attachments?.length && <div className="canvas-assistant-files">
+                {turn.attachments.map(file => <span key={file.file_id}>{file.name ?? uiText("素材不可用")}</span>)}
+              </div>}</>,
+            },
+            {
+              key: 'assistant', role: 'ai', variant: 'borderless', content: turn.reply,
+              styles: { content: { padding: 0, color: 'var(--wb-text)' } },
+            },
+          ]} />
             {!!turn.attachments?.length && <CanvasAssistantEvidence attachments={turn.attachments} />}
           {turn.generation && <AssistantGeneration generation={turn.generation}
             openRun={runId => { close(); openRun(runId) }} cancelRun={cancelRun} />}
@@ -644,12 +654,14 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                 ? '与当前画布冲突' : entry.outcome === 'partial' ? '部分建议已写入' : '已写入画布')
             }
           </small>)}
-          {!!turn.skills?.length && <details className="canvas-assistant-evidence">
-            <summary>{uiText("本轮使用的技能")}</summary>
-            <span>{turn.skills.map(skill => skill.name).join('、')}</span>
-          </details>}
+          {!!turn.skills?.length && <ThoughtChain items={[{
+            key: 'skills', title: uiText("本轮使用的技能"), status: 'success',
+            collapsible: true, content: turn.skills.map(skill => skill.name).join('、'),
+          }]} />}
         </article>)}
-        {sending && <p role="status">{uiText("助手正在回复")}</p>}
+        {sending && <div role="status"><ThoughtChain items={[
+          { key: 'reply', title: uiText("助手正在回复"), status: 'loading' },
+        ]} /></div>}
         {activeRequestId && <WorkbenchButton variant="quiet" loading={stopping === activeRequestId}
           onClick={() => { void stopTurn(activeRequestId) }}>{uiText("停止助手")}</WorkbenchButton>}
         {!activeRequestId && pendingServerRequest && <div>
@@ -659,6 +671,12 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         </div>}
       </div>
       <form className="canvas-assistant-composer" ref={composer} onSubmit={event => { event.preventDefault(); void send() }}>
+        {readingEarlier && <WorkbenchButton variant="quiet" onClick={() => {
+          const log = history.current
+          historyPosition.current.follow = true
+          if (log) log.scrollTop = log.scrollHeight
+          setReadingEarlier(false)
+        }}>{uiText('返回最新进展')}</WorkbenchButton>}
         {revising?.proposal && <div className="canvas-assistant-edit-actions">
           <span>{uiText("正在修订修改建议")} · {uiText(revising.proposal.card_name)}</span>
           <WorkbenchButton variant="quiet" disabled={sending} onClick={() => {
@@ -686,16 +704,19 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                 onChange={value => { setScope(value); pending.current = undefined; setSendError(undefined) }} />
             </div>}
             {attachments}
-            <Input.TextArea id={inputId} aria-label={uiText("给画布助手发消息")} value={draft} maxLength={16000}
+            <Sender aria-label={uiText("给画布助手发消息")} value={draft}
               placeholder={uiText("输入想讨论的镜头、画面或提示词…")}
+              className="canvas-assistant-sender" suffix={false}
               autoSize={{ minRows: 2, maxRows: 4 }} disabled={sending}
+              onChange={value => updateDraft(value.slice(0, 16000))}
               onKeyDown={event => {
-                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) {
+                if (event.nativeEvent.isComposing || event.keyCode === 229) return false
+                if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
                   event.preventDefault()
                   void send()
                 }
-              }}
-              onChange={event => updateDraft(event.target.value)} />
+                return false
+              }} />
             {modelError && <span role="alert">{uiText("无法读取或切换助手模型")}</span>}
             <div className="canvas-assistant-footer">
               {add}

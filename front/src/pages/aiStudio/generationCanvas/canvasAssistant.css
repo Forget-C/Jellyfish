@@ -65,8 +65,7 @@
 }
 
 .canvas-assistant-question {
-  justify-self: end;
-  max-inline-size: 90%;
+  max-inline-size: 100%;
   padding: 8px 12px;
   border-radius: var(--wb-radius);
   background: var(--wb-raised);
@@ -99,6 +98,18 @@
   background: var(--wb-raised);
   border: 1px solid var(--wb-border);
   border-radius: var(--wb-radius);
+}
+
+.canvas-assistant-sender {
+  background: transparent;
+  border: 0;
+}
+
+.canvas-assistant-sender textarea { color: var(--wb-text); }
+
+.canvas-assistant-sender:has(textarea:focus-visible) {
+  outline: 1px solid var(--wb-focus);
+  outline-offset: 1px;
 }
 
 .canvas-assistant-footer,
@@ -141,7 +152,6 @@
 
   .canvas-assistant-header .wb-action,
   .canvas-assistant-footer .wb-action { min-block-size: 36px; min-inline-size: 36px; }
-  .canvas-assistant-panel .ant-select-single,
   .canvas-assistant-panel .ant-select-single { min-block-size: 36px; }
 
   .canvas-assistant-panel[data-keyboard="true"] { inset-block-start: calc(var(--assistant-visual-top, 0px) + 8px); }
@@ -160,7 +170,7 @@
 }
 
 @media (max-width: 600px) and (max-height: 520px) {
-  .canvas-assistant-composer > textarea { max-block-size: 60px; }
+  .canvas-assistant-sender textarea { max-block-size: 60px; }
 }
 
 .canvas-assistant-reference-toolbar {

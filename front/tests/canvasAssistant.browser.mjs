@@ -409,13 +409,46 @@ try {
       assert.equal(await storedText(), original)
       await proposal.getByRole('checkbox', { name: '推进轨迹' }).check()
     }
+    const approvalRequests = []
+    const trackApproval = request => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname.includes('/assistant/proposals/')) {
+        approvalRequests.push(request.url())
+      }
+    }
+    page.on('request', trackApproval)
     await confirmation.fill('确认')
+    await confirmation.press('End')
+    await confirmation.press('Shift+Enter')
+    assert.equal(await confirmation.inputValue(), '确认\n')
+    await confirmation.fill('确认')
+    await confirmation.dispatchEvent('keydown', { key: 'Enter', keyCode: 229, isComposing: true })
+    await delay(200)
+    assert.equal(approvalRequests.length, 0)
+    assert.equal(await storedText(), original)
     await confirmation.press('Enter')
     await proposal.getByText('已写入画布', { exact: true }).waitFor()
+    assert.equal(approvalRequests.length, 1)
+    page.off('request', trackApproval)
     assert.equal(await storedText(), '缓慢推近')
     const storedMovement = async () => (await (await fetch(url)).json()).data.document.cards
       .find(item => item.id === target).fields
     if (canvas.project_id) {
+      await page.setViewportSize({ width: 375, height: 460 })
+      const conversationLog = panel.getByRole('log')
+      await conversationLog.evaluate(log => { log.scrollTop = log.scrollHeight })
+      await conversationLog.hover()
+      await page.mouse.wheel(0, -1200)
+      await panel.getByRole('button', { name: '返回最新进展', exact: true }).click()
+      await page.waitForFunction(() => {
+        const log = document.querySelector('.canvas-assistant-history')
+        return log.scrollHeight - log.scrollTop - log.clientHeight < 40
+      })
+      await page.setViewportSize({ width: 1440, height: 960 })
+      await confirmation.focus()
+      await page.keyboard.press('Tab')
+      await page.keyboard.press('Shift+Tab')
+      assert.equal(await confirmation.evaluate(input =>
+        getComputedStyle(input.closest('.canvas-assistant-sender')).outlineStyle), 'solid')
       const fields = await storedMovement()
       assert.equal(fields.movement_path.text, '直线')
       assert.notEqual(fields.movement_start.text, '走廊入口')
