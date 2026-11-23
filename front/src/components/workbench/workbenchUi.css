@@ -19,7 +19,7 @@
 .wb-dialog-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 12px; border-top: 1px solid var(--wb-border); }
 .wb-dialog-actions > div { display: flex; gap: var(--wb-spacing); }
 .wb-modal .ant-modal { top: 24px; padding-bottom: 24px; }
-.wb-modal .ant-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); }
+.wb-modal .ant-modal-container { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); }
 .wb-modal .ant-modal-header, .wb-modal .ant-modal-footer { flex-shrink: 0; }
 .wb-modal .ant-modal-body { min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 :is(.wb-modal, .canvas-task-center, .workbench-ui), :is(.wb-modal, .canvas-task-center, .workbench-ui) * { scrollbar-width: thin; scrollbar-color: var(--wb-primary) transparent; color-scheme: var(--wb-scheme, dark); }

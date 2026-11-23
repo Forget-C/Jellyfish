@@ -66,7 +66,7 @@ export function ExperimentSessionSidebar({ value, currentSessionDirty, currentSe
   return <aside className="experiment-navigation">
     <div className="experiment-session-heading">
       <h2>{uiText("最近会话")}</h2>
-      <Dropdown trigger={['click']} overlayClassName="experiment-session-dropdown" menu={{ items:
+      <Dropdown trigger={['click']} classNames={{ root: "experiment-session-dropdown" }} menu={{ items:
         (Object.keys(labMeta) as ExperimentLabType[]).map(type => ({
           key: type, icon: labMeta[type].icon, label: uiText("{{label}}会话", { label: labMeta[type].label }),
           onClick: () => {
@@ -100,7 +100,7 @@ export function ExperimentSessionSidebar({ value, currentSessionDirty, currentSe
               <span className={`experiment-session-name ${selected ? 'font-semibold' : 'font-normal'}`}>{session.title}</span>
             </Tooltip>
           </button>
-          {menuItems.length ? <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight" overlayClassName="experiment-session-dropdown">
+          {menuItems.length ? <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight" classNames={{ root: "experiment-session-dropdown" }}>
             <Button type="text" size="small" icon={<MoreOutlined />} aria-label={uiText("{{title}} 更多操作", { title: session.title })} className="experiment-session-actions experiment-icon-action" />
           </Dropdown> : null}
         </div>

@@ -75,7 +75,7 @@
   .resource-editor-page-heading > .ant-btn, .resource-editor-page-actions .ant-btn { min-height: 36px; }
 }
 
-.drawer-discard-dialog .ant-modal-content { padding: 16px 20px; }
+.drawer-discard-dialog .ant-modal-container { padding: 16px 20px; }
 .drawer-discard-dialog .ant-modal-header { margin-bottom: 4px; }
 .drawer-discard-dialog .ant-modal-title { font-size: 14px; line-height: 20px; font-weight: 600; }
 .drawer-discard-dialog .ant-modal-body .ant-typography { font-size: 13px; line-height: 20px; color: #536174; }

@@ -204,7 +204,7 @@ export default function FileManager() {
       <FileScrollHint root={root} used={hintUsed} onUsed={() => setHintUsed(true)} visible={visible.length > 0 && !preview && !busy && !error && !viewport.scrolling && !viewport.blocked && viewport.remaining > 80} />
       <Modal title={preview ? uiText("{{value1}} · 预览", { value1: preview.name || '未命名文件' }) : uiText("文件预览")}
         focusTriggerAfterClose={false} afterClose={() => { if (root.current) root.current.scrollTop = previewScroll.current; trigger.current?.focus({ preventScroll: true }) }}
-        open={Boolean(preview)} onCancel={() => { setFocusedId(preview?.id); setPreview(null) }} footer={null} destroyOnClose
+        open={Boolean(preview)} onCancel={() => { setFocusedId(preview?.id); setPreview(null) }} footer={null} destroyOnHidden
         width="min(720px, calc(100vw - 24px))">
         {previewFailed ? <Alert type="error" showIcon message={uiText("无法预览此文件")} /> : preview && previewUrl && (
           <div className="file-preview-media">

@@ -3,7 +3,7 @@
   max-width: 100%;
 }
 
-.file-tag-filter.ant-select .ant-select-selector {
+.file-tag-filter.ant-select {
   display: flex;
   align-items: center;
   height: 100%;

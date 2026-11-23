@@ -307,7 +307,7 @@ function ChapterManagement({ projectId, chapterId }: { projectId: string; chapte
           <div ref={picker} className="management-title-scenes" role="group" aria-label={uiText("选择场次")}>
             {!compact && !historical && visibleScenes.map(scene => <Button key={scene.id} type="text" aria-pressed={selected?.id === scene.id} title={`${scene.position + 1}. ${scene.title}`} onClick={() => { if (selected?.id !== scene.id) drafts.transition(() => select(scene.id, step)) }}>{scene.position + 1}. {scene.title}</Button>)}
             {!!scenes.length && <Dropdown trigger={['click']} placement="bottomRight" open={drawerOpen} onOpenChange={open => { if (open) setDrawerOpen(true); else closeDrawer() }}
-              dropdownRender={() => <div className="management-scene-popup" role="dialog" aria-label={uiText("本章场次")} onKeyDown={event => {
+              popupRender={() => <div className="management-scene-popup" role="dialog" aria-label={uiText("本章场次")} onKeyDown={event => {
                 if (event.key === 'Escape') { event.stopPropagation(); closeDrawer() }
                 if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
                   const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('.management-scene-row'))

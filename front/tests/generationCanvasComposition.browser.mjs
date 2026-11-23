@@ -47,7 +47,7 @@ try {
   await detail.getByRole('combobox',{name:'结构化景别',exact:true}).locator('xpath=../..').click();await page.locator('.ant-select-dropdown:visible').getByTitle('特写',{exact:true}).click()
   await poll(s=>s.document.cards[0].fields?.composition?.text==='主体位于画面右侧' && s.document.cards[0].fields?.shot_size?.size==='close_up')
   const sizeSelect=detail.locator('.design-composition-fields .ant-select')
-  const layout=await sizeSelect.evaluate(node=>{const box=node.getBoundingClientRect();return {width:box.width,height:box.height,font:getComputedStyle(node.querySelector('.ant-select-selection-item')).fontSize}})
+  const layout=await sizeSelect.evaluate(node=>{const box=node.getBoundingClientRect();return {width:box.width,height:box.height,font:getComputedStyle(node.querySelector('.ant-select-content-value')).fontSize}})
   assert.deepEqual(layout,{width:88,height:24,font:'12px'})
   assert.equal((await detail.getByRole('textbox',{name:'景别内容',exact:true}).boundingBox()).y,(await composition.boundingBox()).y,'first row editors align under equal height labels')
   const shotText=(await read()).document.cards[0].fields.shot_size.text

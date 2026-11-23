@@ -62,8 +62,8 @@
 .design-reference-owner { display: contents; }
 .design-preset-candidates { flex: none; padding-bottom: 8px; }
 .design-reference-hint { color: var(--wb-muted); font-size: 11px; white-space: nowrap; padding-left: 4px; }
-.design-source-inspect .ant-popover-inner { background: var(--wb-surface); color: var(--wb-text); }
-.design-source-inspect .ant-popover-inner-content > div { width: 280px; max-width: calc(100vw - 64px); }
+.design-source-inspect .ant-popover-container { background: var(--wb-surface); color: var(--wb-text); }
+.design-source-inspect .ant-popover-content > div { width: 280px; max-width: calc(100vw - 64px); }
 .design-preset-fields > div { min-width: 0; }
 .design-preset-fields > :last-child:nth-child(odd) { grid-column: 1 / -1; }
 .design-preset-fields .generation-prompt-editor { background: var(--wb-inset); min-height: 78px; max-height: 180px; overflow-y: auto; padding: 12px; font-size: 14px; line-height: 1.8; }
@@ -118,11 +118,11 @@
 .design-preset-revision { color: var(--wb-muted); font-size: 12px; white-space: nowrap; flex-shrink: 0; }
 
 /* Input typography is scoped to design editors; titles and reading surfaces retain their hierarchy. */
-.design-preset-editor :is(.generation-prompt-editor, .ant-input, .ant-select, .ant-select-selection-item, .ant-select-selection-placeholder, .ant-input-number, .ant-input-number-input) { font-family: var(--design-input-font); font-size: 14px; font-weight: 400; }
+.design-preset-editor :is(.generation-prompt-editor, .ant-input, .ant-select, .ant-select-content-value, .ant-select-placeholder, .ant-input-number, .ant-input-number-input) { font-family: var(--design-input-font); font-size: 14px; font-weight: 400; }
 .design-preset-editor :is(.generation-prompt-editor, textarea.ant-input) { line-height: 1.8; }
 .design-preset-editor .generation-prompt-token { font: inherit; }
 .design-preset-editor :is(.ant-input, .ant-input-number-input)::placeholder { font-family: inherit; font-size: inherit; font-weight: inherit; font-style: normal; color: var(--wb-muted); opacity: 1; }
-.design-preset-editor .ant-select-selection-placeholder, .design-preset-editor .generation-prompt-editor::before { font-family: var(--design-input-font); font-size: 14px; font-weight: 400; font-style: normal; color: var(--wb-muted); }
+.design-preset-editor .ant-select-placeholder, .design-preset-editor .generation-prompt-editor::before { font-family: var(--design-input-font); font-size: 14px; font-weight: 400; font-style: normal; color: var(--wb-muted); }
 
 /* Stable business regions share sizing rules; short parameters reuse the same field grid. */
 .design-stable-region:has(.design-reference-issue) { height: auto; min-height: var(--design-region-height); }
@@ -145,7 +145,7 @@
 .movement-phase-tab > button:focus-visible { outline: 1px solid var(--wb-focus); outline-offset: -1px; }
 .movement-phase-tab > .ant-input { width: 160px; height: 30px; }
 .movement-tab-anchor { display: flex; flex-shrink: 0; }
-.movement-delete-popover .ant-popover-inner { padding: 0; background: transparent; box-shadow: none; }
+.movement-delete-popover .ant-popover-container { padding: 0; background: transparent; box-shadow: none; }
 .movement-tab-delete { width: 24px; height: 24px; }
 /* Dense phase controls are a local exception to the normal 32px workbench icon buttons. */
 .movement-tab-delete .movement-tab-delete-button.wb-action.ant-btn { width: 24px; min-width: 24px; height: 24px; min-height: 24px; padding: 0; visibility: inherit; }
@@ -177,7 +177,7 @@
 .design-preset-fields section > strong.design-field-label-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .design-composition-fields.design-preset-fields section > strong { display: flex; align-items: center; height: 24px; }
 .design-preset-editor .design-composition-fields .ant-select { flex-shrink: 0; width: 88px; height: 24px; font-size: 12px; font-weight: 400; }
-.design-preset-editor .design-composition-fields .ant-select :is(.ant-select-selection-item, .ant-select-selection-placeholder, .ant-select-selection-search-input) { font-size: 12px; }
+.design-preset-editor .design-composition-fields .ant-select :is(.ant-select-content-value, .ant-select-placeholder, .ant-select-input) { font-size: 12px; }
 
 
 /* Fixed parameter groups share the available body; tabs and modal chrome do not scroll. */
@@ -203,9 +203,9 @@
 .anchor-marker-image [data-anchor-marker] { position: absolute; transform: translate(-50%, -50%); color: var(--wb-text); background: var(--wb-surface); border-radius: 50%; font-size: 20px; line-height: 20px; }
 .anchor-reference-settings { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .anchor-reference-settings .ant-select { min-width: 0; }
-.design-source-expanded .ant-popover-inner-content > div { width: min(680px, calc(100vw - 64px)); }
+.design-source-expanded .ant-popover-content > div { width: min(680px, calc(100vw - 64px)); }
 .design-source-expanded .anchor-marker-image img { max-height: min(55dvh, 520px); }
-.design-source-inspect .ant-popover-inner { max-height: calc(100dvh - 40px); overflow-y: auto; }
+.design-source-inspect .ant-popover-container { max-height: calc(100dvh - 40px); overflow-y: auto; }
 @media (max-width: 700px) { .anchor-reference-settings { grid-template-columns: 1fr; } }
 
 .design-tab-label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }

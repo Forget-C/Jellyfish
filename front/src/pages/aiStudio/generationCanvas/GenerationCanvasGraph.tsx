@@ -1435,7 +1435,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       {cards.some(card => card.type?.startsWith('model.') && pendingDeletion?.includes(card.id)) && <p>{uiText("关联结果卡会随生成卡一并移除，已独立的内容卡按本次选择处理。")}</p>}
       {cards.filter(card => 'input_bindings' in card && card.input_bindings?.some(binding => binding.input_port === 'acceptance_basis' && pendingDeletion?.includes(binding.source.card_id)) && !pendingDeletion?.includes(card.id)).map(card => <p key={card.id}>{uiText("将解除")} {cardLabel(card.id)} {uiText("的验收关联，后续生成不再自动带入该要求。")}</p>)}
     </WorkbenchModal>
-    <Modal title={uiText("堆叠内容（只读）")} open={!!stacks.find(group => group.id === viewStackId)} onCancel={() => setViewStackId(undefined)} footer={null} width={1100} maskClosable destroyOnClose>
+    <Modal title={uiText("堆叠内容（只读）")} open={!!stacks.find(group => group.id === viewStackId)} onCancel={() => setViewStackId(undefined)} footer={null} width={1100} maskClosable destroyOnHidden>
       <div className="generation-stack-reading" onClick={event => { if (event.target === event.currentTarget) setViewStackId(undefined) }}>
         {(stacks.find(group => group.id === viewStackId)?.card_ids || []).map(id => {
           const card = cards.find(item => item.id === id)!
@@ -1684,7 +1684,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
                 <CanvasDragHandle onCancel={() => finishMove(true)} className="generation-group-move" contextKey={document.id} label={uiText("分组 {{name}}", { name: group.name })} offset={origin} scale={transform.scale} onMove={next => {
                   movement.moveHandle(members, next, origin)
                 }} />
-                <Dropdown trigger={['click']} placement="topLeft" dropdownRender={menu => <div onPointerDown={event => event.stopPropagation()} onPointerUp={event => event.stopPropagation()}>{menu}</div>} menu={{ items: [
+                <Dropdown trigger={['click']} placement="topLeft" popupRender={menu => <div onPointerDown={event => event.stopPropagation()} onPointerUp={event => event.stopPropagation()}>{menu}</div>} menu={{ items: [
                   { key: 'name', label: uiText("重命名"), disabled: readonly },
                   { key: 'members', label: uiText("管理成员"), disabled: readonly },
                   ...(group.collapsed ? [{ key: 'expand', label: uiText("展开组"), disabled: readonly }] : []),

@@ -127,7 +127,7 @@ export function MediaContentEditor({ card, projectId, onChange, disabled, initia
     {(uploading || card.uploading) && <Alert type="info" message={uploading ? uiText("上传中，暂不发布有效输出") : (projectId ? uiText("上次上传未完成，请重新上传或从项目文件选择") : uiText("上次上传未完成，请重新上传或从文件管理选择"))} />}
     <input ref={input} hidden aria-label={uiText("上传媒体文件")} type="file" accept={`${type}/*`} disabled={disabled}
       onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void upload(file) }} />
-    <Modal title={projectId ? uiText("项目文件库") : uiText("文件管理")} open={library} onCancel={() => setLibrary(false)} footer={null} destroyOnClose>
+    <Modal title={projectId ? uiText("项目文件库") : uiText("文件管理")} open={library} onCancel={() => setLibrary(false)} footer={null} destroyOnHidden>
       {error && <Alert type="error" message={error} />}
       <Button loading={loading} onClick={() => setRefresh(value => value + 1)}>{projectId ? uiText("刷新项目文件") : uiText("刷新文件")}</Button>
       {files.filter(file => file.type === type).map(file => <div key={file.id} style={{ marginBottom: 16 }}>

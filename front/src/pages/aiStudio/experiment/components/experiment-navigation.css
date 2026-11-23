@@ -74,7 +74,7 @@
 .experiment-composer-options { flex: 1; min-width: 0; }
 .experiment-composer-submit { flex-shrink: 0; justify-content: flex-end; margin-inline-start: auto; }
 .experiment-composer-toolbar :is(.ant-btn, .ant-select) { height: var(--experiment-control-height); font-size: 13px; }
-.experiment-composer-toolbar .ant-select .ant-select-selector { height: 100%; }
+.experiment-composer-toolbar .ant-select { height: 100%; }
 .experiment-composer-toolbar .ant-btn-primary:not(:disabled) { background: var(--app-accent); }
 .experiment-composer-toolbar .ant-btn-primary:not(:disabled):hover { background: #1d50aa; }
 .experiment-workspace :is(button, textarea):focus-visible {

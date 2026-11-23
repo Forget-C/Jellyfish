@@ -80,7 +80,7 @@
 .management-workspace .management-panel { padding: 16px var(--app-page-gutter) 20px; }
 .management-workspace button:focus-visible { outline: 2px solid #245fc5; outline-offset: 2px; }
 .management-scene-dialog { top: 16px; padding-bottom: 16px; }
-.management-scene-dialog .ant-modal-content { border-radius: 12px; padding: 16px; max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
+.management-scene-dialog .ant-modal-container { border-radius: 12px; padding: 16px; max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
 .management-scene-dialog .ant-modal-title { font-size: 16px; font-weight: 600; }
 .management-scene-dialog .ant-modal-body { overflow-y: auto; min-height: 0; scrollbar-gutter: stable; }
 .management-scene-dialog .ant-modal-footer { flex-shrink: 0; }

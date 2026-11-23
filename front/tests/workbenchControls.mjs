@@ -38,7 +38,7 @@ export async function directorSelect(page, name, label, search) {
   }
   if (name === '定位设计对象') await directorInfo(page)
   const combo = page.getByRole('combobox', { name, exact: true })
-  await combo.locator('xpath=ancestor::div[contains(@class,"ant-select-selector")][1]').click()
+  await combo.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " ant-select ")][1]').click()
   if (search) await combo.fill(search)
   await page.locator(`[id="${await combo.getAttribute('aria-controls')}"]`).locator('xpath=ancestor::div[contains(@class,"ant-select-dropdown")][1]').locator('.ant-select-item-option').filter({ hasText: label }).click()
 }
@@ -95,7 +95,7 @@ export async function exportControl(page, name) {
 /** 通过控件关联的弹层选择，避免命中保留在 DOM 的旧菜单。 */
 export async function selectWorkbenchOption(page, name, label) {
   const combo = page.getByRole('combobox', { name, exact: true })
-  await combo.locator('xpath=ancestor::div[contains(@class,"ant-select-selector")][1]').click()
+  await combo.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " ant-select ")][1]').click()
   const popup = page.locator(`[id="${await combo.getAttribute('aria-controls')}"]`).locator('xpath=ancestor::div[contains(@class,"ant-select-dropdown")][1]')
   await popup.locator('.ant-select-item-option').filter({ hasText: label }).click()
 }

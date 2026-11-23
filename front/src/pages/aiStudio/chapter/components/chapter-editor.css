@@ -16,7 +16,7 @@
 .chapter-editor-drawer .ant-drawer-body .ant-btn,
 .chapter-editor-history .ant-btn { font-size: 13px; min-height: 32px; border-radius: 8px; }
 .chapter-editor-drawer .ant-alert { overflow-wrap: anywhere; }
-.chapter-editor-drawer .ant-alert-message,
+.chapter-editor-drawer .ant-alert-title,
 .chapter-editor-drawer .ant-alert-description { font-size: 14px; }
 .chapter-editor-drawer .ant-card-head-title { font-size: 14px; font-weight: 600; }
 .resource-editor-drawer .chapter-editor-drawer .app-page-toolbar {
@@ -270,7 +270,7 @@
   overflow-wrap: anywhere;
 }
 .chapter-editor-simplify.ant-modal { top: min(8dvh, 64px); padding-bottom: 0; }
-.chapter-editor-simplify .ant-modal-content {
+.chapter-editor-simplify .ant-modal-container {
   display: flex;
   flex-direction: column;
   max-height: calc(100dvh - 2 * min(8dvh, 64px));

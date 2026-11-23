@@ -1,5 +1,5 @@
 .project-files-filter.ant-select { height: 32px; font-size: 13px; }
-.project-files-filter.ant-select .ant-select-selector { border-radius: 8px; }
+.project-files-filter.ant-select { border-radius: 8px; }
 .project-files-page .ant-btn { height: 32px; border-radius: 8px; font-size: 13px; }
 .project-files-page .ant-tag { width: fit-content; margin: 0; border-radius: 4px; font-size: 12px; }
 .project-files-page .project-resource-title-row .ant-btn { flex-shrink: 0; }

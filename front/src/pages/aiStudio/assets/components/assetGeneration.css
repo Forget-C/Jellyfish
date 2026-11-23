@@ -1,5 +1,5 @@
 .asset-generation-dialog { padding-bottom:0; }
-.asset-generation-dialog .ant-modal-content { display:flex; flex-direction:column; height:min(760px, calc(100dvh - 48px)); max-height:calc(100dvh - 48px); padding:0; border-radius:12px; overflow:hidden; }
+.asset-generation-dialog .ant-modal-container { display:flex; flex-direction:column; height:min(760px, calc(100dvh - 48px)); max-height:calc(100dvh - 48px); padding:0; border-radius:12px; overflow:hidden; }
 .asset-generation-dialog .ant-modal-header { flex:none; margin:0; padding:16px 48px 16px 20px; }
 .asset-generation-dialog .ant-modal-title { font-size:16px; line-height:24px; font-weight:600; }
 .asset-generation-dialog .ant-modal-body { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:0 20px 16px; scrollbar-gutter:stable; font-size:13px; }
@@ -16,7 +16,7 @@
 .asset-generation-dialog textarea { resize:vertical; }
 @media(max-width:767px) {
  .asset-generation-dialog { max-width:calc(100vw - 32px); margin:16px auto; }
- .asset-generation-dialog .ant-modal-content { height:calc(100dvh - 32px); max-height:calc(100dvh - 32px); }
+ .asset-generation-dialog .ant-modal-container { height:calc(100dvh - 32px); max-height:calc(100dvh - 32px); }
  .asset-generation-dialog .ant-modal-header { padding:16px 48px 12px 16px; }
  .asset-generation-dialog .ant-modal-body { padding:0 16px 12px; }
  .asset-generation-dialog .ant-modal-footer { padding:12px 16px; }

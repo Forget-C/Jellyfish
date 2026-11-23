@@ -72,7 +72,7 @@
   font-size: 13px;
 }
 
-.experiment-result-dialog .ant-modal-content { max-height: calc(100dvh - 24px); overflow-y: auto; }
+.experiment-result-dialog .ant-modal-container { max-height: calc(100dvh - 24px); overflow-y: auto; }
 
 .experiment-result-dialog .experiment-result-frame {
   height: min(62dvh, 660px);

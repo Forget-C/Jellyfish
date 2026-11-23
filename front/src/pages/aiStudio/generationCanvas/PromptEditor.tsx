@@ -296,7 +296,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
       {!instruction.references?.length && <small role="alert">{uiText("指令缺少引用，可继续编辑保存")}</small>}
     </section>)}
     {!imageMentions && candidateList}
-    {imageMentions && query && createPortal(<Popover open placement="topLeft" arrow={false} trigger={[]} overlayClassName="canvas-workbench-dialog generation-prompt-popup" content={candidateList} overlayStyle={{ width: popupAnchor.width }}>
+    {imageMentions && query && createPortal(<Popover open placement="topLeft" arrow={false} trigger={[]} classNames={{ root: "canvas-workbench-dialog generation-prompt-popup" }} content={candidateList} overlayStyle={{ width: popupAnchor.width }}>
       <span aria-hidden="true" style={{ position: 'fixed', pointerEvents: 'none', left: popupAnchor.left, top: popupAnchor.top, height: popupAnchor.height, width: 1 }} />
     </Popover>, window.document.body)}
     <div ref={root} data-diagnostic-control="prompt" role="textbox" aria-label={fieldLabel || uiText("模型正文")} aria-describedby={fieldDescriptionId} aria-multiline="true" aria-readonly={disabled} aria-disabled={disabled} aria-autocomplete="list" aria-controls={query ? listId : undefined} aria-activedescendant={query && active ? `${listId}-${matches.indexOf(active)}` : undefined} contentEditable={!disabled} suppressContentEditableWarning className="generation-prompt-editor" aria-placeholder={compact ? placeholder : undefined} data-placeholder={placeholder} data-empty={!(value.segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())}

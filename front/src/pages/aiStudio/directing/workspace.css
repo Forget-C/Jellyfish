@@ -633,7 +633,7 @@
 
 @media (max-width: 767px) {
   .workspace-version-dialog.ant-modal { top: 0; margin: 0; padding-bottom: 0; width: 100vw !important; max-width: 100vw !important; }
-  .workspace-version-dialog .ant-modal-content { height: 100dvh; border-radius: 0; display: flex; flex-direction: column; }
+  .workspace-version-dialog .ant-modal-container { height: 100dvh; border-radius: 0; display: flex; flex-direction: column; }
   .workspace-version-dialog .ant-modal-body { flex: 1; min-height: 0; overflow: auto; }
   .workspace-version-dialog .ant-modal-footer { flex-shrink: 0; }
 }

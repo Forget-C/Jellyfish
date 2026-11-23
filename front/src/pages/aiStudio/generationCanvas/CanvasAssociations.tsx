@@ -1,5 +1,5 @@
 import { useUiText } from '../../../uiText'
-import type { TooltipRef } from 'antd/es/tooltip'
+import type { GetRef } from 'antd'
 import { cardCategories } from './CardList'
 import { useGraphRules } from './CanvasCatalogContext'
 import { sourceKey } from './promptRules'
@@ -47,7 +47,7 @@ export function CanvasAssociations({ entries, sourceActions, loading, error, ses
   const owner = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLElement>()
   const popupId = useId()
-  const activePopover = useRef<TooltipRef>(null)
+  const activePopover = useRef<GetRef<typeof Popover>>(null)
   const { token } = theme.useToken()
   const { cardDefinitions } = useGraphRules()
   const groups = (['material', 'design'] as const).map(kind => ({ kind, label: kind === 'material' ? uiText("素材") : uiText("设计"), entries: entries.filter(entry => entry.kind === kind) })).filter(group => group.entries.length)
@@ -132,8 +132,8 @@ export function CanvasAssociations({ entries, sourceActions, loading, error, ses
     return () => cancelAnimationFrame(frame)
   }, [width, surface])
 
-  const popover = (id: string, button: ReactNode, content: ReactNode) => <Popover key={id} ref={surface === id ? activePopover : undefined} placement="bottomLeft" trigger="click" destroyTooltipOnHide open={surface === id}
-    overlayClassName={`canvas-workbench-dialog design-source-inspect canvas-association-inspect${expanded ? ' design-source-expanded' : ''}`} content={<div id={popupId}>{content}</div>}
+  const popover = (id: string, button: ReactNode, content: ReactNode) => <Popover key={id} ref={surface === id ? activePopover : undefined} placement="bottomLeft" trigger="click" destroyOnHidden open={surface === id}
+    classNames={{ root: `canvas-workbench-dialog design-source-inspect canvas-association-inspect${expanded ? ' design-source-expanded' : ''}` }} content={<div id={popupId}>{content}</div>}
     onOpenChange={open => {
       if (!open) { if (surface === id) close(false); return }
       setDetail(entries.some(entry => entry.id === id) ? id : undefined)

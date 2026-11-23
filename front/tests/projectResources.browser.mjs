@@ -174,7 +174,7 @@ try {
       await generation.getByRole('button', { name: '预览提示词', exact: true }).click()
       await generation.getByRole('button', { name: '收起提示词预览', exact: true }).waitFor()
       const geometry = await generation.evaluate(node => {
-        const content = node.querySelector('.ant-modal-content')
+        const content = node.querySelector('.ant-modal-container')
         const body = node.querySelector('.ant-modal-body')
         const footer = node.querySelector('.ant-modal-footer').getBoundingClientRect()
         const strip = node.querySelector('.asset-reference-strip')

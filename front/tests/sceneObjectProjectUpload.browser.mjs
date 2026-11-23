@@ -83,7 +83,7 @@ try {
     await form.getByRole('img', { name: 'front.png', exact: true }).waitFor()
     await form.getByRole('img', { name: 'side.png', exact: true }).waitFor()
     await form.getByRole('button', { name: '设为主图', exact: true }).click()
-    await form.locator('.resource-upload-item-controls').first().locator('.ant-select-selector').click()
+    await form.locator('.resource-upload-item-controls').first().locator('.ant-select').click()
     await page.locator('.ant-select-dropdown:visible').getByText('侧面', { exact: true }).click()
     await form.locator('.resource-upload-item-controls').first().getByTitle('侧面', { exact: true }).waitFor()
     let creations = 0, failSelection = true

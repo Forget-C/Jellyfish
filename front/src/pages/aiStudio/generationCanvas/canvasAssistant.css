@@ -142,7 +142,7 @@
   .canvas-assistant-header .wb-action,
   .canvas-assistant-footer .wb-action { min-block-size: 36px; min-inline-size: 36px; }
   .canvas-assistant-panel .ant-select-single,
-  .canvas-assistant-panel .ant-select-single .ant-select-selector { min-block-size: 36px; }
+  .canvas-assistant-panel .ant-select-single { min-block-size: 36px; }
 
   .canvas-assistant-panel[data-keyboard="true"] { inset-block-start: calc(var(--assistant-visual-top, 0px) + 8px); }
   .canvas-assistant-panel[data-keyboard="true"] textarea { max-block-size: 60px; }

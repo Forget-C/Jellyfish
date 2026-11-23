@@ -2,8 +2,7 @@ import { useUiText } from '../../../../uiText'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiOutlined, CheckOutlined, DownOutlined, FileTextOutlined, PictureOutlined, PlusOutlined } from '@ant-design/icons'
 import { Alert, Button, Dropdown, Input, Menu, Modal, Popover, Select, Typography } from 'antd'
-import type { InputRef } from 'antd'
-import type { RefSelectProps } from 'antd/es/select'
+import type { GetRef, InputRef } from 'antd'
 
 export type ExperimentModelOption = { id: string; name: string }
 export type ExperimentTemplateOption = { id: string; name: string; version: number; preview?: string; category?: string }
@@ -43,7 +42,7 @@ export function ExperimentOptionBar({ children, referenceAction, models, templat
   const addTrigger = useRef<HTMLButtonElement>(null)
   const modelSearch = useRef<InputRef>(null)
   const modelPanel = useRef<HTMLDivElement>(null)
-  const templateSelect = useRef<RefSelectProps>(null)
+  const templateSelect = useRef<GetRef<typeof Select>>(null)
   // 列表晚于浮层到达时，仅接管仍停在入口或面板上的焦点，不打断用户的搜索。
   useEffect(() => {
     if (openPanel !== 'model' || modelsLoading) return
@@ -70,7 +69,7 @@ export function ExperimentOptionBar({ children, referenceAction, models, templat
   }
   const closeTemplate = () => { close('template'); addTrigger.current?.focus() }
   const modelControl = <Popover trigger="click" placement="topLeft" open={openPanel === 'model'}
-    overlayClassName="experiment-model-popup"
+    classNames={{ root: "experiment-model-popup" }}
     onOpenChange={visible => visible ? open('model') : close('model')}
     afterOpenChange={visible => {
       if (visible) {
@@ -105,7 +104,7 @@ export function ExperimentOptionBar({ children, referenceAction, models, templat
   </Popover>
   const addControl = <Dropdown trigger={['click']} placement="topRight" open={openPanel === 'add'}
     onOpenChange={visible => visible ? open('add') : close('add')} autoFocus
-    overlayClassName="experiment-add-menu"
+    classNames={{ root: "experiment-add-menu" }}
     menu={{ items: [
       { key: 'template', label: uiText("选择提示词模板"), icon: <FileTextOutlined aria-hidden="true" /> },
       ...(referenceAction ? [{ key: 'references', label: referenceAction.label, icon: <PictureOutlined aria-hidden="true" /> }] : []),

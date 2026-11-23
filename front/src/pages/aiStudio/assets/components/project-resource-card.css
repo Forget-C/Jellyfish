@@ -12,7 +12,7 @@ button.project-resource-cover { cursor: zoom-in; }
 .project-resource-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .project-resource-preview { display: block; width: 100%; max-height: 70dvh; object-fit: contain; }
 .project-resource-dialog { top: 16px; padding-bottom: 16px; }
-.project-resource-dialog .ant-modal-content { border-radius: 12px; padding: 16px; max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
+.project-resource-dialog .ant-modal-container { border-radius: 12px; padding: 16px; max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
 .project-resource-dialog .ant-modal-title { font-size: 16px; font-weight: 600; }
 .project-resource-dialog .ant-modal-body { overflow-y: auto; min-height: 0; scrollbar-gutter: stable; }
 .project-resource-dialog .ant-modal-footer { flex-shrink: 0; }

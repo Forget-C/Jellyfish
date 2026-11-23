@@ -49,7 +49,7 @@ try {
     await page.getByLabel(t('生成画布视口', 'Generation canvas viewport'), { exact: true }).waitFor()
     for (const width of [375, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 1000 })
-      const values = page.locator('.generation-browse .ant-select-selection-item')
+      const values = page.locator('.generation-browse .ant-select-content-value')
       assert.equal(await values.count(), 2)
       assert.ok(await values.evaluateAll(items => items.every(item => item.scrollWidth <= item.clientWidth + 1)), `Full canvas filters at ${width}px`)
     }

@@ -53,7 +53,7 @@ try {
   const cards = english.locator('.app-task-card')
   await cards.filter({ hasText: '试验 2' }).waitFor()
   assert.equal(await cards.count(), 3)
-  await english.locator('.ant-select-selection-item').filter({ hasText: 'Image generation' }).waitFor()
+  await english.locator('.ant-select-content-value').filter({ hasText: 'Image generation' }).waitFor()
   const running = cards.filter({ hasText: '试验 0' })
   await running.getByText('Elapsed 1 min 5 sec').waitFor()
   await running.getByRole('button', { name: /Cancel$/ }).click()

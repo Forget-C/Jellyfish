@@ -344,9 +344,9 @@ try {
     await panel.getByRole('button', { name: '关闭画布助手' }).click()
     await page.locator('[data-card-id="other"]').click()
     await open()
-    await panel.getByTitle('browser-assistant-model', { exact: true }).click()
+    await panel.getByRole('combobox', { name: '助手模型' }).click()
     await page.locator('.ant-select-item-option').getByText('browser-tool-model · 可读画布与提出修改', { exact: true }).click()
-    await panel.getByTitle('browser-tool-model', { exact: true }).waitFor()
+    await panel.getByText('browser-tool-model', { exact: true }).waitFor()
     await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('分析当前选中的卡片')
     await panel.getByRole('button', { name: '发送消息' }).click()
     await panel.getByText('找到原先的草稿').waitFor()
@@ -382,7 +382,7 @@ try {
     assert.equal(after.document.cards.find(item => item.id === 'target').model_id, 'original-video-generator')
     await page.reload()
     await open()
-    await panel.getByTitle('browser-tool-model', { exact: true }).waitFor()
+    await panel.getByText('browser-tool-model', { exact: true }).waitFor()
     await panel.getByRole('button', { name: '关闭画布助手' }).click()
     const target = canvas.project_id ? 'camera-movement' : 'target'
     await page.locator('[data-card-id="' + target + '"]').click()
@@ -480,9 +480,9 @@ try {
     if (!canvas.project_id) {
       await open()
       const setMode = async name => {
-        await panel.getByTitle(name === '手动审批' ? '自动审批明确请求' : '手动审批', { exact: true }).click()
-        await page.getByTitle(name, { exact: true }).click()
-        await panel.getByTitle(name, { exact: true }).waitFor()
+        await panel.getByRole('combobox', { name: '审批模式' }).click()
+        await page.locator('.ant-select-item-option').getByText(name, { exact: true }).click()
+        await panel.locator('.ant-select-content').filter({ hasText: name }).waitFor()
       }
       await setMode('自动审批明确请求')
       await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('把这张卡的推近放慢')
@@ -529,8 +529,8 @@ try {
   assert.ok(Number.isFinite(beforeLayout))
   await open()
   const requestLayout = async text => {
-    if (!await panel.getByTitle('审看整张画布', { exact: true }).count()) {
-      await panel.getByTitle('仅对话', { exact: true }).click()
+    if (!await panel.locator('.ant-select-content').filter({ hasText: '审看整张画布' }).count()) {
+      await panel.getByRole('combobox', { name: '提问范围' }).click()
       await page.locator('.ant-select-item-option').getByText('审看整张画布', { exact: true }).click()
     }
     await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill(text)
@@ -686,7 +686,7 @@ try {
     await page.goto(base + (canvas.project_id ? storyboardCanvasPath(canvas) : '/canvases/' + canvas.id))
     await page.locator('[data-card-id="target"]').click()
     await open()
-    await panel.getByTitle('browser-tool-model', { exact: true }).click()
+    await panel.getByRole('combobox', { name: '助手模型' }).click()
     await page.locator('.ant-select-item-option').getByText('qwen3.8-omni-flash', { exact: false }).click()
     await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill(journey)
     await panel.getByRole('button', { name: '发送消息' }).click()
@@ -755,7 +755,7 @@ try {
   const cardDraft = await newDraft()
   await open()
   assert.equal(await panel.getByText('答复 草稿里先聊', { exact: true }).count(), 0)
-  await panel.getByTitle('browser-assistant-model', { exact: true }).click()
+  await panel.getByRole('combobox', { name: '助手模型' }).click()
   await page.locator('.ant-select-item-option').getByText('browser-tool-model · 可读画布与提出修改', { exact: true }).click()
   await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('新增潮水文本卡')
   await panel.getByRole('button', { name: '发送消息' }).click()
