@@ -21,6 +21,7 @@ export function OverviewResources({ projectId, refresh, onOpen }: {
 }) {
   const uiText = useUiText()
   const [results, setResults] = useState<Partial<Record<ProjectResourceKind, Summary>>>({})
+  const [selected, setSelected] = useState<keyof typeof kinds>()
   const [retry, setRetry] = useState(0)
   useEffect(() => {
     let active = true
@@ -41,36 +42,43 @@ export function OverviewResources({ projectId, refresh, onOpen }: {
 
   const loading = categories.some(({ key }) => !results[kinds[key]])
   const failed = Object.values(results).some(result => result.failed)
-  const recent = categories.flatMap(category => (results[kinds[category.key]]?.items ?? []).flatMap(resource => {
+  const category = categories.find(item => item.key === selected)
+  const visibleCategories = category ? [category] : categories
+  const recent = visibleCategories.flatMap(category => (results[kinds[category.key]]?.items ?? []).flatMap(resource => {
     const created = Date.parse(resource.created_at ?? '')
     return Number.isFinite(created) ? [{ resource, category, created }] : []
   })).sort((a, b) => b.created - a.created).slice(0, 3)
 
   return <div className="overview-resource-body" aria-busy={loading}>
-    <ul className="overview-resource-counts">
-      {categories.map(({ key, label }) => {
-        const result = results[kinds[key]]
-        return <li key={key}><Link to={projectTabLocation(projectId, key)}>
-          <span>{uiText(label)}</span>
-          {!result ? <Skeleton.Input active size="small" /> : <strong>{result.total ?? uiText("数量待确认")}</strong>}
-        </Link></li>
-      })}
-    </ul>
-    <div className="overview-recent-resources">
-      <div className="overview-recent-heading">
-        <h3>{uiText("最近新增")}</h3>
-        {failed && !loading && <Button size="small" type="link" onClick={() => setRetry(value => value + 1)}>{uiText("重试读取资源")}</Button>}
+    <div className="overview-resource-toolbar">
+      <div className="overview-resource-filters" role="group" aria-label={uiText("资源分类")}>
+        <button type="button" aria-pressed={!selected} onClick={() => setSelected(undefined)}>{uiText("全部")}</button>
+        {categories.map(({ key, label }) => {
+          const result = results[kinds[key]]
+          return <button type="button" key={key} aria-pressed={selected === key} onClick={() => setSelected(key)}>
+            {uiText(label)}{' '}
+            {!result ? <Skeleton.Input active size="small" /> : <span title={result.total === undefined ? uiText("数量待确认") : undefined}>{result.total ?? '—'}</span>}
+          </button>
+        })}
       </div>
-      {loading ? <Skeleton active title={false} paragraph={{ rows: 2 }} />
-        : recent.length ? <ul>{recent.map(({ resource, category }) =>
+      <div className="overview-resource-actions">
+        {failed && !loading && <Button size="small" type="link" onClick={() => setRetry(value => value + 1)}>{uiText("重试读取资源")}</Button>}
+        {category ? <Link to={projectTabLocation(projectId, category.key)}>
+          {uiText("查看全部{{category}}", { category: uiText(category.label) })}
+        </Link> : <span>{uiText("按新增时间")}</span>}
+      </div>
+    </div>
+    <div className="overview-recent-resources">
+      {loading ? <ul aria-hidden="true">{[0, 1, 2].map(slot => <li key={slot}><Skeleton avatar active title={false} paragraph={{ rows: 1 }} /></li>)}</ul>
+        : recent.length ? <ul aria-label={uiText("资源预览")}>{recent.map(({ resource, category }) =>
           <li key={`${category.key}:${resource.id}`}>
             <button type="button" onClick={event => onOpen(kinds[category.key], resource.id, event.currentTarget)} title={resource.name}>
               <ResourceThumbnail key={resource.thumbnail} source={resolveAssetUrl(resource.thumbnail ?? undefined)} icon={category.icon} />
               <span><strong>{resource.name}</strong><small>{uiText(category.label)}</small></span>
             </button>
           </li>)}</ul>
-          : <p className="overview-message">{uiText(categories.every(({ key }) => results[kinds[key]]?.total === 0)
-            ? "暂无项目资源" : "暂无可展示的最近资源")}</p>}
+          : <p className="overview-message">{uiText(visibleCategories.every(({ key }) => results[kinds[key]]?.total === 0)
+            ? (category ? "该分类暂无资源" : "暂无项目资源") : "暂无可展示的最近资源")}</p>}
     </div>
   </div>
 }

@@ -13,7 +13,7 @@ const origin = `http://127.0.0.1:${port}`
 const server = await createServer({ root, server: { host: '127.0.0.1', port, strictPort: true, open: false } })
 const output = await browserOutput('jellyfish-project-overview-')
 const chapters = [
-  ...[5, 2, 1, 4, 3].map(index => ({id:`rich-${index}`,project_id:'p-rich',index,title:index===2?'丰富章节2：这是用于验证概览长章节名称可换行的标题':`丰富章节${index}`,raw_text:'真实原文',sequence_count:5,status:'shooting'})),
+  ...[5, 2, 1, 4, 3].map(index => ({id:`rich-${index}`,project_id:'p-rich',index,title:index===2?'丰富章节2：这是用于验证概览长章节名称可换行的标题':`丰富章节${index}`,raw_text:'真实原文',sequence_count:index===2?0:5,status:'shooting'})),
   { id: 'unknown', project_id: 'p-unknown', index: 1, title: '未知场次章节', raw_text:'已有原文',status:'draft'},
   { id: 'scene-failed', project_id: 'p-scene-failed', index: 1, title: '可重试章节', raw_text:'已有原文',sequence_count:1,status:'draft'},
   { id: 'raw', project_id: 'p-raw', index: 1, title: '夜入长安', raw_text: '', sequence_count: 0, status: 'draft' },
@@ -47,7 +47,7 @@ try {
       const day = { actor: 3, character: 6, scene: 9, prop: 12, costume: 15 }[kind]
       const count = projectId === 'p-rich' ? 3 : projectId === 'p-manage' && kind === 'character' ? 1 : 0
       const items = Array.from({ length: count }, (_, n) => ({ id: kind + n, name: `${kind} ${n}`,
-        project_id: projectId, created_at: `2026-01-${String(day - n).padStart(2, '0')}T00:00:00Z` }))
+        project_id: projectId, thumbnail: kind === 'character' ? '/api/v1/studio/files/cover-1/download' : undefined, created_at: `2026-01-${String(day - n).padStart(2, '0')}T00:00:00Z` }))
       return respond({ items, pagination: { total: count } })
     }
     if (path.endsWith('/entities/character/character0')) return respond({ id: 'character0', name: 'character 0', project_id: 'p-manage' })
@@ -57,11 +57,14 @@ try {
       return respond({ items, pagination: { total: items.length } })
     }
     const chapter = chapters.find(row => path.endsWith(`/chapters/${row.id}`) || path.includes(`/chapters/${row.id}/`))
+    if (chapter?.id === 'rich-3' && path.endsWith('/overview')) {
+      return route.fulfill({ status: 503, json: { detail: '未展示章节暂不可用' } })
+    }
     if (chapter?.id === 'scene-failed' && path.includes('/directing/') && failSceneRead) return route.fulfill({status:503,json:{detail:'场次暂不可用'}})
     if (chapter && path.endsWith('/workbench-management')) return respond({ chapter_id: chapter.id, title: chapter.title,
       has_source: Boolean(chapter.raw_text), historical_sequences: [], sequences: chapter.id === 'manage' ? [{ ...sequence, object_count: 0, canvas_count: 0 }] : [] })
     if (chapter && path.endsWith('/objects')) return respond({ revision: 0, objects: [], assets: [] })
-    if (chapter && path.includes('/directing/')) return respond({ chapter_id: chapter.id, title: chapter.title, raw_text: chapter.raw_text, sequences: chapter.id.startsWith('rich-') ? Array.from({length:5},(_,n)=>({...sequence,id:`${chapter.id}-s${n+1}`,title:`${chapter.title}场次${n+1}${n===2?' · 长场次名称应自然换行并保持进入箭头可达':''}`})) : chapter.id === 'manage' ? [sequence] : [] })
+    if (chapter && path.includes('/directing/')) return respond({ chapter_id: chapter.id, title: chapter.title, raw_text: chapter.raw_text, sequences: chapter.id.startsWith('rich-') && chapter.id !== 'rich-2' ? Array.from({length:5},(_,n)=>({...sequence,id:`${chapter.id}-s${n+1}`,title:`${chapter.title}场次${n+1}${n===2?' · 长场次名称应自然换行并保持进入箭头可达':''}`})) : chapter.id === 'manage' ? [sequence] : [] })
     if (chapter) return respond(chapter)
     if (path.endsWith('/generation-canvases')) {
       const query = url.searchParams.get('q')
@@ -79,12 +82,15 @@ try {
     return respond({ items: [], next_cursor: null })
   })
 
-  const current = page.getByRole('region', { name: '当前制作', exact: true })
   const canvases = page.getByRole('region', { name: '画布列表', exact: true })
   const visit = id => page.goto(`${origin}/projects/p-${id}?tab=dashboard`)
   const info = page.getByRole('region', { name: '项目信息', exact: true })
   const resources = page.getByRole('region', { name: '项目资源', exact: true })
-  const scenes = page.getByRole('region', { name: '章节场次', exact: true })
+  const scenes = page.getByRole('region', { name: '章节制作', exact: true })
+  const current = scenes
+  const chapterOptions = scenes.getByRole('group', { name: '选择章节' })
+  const filters = resources.getByRole('group', { name: '资源分类' })
+  const tiles = resources.getByRole('list', { name: '资源预览' }).getByRole('button')
   for (const [width, height] of [[1366, 768], [390, 844]]) {
     await page.setViewportSize({ width, height })
     let expected
@@ -92,7 +98,7 @@ try {
       let release
       pendingOverview = new Promise(resolve => { release = resolve })
       await page.goto(`${origin}/projects/p-${state}?tab=dashboard`, { waitUntil: 'domcontentloaded' })
-      const panels = [current, info, resources, scenes]
+      const panels = [info, scenes, resources]
       const regions = () => Promise.all(panels.map(panel => panel.evaluate(node => [node.offsetTop, node.offsetWidth, node.offsetHeight])))
       try {
         await Promise.all(panels.map(panel => panel.locator('[aria-busy="true"]').waitFor()))
@@ -104,21 +110,39 @@ try {
       }
       await Promise.all(panels.map(panel => panel.locator('[aria-busy="false"]').waitFor()))
       assert.deepEqual(await regions(), expected, '空、单条和多条的区块位置和尺寸一致')
-      assert.equal(await resources.getByRole('button').count(), { empty: 0, manage: 1, rich: 3 }[state])
+      assert.equal(await tiles.count(), { empty: 0, manage: 1, rich: 3 }[state])
       assert.equal(await scenes.getByRole('listitem').count(), { empty: 0, manage: 1, rich: 3 }[state])
-      if (state === 'rich') assert.deepEqual(await resources.getByRole('button').allTextContents(), ['costume 0服装', 'costume 1服装', 'costume 2服装'])
-      const [first, second, third, fourth] = expected
-      if (width === 1366) assert.ok(first[0] === second[0] && first[2] === second[2] && third[1] === fourth[1] && fourth[0] > third[0])
-      else assert.ok(expected.every((entry, index) => entry[1] === first[1] && (index === 0 || entry[0] > expected[index - 1][0])))
+      if (state === 'rich') assert.deepEqual(await tiles.allTextContents(), ['costume 0服装', 'costume 1服装', 'costume 2服装'])
+      const heights = width === 1366 ? [96, 240, 176] : [108, 282, 278]
+      assert.deepEqual(expected.map(entry => entry[2]), heights)
+      assert.ok(expected.every((entry, index) => entry[1] === expected[0][1] && (index === 0 || entry[0] > expected[index - 1][0])))
+      if (state === 'rich') {
+        const action = await scenes.getByRole('button', { name: '工作台管理' }).boundingBox()
+        assert.ok(action && action.y + action.height <= height, '首屏可见继续制作入口')
+        await chapterOptions.getByRole('button', { name: '丰富章节1', exact: true }).click()
+        await scenes.getByRole('heading', { name: '第 1 章 · 丰富章节1', exact: true }).waitFor()
+        await scenes.getByRole('link', { name: '丰富章节1场次1', exact: true }).waitFor()
+        await chapterOptions.getByRole('button', { name: /^丰富章节2/ }).click()
+        await scenes.getByRole('button', { name: '划分场次', exact: true }).waitFor()
+        await scenes.getByText('暂无章节场次', { exact: true }).waitFor()
+        await chapterOptions.getByRole('button', { name: '丰富章节4', exact: true }).click()
+        await scenes.getByRole('link', { name: '丰富章节4场次1', exact: true }).waitFor()
+        await filters.getByRole('button', { name: '角色 3', exact: true }).click()
+        assert.deepEqual(await tiles.allTextContents(), ['character 0角色', 'character 1角色', 'character 2角色'])
+        await tiles.first().locator('img').evaluate(image => image.decode())
+        assert.equal(await tiles.first().locator('img').evaluate(image => image.naturalWidth), 40)
+        assert.equal(await resources.getByRole('link', { name: '查看全部角色' }).getAttribute('href'), '/projects/p-rich?tab=roles')
+        assert.deepEqual(await regions(), expected)
+        await filters.getByRole('button', { name: '全部', exact: true }).click()
+      }
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), true)
       await page.screenshot({ path: join(output, `overview-${width}-${state}.png`), animations: 'disabled' })
     }
   }
   await visit('rich')
-  const chapterOptions = scenes.getByRole('group', { name: '选择章节' })
   await chapterOptions.getByRole('button', { name: '丰富章节4', exact: true }).waitFor()
-  assert.deepEqual(await chapterOptions.getByRole('button').allTextContents(), ['丰富章节4','丰富章节1','丰富章节2：这是用于验证概览长章节名称可换行的标题'])
-  assert.equal(await chapterOptions.getByRole('button', { pressed: true }).textContent(), '丰富章节4')
+  assert.deepEqual(await chapterOptions.getByRole('button').allTextContents(), ['丰富章节4当前','丰富章节1','丰富章节2：这是用于验证概览长章节名称可换行的标题'])
+  assert.equal(await chapterOptions.getByRole('button', { pressed: true }).textContent(), '丰富章节4当前')
   assert.equal(await page.getByRole('heading', { name: '项目概览', exact: true }).count(), 1)
   assert.equal(await page.getByRole('button', { name: '更多', exact: true }).count(), 0)
   assert.equal(await scenes.getByRole('link', { name: '丰富章节4场次1', exact: true }).getAttribute('href'), '/projects/p-rich/chapters/rich-4/workbench-management?sequence=rich-4-s1')
@@ -128,7 +152,7 @@ try {
   await chapterOptions.getByRole('button', { name: '丰富章节1', exact: true }).click()
   await scenes.getByRole('link', { name: '丰富章节1场次1', exact: true }).waitFor()
   assert.equal(await scenes.getByRole('link', { name: '丰富章节4场次1', exact: true }).count(), 0)
-  await current.getByRole('heading',{name:'第 4 章 · 丰富章节4',exact:true}).waitFor()
+  await current.getByRole('heading',{name:'第 1 章 · 丰富章节1',exact:true}).waitFor()
   for (const theme of ['mist','solid']) {
     await page.evaluate(value => localStorage.setItem('jellyfish_appearance',value),theme)
     await page.reload()
@@ -144,7 +168,10 @@ try {
   }
   await page.setViewportSize({width:1440,height:900})
   await visit('manage')
-  const resourceLink = resources.getByRole('link', { name: '角色 1', exact: true })
+  await filters.getByRole('button', { name: '演员 0', exact: true }).click()
+  assert.equal(await tiles.count(), 0)
+  await filters.getByRole('button', { name: '角色 1', exact: true }).click()
+  const resourceLink = resources.getByRole('link', { name: '查看全部角色', exact: true })
   assert.equal(await resourceLink.getAttribute('href'), '/projects/p-manage?tab=roles')
   const resourceButton = resources.getByRole('button', { name: 'character 0 角色', exact: true })
   await resourceButton.click()
@@ -208,13 +235,13 @@ try {
   await visit('unknown')
   await current.getByText('场次数量待核对',{exact:true}).waitFor()
   await current.getByRole('button',{name:'工作台管理',exact:true}).waitFor()
-  await scenes.getByText('划分场次后，可在这里继续制作',{exact:true}).waitFor()
+  await scenes.getByText('暂无章节场次',{exact:true}).waitFor()
   await visit('scene-failed')
   await scenes.getByText('场次暂不可用',{exact:true}).waitFor()
   assert.equal(await scenes.getByText('暂无章节场次',{exact:true}).count(),0)
   failSceneRead = false
   await scenes.getByRole('button',{name:'重试读取场次',exact:true}).click()
-  await scenes.getByText('划分场次后，可在这里继续制作',{exact:true}).waitFor()
+  await scenes.getByText('暂无章节场次',{exact:true}).waitFor()
   await visit('empty')
   await current.getByText('创建第一章开始创作', { exact: true }).waitFor()
   await visit('failed')

@@ -3855,5 +3855,12 @@
   "划分场次后，可在这里继续制作": "Divide a chapter into scenes to continue production here",
   "选择章节": "Select chapter",
   "原文已变更": "Source changed",
-  "{{count}} 章": "{{count}} chapters"
+  "{{count}} 章": "{{count}} chapters",
+  "章节制作": "Chapter production",
+  "添加项目简介": "Add project description",
+  "资源分类": "Resource categories",
+  "资源预览": "Resource preview",
+  "按新增时间": "Newest first",
+  "查看全部{{category}}": "View all {{category}}",
+  "该分类暂无资源": "No resources in this category"
 }

@@ -30,38 +30,37 @@ export function DashboardTab({ projectId, project, projectLoading, chapterData }
   const uiText = useUiText()
   const navigate = useNavigate()
   const { chapters, loading, error: chapterError, refresh, total, totalKnown } = chapterData
-  const [sceneResult, setSceneResult] = useState<{ chapters: typeof chapters; rows: ChapterOverview[]; error?: string }>()
+  const [sceneResult, setSceneResult] = useState<{ chapter: (typeof chapters)[number]; overview?: ChapterOverview; error?: string }>()
   const [selectedId, setSelectedId] = useState('')
   const [retry, setRetry] = useState(0)
   const [resourceRefresh, setResourceRefresh] = useState(0)
   const [asset, setAsset] = useState<{ kind: ProjectResourceKind; id: string; trigger: HTMLElement; panel: HTMLElement | null; scrollTop: number }>()
-  useEffect(() => {
-    if (loading || chapterError || !chapters.length) return
-    let active = true
-    void Promise.all([...chapters].sort((a, b) => a.index - b.index).map(async chapter => {
-      const result = await StudioDirectingService.directingChapterOverview({ projectId, chapterId: chapter.id })
-      if (!result.data || result.data.chapter_id !== chapter.id) throw new Error(uiText("场次列表读取失败，请重试"))
-      return result.data
-    })).then(rows => {
-      if (active) setSceneResult({ chapters, rows })
-    }).catch(cause => {
-      if (active) setSceneResult({ chapters, rows: [], error: apiErrorMessage(cause) })
-    })
-    return () => { active = false }
-  }, [uiText, chapters, projectId, retry, loading, chapterError])
-
   const recentChapterId = readRecentWork(projectId)?.chapterId
   const chapter = chapters.find(row => row.id === recentChapterId)
     ?? chapters.find(row => row.status !== 'done') ?? chapters[0]
-  const production = chapter && chapterProduction(chapter)
-  const currentResults = sceneResult?.chapters === chapters ? sceneResult : undefined
-  const scenesLoading = loading || (!chapterError && chapters.length > 0 && !currentResults)
-  const ordered = (currentResults?.rows ?? []).filter(row => row.sequences.length > 0)
-  const previewRows = [
-    ...ordered.filter(row => row.chapter_id === chapter?.id),
-    ...ordered.filter(row => row.chapter_id !== chapter?.id),
-  ].slice(0, 3)
-  const selected = previewRows.find(row => row.chapter_id === selectedId) ?? previewRows[0]
+  const previewChapters = chapter
+    ? [chapter, ...chapters.filter(row => row.id !== chapter.id).sort((a, b) => a.index - b.index)].slice(0, 3)
+    : []
+  const selected = previewChapters.find(row => row.id === selectedId) ?? previewChapters[0]
+  const production = selected && chapterProduction(selected)
+  const currentResult = sceneResult?.chapter === selected ? sceneResult : undefined
+  const scenesLoading = loading || (!chapterError && !!selected && !currentResult)
+  const sequences = currentResult?.overview?.sequences ?? []
+
+  useEffect(() => {
+    if (loading || chapterError || !selected) return
+    let active = true
+    const chapterId = selected.id
+    setSceneResult(undefined)
+    void StudioDirectingService.directingChapterOverview({ projectId, chapterId }).then(({ data }) => {
+      if (!data || data.chapter_id !== chapterId) throw new Error(uiText("场次列表读取失败，请重试"))
+      if (active) setSceneResult({ chapter: selected, overview: data })
+    }).catch(cause => {
+      if (active) setSceneResult({ chapter: selected, error: apiErrorMessage(cause) })
+    })
+    return () => { active = false }
+  }, [uiText, selected, projectId, retry, loading, chapterError])
+
   const cover = buildFileDownloadUrl(project?.cover_file_id)
   const projectMeta = [
     project?.style && uiText(project.style),
@@ -90,83 +89,87 @@ export function DashboardTab({ projectId, project, projectLoading, chapterData }
         }} />
     </div> : <ProjectContentToolbar><h1 className="app-page-title">{uiText("项目概览")}</h1></ProjectContentToolbar>}
     <div className="project-overview" hidden={!!asset}>
-      <Panel id="project-current-production" title={uiText("当前制作")}>
-        <div className="overview-current-body" aria-busy={loading}>
-          {loading ? <OverviewSkeleton /> : chapterError
-            ? <OverviewMessage error action={<Button onClick={() => void refresh()}>{uiText("重试")}</Button>}>{chapterError}</OverviewMessage>
-            : chapter && production ? <>
-              <div className="overview-current-heading">
-                <h3 title={chapter.title}>{uiText("第 {{index}} 章 · {{title}}", { index: chapter.index, title: chapter.title })}</h3>
-                <span className="chapter-production-state" data-tone={production.tone}>{uiText(production.state)}</span>
-              </div>
-              <p>{chapter.sequenceCount === undefined ? uiText("场次数量待核对") : uiText("{{sequenceCount}} 个场次", { sequenceCount: chapter.sequenceCount })}</p>
-              {chapter.summary && <p className="overview-description">{chapter.summary}</p>}
-              <Button type="primary" onClick={() => navigate(chapterActionLocation(projectId, chapter.id, production.target))}>
-                {uiText({ edit: '编辑原文', source: '划分场次', manage: '工作台管理' }[production.target])}
-              </Button>
-            </> : <OverviewMessage action={<Button type="primary" onClick={() => navigate(`${chapterLocation(projectId)}&create=1`)}>{uiText("创建第一章")}</Button>}>
-              {uiText("创建第一章开始创作")}
-            </OverviewMessage>}
-        </div>
-      </Panel>
-      <Panel id="project-overview-info" title={uiText("项目信息")}
-        action={<Link to={projectTabLocation(projectId, 'settings')}>{uiText("项目设置")}</Link>}>
+      <section className="overview-project-header" aria-label={uiText("项目信息")}>
         <div className="overview-info-body" aria-busy={projectLoading}>
           {projectLoading ? <OverviewSkeleton /> : project && <>
             {cover && <img className="overview-project-cover" src={cover} alt="" onError={event => { event.currentTarget.hidden = true }} />}
             <div className="overview-project-copy">
               <h3 title={project.name}>{project.name}</h3>
               {projectMeta && <p className="overview-project-meta">{projectMeta}</p>}
-              <p className="overview-description">{project.description || uiText("尚未填写项目简介")}</p>
+              {project.description
+                ? <p className="overview-description" title={project.description}>{project.description}</p>
+                : <Link to={projectTabLocation(projectId, 'settings')}>{uiText("添加项目简介")}</Link>}
             </div>
           </>}
         </div>
-      </Panel>
-      <Panel id="project-overview-resources" title={uiText("项目资源")} wide>
-        <OverviewResources projectId={projectId} refresh={resourceRefresh} onOpen={openResource} />
-      </Panel>
-      <Panel id="project-overview-sequences" title={uiText("章节场次")} wide
+        <Link className="overview-settings" to={projectTabLocation(projectId, 'settings')}>{uiText("项目设置")}</Link>
+      </section>
+      <Panel id="project-overview-sequences" title={uiText("章节制作")}
         action={<Link to={chapterLocation(projectId)}>{uiText("查看全部章节")} <ArrowRightOutlined aria-hidden /></Link>}>
         <div className="overview-scenes-body" aria-busy={scenesLoading}>
-          {scenesLoading ? <div className="overview-scenes-layout"><OverviewSkeleton /><OverviewSkeleton /></div>
-            : chapterError ? <OverviewMessage error action={<Button onClick={() => void refresh()}>{uiText("重试读取章节")}</Button>}>{uiText("章节读取失败，暂无法展示场次")}</OverviewMessage>
-            : currentResults?.error ? <OverviewMessage error action={<Button onClick={() => { setSceneResult(undefined); setRetry(value => value + 1) }}>{uiText("重试读取场次")}</Button>}>{currentResults.error}</OverviewMessage>
-            : !selected ? <OverviewMessage>{chapters.length ? uiText("划分场次后，可在这里继续制作") : uiText("暂无章节场次")}</OverviewMessage>
+          {loading ? <div className="overview-scenes-layout"><OverviewSkeleton /><OverviewSkeleton /></div>
+            : chapterError ? <OverviewMessage error action={<Button onClick={() => void refresh()}>{uiText("重试")}</Button>}>{chapterError}</OverviewMessage>
+            : !selected || !production ? <OverviewMessage action={<Button type="primary" onClick={() => navigate(`${chapterLocation(projectId)}&create=1`)}>{uiText("创建第一章")}</Button>}>
+              {uiText("创建第一章开始创作")}
+            </OverviewMessage>
             : <div className="overview-scenes-layout">
               <div className="overview-chapter-options" role="group" aria-label={uiText("选择章节")}>
-                {previewRows.map(row => <button key={row.chapter_id} type="button" title={row.title}
-                  aria-pressed={selected.chapter_id === row.chapter_id} onClick={() => setSelectedId(row.chapter_id)}>{row.title}</button>)}
+                {previewChapters.map(row => <button key={row.id} type="button" title={row.title}
+                  aria-label={row.title}
+                  aria-describedby={row.id === chapter?.id ? 'overview-current-chapter-marker' : undefined}
+                  aria-pressed={selected.id === row.id} onClick={() => setSelectedId(row.id)}>
+                  <span>{row.title}</span>{row.id === chapter?.id && <small id="overview-current-chapter-marker">{uiText("当前")}</small>}
+                </button>)}
               </div>
               <div className="overview-scene-preview">
-                <ul className="overview-scene-links">
-                  {selected.sequences.slice(0, 3).map(scene => <li key={scene.id}>
-                    <Link to={workbenchManagementLocation(projectId, selected.chapter_id, scene.id)} aria-label={scene.title} aria-describedby={`overview-scene-${scene.id}`}>
-                      <span className="overview-scene-copy" id={`overview-scene-${scene.id}`}>
-                        <span className="overview-scene-title">
-                          <strong title={scene.title}>{scene.title}</strong>
-                          {scene.source_changed && <small>{uiText("原文已变更")}</small>}
-                        </span>
-                        {scene.source_excerpt && <small title={scene.source_excerpt}>{scene.source_excerpt}</small>}
-                      </span>
-                      <ArrowRightOutlined aria-hidden />
-                    </Link>
-                  </li>)}
-                </ul>
-                {selected.sequences.length > 3 && <Link className="overview-all-scenes" to={workbenchManagementLocation(projectId, selected.chapter_id)}>
-                  {uiText("查看本章全部场次")} <ArrowRightOutlined aria-hidden />
-                </Link>}
+                <div className="overview-selected-chapter">
+                  <div className="overview-current-heading">
+                    <h3 title={selected.title}>{uiText("第 {{index}} 章 · {{title}}", { index: selected.index, title: selected.title })}</h3>
+                    <p>
+                      <span className="chapter-production-state" data-tone={production.tone}>{uiText(production.state)}</span>
+                      <span>{selected.sequenceCount === undefined ? uiText("场次数量待核对") : uiText("{{sequenceCount}} 个场次", { sequenceCount: selected.sequenceCount })}</span>
+                    </p>
+                  </div>
+                  <Button type="primary" onClick={() => navigate(chapterActionLocation(projectId, selected.id, production.target))}>
+                    {uiText({ edit: '编辑原文', source: '划分场次', manage: '工作台管理' }[production.target])}
+                  </Button>
+                </div>
+                {scenesLoading ? <OverviewSkeleton />
+                  : currentResult?.error ? <OverviewMessage error action={<Button onClick={() => { setSceneResult(undefined); setRetry(value => value + 1) }}>{uiText("重试读取场次")}</Button>}>{currentResult.error}</OverviewMessage>
+                  : !sequences.length ? <p className="overview-no-scenes">{uiText("暂无章节场次")}</p> : <>
+                    <ul className="overview-scene-links">
+                      {sequences.slice(0, 3).map(scene => <li key={scene.id}>
+                        <Link to={workbenchManagementLocation(projectId, selected.id, scene.id)} aria-label={scene.title} aria-describedby={`overview-scene-${scene.id}`}>
+                          <span className="overview-scene-copy" id={`overview-scene-${scene.id}`}>
+                            <span className="overview-scene-title">
+                              <strong title={scene.title}>{scene.title}</strong>
+                              {scene.source_changed && <small>{uiText("原文已变更")}</small>}
+                            </span>
+                            {scene.source_excerpt && <small title={scene.source_excerpt}>{scene.source_excerpt}</small>}
+                          </span>
+                          <ArrowRightOutlined aria-hidden />
+                        </Link>
+                      </li>)}
+                    </ul>
+                    {sequences.length > 3 && <Link className="overview-all-scenes" to={workbenchManagementLocation(projectId, selected.id)}>
+                      {uiText("查看本章全部场次")} <ArrowRightOutlined aria-hidden />
+                    </Link>}
+                </>}
               </div>
             </div>}
         </div>
+      </Panel>
+      <Panel id="project-overview-resources" title={uiText("项目资源")}>
+        <OverviewResources projectId={projectId} refresh={resourceRefresh} onOpen={openResource} />
       </Panel>
     </div>
   </>
 }
 
-function Panel({ id, title, wide, action, children }: {
-  id: string; title: string; wide?: boolean; action?: ReactNode; children: ReactNode
+function Panel({ id, title, action, children }: {
+  id: string; title: string; action?: ReactNode; children: ReactNode
 }) {
-  return <section className="overview-panel" data-wide={wide || undefined} aria-labelledby={id}>
+  return <section className="overview-panel" aria-labelledby={id}>
     <header><h2 id={id}>{title}</h2>{action}</header>
     {children}
   </section>
