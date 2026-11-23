@@ -102,3 +102,22 @@ def read_context_coverage(messages):
             payload = json.loads(message.content)
             observed.update(card['id'] for card in payload['cards'])
     return observed
+
+
+async def resolve_external_canvas_cards(store, canvas_id, references):
+    """Freeze explicitly pasted card bodies through the ordinary canvas read boundary."""
+    snapshots = []
+    for reference in references:
+        if reference.canvas_id == canvas_id:
+            raise HTTPException(422, 'Select local cards through the current canvas draft')
+        source = await store.get(reference.canvas_id)
+        document = source.document or {}
+        cards = {item['id']: item for item in document.get('cards', [])}
+        if any(card_id not in cards for card_id in reference.card_ids):
+            raise HTTPException(409, 'A referenced source card is no longer available')
+        snapshots.append({'canvas_id': source.id, 'name': document.get('name', source.id), 'revision': source.revision,
+                          'cards': [cards[card_id] for card_id in dict.fromkeys(reference.card_ids)]})
+    payload = json.dumps(snapshots, ensure_ascii=False)
+    if len(payload) > 24000:
+        raise HTTPException(422, 'Referenced canvas cards exceed the assistant reading limit')
+    return payload if snapshots else None

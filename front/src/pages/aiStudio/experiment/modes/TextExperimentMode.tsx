@@ -85,7 +85,7 @@ function toLocalMessages(messages: ExperimentMessageRead[]): LocalMessage[] {
       id: item.id,
       role: item.role === 'assistant' ? 'assistant' : 'user',
       content: item.content ?? '',
-      status: item.role === 'assistant' ? 'succeeded' : undefined,
+      status: item.role === 'assistant' ? (item.status === 'failed' || item.status === 'cancelled' ? item.status : 'succeeded') : undefined,
       inputSnapshot: item.role === 'user' ? readExperimentInputSnapshot(item) : undefined,
     }))
 }
@@ -205,6 +205,7 @@ export function TextExperimentMode({
       for await (const event of streamTextLab({
         sessionId: session.id,
         body: { model_id: modelId, content: currentPrompt },
+        requestId: attempt.requestId,
         signal: controller.signal,
       })) {
         if (!submission.isCurrent(attempt)) {

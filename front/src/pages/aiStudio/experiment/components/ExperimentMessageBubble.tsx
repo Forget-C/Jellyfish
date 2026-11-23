@@ -1,5 +1,6 @@
 import { MessageOutlined, UserOutlined } from '@ant-design/icons'
 import type { ReactNode } from 'react'
+import { WorkbenchConversation } from '../../../../components/workbench/WorkbenchConversation'
 
 type ExperimentMessageBubbleProps = {
   children?: ReactNode
@@ -14,7 +15,11 @@ export function ExperimentMessageBubble({ children, footer, identity, tone, stat
   const Icon = tone === 'user' ? UserOutlined : MessageOutlined
   return <article className={`experiment-message experiment-message-${tone}`}>
     <header className="experiment-message-header"><span><Icon aria-hidden="true" /> {identity}</span>{status}</header>
-    {children ? <div className="experiment-message-body">{children}</div> : null}
+    {children ? <WorkbenchConversation gap={0} items={[{
+      key: 'body', role: tone === 'assistant' ? 'ai' : 'user', placement: tone === 'user' ? 'end' : 'start',
+      variant: 'borderless', content: children, classNames: { content: 'experiment-message-body' },
+      styles: { content: { background: tone === 'user' ? 'var(--app-selected)' : 'white', padding: '8px 12px' } },
+    }]} /> : null}
     {footer ? <footer className="experiment-message-footer">{footer}</footer> : null}
   </article>
 }

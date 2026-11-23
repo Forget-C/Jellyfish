@@ -127,7 +127,7 @@ try {
   await page.keyboard.press('Escape')
   await panel.waitFor({ state: 'hidden' })
   await trigger.and(page.locator(':focus')).waitFor()
-  for (const dismiss of [() => panel.getByRole('button', { name: 'Close', exact: true }).click(), () => page.mouse.click(20, 120)]) {
+  for (const dismiss of [() => panel.getByRole('button', { name: /^(Close|关闭)$/ }).click(), () => page.mouse.click(20, 120)]) {
     await openLabAddition(page, '添加参考图')
     await panel.getByRole('button', { name: '移除参考图：参考图片 1', exact: true }).click()
     await dismiss()

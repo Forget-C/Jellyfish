@@ -33,6 +33,7 @@ from app.services.generation_canvas.catalog import CARD_TITLES, design_fields
 from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
 from app.services.generation_canvas.assistant_approval import automatic_approval_allowed
 from app.services.generation_canvas.assistant_auto_review import AutomaticReview, review_basis
+from app.services.generation_canvas.assistant_hitl import resume_canvas_approval
 from app.services.generation_canvas.assistant_removals import apply_removal, removal_impact
 from app.services.generation_canvas.assistant_structure import (
     apply_structural_change, assistant_card_configuration, preview_assistant_connection,
@@ -339,6 +340,8 @@ async def resolve_assistant_proposal(
         result = await _resolve_groups(store, canvas, turn, proposal, decision, decision_key)
     else:
         result = await _resolve_single(store, canvas, turn, proposal, decision)
+    if not result.replayed:
+        result.graph_resumed = await resume_canvas_approval(turn, pending=result.proposal.state == 'pending')
     if automatic_review is not None and not result.replayed:
         if automatic_review.receipt.status == 'blocked' and result.receipt:
             raise HTTPException(409, 'Automatic review did not authorize this execution')
@@ -348,6 +351,14 @@ async def resolve_assistant_proposal(
             turn.approval_audit = [*audit[:-1], {**audit[-1], 'review': automatic_review.receipt.model_dump(mode='json')}]
     if decision_key:
         _store_decision_receipt(turn, decision_key, command, result)
+    elif result.graph_resumed:
+        receipts = turn.proposal_receipt or {}
+        if proposal.groups:
+            digest = _group_decision_digest(turn, decision, None, selected)
+            if digest in receipts:
+                turn.proposal_receipt = {**receipts, digest: {**receipts[digest], 'graph_resumed': True}}
+        elif result.receipt or result.proposal.state == 'rejected':
+            turn.proposal_receipt = {**receipts, '_graph_resumed': True}
     return result
 
 
@@ -361,6 +372,7 @@ def _store_decision_receipt(turn, key, command, result):
             'receipt': result.receipt.model_dump(mode='json') if result.receipt else None,
             'conflicts': [item.model_dump(mode='json') for item in result.conflicts],
             'automatic_review': result.automatic_review.model_dump(mode='json') if result.automatic_review else None,
+            'graph_resumed': result.graph_resumed,
         },
     }
 
@@ -369,12 +381,15 @@ async def _resolve_single(store, canvas, turn, proposal, decision):
     canvas_id = canvas.id
     if decision.group_ids is not None:
         raise HTTPException(422, 'This assistant proposal has no edit groups')
+    receipts = turn.proposal_receipt or {}
     if proposal.state == 'applied' and decision.action == 'approve':
-        receipt = {key: value for key, value in (turn.proposal_receipt or {}).items()
-                   if not key.startswith('decision:')}
-        return await _replay_decision(store, canvas_id, proposal, {'receipt': receipt or None, 'conflicts': []})
+        receipt = {key: value for key, value in receipts.items() if not key.startswith(('decision:', '_'))}
+        return await _replay_decision(store, canvas_id, proposal, {
+            'receipt': receipt or None, 'conflicts': [], 'graph_resumed': receipts.get('_graph_resumed', False),
+        })
     if proposal.state == 'rejected' and decision.action == 'reject':
-        return CanvasAssistantProposalResult(proposal=proposal)
+        return CanvasAssistantProposalResult(proposal=proposal, replayed=True,
+                                             graph_resumed=receipts.get('_graph_resumed', False))
     if proposal.state != 'pending':
         raise HTTPException(409, 'Canvas assistant proposal has already been decided')
     if decision.action == 'reject':
@@ -416,6 +431,11 @@ def _apply_text(card, field, change: CanvasAssistantChange) -> None:
         card.generated_prompt.edit_confirmed = True
 
 
+def _group_decision_digest(turn, decision, decision_key, selected):
+    identity = (turn.request_id, decision_key) if decision_key else (turn.request_id, decision.action, *selected)
+    return hashlib.sha256(':'.join(identity).encode()).hexdigest()[:48]
+
+
 async def _resolve_groups(store, canvas, turn, proposal, decision, decision_key) -> CanvasAssistantProposalResult:
     groups = {group.id: group for group in proposal.groups}
     if decision.group_ids is None:
@@ -423,8 +443,7 @@ async def _resolve_groups(store, canvas, turn, proposal, decision, decision_key)
     selected = sorted(decision.group_ids)
     if len(set(selected)) != len(selected) or any(group_id not in groups for group_id in selected):
         raise HTTPException(422, 'Unknown or repeated assistant edit group')
-    identity = (turn.request_id, decision_key) if decision_key else (turn.request_id, decision.action, *selected)
-    digest = hashlib.sha256(':'.join(identity).encode()).hexdigest()[:48]
+    digest = _group_decision_digest(turn, decision, decision_key, selected)
     receipts = turn.proposal_receipt or {}
     recorded = receipts.get(digest)
     if recorded:
@@ -460,7 +479,7 @@ async def _replay_decision(store, canvas_id, proposal, recorded):
     return CanvasAssistantProposalResult(
         proposal=proposal, receipt=recorded['receipt'], conflicts=recorded['conflicts'],
         canvas=await store.read(canvas_id) if recorded['receipt'] or recorded['conflicts'] or recorded.get('automatic_review') else None,
-        automatic_review=recorded.get('automatic_review'),
+        automatic_review=recorded.get('automatic_review'), graph_resumed=recorded.get('graph_resumed', False),
         replayed=True,
     )
 

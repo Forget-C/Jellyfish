@@ -13,7 +13,7 @@ from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, ConnectC
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
 from app.services.generation_canvas.assistant import CanvasAssistant
-from app.services.generation_canvas.assistant_context import resolve_assistant_context
+from app.services.generation_canvas.assistant_context import resolve_assistant_context, resolve_external_canvas_cards
 from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
 from app.services.generation_canvas.assistant_events import publish_events
 from app.services.generation_canvas.assistant_media import (
@@ -49,8 +49,11 @@ class DraftCanvasAssistant(CanvasAssistant):
         messages = []
         for turn in turns:
             messages.extend([HumanMessage(content=turn.text), AIMessage(content=turn.reply)])
+        referenced = await resolve_external_canvas_cards(self.store, canvas_id, command.canvas_references)
+        text = (command.text + '\n\n以下是其他画布的只读参考，不得修改来源卡片。\n' + referenced
+                if referenced else command.text)
         content, attachments = await describe_assistant_media(
-            command.text, command.attachment_file_ids, sources, capability=capability,
+            text, command.attachment_file_ids, sources, capability=capability,
         )
         messages.append(HumanMessage(content=content))
         reply, skills, observed = await self._reply(
@@ -61,6 +64,7 @@ class DraftCanvasAssistant(CanvasAssistant):
             context.observed_card_ids = observed
         return CanvasAssistantExchange(request_id=command.request_id, text=command.text, context=context,
             sequence=len(command.turns) + 1, model_id=model_id, reply=reply, attachments=attachments,
+            canvas_references=command.canvas_references or None,
             skills=skills or None, proposal=edit_draft.proposal if edit_draft else None, revises=command.revises)
 
 
@@ -155,6 +159,7 @@ async def attach_draft_conversation(store, command: CanvasDraftSave, receipt: di
             model_id=turn.model_id, text=turn.text, reply=turn.reply, revises=turn.revises,
             context=turn.context.model_dump(mode='json') if turn.context else None,
             skills=[skill.model_dump(mode='json') for skill in (turn.skills or [])],
+            canvas_references=[item.model_dump(mode='json') for item in turn.canvas_references] if turn.canvas_references else None,
             attachments=[item.model_dump(mode='json') for item in (turn.attachments or [])
                          if item.file_id in sources],
             proposal=proposal.model_dump(mode='json') if proposal else None, approval_audit=audit))

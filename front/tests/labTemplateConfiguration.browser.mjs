@@ -135,7 +135,7 @@ try {
   // Each close route discards temporary edits and returns focus to the trigger.
   for (const dismiss of [
     () => cancel.click(),
-    () => editor.getByRole('button', { name: 'Close', exact: true }).click(),
+    () => editor.getByRole('button', { name: /^(Close|关闭)$/ }).click(),
     () => page.keyboard.press('Escape'),
     () => page.mouse.click(20, 400),
   ]) {

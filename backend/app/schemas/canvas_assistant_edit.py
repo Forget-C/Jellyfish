@@ -169,6 +169,7 @@ class CanvasAssistantProposalResult(BaseModel):
     conflicts: list[CanvasAssistantEditConflict] = Field(default_factory=list)
     generation: CanvasAssistantGenerationRead | None = None
     automatic_review: CanvasAssistantIndependentReview | None = None
+    graph_resumed: bool = False
     replayed: bool = Field(default=False, exclude=True)
 
 

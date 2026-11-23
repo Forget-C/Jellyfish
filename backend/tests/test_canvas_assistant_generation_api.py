@@ -103,6 +103,7 @@ async def test_worker_resumes_exact_authorized_versions(runtime, monkeypatch):
 @pytest.mark.parametrize('scenario, expected_state, expected_runs', [
     ('approve', 'running', 1), ('reject', 'rejected', 0), ('precheck', 'failed', 0), ('edit_only', None, 0),
     ('partial_group', 'running', 1), ('automatic', 'running', 1),
+    ('layout_after_approval', 'running', 1), ('new_input_after_approval', 'failed', 0),
     ('named_match', 'running', 1), ('named_mismatch', None, 0), ('wrong_direction', None, 0),
 ])
 async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypatch, scenario, expected_state,
@@ -224,6 +225,17 @@ async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypa
                 })
                 assert rejected.status_code == 200, rejected.text
                 assert rejected.json()['data']['generation']['state'] == 'queued'
+            if scenario in ('layout_after_approval', 'new_input_after_approval'):
+                updated = (await runtime.client.get(runtime.url)).json()['data']
+                if scenario == 'layout_after_approval':
+                    updated['document']['groups'] = [{'id': 'layout', 'name': '展示编组', 'card_ids': ['v']}]
+                else:
+                    updated['document']['cards'][-1]['prompt']['segments'][0]['text'] = '独立修改后的文本'
+                moved = await runtime.client.put(runtime.url, json={
+                    'request_id': 'edit-after-approval', 'expected_revision': updated['revision'],
+                    'document': updated['document'],
+                })
+                assert moved.status_code == 200, moved.text
             await worker.tick()
             await worker.tick()
             response = await runtime.client.get(assistant)

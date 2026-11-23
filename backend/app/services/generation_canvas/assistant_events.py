@@ -1,7 +1,8 @@
 """Append canvas assistant events atomically with their business state."""
 
 from app.models.canvas_assistant import CanvasAssistantEvent, CanvasAssistantSession
-from app.schemas.canvas_assistant import CanvasAssistantEventPayload, CanvasAssistantExchange, CanvasAssistantQueueItem, InteractionEvent
+from app.schemas.interaction import InteractionEvent
+from app.schemas.canvas_assistant import CanvasAssistantEventPayload, CanvasAssistantExchange, CanvasAssistantQueueItem
 
 
 def publish_events(db, session: CanvasAssistantSession, exchange: CanvasAssistantExchange, *kinds: str) -> None:

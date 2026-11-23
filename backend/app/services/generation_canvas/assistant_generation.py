@@ -32,7 +32,7 @@ _CHINESE_REQUEST = re.compile(
 _ENGLISH_REQUEST = re.compile(
     r'(?:please )?(?:re)?generate (?P<count>[1-9][0-9]?|one|two|three) versions?[.!]?', re.IGNORECASE,
 )
-_EDIT_PREFIX = re.compile(r'^(?:请|帮我)?(?:先)?(?:把|将|修改|改写|调整|更新|优化|改好后|修改后|调整后|更新后)')
+_EDIT_PREFIX = re.compile(r'^(?:请|帮我)?(?:先)?(?:把|将|改|修改|改写|调整|更新|优化|改好后|修改后|调整后|更新后)')
 _AFTER_EDIT = ('改好后', '修改后', '调整后', '更新后')
 
 
@@ -46,7 +46,7 @@ def _explicit_quantity(text: str) -> tuple[int, bool, str | None] | None:
         ending = next(prefix for prefix in _AFTER_EDIT if request.startswith(prefix))
         request = request.removeprefix(ending).lstrip('，, ')
     else:
-        split = re.search(r'(?:[，,；;。]\s*|(?:改好|修改|调整|更新)后\s*|并\s*)(?:然后|并)?\s*'
+        split = re.search(r'(?:[，,、；;。]\s*|(?:改好|修改|调整|更新)后\s*|并\s*)(?:然后|并)?\s*'
                           r'(?=(?:请|帮我|给我|再)?生成)', request)
         if split and _EDIT_PREFIX.match(request):
             prefix = request[:split.start()]
@@ -262,7 +262,7 @@ async def _advance_generation(db, canvas_id: str, source_id: str, project_id: st
         return
     if await db.get(CanvasScopeOccupancy, (canvas_id, entry.card_id)):
         return
-    if canvas.revision != entry.expected_revision:
+    if entry.basis_hash is None and canvas.revision != entry.expected_revision:
         entry.state, entry.error = 'failed', '画布已在授权后修改，请核对输入后重新授权生成'
         return
     version = next(index for index in range(1, entry.requested_count + 1) if _request_id(source_id, index) not in receipts)

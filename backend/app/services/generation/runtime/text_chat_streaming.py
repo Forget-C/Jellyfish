@@ -24,12 +24,14 @@ from app.core.contracts.generation import (
 from app.core.contracts.streaming import (
     GenerationStreamEvent,
     StreamAcceptedData,
+    StreamCancelledData,
     StreamCompletedData,
     StreamDeltaData,
     StreamErrorData,
     StreamErrorDetail,
     StreamGenerationResult,
     StreamMessageData,
+    StreamEventType,
 )
 from app.core.contracts.text_generation import TextChatInput, TextChatMessage
 from app.core.db import async_session_maker
@@ -38,6 +40,8 @@ from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.runtime.text_streaming import TextStreamRunNotFoundError, TextStreamingRuntime
 from app.services.generation.submission import GenerationAccepted, GenerationSubmitter
 from app.services.llm.resolver import build_text_chat_model
+from app.schemas.studio.text_lab import TextLabRunRequest
+from app.services.studio.experiment_interaction import find_text_request, interaction_request_payload, text_stream_result
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, experiment_user_message
 
 _runtime = TextStreamingRuntime()
@@ -52,6 +56,7 @@ class _TextStreamInput:
     session_id: str
     model_id: str
     content: str
+    request_id: str | None = None
 
 
 def _as_message_data(message: ExperimentMessage) -> StreamMessageData:
@@ -79,24 +84,77 @@ def _chunk_text(chunk: object) -> str:
 
 
 async def create_text_stream_run(
-    db: AsyncSession, *, session_id: str, model_id: str, content: str
+    db: AsyncSession, *, session_id: str, model_id: str, content: str, request_id: str | None = None,
 ) -> tuple[str, GenerationStreamEvent]:
     """持久化用户消息并创建内存 SSE run，不写入异步任务表。"""
     session = await _require_text_session(db, session_id=session_id)
     await build_text_chat_model(db, model_id=model_id, thinking=False)
-    user_message = (
-        await append_experiment_messages(
-            db, session_id=session_id, drafts=[experiment_user_message(prompt=content, model_id=model_id)]
-        )
-    )[0]
+    run_id = uuid4().hex
+    draft = experiment_user_message(prompt=content, model_id=model_id)
+    if request_id:
+        draft.payload.update(interaction_request_payload(request_id, TextLabRunRequest(model_id=model_id, content=content)))
+        draft.payload['interaction_run_id'] = run_id
+    user_message = (await append_experiment_messages(db, session_id=session_id, drafts=[draft]))[0]
     session.updated_at = func.now()
     await db.flush()
     await db.refresh(user_message)
-    run_id = uuid4().hex
     async with _stream_inputs_lock:
-        _stream_inputs[run_id] = _TextStreamInput(session_id=session_id, model_id=model_id, content=content)
+        _stream_inputs[run_id] = _TextStreamInput(session_id=session_id, model_id=model_id, content=content, request_id=request_id)
     accepted = await _runtime.create_run(StreamAcceptedData(task_id=run_id, user_message=_as_message_data(user_message)))
     return run_id, accepted
+
+
+@dataclass(frozen=True, slots=True)
+class TextInteractionAdmission:
+    """The enrolled stream owns execution only on the first request."""
+
+    task_id: str
+    start: bool
+    saved_events: tuple[GenerationStreamEvent, ...] | None = None
+
+
+async def admit_text_interaction(db, session_id, body: TextLabRunRequest, request_id: str | None) -> TextInteractionAdmission:
+    """Resume an existing text stream by identity without starting the model again."""
+    if request_id is not None:
+        await _require_text_session(db, session_id=session_id)
+        previous = await find_text_request(db, session_id, request_id, body)
+        if previous is not None:
+            task_id = previous.payload['interaction_run_id']
+            try:
+                await _runtime.state_of(task_id)
+            except TextStreamRunNotFoundError as error:
+                result = await text_stream_result(db, session_id, task_id)
+                if result is None:
+                    raise HTTPException(409, 'TEXT_LAB_STREAM_RESULT_UNKNOWN') from error
+                return TextInteractionAdmission(task_id, False, _recovered_text_events(previous, result, task_id))
+            return TextInteractionAdmission(task_id, False)
+    task_id, _ = await create_text_stream_run(
+        db, session_id=session_id, model_id=body.model_id, content=body.content, request_id=request_id,
+    )
+    return TextInteractionAdmission(task_id, True)
+
+
+def _recovered_text_events(user, result, task_id):
+    events = [
+        GenerationStreamEvent(event=StreamEventType.accepted, sequence=1, created_at=user.created_at,
+                              data=StreamAcceptedData(task_id=task_id, user_message=_as_message_data(user))),
+    ]
+    for sequence, text in result.payload.get('stream_deltas', []):
+        events.append(GenerationStreamEvent(event=StreamEventType.delta, sequence=sequence, created_at=result.updated_at,
+                                           data=StreamDeltaData(task_id=task_id, text_delta=text)))
+    if result.status == 'cancelled':
+        kind = StreamEventType.cancelled
+        data = StreamCancelledData(task_id=task_id, reason=result.payload.get('reason'))
+    elif result.status == 'failed':
+        kind = StreamEventType.error
+        data = StreamErrorData(task_id=task_id, error=StreamErrorDetail.model_validate(result.payload['error']))
+    else:
+        kind = StreamEventType.completed
+        data = StreamCompletedData(task_id=task_id, assistant_message=_as_message_data(result),
+                                   result=StreamGenerationResult(text=result.content, model_id=result.payload['model_id']))
+    events.append(GenerationStreamEvent(event=kind, sequence=events[-1].sequence + 1,
+                                       created_at=result.updated_at, data=data))
+    return tuple(events)
 
 
 def _text_chat_command(*, session_id: str, model_id: str, content: str, delivery: GenerationDelivery) -> GenerationCommand:
@@ -224,9 +282,9 @@ async def request_text_stream_cancel(*, session_id: str, task_id: str, reason: s
     return await _runtime.request_cancel(task_id, reason)
 
 
-async def subscribe_text_stream(task_id: str) -> AsyncIterator[GenerationStreamEvent]:
+async def subscribe_text_stream(task_id: str, *, after: int = 0) -> AsyncIterator[GenerationStreamEvent]:
     """订阅同步 SSE run 的进程内事件序列。"""
-    async for event in _runtime.subscribe(task_id):
+    async for event in _runtime.subscribe(task_id, after_event_id=after):
         yield event
 
 
@@ -237,17 +295,39 @@ async def _complete_stream(run_id: str, stream_input: _TextStreamInput) -> None:
     if not text:
         await _fail_stream(run_id, "empty_response", "Text model returned an empty response")
         return
-    async with async_session_maker() as db:
-        assistant_message = (await append_experiment_messages(db, session_id=stream_input.session_id, drafts=[ExperimentMessageDraft(role="assistant", content=text, payload={"model_id": stream_input.model_id})]))[0]
-        await db.commit()
-        await db.refresh(assistant_message)
+    assistant_message = await _persist_stream_message(run_id, stream_input, events, text, 'succeeded')
     await _runtime.complete(run_id, StreamCompletedData(task_id=run_id, assistant_message=_as_message_data(assistant_message), result=StreamGenerationResult(text=text, model_id=stream_input.model_id)))
     await _discard_stream_input(run_id)
 
 
+async def _persist_stream_message(run_id, stream_input, events, body, state, details=None):
+    payload = {'model_id': stream_input.model_id}
+    if stream_input.request_id:
+        payload.update(details or {})
+        payload.update(interaction_run_id=run_id, stream_deltas=[
+            [event.sequence, event.data.text_delta] for event in events if isinstance(event.data, StreamDeltaData)
+        ])
+    async with async_session_maker() as db:
+        message, = await append_experiment_messages(db, session_id=stream_input.session_id, drafts=[
+            ExperimentMessageDraft(role='assistant', content=body, status=state, payload=payload),
+        ])
+        await db.commit()
+        await db.refresh(message)
+    return message
+
+
+async def _save_partial_stream(run_id, state, details):
+    stream_input = await _get_stream_input(run_id)
+    if stream_input.request_id:
+        events = await _runtime.replay(run_id)
+        body = ''.join(event.data.text_delta for event in events if isinstance(event.data, StreamDeltaData))
+        await _persist_stream_message(run_id, stream_input, events, body, state, details)
+
+
 async def _cancel(run_id: str, reason: str) -> None:
-    """发出取消终态；同步文本运行不会创建或更新 GenerationTask。"""
+    """Publish cancellation and keep already received text in the original interaction."""
     try:
+        await _save_partial_stream(run_id, 'cancelled', {'reason': reason})
         await _runtime.cancel(run_id, reason)
         await _discard_stream_input(run_id)
     except TextStreamRunNotFoundError:
@@ -255,9 +335,11 @@ async def _cancel(run_id: str, reason: str) -> None:
 
 
 async def _fail_stream(run_id: str, code: str, message: str) -> None:
-    """发出稳定错误终态；失败信息不伪装为异步任务。"""
+    """Publish one failed result with any text already delivered."""
     try:
-        await _runtime.fail(run_id, StreamErrorData(task_id=run_id, error=StreamErrorDetail(code=code, message=message)))
+        detail = StreamErrorDetail(code=code, message=message)
+        await _save_partial_stream(run_id, 'failed', {'error': detail.model_dump(mode='json')})
+        await _runtime.fail(run_id, StreamErrorData(task_id=run_id, error=detail))
         await _discard_stream_input(run_id)
     except TextStreamRunNotFoundError:
         return

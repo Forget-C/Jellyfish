@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CanvasAssistantCardReference } from './CanvasAssistantCardReference';
 import type { CanvasAssistantDraftContext } from './CanvasAssistantDraftContext';
 import type { CanvasAssistantFieldRevision } from './CanvasAssistantFieldRevision';
 /**
@@ -13,5 +14,6 @@ export type CanvasAssistantPendingRequest = {
     context?: (CanvasAssistantDraftContext | null);
     revises?: (string | null);
     revises_field?: (CanvasAssistantFieldRevision | null);
+    canvas_references?: Array<CanvasAssistantCardReference>;
     attachment_file_ids?: Array<string>;
 };

@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ApiResponse_ExperimentSessionRead_ } from '../models/ApiResponse_ExperimentSessionRead_';
+import type { ApiResponse_ExperimentTaskCreated_ } from '../models/ApiResponse_ExperimentTaskCreated_';
 import type { ApiResponse_list_ExperimentMessageRead__ } from '../models/ApiResponse_list_ExperimentMessageRead__';
 import type { ApiResponse_list_ExperimentSessionRead__ } from '../models/ApiResponse_list_ExperimentSessionRead__';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
@@ -153,6 +154,31 @@ export class StudioExperimentSessionsService {
             url: '/api/v1/studio/experiment-sessions/{session_id}/messages',
             path: {
                 'session_id': sessionId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Experiment Interaction Receipt
+     * Recover an accepted task and its current state by the original request identity.
+     * @returns ApiResponse_ExperimentTaskCreated_ Successful Response
+     * @throws ApiError
+     */
+    public static experimentInteractionReceipt({
+        sessionId,
+        requestId,
+    }: {
+        sessionId: string,
+        requestId: string,
+    }): CancelablePromise<ApiResponse_ExperimentTaskCreated_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/experiment-sessions/{session_id}/interaction/requests/{request_id}',
+            path: {
+                'session_id': sessionId,
+                'request_id': requestId,
             },
             errors: {
                 422: `Validation Error`,

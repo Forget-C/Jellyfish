@@ -138,6 +138,7 @@ async def test_batch_proposal_edits_creates_and_connects_atomically(canvas_clien
     assert all(event['turn_id'] == exchange['request_id'] for event in events)
     assert events[-1]['payload']['approval_audit'][-1]['outcome'] == ('conflict' if field_conflict else 'applied')
     result = approved.json()['data']
+    assert result['graph_resumed'] is True
     actual = (await canvas_client.get(url)).json()['data']
     if field_conflict:
         assert result['receipt'] is None

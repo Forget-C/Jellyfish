@@ -17,7 +17,7 @@ const apiPort = Number(process.env.CANVAS_ASSISTANT_TEST_API_PORT || 8462)
 const webPort = Number(process.env.CANVAS_ASSISTANT_TEST_WEB_PORT || 4462)
 const api = 'http://127.0.0.1:' + apiPort
 const canvasApi = api + '/api/v1/studio/generation-canvases'
-const journey = '把镜头三的推近放慢，生成一版，再审看'
+const journey = '把镜头三的推近放慢并整理目标卡片布局，生成一版，再审看'
 const clipPath = join(output, 'known-silent-clip.mp4')
 execFileSync('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi',
   '-i', 'color=red:size=64x64:rate=24:duration=2', '-an', '-c:v', 'libx264', '-bf', '0',
@@ -114,6 +114,13 @@ const provider = createHttpServer(async (request, response) => {
       answer = { role: 'assistant', tool_calls: [{
         id: 'context', type: 'function', function: { name: 'read_canvas_context', arguments: '{}' },
       }] }
+    } else if (turns.at(-1) === '/plan 先确认这一段的情绪') {
+      const choice = messages.find(message => message.role === 'tool' && message.tool_call_id === 'creative-choice')
+      answer = choice ? { role: 'assistant', content: '这一段采用：' + choice.content } :
+        { role: 'assistant', tool_calls: [{
+          id: 'creative-choice', type: 'function', function: { name: 'ask_canvas_question',
+            arguments: JSON.stringify({ question: '这一段要用哪种情绪？', options: ['紧张逼近', '保持疏离'] }) },
+        }] }
     } else if (useSkill && !loaded) {
       answer = { role: 'assistant', tool_calls: [{
         id: 'load_canvas_skill', type: 'function', function: { name: 'load_canvas_skill',
@@ -142,6 +149,22 @@ const provider = createHttpServer(async (request, response) => {
           card_id, target: { kind: 'video_prompt_segment', segment_id: 'text' }, text: '缓慢推近',
         }),
       } }] }
+    } else if (combined && !proposedLayout && draft.layout_positions?.target) {
+      const basis = draft.layout_positions.target
+      answer = { role: 'assistant', tool_calls: [{
+        id: 'layout', type: 'function', function: { name: 'propose_canvas_layout',
+          arguments: JSON.stringify({ card_ids: ['target'], placement: {
+            kind: 'move', positions: { target: { x: basis.x + 70, y: basis.y } },
+          } }) },
+      }] }
+    } else if (turns.at(-1) === '改为弧线，其他修改保留' && !proposed) {
+      answer = { role: 'assistant', tool_calls: [{
+        id: 'proposal', type: 'function', function: { name: 'propose_canvas_changes', arguments: JSON.stringify({
+          groups: [{ title: '只修订路径', changes: [{ kind: 'edit_field', change: {
+            card_id: draft.target_card_ids[0], target: { kind: 'movement_field', field: 'movement_path' }, text: '弧线',
+          } }] }],
+        }) },
+      }] }
     } else if (requestEdit && !proposed) {
       const card = draft.cards.find(item => item.id === draft.target_card_ids[0])
       const target = card.type === 'direction.movement'
@@ -475,12 +498,27 @@ try {
     }
     assert.equal(await storedText(), original)
     const confirmation = panel.getByRole('textbox', { name: '给画布助手发消息' })
+    await confirmation.fill('/plan 先确认这一段的情绪')
+    await panel.getByRole('button', { name: '发送消息' }).click()
+    const question = panel.getByRole('form', { name: '创作问题' })
+    await question.getByText('这一段要用哪种情绪？').waitFor()
+    await panel.getByRole('button', { name: '关闭画布助手' }).click()
+    await open()
+    await question.getByRole('button', { name: '紧张逼近' }).click()
+    await panel.getByText('这一段采用：紧张逼近', { exact: true }).waitFor()
+    assert.equal(await storedText(), original, 'answering a creative question cannot approve the earlier proposal')
+
     if (canvas.project_id) {
       assert.ok(await proposal.getByRole('button', { name: '写入所选 0 组' }).isDisabled())
       await confirmation.fill('确认')
       await confirmation.press('Enter')
       await panel.getByText('请先勾选要批准的改动组，或回复「全部确认」。', { exact: true }).waitFor()
       assert.equal(await storedText(), original)
+      const pathDifference = proposal.locator('dl').filter({ hasText: '直线' })
+      await pathDifference.getByRole('button', { name: '修订此字段' }).click()
+      await confirmation.fill('改为弧线，其他修改保留')
+      await panel.getByRole('button', { name: '发送消息' }).click()
+      await proposal.getByText('弧线', { exact: true }).waitFor()
       await proposal.getByRole('checkbox', { name: '推进轨迹' }).check()
     }
     const approvalRequests = []
@@ -524,7 +562,7 @@ try {
       assert.equal(await confirmation.evaluate(input =>
         getComputedStyle(input.closest('.canvas-assistant-sender')).outlineStyle), 'solid')
       const fields = await storedMovement()
-      assert.equal(fields.movement_path.text, '直线')
+      assert.equal(fields.movement_path.text, '弧线')
       assert.notEqual(fields.movement_start.text, '走廊入口')
     }
     await page.screenshot({ path: join(output, canvas.project_id ? 'assistant-scene-edit.png' : 'assistant-free-edit.png') })
@@ -533,7 +571,7 @@ try {
     for (let attempt = 0; attempt < 40 && await storedText() !== original; attempt++) await delay(150)
     assert.equal(await storedText(), original, 'one undo restores the saved field')
     if (canvas.project_id) {
-      assert.notEqual((await storedMovement()).movement_path.text, '直线')
+      assert.notEqual((await storedMovement()).movement_path.text, '弧线')
       await page.locator('[data-card-id="target"]').click()
       await open()
       await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('只把镜头三的推近放慢')
@@ -610,7 +648,7 @@ try {
       await panel.getByText('手动审批', { exact: true }).waitFor()
     }
   }
-  assert.equal(observed.length, 6)
+  assert.equal(observed.length, 7)
   const layoutCanvas = (await (await fetch(canvasApi, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '布局回执' }),
   })).json()).data
@@ -807,7 +845,9 @@ try {
     } else {
       await proposal.getByText(target.prompt.segments[0].text, { exact: true }).waitFor()
     }
-    await proposal.getByRole('button', { name: canvas.project_id ? '写入所选 1 组' : '确认写入', exact: true }).click()
+    const actions = panel.getByRole('region', { name: '本轮执行摘要' }).last()
+    await actions.getByRole('checkbox', { name: '一并批准布局' }).check()
+    await actions.getByRole('button', { name: '批准所选动作' }).click()
     await proposal.getByText('已写入画布', { exact: true }).waitFor()
     await panel.getByText('连续画面 0–2 秒为红色，没有音轨，无法判断声画同步。', { exact: true })
       .last().waitFor({ timeout: 30_000 })
@@ -829,6 +869,10 @@ try {
     assert.equal(videoRequests.length - requestCount, 1)
     assert.match(videoRequests.at(-1).prompt, /缓慢推近/)
     assert.equal(added[0].nodes[0].card_id, 'target')
+    await panel.getByRole('button', { name: '关闭画布助手' }).click()
+    await open()
+    await actions.getByText('布局已执行', { exact: true }).waitFor()
+    await actions.getByText('已生成', { exact: true }).waitFor()
     assert.equal(turn.generation.versions[0].run_id, added[0].id)
     assert.equal(turn.generation.review.results[0].run_id, added[0].id)
     const [observation] = turn.generation.review.results[0].evidence

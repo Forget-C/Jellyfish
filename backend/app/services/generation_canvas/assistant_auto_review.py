@@ -73,7 +73,7 @@ async def conduct_review(db, project_id, canvas_id, source_id, decision, validat
         return None
     session = await db.get(CanvasAssistantSession, canvas_id)
     proposal = CanvasAssistantProposal.model_validate(turn.proposal)
-    allowed_session = session and session.approval_mode == 'automatic' and not turn.stopped and not turn.instructions
+    allowed_session = session and session.approval_mode == 'automatic' and not turn.stopped and not (turn.instructions or turn.canvas_references)
     document = CanvasDocument.model_validate(canvas.document)
     allowed_change = automatic_approval_allowed(turn.text, turn.context, proposal, document, decision.group_ids)
     if decision.action != 'approve' or not allowed_session or decision.expected_revision > canvas.revision or not allowed_change:

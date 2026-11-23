@@ -184,6 +184,7 @@ export type { CameraShot_Output } from './models/CameraShot_Output';
 export type { CanvasAssistantApprovalAudit } from './models/CanvasAssistantApprovalAudit';
 export type { CanvasAssistantApprovalSetting } from './models/CanvasAssistantApprovalSetting';
 export type { CanvasAssistantAttachment } from './models/CanvasAssistantAttachment';
+export type { CanvasAssistantCardReference } from './models/CanvasAssistantCardReference';
 export type { CanvasAssistantChange } from './models/CanvasAssistantChange';
 export type { CanvasAssistantDraftContext } from './models/CanvasAssistantDraftContext';
 export type { CanvasAssistantEditConflict } from './models/CanvasAssistantEditConflict';
@@ -213,6 +214,7 @@ export type { CanvasAssistantQueueItem } from './models/CanvasAssistantQueueItem
 export type { CanvasAssistantReadContext } from './models/CanvasAssistantReadContext';
 export type { CanvasAssistantReviewResult } from './models/CanvasAssistantReviewResult';
 export type { CanvasAssistantSkillUse } from './models/CanvasAssistantSkillUse';
+export type { CanvasAssistantSubtask } from './models/CanvasAssistantSubtask';
 export type { CanvasAutomaticCheckEstimate } from './models/CanvasAutomaticCheckEstimate';
 export type { CanvasCardOutputs } from './models/CanvasCardOutputs';
 export type { CanvasCardTypeDefinition } from './models/CanvasCardTypeDefinition';

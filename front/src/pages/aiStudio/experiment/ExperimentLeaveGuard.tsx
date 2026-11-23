@@ -59,10 +59,13 @@ export function useExperimentLeaveGuard() {
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   const confirming = useRef(false)
+  const promptOrigin = useRef<HTMLElement>()
+  const returnFocus = useRef<HTMLElement>()
   const request = (action: () => void) => {
     const status = readStatus()
     if (!status.dirty && !status.run) action()
     else {
+      promptOrigin.current = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
       setFailed(false)
       setPending(() => action)
     }
@@ -71,6 +74,7 @@ export function useExperimentLeaveGuard() {
   const { dirty, run } = readStatus()
   const cancel = () => {
     if (confirming.current) return
+    returnFocus.current = promptOrigin.current
     setPending(undefined)
     setFailed(false)
     if (blocker.state === 'blocked') blocker.reset()
@@ -100,6 +104,14 @@ export function useExperimentLeaveGuard() {
     title={run ? uiText("文本正在生成") : dirty ? uiText("有未发送内容") : uiText("离开实验室？")}
     open={Boolean(transition)}
     onCancel={cancel}
+    afterClose={() => {
+      if (returnFocus.current?.isConnected) returnFocus.current.focus()
+      returnFocus.current = undefined
+      promptOrigin.current = undefined
+    }}
+    modalRender={node => <div onKeyDown={event => {
+      if (event.key === 'Escape' && !busy) { event.preventDefault(); event.stopPropagation(); cancel() }
+    }}>{node}</div>}
     closable={!busy}
     keyboard={!busy}
     maskClosable={false}

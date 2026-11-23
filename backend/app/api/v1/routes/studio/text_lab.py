@@ -6,13 +6,15 @@ from app.services.studio.experiment_messages import read_experiment_messages
 
 import asyncio
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Header, Request
+from typing import Annotated
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.streaming import GenerationStreamEvent, StreamEventType
 from app.dependencies import get_db
 from app.schemas.common import ApiResponse, created_response, success_response
+from app.schemas.interaction import InteractionRequestHeader
 from app.schemas.studio.experiment_sessions import ExperimentMessageRead, ExperimentTaskCreated
 from app.schemas.studio.text_lab import (
     TextLabCancelRequest,
@@ -21,7 +23,7 @@ from app.schemas.studio.text_lab import (
 )
 from app.services.generation.runtime.text_chat_streaming import (
     create_text_async_task,
-    create_text_stream_run,
+    admit_text_interaction,
     execute_text_inline,
     request_text_stream_cancel,
     stream_text_run,
@@ -101,36 +103,32 @@ async def stream_text_lab_response(
     body: TextLabRunRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
+    idempotency_key: InteractionRequestHeader = None,
+    last_event_id: Annotated[int, Header(alias='Last-Event-ID', ge=0)] = 0,
 ) -> StreamingResponse:
     """提交 canonical user message 后持续输出本轮文本增量与唯一终态事件。"""
-    task_id, accepted = await create_text_stream_run(
-        db,
-        session_id=session_id,
-        model_id=body.model_id,
-        content=body.content,
-    )
+    admission = await admit_text_interaction(db, session_id, body, idempotency_key)
+    task_id = admission.task_id
     await db.commit()
-    execution = asyncio.create_task(stream_text_run(task_id))
+    execution = asyncio.create_task(stream_text_run(task_id)) if admission.start else None
 
     async def event_stream():
-        """在连接断开时请求取消，已终态的运行则保持原有最终结果。"""
+        """Replay known events without cancelling or starting a second execution."""
+        if admission.saved_events is not None:
+            for event in admission.saved_events:
+                if event.sequence > last_event_id:
+                    yield _encode_sse(event)
+            return
         terminal = False
         try:
-            yield _encode_sse(accepted)
-            async for event in subscribe_text_stream(task_id):
-                if event.sequence != accepted.sequence:
-                    yield _encode_sse(event)
+            async for event in subscribe_text_stream(task_id, after=last_event_id):
+                yield _encode_sse(event)
                 terminal = event.event in {StreamEventType.completed, StreamEventType.error, StreamEventType.cancelled}
                 if await request.is_disconnected():
                     break
         finally:
-            if not terminal:
-                await request_text_stream_cancel(
-                    session_id=session_id,
-                    task_id=task_id,
-                    reason="client_disconnected",
-                )
-            if not execution.done():
+            if execution is not None and not execution.done() and not terminal:
+                await request_text_stream_cancel(session_id=session_id, task_id=task_id, reason="client_disconnected")
                 execution.cancel()
 
     return StreamingResponse(

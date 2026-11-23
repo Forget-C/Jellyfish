@@ -119,7 +119,7 @@ async def test_assistant_switches_model_without_losing_visible_card_scope(canvas
         elif tool_result is None:
             assert {tool['function']['name'] for tool in body['tools']} == {
                 'read_canvas_context', 'load_canvas_skill', 'read_canvas_skill_example', 'propose_canvas_structure',
-                'propose_canvas_changes', 'ask_canvas_question',
+                'propose_canvas_changes', 'ask_canvas_question', 'delegate_canvas_tasks',
             }
             answer = {'role': 'assistant', 'tool_calls': [{
                 'id': 'call-context', 'type': 'function',
@@ -569,3 +569,112 @@ async def test_running_turn_takes_latest_instruction_and_discards_late_reply(can
     assert [entry['type'] for entry in (await canvas_client.get(url + '/events')).json()['data']] == [
         'turn.steered', 'turn.completed',
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('native_tools', [True, False])
+async def test_registered_specialists_keep_independent_work_when_review_fails(canvas_client, monkeypatch, native_tools):
+    from app.models.llm import Model
+
+    async with canvas_client.canvas_sessions.begin() as db:
+        provider = await db.get(Provider, 'canvas-provider')
+        provider.api_key = 'local-test-key'
+        model = await db.get(Model, 'canvas-text')
+        model.capability_profile = {'tool_calling': {'declaration': 'supported' if native_tools else 'unsupported'}}
+        db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
+    canvas = (await canvas_client.post('/canvases', json={'name': '专项任务'})).json()['data']
+    url = f"/canvases/{canvas['id']}"
+    original = httpx.AsyncClient.send
+    consulted = []
+    tasks = [
+        {'id': 'footage', 'role': 'footage-continuity-review', 'task': '审看素材'},
+        {'id': 'independent', 'role': 'storyboard-design', 'task': '规划独立的节拍'},
+        {'id': 'dependent', 'role': 'storyboard-design', 'task': '使用审看片段调整镜头', 'depends_on': ['footage']},
+    ]
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original(client, request, **kwargs)
+        body = json.loads(request.content)
+        system = next(item['content'] for item in body['messages'] if item['role'] == 'system')
+        observed = {item['tool_call_id'] for item in body['messages'] if item['role'] == 'tool'}
+        answer = {'role': 'assistant', 'content': '汇总已交付的专项结果'}
+        if '不得写入画布、审批、提交生成或继续委派' in system:
+            assert not body.get('tools')
+            task = json.loads(body['messages'][-1]['content'])['任务']
+            consulted.append(task)
+            answer['content'] = '可保留一个独立反应镜头' if task.startswith('规划') else ''
+        elif not native_tools:
+            answer['content'] = json.dumps({'delegations': tasks}, ensure_ascii=False)
+        elif 'delegate' not in observed:
+            name, key, args = ('delegate_canvas_tasks', 'delegate', {'tasks': tasks}) if observed else (
+                'read_canvas_context', 'read', {},
+            )
+            answer = {'role': 'assistant', 'tool_calls': [{
+                'id': key, 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(args)},
+            }]}
+        return httpx.Response(200, request=request, json={
+            'id': 'delegate', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+            'choices': [{'index': 0, 'finish_reason': 'tool_calls' if 'tool_calls' in answer else 'stop',
+                         'message': answer}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    sent = await canvas_client.post(url + '/assistant', json={
+        'request_id': 'split-specialists', 'text': '准备分镜并审看片段',
+        'context': {'draft': canvas['document'], 'revision': canvas['revision'], 'scope': 'canvas'},
+    })
+    assert sent.status_code == 200, sent.text
+    result = sent.json()['data']
+    assert result['proposal'] is None
+    assert {entry['id']: entry['status'] for entry in result['subtasks']} == {
+        'footage': 'failed', 'independent': 'completed', 'dependent': 'blocked',
+    }
+    assert sorted(consulted) == ['审看素材', '规划独立的节拍']
+    assert (await canvas_client.get(url + '/assistant')).json()['data']['turns'][0]['subtasks'] == result['subtasks']
+
+
+@pytest.mark.asyncio
+async def test_cross_canvas_reference_observes_allowed_source_and_rejects_other_scope(canvas_client, monkeypatch):
+    async with canvas_client.canvas_sessions.begin() as db:
+        provider = await db.get(Provider, 'canvas-provider')
+        provider.api_key = 'local-test-key'
+        db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
+    primary = (await canvas_client.post('/canvases', json={'name': '当前画布'})).json()['data']
+    source = (await canvas_client.post('/canvases', json={'name': '来源画布'})).json()['data']
+    hidden = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '项目内分镜'})).json()['data']
+    updated = await canvas_client.put(f"/canvases/{source['id']}", json={
+        'request_id': 'set-evidence', 'expected_revision': source['revision'],
+        'document': {**source['document'], 'cards': [{'id': 'notes', 'type': 'content.text', 'text': '海面在晨雾里'}]},
+    })
+    assert updated.status_code == 200, updated.text
+    original = httpx.AsyncClient.send
+    prompt = []
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original(client, request, **kwargs)
+        body = json.loads(request.content)
+        prompt.append(body['messages'][-1]['content'])
+        assert not body.get('tools')
+        return httpx.Response(200, request=request, json={
+            'id': 'cross', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+            'choices': [{'index': 0, 'finish_reason': 'stop',
+                         'message': {'role': 'assistant', 'content': '建议回来源画布调整对比度'}}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    url = f"/canvases/{primary['id']}/assistant"
+    message = {'request_id': 'analysis', 'text': '用这张卡给建议',
+               'canvas_references': [{'canvas_id': source['id'], 'card_ids': ['notes']}]}
+    allowed = await canvas_client.post(url, json=message)
+    assert allowed.status_code == 200, allowed.text
+    assert '海面在晨雾里' in prompt[0]
+    assert allowed.json()['data']['canvas_references'] == message['canvas_references']
+    assert allowed.json()['data']['proposal'] is None
+    assert (await canvas_client.post(url, json=message)).json() == allowed.json()
+    denied = await canvas_client.post(url, json={
+        **message, 'request_id': 'denied', 'canvas_references': [{'canvas_id': hidden['id'], 'card_ids': ['notes']}],
+    })
+    assert denied.status_code == 404, denied.text
+    assert len(prompt) == 1

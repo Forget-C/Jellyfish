@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowUpOutlined, CommentOutlined, CloseOutlined } from '@ant-design/icons'
 import { Alert, Select, Spin } from 'antd'
-import { Bubble, Sender, ThoughtChain } from '@ant-design/x'
+import { Sender, ThoughtChain } from '@ant-design/x'
+import { WorkbenchConversation } from '../../../components/workbench/WorkbenchConversation'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasDocument, CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantFieldRevision, CanvasAssistantInstruction, CanvasAssistantLayout, CanvasAssistantMessage, CanvasAssistantQuestion, CanvasAssistantQueueItem, FileRead, ModelRead } from '../../../services/generated'
@@ -9,6 +10,7 @@ import { AssistantEditGroups, AssistantProposal } from './AssistantProposal'
 import { AssistantLayout } from './AssistantLayout'
 import type { AssistantLayoutOutcome } from './assistantLayoutEditor'
 import { AssistantGeneration } from './AssistantGeneration'
+import { AssistantActionSummary } from './AssistantActionSummary'
 import { useUiText } from '../../../uiText'
 import { CanvasAssistantAttachments, CanvasAssistantEvidence } from './CanvasAssistantAttachments'
 import { draftingAssistantReply, readDraftAssistant, writeDraftAssistant } from './draftAssistant'
@@ -84,6 +86,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const [retryLoad, setRetryLoad] = useState(0)
   const [draft, setDraft] = useState('')
   const [cardReferences, setCardReferences] = useState<string[]>([])
+  const [externalReferences, setExternalReferences] = useState<Record<string, string[]>>({})
   const [referenceGroups, setReferenceGroups] = useState<{ id: string; name: string; members: string[] }[]>([])
   const [browseReferences, setBrowseReferences] = useState(false)
   const referenceIds = [...new Set([...cardReferences, ...referenceGroups.flatMap(group => group.members)])]
@@ -157,7 +160,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const effectiveScope = scope ?? (
     selectionInDraft ? 'selection' : starterScope ?? (canUseDraftTools || planning ? 'canvas' : 'text')
   )
-  const awaitingSelection = !revising && !pending.current && effectiveScope === 'selection' && !selectedCards.length && !referenceIds.length
+  const awaitingSelection = !revising && !pending.current && effectiveScope === 'selection' && !selectedCards.length && !referenceIds.length && !Object.values(externalReferences).some(ids => ids.length)
   useLayoutEffect(() => {
     if (!draft.trim()) setStarterScope(undefined)
     if (!draft.trim() || selectedCards.length) {
@@ -417,6 +420,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         setRevisingField(undefined)
         setCardReferences([])
         setReferenceGroups([])
+        setExternalReferences({})
       }
       if (revising?.request_id === sourceId) {
         setRevising(undefined)
@@ -425,6 +429,14 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       }
     } catch { setStopError(true) }
     finally { setStopping(undefined) }
+  }
+
+  const decideLayout = async (sourceId: string, action: 'approve' | 'reject') => {
+    const { data } = await Canvases.canvasAssistantDecideLayout({
+      projectId, canvasId, sourceId, requestBody: { action },
+    })
+    if (!data) throw new Error('missing assistant layout decision')
+    setTurns(previous => previous?.map(entry => entry.request_id === sourceId ? { ...entry, layout: data } : entry))
   }
 
   const cancelRun = async (runId: string) => {
@@ -561,7 +573,10 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       }
     }
     if (!resume && ((!enqueue && pendingQuestion) || referenceIsMissing || awaitingSelection && !revision)) return
-    const explicitReferences = /(?:当前选区|当前选择)/.test(text) ? [] : referenceIds
+    const useCurrentSelection = /(?:当前选区|当前选择)/.test(text)
+    const explicitReferences = useCurrentSelection ? [] : referenceIds
+    const crossCanvas = useCurrentSelection ? [] : Object.entries(externalReferences).filter(([, ids]) => ids.length)
+      .map(([canvas_id, card_ids]) => ({ canvas_id, card_ids }))
     const revisionTargets = revision?.proposal?.groups
       ? [...new Set(revision.proposal.groups.filter(group => group.state === 'pending' &&
         (!fieldRevision || group.id === fieldRevision.group_id))
@@ -576,11 +591,12 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             revision?.attachments?.map(file => file.file_id) ?? [],
           revises: revision?.request_id,
           revises_field: fieldRevision,
+          canvas_references: crossCanvas,
           context: revision?.proposal ? {
             ...readDraft(), scope: revisionTargets.length ? 'selection' : 'canvas', card_ids: revisionTargets,
           } : explicitReferences.length ? {
             ...readDraft(), scope: 'selection', card_ids: explicitReferences,
-          } : effectiveScope === 'text' ? undefined : {
+          } : crossCanvas.length || effectiveScope === 'text' ? undefined : {
             ...readDraft(), scope: effectiveScope, card_ids: effectiveScope === 'selection' ? selectedCards : [],
           },
         })
@@ -597,6 +613,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         setReferenceFiles([])
         setCardReferences([])
         setReferenceGroups([])
+        setExternalReferences({})
       } catch {
         setQueueError(true)
       } finally {
@@ -636,6 +653,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       setReferenceFiles([])
       setCardReferences([])
       setReferenceGroups([])
+      setExternalReferences({})
       pending.current = undefined
       if (!turn.question) {
         setPendingQuestion(undefined)
@@ -835,8 +853,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           action={<WorkbenchButton onClick={() => { setHistoryError(false); setRetryLoad(value => value + 1) }}>{uiText("重试")}</WorkbenchButton>} />}
         {stopError && <Alert type="error" message={uiText("暂时无法停止助手")} />}
         {!turns && !historyError && <Spin aria-label={uiText("正在读取助手对话")} />}
-        {turns?.map(turn => <article className="canvas-assistant-turn" key={turn.request_id}>
-          <Bubble.List autoScroll={false} styles={{ root: { gap: 8 } }} items={[
+        {turns?.map(turn => <article className="canvas-assistant-turn" data-assistant-turn={turn.request_id} key={turn.request_id}>
+          <WorkbenchConversation items={[
             {
               key: 'user', role: 'user', placement: 'end', variant: 'borderless',
               classNames: { content: 'canvas-assistant-question' },
@@ -853,6 +871,10 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             },
           ]} />
             {!!turn.attachments?.length && <CanvasAssistantEvidence attachments={turn.attachments} />}
+          {!!turn.canvas_references?.length && <details className="canvas-assistant-evidence">
+            <summary>{uiText('其他画布的只读引用')}</summary>
+            <ul>{turn.canvas_references.map(ref => <li key={ref.canvas_id}>{ref.canvas_id} · {ref.card_ids.join('、')}</li>)}</ul>
+          </details>}
           {turn.context?.observed_card_ids && <details className="canvas-assistant-evidence">
             <summary>{uiText('本轮读取 {{count}}/{{total}} 张卡片', {
               count: turn.context.observed_card_ids.length, total: turn.context.cards.length,
@@ -874,13 +896,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             loading={stopping === turn.request_id}
             onClick={() => { void stopTurn(turn.request_id) }}>{uiText("停止助手")}</WorkbenchButton>}
           {turn.layout && <AssistantLayout layout={turn.layout} disabled={approvalDisabled || sending && !activeRequestId}
-            decide={async action => {
-              const { data } = await Canvases.canvasAssistantDecideLayout({
-                projectId, canvasId, sourceId: turn.request_id, requestBody: { action },
-              })
-              if (!data) throw new Error('missing assistant layout decision')
-              setTurns(previous => previous?.map(entry => entry.request_id === turn.request_id ? { ...entry, layout: data } : entry))
-            }} />}
+            decide={action => decideLayout(turn.request_id, action)} />}
           {turn.proposal && <div className="canvas-assistant-edit-actions">
             <WorkbenchButton variant="quiet" aria-pressed={highlight?.sourceId === turn.request_id && !highlight.hidden}
               onClick={() => {
@@ -946,6 +962,31 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
               <span>{skill.name}</span> <small>{skill.version}</small>
             </li>)}</ul>,
           }]} />}
+          {!!turn.subtasks?.length && <details className="canvas-assistant-evidence">
+            <summary>{uiText('专项任务结果')}</summary>
+            {turn.subtasks.map(task => <section key={task.id}>
+              <strong>{uiText(task.role === 'storyboard-design' ? '分镜设计' : '素材与连续性审看')}</strong>
+              <p>{task.task}</p>
+              <small>{task.model_id} · {task.skills.map(skill => skill.name + ' ' + skill.version).join('、')}</small>
+              {!!task.card_ids.length && <p>{task.card_ids.join('、')}</p>}
+              <p>{task.result}</p>
+              {!!task.evidence.length && <CanvasAssistantEvidence attachments={task.evidence} />}
+            </section>)}
+          </details>}
+          {!turn.stopped && <AssistantActionSummary turn={turn}
+            canApprove={!approvalDisabled && !sending && (!turn.proposal?.groups ||
+              turn.proposal.groups.some(group => group.state === 'pending' && selectedGroups[turn.request_id]?.includes(group.id)))}
+            approve={async includeLayout => {
+              const groups = turn.proposal?.groups?.filter(group => group.state === 'pending' && selectedGroups[turn.request_id]?.includes(group.id))
+                .map(group => group.id)
+              const approved = await approveProposal(turn.request_id, groups)
+              if (includeLayout) await decideLayout(turn.request_id, 'approve')
+              if (!approved) throw new Error('proposal remains pending')
+            }}
+            locate={label => {
+              const item = history.current?.querySelector('article[data-assistant-turn="' + CSS.escape(turn.request_id) + '"]')
+              item?.querySelector('[aria-label="' + CSS.escape(label) + '"]')?.scrollIntoView({ block: 'nearest' })
+            }} />}
         </article>)}
         {!!pendingInstructions.length && <div role="status">
           <strong>{uiText('本轮已接收补充指令')}</strong>
@@ -1029,13 +1070,19 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                 onChange={value => { setScope(value); pending.current = undefined; setSendError(undefined) }} />
             </div>}
             {attachments}
-            {!!referenceIds.length && <div className="canvas-assistant-files" aria-label={uiText('引用卡片')}>
+            {(!!referenceIds.length || Object.values(externalReferences).some(ids => ids.length)) && <div className="canvas-assistant-files" aria-label={uiText('引用卡片')}>
               {cardReferences.map(id => {
                 const card = cards.find(item => item.id === id)
                 return <WorkbenchButton key={id} variant="quiet" onClick={() => {
                   setCardReferences(current => current.filter(value => value !== id)); pending.current = undefined
                 }}>{card ? ('name' in card && card.name) || uiText(cardTitles[card.type ?? ''] ?? card.type ?? '卡片') : uiText('引用已失效')} · {id.slice(0, 8)} ×</WorkbenchButton>
               })}
+              {Object.entries(externalReferences).flatMap(([source, ids]) => ids.map(id =>
+                <WorkbenchButton key={source + ':' + id} variant="quiet" onClick={() => {
+                  setExternalReferences(previous => ({ ...previous, [source]: previous[source].filter(item => item !== id) }))
+                  pending.current = undefined
+                }}>{uiText('其他画布的只读引用')} · {source.slice(0, 8)} / {id.slice(0, 8)} ×</WorkbenchButton>
+              ))}
               {referenceGroups.map(group => {
                 const current = document.groups?.find(item => item.id === group.id)
                 const members = current?.card_ids ?? []
@@ -1081,9 +1128,17 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                 const reference = readCardReference(event.clipboardData.getData('text/plain'))
                 if (!reference) return
                 event.preventDefault()
-                if (reference.canvasId !== canvasId) {
-                  setConfirmationHint(uiText('请在来源画布使用这些卡片引用。'))
-                } else addCardReferences(reference.cardIds)
+                if (reference.canvasId === canvasId) addCardReferences(reference.cardIds)
+                else {
+                  if (!(reference.canvasId in externalReferences) && Object.keys(externalReferences).filter(key => externalReferences[key].length).length >= 3) {
+                    setConfirmationHint(uiText('每轮最多引用三个其他画布'))
+                    return
+                  }
+                  setExternalReferences(previous => ({ ...previous,
+                    [reference.canvasId]: [...new Set([...(previous[reference.canvasId] ?? []), ...reference.cardIds])].slice(0, 20),
+                  }))
+                  pending.current = undefined
+                }
               }}
               onKeyDown={event => {
                 if (event.nativeEvent.isComposing || event.keyCode === 229) return false

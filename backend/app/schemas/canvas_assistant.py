@@ -1,13 +1,17 @@
 """Public request and history contracts for the canvas assistant."""
 
-from typing import Annotated, Generic, Literal, TypeVar
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.schemas.canvas_assistant_edit import CanvasAssistantApprovalAudit, CanvasAssistantProposal
 from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationRead, CanvasAssistantSkillUse
 from app.schemas.canvas_assistant_media import CanvasAssistantAttachment
+from app.schemas.canvas_assistant_subtasks import CanvasAssistantSubtask
 from app.schemas.canvas_assistant_layout import CanvasAssistantLayout, CanvasAssistantPoint, CardId
+
+
+from app.schemas.interaction import InteractionSnapshot
 
 
 class CanvasAssistantDraftContext(BaseModel):
@@ -57,6 +61,14 @@ class CanvasAssistantFieldRevision(BaseModel):
     change_index: int = Field(ge=0, le=7)
 
 
+class CanvasAssistantCardReference(BaseModel):
+    """Explicit read-only reference to cards in another saved canvas."""
+
+    model_config = ConfigDict(extra='forbid')
+    canvas_id: str = Field(min_length=1, max_length=64)
+    card_ids: list[Annotated[str, StringConstraints(min_length=1, max_length=64)]] = Field(min_length=1, max_length=20)
+
+
 class CanvasAssistantMessage(BaseModel):
     """Send a turn with a stable request identity for retries."""
 
@@ -65,6 +77,7 @@ class CanvasAssistantMessage(BaseModel):
     context: CanvasAssistantDraftContext | None = None
     revises: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')] | None = None
     revises_field: CanvasAssistantFieldRevision | None = None
+    canvas_references: list[CanvasAssistantCardReference] = Field(default_factory=list, max_length=3)
     attachment_file_ids: list[Annotated[str, StringConstraints(min_length=1, max_length=64)]] = Field(
         default_factory=list, max_length=4,
     )
@@ -111,6 +124,7 @@ class CanvasAssistantExchange(BaseModel):
     text: str
     context: CanvasAssistantReadContext | None = None
     attachments: list[CanvasAssistantAttachment] | None = None
+    canvas_references: list[CanvasAssistantCardReference] | None = None
     sequence: int
     model_id: str
     reply: str
@@ -118,6 +132,7 @@ class CanvasAssistantExchange(BaseModel):
     revises: str | None = None
     revises_field: CanvasAssistantFieldRevision | None = None
     skills: list[CanvasAssistantSkillUse] | None = None
+    subtasks: list[CanvasAssistantSubtask] | None = None
     automatic_approval: bool = False
     approval_audit: list[CanvasAssistantApprovalAudit] | None = None
     generation: CanvasAssistantGenerationRead | None = None
@@ -151,11 +166,9 @@ class CanvasAssistantQueueItem(BaseModel):
 InteractionCapability = Literal['snapshot', 'send', 'events', 'stop', 'approval', 'question', 'queue', 'steer']
 
 
-class CanvasAssistantHistory(BaseModel):
+class CanvasAssistantHistory(InteractionSnapshot):
     """Persisted exchanges for the selected canvas."""
 
-    session_id: str
-    cursor: int
     capabilities: tuple[InteractionCapability, ...]
     turns: list[CanvasAssistantExchange]
     pending_request: CanvasAssistantPendingRequest | None = None
@@ -164,19 +177,6 @@ class CanvasAssistantHistory(BaseModel):
     queue: list[CanvasAssistantQueueItem] = Field(default_factory=list)
     model_id: str | None = None
     approval_mode: Literal['manual', 'automatic'] = 'manual'
-
-
-Payload = TypeVar('Payload')
-
-
-class InteractionEvent(BaseModel, Generic[Payload]):
-    """A committed interaction update with resume and deduplication identities."""
-
-    session_id: str
-    turn_id: str | None
-    cursor: int
-    type: str
-    payload: Payload
 
 
 CanvasAssistantEventPayload = CanvasAssistantExchange | CanvasAssistantQueueItem

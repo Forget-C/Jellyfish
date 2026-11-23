@@ -11,6 +11,7 @@ import { TextLabStreamTransportError } from '../../../../services/textLabStream'
 import type { ExperimentHistoryState } from './useExperimentHistory'
 
 type Attempt = {
+  requestId: string
   sessionId?: string
   busy: boolean
   input: string
@@ -21,6 +22,7 @@ type UncertainSubmission = {
   sessionId: string
   taskId?: string
   accepted?: boolean
+  recoverMedia?: boolean
   accept: () => void
 }
 
@@ -30,6 +32,7 @@ export type ExperimentSubmissionNotice =
   | { kind: 'unknown' | 'run-unavailable'; historyUnavailable: boolean }
 
 export function isRejectedSubmission(error: unknown) {
+  if (error instanceof TextLabStreamTransportError && error.responseBody?.includes('TEXT_LAB_STREAM_RESULT_UNKNOWN')) return false
   const status = error instanceof ApiError || error instanceof TextLabStreamTransportError ? error.status : undefined
   return status !== undefined && status >= 400 && status < 500 && status !== 408
 }
@@ -81,7 +84,7 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
 
   const begin = () => {
     if (attemptRef.current?.busy || uncertainRef.current) return
-    const attempt: Attempt = { sessionId, busy: true, input }
+    const attempt: Attempt = { requestId: crypto.randomUUID(), sessionId, busy: true, input }
     attemptRef.current = attempt
     setSubmitting(true)
     setNotice(undefined)
@@ -110,6 +113,22 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
     checkingRef.current = uncertain
     setNotice({ kind: 'checking', accepted: uncertain.accepted })
     try {
+      if (uncertain.recoverMedia && !uncertain.taskId) {
+        const receipt = await StudioExperimentSessionsService.experimentInteractionReceipt({
+          sessionId: uncertain.sessionId, requestId: uncertain.attempt.requestId,
+        }).catch(error => {
+          if (error instanceof ApiError && error.status === 404) return undefined
+          throw error
+        })
+        if (uncertainRef.current !== uncertain || !isCurrent(uncertain.attempt)) return
+        if (receipt?.data && hasTaskReceipt(receipt.data, uncertain.sessionId)) {
+          history.adoptCanonicalMessages(uncertain.sessionId, receipt.data.messages)
+          uncertainRef.current = undefined
+          setNotice(undefined)
+          uncertain.accept()
+          return
+        }
+      }
       const response = await StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet({
         sessionId: uncertain.sessionId, page: 1, pageSize: 50,
       })
@@ -118,7 +137,9 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
       const messages: ExperimentMessageRead[] = response.data.filter(item => item.session_id === uncertain.sessionId)
       history.adoptCanonicalMessages(uncertain.sessionId, messages)
       // History alone cannot correlate identical prompts from separate submissions.
-      const matched = uncertain.taskId && messages.find(item => item.role !== 'user' && item.task_id === uncertain.taskId)
+      const matched = uncertain.taskId && messages.find(item => item.role !== 'user' && (
+        item.task_id === uncertain.taskId || item.payload?.interaction_run_id === uncertain.taskId
+      ))
       const terminal = matched && ['succeeded', 'failed', 'cancelled'].includes(matched.status ?? '')
       if (matched && (!uncertain.accepted || terminal)) {
         uncertainRef.current = undefined
@@ -137,7 +158,7 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
   }
 
   const checkOutcome = async (
-    attempt: Attempt, targetSessionId: string, accept: () => void, result?: { taskId?: string; accepted?: boolean },
+    attempt: Attempt, targetSessionId: string, accept: () => void, result?: { taskId?: string; accepted?: boolean; recoverMedia?: boolean },
   ) => {
     if (!isCurrent(attempt)) return
     uncertainRef.current = { attempt, sessionId: targetSessionId, accept, ...result }
@@ -147,7 +168,7 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
   /** Both media modes consume the same durable task receipt, with mode-specific request bodies. */
   const submitTask = async ({ ensureSession, request, onAccept, failureMessage }: {
     ensureSession: () => Promise<{ id: string }>
-    request: (sessionId: string) => Promise<ExperimentTaskCreated | null | undefined>
+    request: (sessionId: string, requestId: string) => Promise<ExperimentTaskCreated | null | undefined>
     onAccept: (attempt: Attempt, sessionId: string) => void
     failureMessage: string
   }) => {
@@ -160,17 +181,18 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
       targetSessionId = session.id
       attempt.sessionId = session.id
       const accept = () => onAccept(attempt, session.id)
-      const created = await request(session.id)
+      const created = await request(session.id, attempt.requestId)
       if (!isCurrent(attempt)) return
       if (created && hasTaskReceipt(created, session.id)) {
         history.adoptCanonicalMessages(session.id, created.messages.filter(item => item.session_id === session.id))
         accept()
       } else {
-        await checkOutcome(attempt, session.id, accept, { taskId: created?.task_id })
+        await checkOutcome(attempt, session.id, accept, { taskId: created?.task_id, recoverMedia: true })
       }
     } catch (error) {
       if (targetSessionId && !isRejectedSubmission(error)) {
-        await checkOutcome(attempt, targetSessionId, () => {})
+        const acceptedSession = targetSessionId
+        await checkOutcome(attempt, targetSessionId, () => onAccept(attempt, acceptedSession), { recoverMedia: true })
       } else {
         reject(attempt, defaultTaskActionErrorMessage(error, failureMessage))
       }

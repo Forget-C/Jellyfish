@@ -72,15 +72,23 @@ export class StudioTextLabService {
     public static streamTextLabResponseApiV1StudioLabsTextSessionsSessionIdStreamPost({
         sessionId,
         requestBody,
+        idempotencyKey,
+        lastEventId,
     }: {
         sessionId: string,
         requestBody: TextLabRunRequest,
+        idempotencyKey?: (string | null),
+        lastEventId?: number,
     }): CancelablePromise<any> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/studio/labs/text/sessions/{session_id}/stream',
             path: {
                 'session_id': sessionId,
+            },
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+                'Last-Event-ID': lastEventId,
             },
             body: requestBody,
             mediaType: 'application/json',

@@ -24,8 +24,9 @@ class CheckpointMediaUnavailable(ValueError):
 class CanvasCheckpointSerializer(JsonPlusSerializer):
     """Keep checkpoint URLs as digests and re-resolve private bytes on retry."""
 
-    def __init__(self, content):
+    def __init__(self, content, *, redact_missing=False):
         super().__init__()
+        self._redact_missing = redact_missing
         urls = (
             block[block['type']].get('url') for block in content
             if isinstance(block, dict) and block.get('type') in ('image_url', 'video_url', 'audio_url')
@@ -37,9 +38,10 @@ class CanvasCheckpointSerializer(JsonPlusSerializer):
             return value.model_copy(update={'content': self._map_media(value.content, restore=restore)})
         if isinstance(value, dict):
             if restore and MEDIA_KEY in value and len(value) == 1:
-                if (url := self._media.get(value[MEDIA_KEY])) is None:
+                url = self._media.get(value[MEDIA_KEY])
+                if url is None and not self._redact_missing:
                     raise CheckpointMediaUnavailable('Assistant checkpoint media has changed')
-                return url
+                return url if url is not None else value
             return {key: self._map_media(item, restore=restore) for key, item in value.items()}
         if isinstance(value, (list, tuple)):
             mapped = [self._map_media(item, restore=restore) for item in value]
@@ -57,14 +59,12 @@ class CanvasCheckpointSerializer(JsonPlusSerializer):
         return self._map_media(super().loads_typed(data), restore=True)
 
 
-class CanvasCheckpointer(InMemorySaver):
-    """Flush the pinned LangGraph saver state before releasing each step."""
+class CanvasGraphSnapshot(InMemorySaver):
+    """Serialize the graph state with private media replaced by evidence digests."""
 
-    def __init__(self, db, canvas_id, request_id, token, snapshot, content):
-        super().__init__(serde=CanvasCheckpointSerializer(content))
-        self._db, self._canvas_id, self._token = db, canvas_id, token
+    def __init__(self, request_id, snapshot, content=None, *, redact_missing=False):
+        super().__init__(serde=CanvasCheckpointSerializer(content, redact_missing=redact_missing))
         self._serialize = JsonPlusSerializer()
-        self._lock = asyncio.Lock()
         self.config = {'configurable': {'thread_id': request_id}}
         if snapshot:
             self._restore(snapshot)
@@ -78,7 +78,8 @@ class CanvasCheckpointer(InMemorySaver):
             self.writes[tuple(key)] = {tuple(index): value for index, value in inner}
         self.blobs.update((tuple(key), value) for key, value in blobs)
 
-    async def _flush(self):
+    def snapshot(self):
+        """Encode the bounded graph checkpoint for durable storage."""
         payload = (self.storage, [(key, list(inner.items())) for key, inner in self.writes.items()], list(self.blobs.items()))
         codec, data = self._serialize.dumps_typed(payload)
         if len(data) > CHECKPOINT_DATA_LIMIT:
@@ -86,6 +87,20 @@ class CanvasCheckpointer(InMemorySaver):
         snapshot = codec.encode() + b'\0' + compress(data, 1)
         if len(snapshot) > CHECKPOINT_LIMIT:
             raise HTTPException(422, 'Canvas assistant checkpoint exceeds the turn limit')
+        return snapshot
+
+
+class CanvasCheckpointer(CanvasGraphSnapshot):
+    """Flush the pinned LangGraph saver state before releasing each step."""
+
+    def __init__(self, db, canvas_id, request_id, token, snapshot, content):
+        super().__init__(request_id, snapshot, content)
+        self._db, self._canvas_id, self._token = db, canvas_id, token
+        self._lock = asyncio.Lock()
+        self.waiting_approval = False
+
+    async def _flush(self):
+        snapshot = self.snapshot()
         result = await self._db.execute(update(CanvasAssistantSession).where(
             CanvasAssistantSession.canvas_id == self._canvas_id,
             CanvasAssistantSession.pending_token == self._token,
@@ -93,6 +108,17 @@ class CanvasCheckpointer(InMemorySaver):
         await self._db.commit()
         if not result.rowcount:
             raise HTTPException(409, 'Canvas assistant reply lease expired')
+
+    async def save_delegation(self, identity, receipt):
+        """Commit one completed specialist result while this turn still owns its lease."""
+        async with self._lock:
+            session = await self._db.get(CanvasAssistantSession, self._canvas_id, with_for_update=True, populate_existing=True)
+            if session is None or session.pending_token != self._token:
+                await self._db.rollback()
+                raise HTTPException(409, 'Canvas assistant reply lease expired')
+            pending = session.pending_request
+            session.pending_request = {**pending, 'delegations': {**pending.get('delegations', {}), identity: receipt}}
+            await self._db.commit()
 
     async def aput(self, config, checkpoint, metadata, new_versions):
         async with self._lock:

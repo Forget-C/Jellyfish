@@ -149,9 +149,9 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
     if (disabled) return
     await submission.submitTask({
       ensureSession: () => sessionId ? Promise.resolve({ id: sessionId }) : ensureSession('image'),
-      request: async targetSessionId => {
+      request: async (targetSessionId, idempotencyKey) => {
         const response = await StudioGenerationTasksService.submitImageLabGenerationTaskApiV1StudioGenerationTasksLabsImageSessionsSessionIdTasksPost({
-          sessionId: targetSessionId,
+          sessionId: targetSessionId, idempotencyKey,
           requestBody: {
             model_id: modelId,
             execution_prompt: currentPrompt,

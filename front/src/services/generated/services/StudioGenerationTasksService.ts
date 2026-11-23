@@ -108,15 +108,20 @@ export class StudioGenerationTasksService {
     public static submitImageLabGenerationTaskApiV1StudioGenerationTasksLabsImageSessionsSessionIdTasksPost({
         sessionId,
         requestBody,
+        idempotencyKey,
     }: {
         sessionId: string,
         requestBody: GenerationSubmitRequest,
+        idempotencyKey?: (string | null),
     }): CancelablePromise<ApiResponse_ExperimentTaskCreated_> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/studio/generation-tasks/labs/image/sessions/{session_id}/tasks',
             path: {
                 'session_id': sessionId,
+            },
+            headers: {
+                'Idempotency-Key': idempotencyKey,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -134,15 +139,20 @@ export class StudioGenerationTasksService {
     public static submitVideoLabGenerationTaskApiV1StudioGenerationTasksLabsVideoSessionsSessionIdTasksPost({
         sessionId,
         requestBody,
+        idempotencyKey,
     }: {
         sessionId: string,
         requestBody: GenerationSubmitRequest,
+        idempotencyKey?: (string | null),
     }): CancelablePromise<ApiResponse_ExperimentTaskCreated_> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/studio/generation-tasks/labs/video/sessions/{session_id}/tasks',
             path: {
                 'session_id': sessionId,
+            },
+            headers: {
+                'Idempotency-Key': idempotencyKey,
             },
             body: requestBody,
             mediaType: 'application/json',

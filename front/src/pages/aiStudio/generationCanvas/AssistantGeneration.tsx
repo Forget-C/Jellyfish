@@ -36,7 +36,7 @@ export function AssistantGeneration({ generation, openRun, cancelRun }: {
     failed: uiText("生成未完成"),
     cancelled: uiText("已取消"),
   }
-  return <div className="canvas-assistant-generation" role="status">
+  return <div className="canvas-assistant-generation" role="status" aria-label={uiText("生成回执")}>
     <div>{uiText("已授权生成版本数")} {generation.requested_count} · {states[generation.state]}</div>
     {(generation.versions ?? []).map(version => <div key={version.request_id}>
       {uiText("版本")} {version.version} · {versionStates[version.state] ?? version.state}

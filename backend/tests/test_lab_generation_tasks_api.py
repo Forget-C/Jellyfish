@@ -210,8 +210,17 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         body = {"execution_prompt": "按参考图生成", "media": media, "operation_input": operation}
         if explicit_model:
             body["model_id"] = "lab-model"
-        submitted = await client.post(base + f"/generation-tasks/labs/{modality}/sessions/{session_id}/tasks", json=body)
+        submit_url = base + f"/generation-tasks/labs/{modality}/sessions/{session_id}/tasks"
+        headers = {"Idempotency-Key": "same-lab-request"}
+        submitted = await client.post(submit_url, json=body, headers=headers)
         assert submitted.status_code == 201, submitted.text
+        reconnected = await client.get(base + f"/experiment-sessions/{session_id}/interaction/requests/same-lab-request")
+        assert reconnected.status_code == 200, reconnected.text
+        assert reconnected.json()["data"] == submitted.json()["data"]
+        replayed = await client.post(submit_url, json=body, headers=headers)
+        assert replayed.status_code == 201 and replayed.json()["data"] == submitted.json()["data"]
+        changed = await client.post(submit_url, json={**body, "execution_prompt": "更换请求正文"}, headers=headers)
+        assert changed.status_code == 409, changed.text
         history = await client.get(base + f"/experiment-sessions/{session_id}/messages")
         assert history.status_code == 200
         user, task = history.json()["data"]

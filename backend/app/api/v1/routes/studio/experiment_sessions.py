@@ -10,14 +10,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
+from app.schemas.interaction import InteractionSnapshot
 from app.schemas.common import ApiResponse, created_response, empty_response, success_response
 from app.schemas.studio.experiment_sessions import (
     ExperimentMessageRead,
     ExperimentSessionCreate,
     ExperimentSessionRead,
     ExperimentSessionUpdate,
+    ExperimentTaskCreated,
     LabType,
 )
+from app.services.studio.experiment_interaction import read_experiment_receipt
 from app.services.studio.experiment_messages import read_experiment_messages, has_active_experiment_tasks
 
 router = APIRouter()
@@ -77,11 +80,22 @@ async def update_experiment_session(session_id: str, body: ExperimentSessionUpda
 @router.get("/{session_id}/messages", response_model=ApiResponse[list[ExperimentMessageRead]])
 async def list_experiment_messages(session_id: str, db: AsyncSession = Depends(get_db), page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=100)) -> ApiResponse[list[ExperimentMessageRead]]:
     """分页读取一个会话的用户可见消息历史。"""
-    if await db.get(ExperimentSession, session_id) is None:
+    session = await db.get(ExperimentSession, session_id)
+    if session is None:
         raise HTTPException(status_code=404, detail="Experiment session not found")
     rows = (await db.execute(select(ExperimentMessage).where(ExperimentMessage.session_id == session_id).order_by(ExperimentMessage.sequence.desc()).offset((page - 1) * page_size).limit(page_size))).scalars().all()
     rows.reverse()
-    return success_response(await read_experiment_messages(db, rows))
+    capabilities = ('snapshot', 'send', 'events', 'stop') if session.lab_type == 'text' else ('snapshot', 'send', 'task_receipt')
+    snapshot = InteractionSnapshot(session_id=session.id, cursor=session.message_sequence, capabilities=capabilities)
+    return success_response(await read_experiment_messages(db, rows), meta=snapshot.model_dump(mode='json'))
+
+
+@router.get('/{session_id}/interaction/requests/{request_id}', response_model=ApiResponse[ExperimentTaskCreated],
+            operation_id='experiment_interaction_receipt')
+async def get_experiment_interaction_receipt(session_id: str, request_id: str,
+                                             db: AsyncSession = Depends(get_db)):
+    """Recover an accepted task and its current state by the original request identity."""
+    return success_response(await read_experiment_receipt(db, session_id, request_id))
 
 
 @router.delete("/{session_id}", response_model=ApiResponse[None])

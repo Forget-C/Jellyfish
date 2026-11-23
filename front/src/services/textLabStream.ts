@@ -94,6 +94,8 @@ export interface TextLabHeartbeatEvent {
 export interface TextLabStreamRequest {
   sessionId: string
   body: TextLabRunRequest
+  requestId?: string
+  afterEventId?: number
   signal?: AbortSignal
 }
 
@@ -126,7 +128,11 @@ export async function* streamTextLab(
     path: { session_id: request.sessionId },
     body: request.body,
     mediaType: 'application/json',
-    headers: { Accept: 'text/event-stream' },
+    headers: {
+      Accept: 'text/event-stream',
+      'Idempotency-Key': request.requestId,
+      'Last-Event-ID': request.afterEventId?.toString(),
+    },
   }
   const headers = await getHeaders(OpenAPI, options)
   const response = await fetch(buildTextLabStreamUrl(request.sessionId), {
@@ -155,6 +161,15 @@ export async function* streamTextLab(
   const decoder = new TextDecoder()
   let buffer = ''
   let receivedTerminalEvent = false
+  let cursor = request.afterEventId ?? 0
+  const nextEvent = (frame: string) => {
+    const event = parseTextLabSseFrame(frame)
+    if (event && event.event !== 'heartbeat') {
+      if (event.sequence <= cursor) return
+      cursor = event.sequence
+    }
+    return event
+  }
   try {
     let hasMoreChunks = true
     while (hasMoreChunks) {
@@ -163,7 +178,7 @@ export async function* streamTextLab(
       const frames = takeSseFrames(buffer)
       buffer = frames.remainder
       for (const frame of frames.frames) {
-        const event = parseTextLabSseFrame(frame)
+        const event = nextEvent(frame)
         if (event) {
           receivedTerminalEvent ||= isTextLabTerminalEvent(event)
           yield event
@@ -175,7 +190,7 @@ export async function* streamTextLab(
     }
     buffer += decoder.decode()
     if (buffer.trim()) {
-      const event = parseTextLabSseFrame(buffer)
+      const event = nextEvent(buffer)
       if (event) {
         receivedTerminalEvent ||= isTextLabTerminalEvent(event)
         yield event

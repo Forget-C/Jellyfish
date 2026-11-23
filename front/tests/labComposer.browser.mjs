@@ -115,7 +115,7 @@ try {
   assert.equal(await videoSummary.getByRole('button', { name: '预览尾帧：参考图 0', exact: true }).count(), 0)
   await videoSummary.getByRole('button', { name: '预览主体 海鸥 · 第 1 项：参考图 0', exact: true }).click()
   await videoPreview.getByText('主体 海鸥 · 第 1 项：参考图 0', { exact: true }).waitFor()
-  await videoPreview.getByRole('button', { name: 'Close', exact: true }).press('Escape')
+  await videoPreview.getByRole('button', { name: /^(Close|关闭)$/ }).press('Escape')
   await videoPreview.waitFor({ state: 'hidden' })
   longModels = true
   for (const mode of Object.keys(modes)) {

@@ -27,6 +27,8 @@ from app.core.contracts.media import ImageMediaInput, VideoMediaInput
 from app.dependencies import get_db
 from app.models.experiment_sessions import ExperimentSession
 from app.schemas.common import ApiResponse, created_response
+from app.schemas.interaction import InteractionRequestHeader
+from app.services.studio.experiment_interaction import find_media_receipt, interaction_request_payload
 from app.schemas.studio.experiment_sessions import ExperimentTaskCreated
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.submission import GenerationSubmitter
@@ -78,11 +80,16 @@ async def _submit_lab_task(
     session_id: str,
     modality: GenerationModality,
     body: GenerationSubmitRequest,
+    request_id: str | None = None,
 ) -> ApiResponse[ExperimentTaskCreated]:
     """原子写入实验室消息和快照任务，并在提交成功后再投递 Worker。"""
 
     lab_type: Literal["image", "video"] = "image" if modality is GenerationModality.image else "video"
     session = await _require_session(db, session_id=session_id, lab_type=lab_type)
+    if request_id:
+        receipt = await find_media_receipt(db, session_id, request_id, body=body)
+        if receipt:
+            return created_response(receipt)
     operation = GenerationOperation.image_generation if modality is GenerationModality.image else GenerationOperation.video_generation
     task_label = "图片" if modality is GenerationModality.image else "视频"
     accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(
@@ -105,7 +112,8 @@ async def _submit_lab_task(
                 role="task",
                 task_id=accepted.task_id,
                 content=f"{task_label}生成任务已提交，正在等待生成结果。",
-                payload=task_message_display_payload(modality=modality.value),
+                payload={**task_message_display_payload(modality=modality.value),
+                         **interaction_request_payload(request_id, body)},
             ),
         ],
     )
@@ -131,11 +139,12 @@ async def submit_image_lab_generation_task(
     session_id: str,
     body: GenerationSubmitRequest,
     db: AsyncSession = Depends(get_db),
+    idempotency_key: InteractionRequestHeader = None,
 ) -> ApiResponse[ExperimentTaskCreated]:
     """为图片实验会话创建权威消息和安全快照任务。"""
 
     _require_operation_request(body, modality=GenerationModality.image)
-    return await _submit_lab_task(db, session_id=session_id, modality=GenerationModality.image, body=body)
+    return await _submit_lab_task(db, session_id=session_id, modality=GenerationModality.image, body=body, request_id=idempotency_key)
 
 
 @router.post(
@@ -148,8 +157,9 @@ async def submit_video_lab_generation_task(
     session_id: str,
     body: GenerationSubmitRequest,
     db: AsyncSession = Depends(get_db),
+    idempotency_key: InteractionRequestHeader = None,
 ) -> ApiResponse[ExperimentTaskCreated]:
     """为视频实验会话创建权威消息和安全快照任务。"""
 
     _require_operation_request(body, modality=GenerationModality.video)
-    return await _submit_lab_task(db, session_id=session_id, modality=GenerationModality.video, body=body)
+    return await _submit_lab_task(db, session_id=session_id, modality=GenerationModality.video, body=body, request_id=idempotency_key)

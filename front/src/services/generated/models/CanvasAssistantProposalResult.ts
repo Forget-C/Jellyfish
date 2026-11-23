@@ -18,4 +18,5 @@ export type CanvasAssistantProposalResult = {
     conflicts?: Array<CanvasAssistantEditConflict>;
     generation?: (CanvasAssistantGenerationRead | null);
     automatic_review?: (CanvasAssistantIndependentReview | null);
+    graph_resumed?: boolean;
 };

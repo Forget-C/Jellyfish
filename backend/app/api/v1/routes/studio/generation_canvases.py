@@ -5,8 +5,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
+from app.schemas.interaction import InteractionEvent
 from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
-                                          CanvasAssistantModelSelection, InteractionEvent)
+                                          CanvasAssistantModelSelection)
 from app.schemas.canvas_assistant_draft import CanvasDraftSave, CanvasDraftSaved, DraftAssistantMessage
 from app.services.generation_canvas.assistant_draft import DraftCanvasAssistant
 from app.schemas.common import PaginatedData, paginated_response, ApiResponse, created_response, empty_response, success_response

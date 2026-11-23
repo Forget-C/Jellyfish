@@ -175,9 +175,9 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     if (disabled || capabilityBlocked || ratioConflict || referenceIssues.length) return
     await submission.submitTask({
       ensureSession: () => sessionId ? Promise.resolve({ id: sessionId }) : ensureSession('video'),
-      request: async targetSessionId => {
+      request: async (targetSessionId, idempotencyKey) => {
         const response = await StudioGenerationTasksService.submitVideoLabGenerationTaskApiV1StudioGenerationTasksLabsVideoSessionsSessionIdTasksPost({
-          sessionId: targetSessionId,
+          sessionId: targetSessionId, idempotencyKey,
           requestBody: {
             model_id: modelId,
             execution_prompt: currentPrompt,
