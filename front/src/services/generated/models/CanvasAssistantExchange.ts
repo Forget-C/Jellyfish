@@ -5,6 +5,7 @@
 import type { CanvasAssistantApprovalAudit } from './CanvasAssistantApprovalAudit';
 import type { CanvasAssistantAttachment } from './CanvasAssistantAttachment';
 import type { CanvasAssistantGenerationRead } from './CanvasAssistantGenerationRead';
+import type { CanvasAssistantInstruction } from './CanvasAssistantInstruction';
 import type { CanvasAssistantLayout } from './CanvasAssistantLayout';
 import type { CanvasAssistantProposal } from './CanvasAssistantProposal';
 import type { CanvasAssistantQuestion } from './CanvasAssistantQuestion';
@@ -32,4 +33,5 @@ export type CanvasAssistantExchange = {
     layout?: (CanvasAssistantLayout | null);
     question?: (CanvasAssistantQuestion | null);
     question_answers?: (Array<CanvasAssistantQuestionAnswer> | null);
+    instructions?: (Array<CanvasAssistantInstruction> | null);
 };

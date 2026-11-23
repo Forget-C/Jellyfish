@@ -83,6 +83,14 @@ class CanvasAssistantQuestionAnswer(BaseModel):
     answer: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 
 
+class CanvasAssistantInstruction(BaseModel):
+    """A user instruction directed to an already admitted canvas turn."""
+
+    model_config = ConfigDict(extra='forbid')
+    request_id: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')]
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+
+
 class CanvasAssistantExchange(BaseModel):
     """A completed turn in the order visible to the user."""
 
@@ -105,13 +113,30 @@ class CanvasAssistantExchange(BaseModel):
     layout: CanvasAssistantLayout | None = None
     question: CanvasAssistantQuestion | None = None
     question_answers: list[CanvasAssistantQuestionAnswer] | None = None
+    instructions: list[CanvasAssistantInstruction] | None = None
 
 
 class CanvasAssistantPendingRequest(CanvasAssistantMessage):
     """Original immutable command available to retry after reconnecting."""
 
 
-InteractionCapability = Literal['snapshot', 'send', 'events', 'stop', 'approval']
+class CanvasAssistantQueuedText(BaseModel):
+    """Replace the text of a waiting message while retaining its locked references."""
+
+    model_config = ConfigDict(extra='forbid')
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16000)]
+
+
+class CanvasAssistantQueueItem(BaseModel):
+    """A recoverable queue entry, distinct from its eventual conversation turn."""
+
+    request_id: str
+    turn_id: str | None = None
+    state: Literal['queued', 'admitted', 'completed', 'removed']
+    message: CanvasAssistantQueuedText
+
+
+InteractionCapability = Literal['snapshot', 'send', 'events', 'stop', 'approval', 'question', 'queue', 'steer']
 
 
 class CanvasAssistantHistory(BaseModel):
@@ -123,6 +148,8 @@ class CanvasAssistantHistory(BaseModel):
     turns: list[CanvasAssistantExchange]
     pending_request: CanvasAssistantPendingRequest | None = None
     pending_question: CanvasAssistantQuestion | None = None
+    pending_instructions: list[CanvasAssistantInstruction] = Field(default_factory=list)
+    queue: list[CanvasAssistantQueueItem] = Field(default_factory=list)
     model_id: str | None = None
     approval_mode: Literal['manual', 'automatic'] = 'manual'
 
@@ -134,7 +161,10 @@ class InteractionEvent(BaseModel, Generic[Payload]):
     """A committed interaction update with resume and deduplication identities."""
 
     session_id: str
-    turn_id: str
+    turn_id: str | None
     cursor: int
     type: str
     payload: Payload
+
+
+CanvasAssistantEventPayload = CanvasAssistantExchange | CanvasAssistantQueueItem

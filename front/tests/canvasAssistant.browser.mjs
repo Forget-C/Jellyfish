@@ -31,6 +31,10 @@ let acceptSlowReply
 let slowReplyArrived
 const slowReplyStarted = new Promise(resolve => { slowReplyArrived = resolve })
 const slowReplyAllowed = new Promise(resolve => { acceptSlowReply = resolve })
+let releaseSteerSource
+let noteSteerSource
+const steerSourceStarted = new Promise(resolve => { noteSteerSource = resolve })
+const steerSourceReleased = new Promise(resolve => { releaseSteerSource = resolve })
 const provider = createHttpServer(async (request, response) => {
   const chunks = []
   for await (const chunk of request) chunks.push(chunk)
@@ -193,6 +197,18 @@ const provider = createHttpServer(async (request, response) => {
     return
   }
   prompts.push(turns)
+  if (turns.at(-1) === '需要补充的一轮') {
+    noteSteerSource()
+    await steerSourceReleased
+  }
+  if (turns.at(-1).includes('先别生成，我只想修改镜头 03')) {
+    response.writeHead(200, { 'Content-Type': 'application/json' })
+    response.end(JSON.stringify({
+      id: 'current-turn-steer', object: 'chat.completion', created: 1, model,
+      choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '已采纳补充，只处理镜头 03' } }],
+    }))
+    return
+  }
   if (turns.at(-1) === '自由二') {
     slowReplyArrived()
     await slowReplyAllowed
@@ -267,6 +283,22 @@ try {
   assert.equal(await panel.getByText('答复 分镜一', { exact: true }).count(), 0)
   const askWhileEditing = ask('自由二')
   await Promise.race([slowReplyStarted, askWhileEditing])
+  const queuedComposer = panel.getByRole('textbox', { name: '给画布助手发消息' })
+  await queuedComposer.fill('待编辑的后续任务')
+  await panel.getByRole('button', { name: '排到下一轮' }).click()
+  const waitingQueue = panel.getByRole('region', { name: '下一轮队列' })
+  await waitingQueue.getByText('待编辑的后续任务').waitFor()
+  await queuedComposer.fill('等待删除的后续任务')
+  await panel.getByRole('button', { name: '排到下一轮' }).click()
+  await waitingQueue.getByText('等待删除的后续任务').waitFor()
+  await waitingQueue.getByRole('listitem').filter({ hasText: '待编辑的后续任务' }).getByRole('button', { name: '编辑' }).click()
+  await waitingQueue.getByRole('textbox', { name: '修改排队消息' }).fill('实际处理的后续任务')
+  await waitingQueue.getByRole('button', { name: '保存', exact: true }).click()
+  await waitingQueue.getByRole('listitem').filter({ hasText: '等待删除的后续任务' }).getByRole('button', { name: '移除' }).click()
+  await waitingQueue.getByText('等待删除的后续任务').waitFor({ state: 'hidden' })
+  await panel.getByRole('button', { name: '关闭画布助手' }).click()
+  await open()
+  await waitingQueue.getByText('实际处理的后续任务').waitFor()
   const rename = await fetch(canvasApi + '/' + free.id + '/name', {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: '回复期间仍可保存', expected_revision: free.revision }),
@@ -275,7 +307,20 @@ try {
   assert.ok(rename.ok, await rename.clone().text())
   acceptSlowReply()
   await askWhileEditing
-  assert.deepEqual(prompts, [['自由一'], ['分镜一'], ['自由一', '自由二']])
+  await panel.getByText('答复 实际处理的后续任务', { exact: true }).waitFor()
+  assert.deepEqual(prompts, [['自由一'], ['分镜一'], ['自由一', '自由二'], ['自由一', '自由二', '实际处理的后续任务']])
+  await queuedComposer.fill('需要补充的一轮')
+  await panel.getByRole('button', { name: '发送消息' }).click()
+  await Promise.race([steerSourceStarted, delay(8000).then(() => { throw Error('原轮次未进入供应商') })])
+  await queuedComposer.fill('先别生成，我只想修改镜头 03')
+  await panel.getByRole('button', { name: '发送消息' }).click()
+  await panel.getByText('已采纳补充，只处理镜头 03', { exact: true }).waitFor()
+  releaseSteerSource()
+  const steeringHistory = (await (await fetch(canvasApi + '/' + free.id + '/assistant')).json()).data
+  const steeredTurn = steeringHistory.turns.find(turn => turn.text === '需要补充的一轮')
+  assert.deepEqual(steeredTurn.instructions.map(value => value.text), ['先别生成，我只想修改镜头 03'])
+  assert.equal(steeredTurn.generation, null)
+  assert.equal(await panel.getByText('答复 需要补充的一轮', { exact: true }).count(), 0)
   await page.screenshot({ path: join(output, 'assistant-desktop.png') })
   for (const [theme, expected] of [
     ['经典深色', 'rgb(27, 27, 27)'], ['雾蓝纯色', 'rgb(255, 255, 255)'], ['雾蓝微渐变', 'rgb(255, 255, 255)'],
@@ -837,6 +882,7 @@ try {
   console.log('Assistant conversation persisted independently on both real canvas entries.')
 } finally {
   acceptSlowReply()
+  releaseSteerSource()
   if (worker?.pid && worker.exitCode === null && worker.signalCode === null) {
     const exited = once(worker, 'close')
     worker.kill()

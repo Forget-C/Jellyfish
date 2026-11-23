@@ -3,10 +3,11 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { CanvasAssistantExchange } from './CanvasAssistantExchange';
-export type InteractionEvent_CanvasAssistantExchange_ = {
+import type { CanvasAssistantQueueItem } from './CanvasAssistantQueueItem';
+export type InteractionEvent_Union_CanvasAssistantExchange__CanvasAssistantQueueItem__ = {
     session_id: string;
-    turn_id: string;
+    turn_id: (string | null);
     cursor: number;
     type: string;
-    payload: CanvasAssistantExchange;
+    payload: (CanvasAssistantExchange | CanvasAssistantQueueItem);
 };

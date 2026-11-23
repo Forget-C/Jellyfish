@@ -252,7 +252,7 @@ async def resolve_assistant_proposal(
         return await _replay_decision(store, canvas_id, proposal, recorded)
     if decision.approval_mode == 'automatic':
         session = await db.get(CanvasAssistantSession, canvas_id, populate_existing=True)
-        if (decision.action != 'approve' or session is None or session.approval_mode != 'automatic'
+        if (decision.action != 'approve' or turn.instructions or session is None or session.approval_mode != 'automatic'
                 or not automatic_approval_allowed(
                     turn.text, turn.context, proposal, CanvasDocument.model_validate(canvas.document), decision.group_ids)):
             raise HTTPException(409, 'Automatic approval requires an explicit user request for this change')

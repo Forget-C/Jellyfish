@@ -2,8 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { InteractionEvent_CanvasAssistantExchange_ } from './InteractionEvent_CanvasAssistantExchange_';
-export type ApiResponse_list_InteractionEvent_CanvasAssistantExchange___ = {
+import type { CanvasAssistantQueueItem } from './CanvasAssistantQueueItem';
+export type ApiResponse_CanvasAssistantQueueItem_ = {
     /**
      * 与 HTTP 状态码一致
      */
@@ -15,7 +15,7 @@ export type ApiResponse_list_InteractionEvent_CanvasAssistantExchange___ = {
     /**
      * 实际数据
      */
-    data?: (Array<InteractionEvent_CanvasAssistantExchange_> | null);
+    data?: (CanvasAssistantQueueItem | null);
     /**
      * 附加元信息
      */

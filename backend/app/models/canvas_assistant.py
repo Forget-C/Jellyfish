@@ -53,8 +53,29 @@ class CanvasAssistantTurn(Base):
     attachments: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     approval_audit: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     question_answers: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    instructions: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     stopped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     layout: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class CanvasAssistantQueuedMessage(Base):
+    """A queued message keeps its own request identity before receiving a turn ID."""
+
+    __tablename__ = 'canvas_assistant_queue'
+    __table_args__ = (
+        Index('ix_canvas_assistant_queue_order', 'canvas_id', 'state', 'position'),
+        UniqueConstraint('canvas_id', 'turn_id', name='uq_canvas_assistant_queue_turn'),
+    )
+
+    canvas_id: Mapped[str] = mapped_column(
+        ForeignKey('canvas_assistant_sessions.canvas_id', ondelete='CASCADE'), primary_key=True,
+    )
+    request_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(12), nullable=False)
+    turn_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    command: Mapped[dict] = mapped_column(JSON, nullable=False)
 
 
 class CanvasAssistantEvent(Base):

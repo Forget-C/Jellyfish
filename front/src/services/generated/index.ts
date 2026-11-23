@@ -35,6 +35,7 @@ export type { ApiResponse_CanvasAssistantHistory_ } from './models/ApiResponse_C
 export type { ApiResponse_CanvasAssistantLayout_ } from './models/ApiResponse_CanvasAssistantLayout_';
 export type { ApiResponse_CanvasAssistantModelSelection_ } from './models/ApiResponse_CanvasAssistantModelSelection_';
 export type { ApiResponse_CanvasAssistantProposalResult_ } from './models/ApiResponse_CanvasAssistantProposalResult_';
+export type { ApiResponse_CanvasAssistantQueueItem_ } from './models/ApiResponse_CanvasAssistantQueueItem_';
 export type { ApiResponse_CanvasCardOutputs_ } from './models/ApiResponse_CanvasCardOutputs_';
 export type { ApiResponse_CanvasCatalog_ } from './models/ApiResponse_CanvasCatalog_';
 export type { ApiResponse_CanvasCheckPreview_ } from './models/ApiResponse_CanvasCheckPreview_';
@@ -84,7 +85,7 @@ export type { ApiResponse_list_ExperimentMessageRead__ } from './models/ApiRespo
 export type { ApiResponse_list_ExperimentSessionRead__ } from './models/ApiResponse_list_ExperimentSessionRead__';
 export type { ApiResponse_list_HomeRecentAsset__ } from './models/ApiResponse_list_HomeRecentAsset__';
 export type { ApiResponse_list_HomeRecentCanvas__ } from './models/ApiResponse_list_HomeRecentCanvas__';
-export type { ApiResponse_list_InteractionEvent_CanvasAssistantExchange___ } from './models/ApiResponse_list_InteractionEvent_CanvasAssistantExchange___';
+export type { ApiResponse_list_InteractionEvent_Union_CanvasAssistantExchange__CanvasAssistantQueueItem____ } from './models/ApiResponse_list_InteractionEvent_Union_CanvasAssistantExchange__CanvasAssistantQueueItem____';
 export type { ApiResponse_list_ModelCapabilityVerificationRead__ } from './models/ApiResponse_list_ModelCapabilityVerificationRead__';
 export type { ApiResponse_list_ProjectStyleRevision__ } from './models/ApiResponse_list_ProjectStyleRevision__';
 export type { ApiResponse_list_PromptCategoryOptionRead__ } from './models/ApiResponse_list_PromptCategoryOptionRead__';
@@ -142,6 +143,7 @@ export type { ApiResponse_TaskResultRead_ } from './models/ApiResponse_TaskResul
 export type { ApiResponse_TaskStatusRead_ } from './models/ApiResponse_TaskStatusRead_';
 export type { ApiResponse_TextLabRunStatus_ } from './models/ApiResponse_TextLabRunStatus_';
 export type { ApiResponse_Union_ActorImageParametersRead__NoneType__ } from './models/ApiResponse_Union_ActorImageParametersRead__NoneType__';
+export type { ApiResponse_Union_CanvasAssistantExchange__NoneType__ } from './models/ApiResponse_Union_CanvasAssistantExchange__NoneType__';
 export type { ApiResponse_Union_DivisionSaved__NoneType__ } from './models/ApiResponse_Union_DivisionSaved__NoneType__';
 export type { ApiResponse_Union_ShootingCheckRead__NoneType__ } from './models/ApiResponse_Union_ShootingCheckRead__NoneType__';
 export type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from './models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
@@ -192,6 +194,7 @@ export type { CanvasAssistantGenerationReview } from './models/CanvasAssistantGe
 export type { CanvasAssistantGenerationVersion } from './models/CanvasAssistantGenerationVersion';
 export type { CanvasAssistantGrouping } from './models/CanvasAssistantGrouping';
 export type { CanvasAssistantHistory } from './models/CanvasAssistantHistory';
+export type { CanvasAssistantInstruction } from './models/CanvasAssistantInstruction';
 export type { CanvasAssistantLayout } from './models/CanvasAssistantLayout';
 export type { CanvasAssistantLayoutDecision } from './models/CanvasAssistantLayoutDecision';
 export type { CanvasAssistantMessage } from './models/CanvasAssistantMessage';
@@ -203,6 +206,8 @@ export type { CanvasAssistantProposalDecision } from './models/CanvasAssistantPr
 export type { CanvasAssistantProposalResult } from './models/CanvasAssistantProposalResult';
 export type { CanvasAssistantQuestion } from './models/CanvasAssistantQuestion';
 export type { CanvasAssistantQuestionAnswer } from './models/CanvasAssistantQuestionAnswer';
+export type { CanvasAssistantQueuedText } from './models/CanvasAssistantQueuedText';
+export type { CanvasAssistantQueueItem } from './models/CanvasAssistantQueueItem';
 export type { CanvasAssistantReadContext } from './models/CanvasAssistantReadContext';
 export type { CanvasAssistantReviewResult } from './models/CanvasAssistantReviewResult';
 export type { CanvasAssistantSkillUse } from './models/CanvasAssistantSkillUse';
@@ -430,7 +435,7 @@ export type { ImmutableFactCard } from './models/ImmutableFactCard';
 export type { ImmutableFactFields } from './models/ImmutableFactFields';
 export type { InFrameActivityCard } from './models/InFrameActivityCard';
 export type { InputBinding } from './models/InputBinding';
-export type { InteractionEvent_CanvasAssistantExchange_ } from './models/InteractionEvent_CanvasAssistantExchange_';
+export type { InteractionEvent_Union_CanvasAssistantExchange__CanvasAssistantQueueItem__ } from './models/InteractionEvent_Union_CanvasAssistantExchange__CanvasAssistantQueueItem__';
 export type { JsonValue } from './models/JsonValue';
 export type { KnowledgeCandidate_Input } from './models/KnowledgeCandidate_Input';
 export type { KnowledgeCandidate_Output } from './models/KnowledgeCandidate_Output';

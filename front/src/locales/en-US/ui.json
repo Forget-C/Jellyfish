@@ -1,4 +1,13 @@
 {
+  "本轮已接收补充指令": "Instruction received for this turn",
+  "本轮补充指令": "Additional instructions for this turn",
+  "本轮已结束或正在等待回答，补充指令未接收。": "The turn finished or is waiting for an answer, so the instruction was not accepted.",
+  "暂未核实补充指令，请重试。": "The instruction could not be confirmed. Please retry.",
+  "下一轮队列": "Next-turn queue",
+  "修改排队消息": "Edit queued message",
+  "已开始处理": "Processing started",
+  "暂时无法更新助手队列": "The assistant queue could not be updated.",
+  "排到下一轮": "Queue for next turn",
   "曾写入，后已撤销": "Applied and then undone",
   "创作问题": "Creative question",
   "自定义回答": "Write your own answer",

@@ -17,13 +17,14 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.canvas_assistant import (
-    CanvasAssistantEvent, CanvasAssistantGeneration, CanvasAssistantSession, CanvasAssistantTurn,
+    CanvasAssistantEvent, CanvasAssistantGeneration, CanvasAssistantQueuedMessage, CanvasAssistantSession, CanvasAssistantTurn,
 )
 from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.models.llm import ModelCategoryKey
-from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
+from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantInstruction, CanvasAssistantMessage,
                                           CanvasAssistantModelSelection, CanvasAssistantQuestion, CanvasAssistantQuestionAnswer,
-                                          CanvasAssistantReadContext, CanvasAssistantSkillUse, InteractionEvent)
+                                          CanvasAssistantReadContext, CanvasAssistantSkillUse, CanvasAssistantEventPayload,
+                                          CanvasAssistantQueueItem, InteractionEvent)
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposal, TextCanvasBatchResponse
 from app.schemas.canvas_assistant_layout import CanvasAssistantLayout
 from app.schemas.generation_canvas import CanvasDocument
@@ -37,7 +38,10 @@ from app.services.generation_canvas.assistant_approval import automatic_approval
 from app.services.generation_canvas.assistant_questions import (
     CreativeQuestionPending, ask_canvas_question, check_new_question, resume_question,
 )
-from app.services.generation_canvas.assistant_events import event_read, publish_events
+from app.services.generation_canvas.assistant_events import event_read, publish_events, publish_queue_event
+from app.services.generation_canvas.assistant_queue import (
+    complete_queued_turn, pending_queue, queue_item, require_queue_entry,
+)
 from app.services.generation_canvas.assistant_layout import CanvasAssistantLayoutDraft
 from app.services.generation_canvas.assistant_generation import (
     freeze_generation_basis, generation_authorization, read_generation, update_generation_for_decision,
@@ -110,15 +114,17 @@ class CanvasAssistant:
         return CanvasAssistantHistory(
             session_id=canvas_id,
             cursor=session.event_cursor if session else 0,
-            capabilities=('snapshot', 'send', 'events', 'stop', 'approval'),
+            capabilities=('snapshot', 'send', 'events', 'stop', 'approval', 'question', 'queue', 'steer'),
             turns=[await self._exchange(turn) for turn in turns],
             pending_request=pending,
             pending_question=session.pending_request.get('question') if pending and session else None,
+            pending_instructions=session.pending_request.get('instructions', []) if pending and session else [],
+            queue=[queue_item(entry) for entry in await pending_queue(self.db, canvas_id)] if session else [],
             model_id=session.model_id if session else None,
             approval_mode=session.approval_mode if session else 'manual',
         )
 
-    async def events(self, canvas_id: str, after: int) -> list[InteractionEvent[CanvasAssistantExchange]]:
+    async def events(self, canvas_id: str, after: int) -> list[InteractionEvent[CanvasAssistantEventPayload]]:
         """Read a bounded page of committed turns after the subscriber's cursor."""
         await self.store.get(canvas_id)
         first_event = await self.db.scalar(select(func.min(CanvasAssistantEvent.cursor)).where(
@@ -131,7 +137,7 @@ class CanvasAssistant:
             legacy = legacy.where(CanvasAssistantTurn.sequence < first_event)
         legacy_turns = list(await self.db.scalars(legacy.order_by(CanvasAssistantTurn.sequence).limit(50)))
         events = [
-            InteractionEvent[CanvasAssistantExchange](
+            InteractionEvent[CanvasAssistantEventPayload](
                 session_id=canvas_id, turn_id=turn.request_id, cursor=turn.sequence,
                 type='turn.completed', payload=await self._exchange(turn),
             )
@@ -155,7 +161,7 @@ class CanvasAssistant:
     async def _exchange(self, turn: CanvasAssistantTurn, approval_mode='manual') -> CanvasAssistantExchange:
         exchange = CanvasAssistantExchange.model_validate(turn)
         exchange.generation = await read_generation(self.db, turn.canvas_id, turn.request_id)
-        if approval_mode == 'automatic' and exchange.proposal and exchange.proposal.state == 'pending':
+        if approval_mode == 'automatic' and not exchange.instructions and exchange.proposal and exchange.proposal.state == 'pending':
             canvas = await self.store.get(turn.canvas_id)
             exchange.automatic_approval = automatic_approval_allowed(
                 exchange.text, turn.context, exchange.proposal, CanvasDocument.model_validate(canvas.document))
@@ -202,6 +208,7 @@ class CanvasAssistant:
         turn = CanvasAssistantTurn(
             canvas_id=session.canvas_id, request_id=source_id, sequence=session.sequence, text=command['text'],
             model_id=pending['model_id'], reply='', stopped=True, context=pending['context'], revises=command['revises'],
+            instructions=pending.get('instructions'),
             attachments=[{'file_id': file_id, 'observation': 'unavailable'} for file_id in command['attachment_file_ids']],
         )
         session.pending_token = session.pending_until = None
@@ -210,6 +217,7 @@ class CanvasAssistant:
         await self.db.flush()
         exchange = await self._exchange(turn)
         publish_events(self.db, session, exchange, 'turn.completed')
+        await complete_queued_turn(self.db, session, turn.request_id)
         return exchange
 
     async def set_model(self, canvas_id: str, choice: CanvasAssistantModelSelection) -> CanvasAssistantModelSelection:
@@ -269,6 +277,106 @@ class CanvasAssistant:
             raise HTTPException(404, 'Canvas not found')
         return session
 
+    async def enqueue(self, canvas_id: str, command: CanvasAssistantMessage) -> CanvasAssistantQueueItem:
+        """Save a separate editable message and replay an identical enqueue."""
+        await self._ensure_session(canvas_id)
+        session = await self._lock_session(canvas_id)
+        body = command.model_dump(mode='json')
+        digest = self.store.command_digest(body)
+        existing = await self.db.get(CanvasAssistantQueuedMessage, (canvas_id, command.request_id))
+        if existing:
+            if existing.request_digest != digest:
+                raise HTTPException(409, 'Queue request identity already belongs to different content')
+            return queue_item(existing)
+        if len(await pending_queue(self.db, canvas_id)) >= 20:
+            raise HTTPException(422, 'Canvas assistant queue is full')
+        if command.context:
+            resolve_assistant_context(await self.store.get(canvas_id), command.context)
+        entry = CanvasAssistantQueuedMessage(
+            canvas_id=canvas_id, request_id=command.request_id, state='queued',
+            position=session.event_cursor + 1, request_digest=digest, command=body,
+        )
+        self.db.add(entry)
+        result = queue_item(entry)
+        publish_queue_event(self.db, session, result, 'queue.added')
+        await self.db.flush()
+        return result
+
+    async def change_queue_item(self, canvas_id: str, request_id: str, text: str | None) -> CanvasAssistantQueueItem:
+        """Edit or remove a waiting message before its turn is admitted."""
+        await self.store.get(canvas_id)
+        session = await self._lock_session(canvas_id)
+        entry = await require_queue_entry(self.db, canvas_id, request_id)
+        if text is None and entry.state == 'removed':
+            return queue_item(entry)
+        if entry.state != 'queued':
+            raise HTTPException(409, 'This queue item is no longer editable')
+        if text is None:
+            entry.state = 'removed'
+        else:
+            entry.command = {**entry.command, 'text': text}
+        result = queue_item(entry)
+        publish_queue_event(self.db, session, result, 'queue.removed' if text is None else 'queue.edited')
+        await self.db.flush()
+        return result
+
+    async def run_queued(self, canvas_id: str, request_id: str) -> CanvasAssistantExchange | None:
+        """Admit the head of the queue or replay that entry's original turn."""
+        await self.store.get(canvas_id)
+        session = await self._lock_session(canvas_id)
+        entry = await require_queue_entry(self.db, canvas_id, request_id)
+        if entry.state == 'removed':
+            raise HTTPException(409, 'The queued message was removed')
+        if entry.state == 'completed':
+            turn = await self.db.get(CanvasAssistantTurn, (canvas_id, entry.turn_id))
+            return await self._exchange(turn, session.approval_mode)
+        head = (await pending_queue(self.db, canvas_id))[0]
+        pending = session.pending_request
+        if head.request_id != request_id or pending and pending['command']['request_id'] != entry.turn_id:
+            return None
+        if pending and (pending.get('question') or (session.pending_until and
+                                                    session.pending_until > datetime.now(UTC).replace(tzinfo=None))):
+            return None
+        if entry.turn_id is None:
+            entry.turn_id = uuid4().hex
+            entry.state = 'admitted'
+            publish_queue_event(self.db, session, queue_item(entry), 'queue.admitted')
+        command = CanvasAssistantMessage.model_validate({**entry.command, 'request_id': entry.turn_id})
+        return await self.send(canvas_id, command)
+
+    async def steer(self, canvas_id: str, source_id: str,
+                    instruction: CanvasAssistantInstruction) -> CanvasAssistantExchange:
+        """Withdraw the active model attempt and continue the same turn with new input."""
+        await self.store.get(canvas_id, lock=True)
+        session = await self._lock_session(canvas_id)
+        body = instruction.model_dump()
+        completed = await self.db.get(CanvasAssistantTurn, (canvas_id, source_id))
+        if completed:
+            if body in (completed.instructions or []):
+                return await self._exchange(completed, session.approval_mode)
+            raise HTTPException(409, 'The assistant turn is no longer accepting instructions')
+        pending = session.pending_request
+        if not pending or pending['command']['request_id'] != source_id:
+            raise HTTPException(404, 'The active assistant turn was not found')
+        if pending.get('question') or pending.get('answers'):
+            raise HTTPException(409, 'Wait for the creative answer to finish before adding instructions')
+        instructions = pending.get('instructions', [])
+        previous = next((item for item in instructions if item['request_id'] == instruction.request_id), None)
+        if previous is not None and previous != body:
+            raise HTTPException(409, 'Instruction identity already belongs to different content')
+        if previous is None:
+            if len(instructions) == 8:
+                raise HTTPException(422, 'The current turn has too many supplemental instructions')
+            instructions = [*instructions, body]
+            session.pending_token = session.pending_until = session.pending_checkpoint = None
+            session.pending_request = {**pending, 'instructions': instructions}
+            exchange = CanvasAssistantExchange(
+                request_id=source_id, text=pending['command']['text'], sequence=session.sequence + 1,
+                model_id=pending['model_id'], reply='', instructions=instructions,
+            )
+            publish_events(self.db, session, exchange, 'turn.steered')
+        return await self.send(canvas_id, CanvasAssistantMessage.model_validate(pending['command']))
+
     async def answer(self, canvas_id: str, source_id: str,
                      answer: CanvasAssistantQuestionAnswer) -> CanvasAssistantExchange:
         """Continue the original turn for a known question, or replay the accepted answer."""
@@ -319,6 +427,7 @@ class CanvasAssistant:
             raise HTTPException(409, 'Request already used for a different assistant message')
         question = pending.get('question') if pending else None
         answers = list(pending.get('answers', ())) if resuming else []
+        instructions = pending.get('instructions', []) if resuming else []
         if question:
             if not resuming:
                 raise HTTPException(409, 'Answer the ongoing creative question before sending a new turn')
@@ -346,8 +455,8 @@ class CanvasAssistant:
         session.pending_token = token
         session.pending_until = now + timedelta(seconds=TURN_LEASE_SECONDS)
         session.pending_request = {'command': request, 'model_id': model_id, 'context': context}
-        if answers:
-            session.pending_request = {**session.pending_request, 'answers': answers}
+        if answers or instructions:
+            session.pending_request = {**session.pending_request, 'answers': answers, 'instructions': instructions}
         if not resuming:
             session.pending_checkpoint = None
         snapshot = session.pending_checkpoint
@@ -355,8 +464,11 @@ class CanvasAssistant:
         # turns for this conversation and can expire after an interrupted process.
         await self.db.commit()
         try:
+            text = command.text
+            if instructions:
+                text += '\n\n本轮用户补充指令，后发要求优先：\n' + '\n'.join(item['text'] for item in instructions)
             content, attachments = await describe_assistant_media(
-                command.text, command.attachment_file_ids, sources, capability=capability,
+                text, command.attachment_file_ids, sources, capability=capability,
             )
             messages.append(HumanMessage(content=content))
             reply, skills, observed = await self._reply(
@@ -410,12 +522,13 @@ class CanvasAssistant:
             canvas_id=canvas_id, sequence=session.sequence, request_id=command.request_id,
             model_id=model_id, text=command.text, reply=reply, context=context, attachments=attachments,
             skills=[skill.model_dump() for skill in skills], question_answers=answers or None,
+            instructions=instructions or None,
             proposal=proposal.model_dump(mode='json') if proposal else None, revises=command.revises,
             layout=layout_draft.proposal.model_dump(mode='json') if layout_draft and layout_draft.proposal else None,
         )
         self.db.add(turn)
         await self.db.flush()
-        if context and capability.tool_calling:
+        if context and capability.tool_calling and not instructions:
             canvas = await self.store.get(canvas_id)
             authorization = generation_authorization(turn, CanvasDocument.model_validate(canvas.document), canvas.revision)
             if authorization is not None:
@@ -427,6 +540,7 @@ class CanvasAssistant:
         publish_events(self.db, session, exchange, 'turn.completed')
         if exchange.proposal:
             publish_events(self.db, session, exchange, 'proposal.created')
+        await complete_queued_turn(self.db, session, turn.request_id)
         return exchange
 
     async def _pause_question(self, canvas_id, command, token, question):
@@ -452,6 +566,7 @@ class CanvasAssistant:
         return CanvasAssistantExchange(
             request_id=command.request_id, text=command.text, sequence=session.sequence + 1,
             model_id=pending['model_id'], reply='', question=question, question_answers=pending.get('answers'),
+            instructions=pending.get('instructions'),
         )
 
     async def _revised_proposal(self, canvas_id, source_id, edit_draft, *, lock=False):
