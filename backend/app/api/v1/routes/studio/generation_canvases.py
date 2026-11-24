@@ -14,6 +14,7 @@ from app.schemas.common import PaginatedData, paginated_response, ApiResponse, c
 from app.schemas.generation_canvas import CanvasRename, CanvasSummary, CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError, CanvasModelCapability, CanvasCompiledInput
 from app.services.generation_canvas.store import CanvasStore
 from app.services.generation_canvas.lifecycle import canvas_lifecycle, free_canvas_lifecycle
+from app.services.generation_canvas.edits import canvas_edits, free_canvas_edits
 from app.schemas.canvas_assistant import (
     CanvasAssistantEventPayload, CanvasAssistantInstruction, CanvasAssistantQuestionAnswer, CanvasAssistantQueuedText, CanvasAssistantQueueItem,
 )
@@ -51,7 +52,7 @@ async def read_free_draft(canvas_id: UUID, db: AsyncSession = Depends(get_db, sc
             responses={409: {'model': CanvasError}, 422: {'model': CanvasError}})
 async def save_free_draft(canvas_id: UUID, body: CanvasDraftSave, db: AsyncSession = Depends(get_db, scope='function')):
     """原子创建并保存首份有效内容；未知结果可重放原请求。"""
-    return success_response(await CanvasStore(db, None).save_free_draft(str(canvas_id), body))
+    return success_response(await free_canvas_edits(db).save_free_draft(str(canvas_id), body))
 
 
 @router.post('/drafts/{canvas_id}/assistant', response_model=ApiResponse[CanvasAssistantExchange],
@@ -213,7 +214,7 @@ async def decide_layout(canvas_id: str, source_id: str, body: CanvasAssistantLay
             responses={409: {'model': CanvasError}, 422: {'model': CanvasError}})
 async def save_canvas(canvas_id: str, body: CanvasSave, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """CAS 保存完整文档并返回持久原回执。补齐同源兼容候选，新建来源须满足接收模型能力。"""
-    return success_response(await CanvasStore(db, project_id).save(canvas_id, body))
+    return success_response(await canvas_edits(db, project_id).save(canvas_id, body))
 
 
 @router.delete('/{canvas_id}', response_model=ApiResponse[None], operation_id='canvas_delete',

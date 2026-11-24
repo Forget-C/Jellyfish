@@ -9,6 +9,7 @@ from app.core.contracts.generation_canvas import InputBinding
 from app.schemas.canvas_assistant_edit import CanvasAssistantChange
 from app.schemas.canvas_assistant_structure import VideoInputTarget, VideoTextUse
 from app.schemas.generation_canvas import GenerationCanvasEdge, PromptReference, PromptText, VideoModelCard
+from app.services.generation_canvas.graph_edit import append_edge
 from app.services.generation_canvas.capabilities import model_capability
 from app.services.generation_canvas.compiler import compile_card, published_card_outputs
 from app.services.generation_canvas.current_state import CanvasCurrentState
@@ -105,8 +106,7 @@ def adopt_video_input(document, use, outputs, capabilities, identity=None):
     if not exists:
         edge = GenerationCanvasEdge(id=identity, source_card=source.id, source_port=output_port,
                                     target_card=video.id, target_port=port)
-        document.edges.append(edge)
-        document.input_order.setdefault(video.id, {}).setdefault(port, []).append(edge.id)
+        append_edge(document, edge)
         changed = True
     if not changed:
         return None

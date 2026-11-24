@@ -27,6 +27,7 @@ from app.services.generation_canvas.capabilities import model_capability
 if TYPE_CHECKING:
     from app.schemas.canvas_assistant_draft import CanvasDraftSave
     from app.services.directing.storyboard_save import StoryboardSaveEvidence
+    from app.services.generation_canvas.document_save import PreparedDocument
 
 
 
@@ -216,12 +217,25 @@ class CanvasStore:
         return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(',', ':'),
                                         ensure_ascii=False).encode()).hexdigest()
 
-    async def save_receipt(self, canvas_id: str, request_id: str, digest: str) -> dict | None:
-        """Under the canvas lock, replay only the same command."""
+    async def save_receipt(self, canvas_id: str, request_id: str, digest: str | None = None) -> dict | None:
+        """查询已授权画布的回执，重放时同时核实请求摘要。"""
         receipt = await self.db.get(CanvasSaveReceipt, (canvas_id, request_id))
-        if receipt and receipt.request_hash != digest:
+        if receipt and digest is not None and receipt.request_hash != digest:
             raise diagnostic('IDEMPOTENCY_CONFLICT', '请求身份已用于其他正文', {'canvas_id': canvas_id}, status=409)
         return receipt.response if receipt else None
+
+    async def record_save_receipt(self, canvas_id: str, request_id: str, digest: str, response: dict) -> None:
+        """在已锁定画布的事务内记录可重放结果。"""
+        self.db.add(CanvasSaveReceipt(canvas_id=canvas_id, request_id=request_id, request_hash=digest, response=response))
+        await self.db.flush()
+
+    async def prepare_ordinary_document(self, canvas: GenerationCanvas, document: dict) -> 'PreparedDocument':
+        """预演和普通保存共用解析、规范化和分镜准入。"""
+        from app.services.directing.storyboard_save import require_ordinary_save
+        from app.services.generation_canvas.document_save import prepare_document
+        prepared = await prepare_document(self.db, self.project_id, canvas, document)
+        await require_ordinary_save(self.db, canvas, prepared.previous_document, prepared.document)
+        return prepared
 
     async def save_scene_application(self, canvas: GenerationCanvas, command: CanvasSave, digest: str,
                                      *, chapter_version: str, evidence: 'StoryboardSaveEvidence') -> CanvasRead:
@@ -231,21 +245,21 @@ class CanvasStore:
 
     async def _write(self, canvas: GenerationCanvas, command: CanvasSave, digest: str,
                      *, chapter_version: str | None = None, evidence: 'StoryboardSaveEvidence | None' = None,
-                     creating: bool = False, include_document: bool = False) -> dict:
+                     creating: bool = False, include_document: bool = False, receipt_fields: dict | None = None) -> dict:
         canvas_id = canvas.id
         if canvas.revision != command.expected_revision:
             raise diagnostic('REVISION_CONFLICT', '服务端已有新修订，请重新读取', {'canvas_id': canvas_id}, status=409)
         from app.services.generation_canvas.checks import CanvasChecks, changed_check_connections
         from app.services.generation_canvas.document_save import prepare_document
         from app.services.generation_canvas.saved_media import replace_canvas_content_usages
-        prepared = await prepare_document(self.db, self.project_id, canvas, command.document,
-                                          scene_sources=evidence.scene_sources if evidence else None,
-                                          restored_continuity=evidence.restored_continuity if evidence else frozenset())
+        if evidence:
+            prepared = await prepare_document(self.db, self.project_id, canvas, command.document,
+                                             scene_sources=evidence.scene_sources,
+                                             restored_continuity=evidence.restored_continuity)
+        else:
+            prepared = await self.prepare_ordinary_document(canvas, command.document)
         if creating and prepared.document == prepared.previous_document:
             raise diagnostic('EMPTY_CANVAS', '请先添加画布内容或修改设置', {'canvas_id': canvas_id})
-        if evidence is None:
-            from app.services.directing.storyboard_save import require_ordinary_save
-            await require_ordinary_save(self.db, canvas, prepared.previous_document, prepared.document)
         if canvas.sequence_id and prepared.document.name != prepared.previous_document.name and not prepared.document.name.strip():
             raise diagnostic('INVALID_CANVAS_NAME', '场次画布名称不能为空白', {'canvas_id': canvas_id, 'path': ['name']})
         previous = prepared.previous_document.storyboard
@@ -274,8 +288,9 @@ class CanvasStore:
                 scene=await self._scene_association(canvas)).model_dump(mode='json')
         if evidence is not None:
             response.update(evidence.receipt_fields(prepared.previous_document, prepared.document))
-        self.db.add(CanvasSaveReceipt(canvas_id=canvas_id, request_id=command.request_id, request_hash=digest, response=response))
-        await self.db.flush()
+        if receipt_fields is not None:
+            response.update(receipt_fields)
+        await self.record_save_receipt(canvas_id, command.request_id, digest, response)
         return response
 
     async def card_outputs(self, canvas_id: str, card_id: str):

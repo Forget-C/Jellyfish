@@ -7,6 +7,7 @@ from app.schemas.canvas_assistant_edit import (
     CanvasAssistantRemovalTarget, DeleteCardEdit, DisconnectCardsEdit, ReleaseBindingEdit,
 )
 from app.schemas.generation_canvas import CanvasDocument, ModelCard, PromptInstruction, PromptReference
+from app.services.generation_canvas.graph_edit import remove_card, remove_edges
 
 
 def removal_impact(document: CanvasDocument, card_id: str, target: CanvasAssistantRemovalTarget) -> tuple[str, str] | None:
@@ -52,17 +53,11 @@ def removal_impact(document: CanvasDocument, card_id: str, target: CanvasAssista
 def apply_removal(document: CanvasDocument, card_id: str, target: CanvasAssistantRemovalTarget) -> None:
     """Update references for the approved change and leave canonical save validation in charge."""
     if isinstance(target, DeleteCardEdit):
-        affected = {edge.id for edge in document.edges if card_id in (edge.source_card, edge.target_card)}
-        document.cards = [card for card in document.cards if card.id != card_id]
-        _remove_edges(document, affected)
-        document.input_order.pop(card_id, None)
-        for group in document.groups:
-            group.card_ids = [value for value in group.card_ids if value != card_id]
-        document.groups = [group for group in document.groups if group.card_ids]
+        remove_card(document, card_id)
         return
 
     if isinstance(target, DisconnectCardsEdit):
-        _remove_edges(document, {target.edge_id})
+        remove_edges(document, {target.edge_id})
         return
 
     card = next(item for item in document.cards if item.id == card_id)
@@ -75,14 +70,3 @@ def apply_removal(document: CanvasDocument, card_id: str, target: CanvasAssistan
     if hasattr(card, 'frame_targets'):
         card.frame_targets = [entry for entry in card.frame_targets if entry.binding_id != target.binding_id]
     card.input_bindings = [item for item in card.input_bindings if item.id != target.binding_id]
-
-
-
-def _remove_edges(document: CanvasDocument, affected: set[str]) -> None:
-    document.edges = [edge for edge in document.edges if edge.id not in affected]
-    for edge in document.edges:
-        if edge.order_anchor and edge.order_anchor.edge_id in affected:
-            edge.order_anchor = None
-    for ports in document.input_order.values():
-        for port, entries in ports.items():
-            ports[port] = [edge_id for edge_id in entries if edge_id not in affected]

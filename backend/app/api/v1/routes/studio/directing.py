@@ -20,6 +20,7 @@ from app.core.contracts.directing.scene_storyboard import (StoryboardApplication
     StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardRetry, StoryboardRetryBasis,
     StoryboardTaskRead, StoryboardTaskSummary)
 from app.services.directing.scene_storyboard import SceneStoryboardService
+from app.services.generation_canvas.edits import scene_storyboard_edits
 from app.services.generation_canvas.lifecycle import scene_canvas_lifecycle
 from app.core.contracts.directing.scene_objects import (
     ObjectExtractionRequest, SceneObjectCandidateApplication, SceneObjectCandidateReceipt, SceneObjectCandidateReview,
@@ -265,7 +266,7 @@ async def read_storyboard(project_id: str, chapter_id: str, sequence_id: str, ta
 async def preview_storyboard_application(project_id: str, chapter_id: str, sequence_id: str, task_id: str,
                                          body: StoryboardApplication, db: AsyncSession = Depends(get_db, scope="function")):
     """核对当前修订的卡片差异及保留影响。"""
-    return success_response(await _call(SceneStoryboardService(db, project_id).apply_storyboard(
+    return success_response(await _call(scene_storyboard_edits(db, project_id).apply_storyboard(
         chapter_id, sequence_id, task_id, body, preview=True)))
 
 
@@ -274,7 +275,7 @@ async def preview_storyboard_application(project_id: str, chapter_id: str, seque
 async def apply_storyboard(project_id: str, chapter_id: str, sequence_id: str, task_id: str,
                            body: StoryboardApplication, db: AsyncSession = Depends(get_db, scope="function")):
     """明确应用本场候选，原子保存已核对的共同文档。"""
-    return success_response(await _call(SceneStoryboardService(db, project_id).apply_storyboard(
+    return success_response(await _call(scene_storyboard_edits(db, project_id).apply_storyboard(
         chapter_id, sequence_id, task_id, body)))
 
 
@@ -283,7 +284,7 @@ async def apply_storyboard(project_id: str, chapter_id: str, sequence_id: str, t
 async def restore_storyboard(project_id: str, chapter_id: str, sequence_id: str, task_id: str,
                               body: StoryboardRestore, db: AsyncSession = Depends(get_db, scope="function")):
     """在真实应用回执约束下撤销或重做同一批次。"""
-    return success_response(await _call(SceneStoryboardService(db, project_id).restore_storyboard(
+    return success_response(await _call(scene_storyboard_edits(db, project_id).restore_storyboard(
         chapter_id, sequence_id, task_id, body)))
 
 

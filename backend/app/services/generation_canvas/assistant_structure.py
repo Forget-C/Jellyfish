@@ -18,6 +18,7 @@ from app.schemas.generation_canvas import (
     CanvasDocument, GenerationCanvasEdge, ImageContentCard, ImageModelCard, MovementCard, PromptDocument,
     PromptInstruction, PromptReference, PromptText, TextContentCard, TextModelCard, VideoModelCard,
 )
+from app.services.generation_canvas.graph_edit import append_edge
 from app.services.generation_canvas.assistant_media import resolve_assistant_media
 from app.services.generation_canvas.assistant_movement import apply_shot_movement, preview_shot_movement
 from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
@@ -184,8 +185,7 @@ def structural_preview_tool(draft, kind: str, sources):
 
 def append_candidate_edge(document: CanvasDocument, edge: GenerationCanvasEdge) -> None:
     """Keep the candidate and its input order together in previews and saved edits."""
-    document.edges.append(edge)
-    document.input_order.setdefault(edge.target_card, {}).setdefault(edge.target_port, []).append(edge.id)
+    append_edge(document, edge)
 
 
 async def apply_structural_change(store, canvas, document: CanvasDocument, edit: CanvasAssistantChange) -> bool:
