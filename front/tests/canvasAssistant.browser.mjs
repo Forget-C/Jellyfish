@@ -370,7 +370,7 @@ try {
       await page.getByRole('menuitem', { name: '引用卡片' }).click()
       await panel.getByRole('combobox', { name: '选择引用' }).waitFor()
       const text = '流式回归' + name
-      const waiting = panel.getByText('助手正在回复', { exact: true })
+      const waiting = panel.getByText('等待模型响应', { exact: true })
       const requestUrl = /\/generation-canvases\/[^/]+\/assistant(?:\?|$)/
       let observedWaiting = false
       const holdFirstReply = async route => {
@@ -451,7 +451,7 @@ try {
       await open()
     }
     await sendLive('流式回归提案')
-    await delay(650)
+    await panel.getByText('正在生成画布提案', { exact: true }).waitFor()
     assert.equal(await panel.getByText(/"groups"/).count(), 0)
     assert.equal(await panel.getByRole('region', { name: '修改建议' }).count(), 0)
     replyGates.get('流式回归提案')()

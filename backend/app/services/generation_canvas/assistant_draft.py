@@ -1,6 +1,7 @@
 """Keep unsaved free canvas conversations in the browser until first save."""
 
 import asyncio
+from datetime import UTC, datetime
 from hashlib import sha256
 
 from fastapi import HTTPException
@@ -9,13 +10,13 @@ from pydantic import ValidationError
 
 from app.models.canvas_assistant import CanvasAssistantSession, CanvasAssistantTurn
 from app.models.generation_canvas import GenerationCanvas
-from app.schemas.canvas_assistant import CanvasAssistantExchange
+from app.schemas.canvas_assistant import CanvasAssistantExchange, CanvasAssistantProgress
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposal
 from app.schemas.canvas_assistant_draft import CanvasDraftSave, DraftAssistantMessage, DraftAssistantReply
 from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, ConnectCardsTarget
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
-from app.services.generation_canvas.assistant import CanvasAssistant
+from app.services.generation_canvas.assistant import CanvasAssistant, MODEL_FAILED, MODEL_TIMEOUT, PROPOSAL_INVALID, PROPOSAL_RETRY_GUIDANCE
 from app.services.generation_canvas.assistant_context import resolve_assistant_context, resolve_external_canvas_cards
 from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
 from app.services.generation_canvas.assistant_events import publish_events
@@ -76,10 +77,10 @@ class DraftCanvasAssistant(CanvasAssistant):
             text, command.attachment_file_ids, sources, capability=capability,
         )
         messages.append(HumanMessage(content=content))
-        async def complete(on_reply=None):
+        async def complete(on_reply=None, on_phase=None):
             reply, skills, observed = await self._reply(
                 client, messages, context, edit_draft, supports_tools=capability.tool_calling, structure_tool=structure_tool,
-                max_input_tokens=capability.max_input_tokens, on_reply=on_reply,
+                max_input_tokens=capability.max_input_tokens, on_reply=on_reply, on_phase=on_phase,
             )
             if context is not None:
                 context.observed_card_ids = observed
@@ -95,18 +96,33 @@ class DraftCanvasAssistant(CanvasAssistant):
             snapshot, _, original = existing
             if digest != original or snapshot.state == 'running':
                 raise HTTPException(409, 'Draft assistant request already active or changed')
-            if snapshot.state == 'interrupted':
-                raise HTTPException(409, 'Draft assistant reply interrupted')
-            return snapshot.turn
+            if snapshot.state != 'interrupted':
+                return snapshot.turn
+            if snapshot.turn.error_code == PROPOSAL_INVALID:
+                messages[-1] = HumanMessage(content=(
+                    content + '\n\n' + PROPOSAL_RETRY_GUIDANCE if isinstance(content, str)
+                    else [*content, {'type': 'text', 'text': PROPOSAL_RETRY_GUIDANCE}]
+                ))
         snapshot = DraftAssistantReply(state='running', turn=CanvasAssistantExchange(
             request_id=command.request_id, text=command.text, model_id=model_id, sequence=len(turns) + 1, reply='',
+            progress=CanvasAssistantProgress(request_id=command.request_id, model_id=model_id, streaming=True),
         ))
 
         async def publish(text):
             snapshot.turn.reply = text
 
-        task = asyncio.create_task(complete(publish))
-        _draft_replies[key] = snapshot, task, digest
+        async def publish_phase(phase):
+            progress = snapshot.turn.progress
+            progress.phase = phase
+            progress.phase_started_at[phase] = datetime.now(UTC)
+
+        task = asyncio.create_task(complete(publish, publish_phase))
+        record = snapshot, task, digest
+        _draft_replies[key] = record
+
+        def expire():
+            if _draft_replies.get(key) is record:
+                _draft_replies.pop(key)
         try:
             snapshot.turn = await task
             snapshot.state = 'completed'
@@ -114,11 +130,16 @@ class DraftCanvasAssistant(CanvasAssistant):
             if snapshot.state != 'stopped':
                 snapshot.state = 'interrupted'
                 raise
+        except HTTPException as error:
+            snapshot.state = 'interrupted'
+            snapshot.turn.error_code = error.detail if error.detail in (PROPOSAL_INVALID, MODEL_TIMEOUT) else MODEL_FAILED
+            raise
         except Exception:
             snapshot.state = 'interrupted'
+            snapshot.turn.error_code = MODEL_FAILED
             raise
         finally:
-            asyncio.get_running_loop().call_later(900, _draft_replies.pop, key, None)
+            asyncio.get_running_loop().call_later(900, expire)
         return snapshot.turn
 
 

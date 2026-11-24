@@ -1,6 +1,7 @@
 """Store LangGraph checkpoints for the one leased request on each canvas."""
 
 import asyncio
+from datetime import UTC, datetime
 from hashlib import sha256
 from zlib import compress, decompress
 
@@ -128,6 +129,8 @@ class CanvasCheckpointer(CanvasGraphSnapshot):
                 changes['subtasks'] = [*previous.get('subtasks', []), completed]
             if observed := changes.pop('observed', None):
                 changes['observed_card_ids'] = list(dict.fromkeys([*previous.get('observed_card_ids', []), *observed]))
+            if (phase := changes.get('phase')) and phase != previous.get('phase'):
+                changes['phase_started_at'] = {**previous.get('phase_started_at', {}), phase: datetime.now(UTC)}
             progress = CanvasAssistantProgress.model_validate({
                 **previous, **changes, 'active_tasks': active_tasks, 'streaming': True,
                 'request_id': pending['command']['request_id'], 'model_id': pending['model_id'],

@@ -340,3 +340,12 @@
     transition-duration: 0s !important;
   }
 }
+
+.canvas-assistant-think-toggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}

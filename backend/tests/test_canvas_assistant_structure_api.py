@@ -459,3 +459,99 @@ async def test_revise_one_duration_keeps_dependent_changes_and_independent_decis
     assert cards[0]['config']['seconds'] == 6
     assert cards[0]['prompt']['segments'][0]['text'] == '减速推进'
     assert cards[1]['text'] == '定稿'
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures('assistant_edit_model')
+@pytest.mark.parametrize('surface', ['free', 'scene', 'draft'])
+async def test_large_canvas_proposal_recovers_from_invalid_output(canvas_client, monkeypatch, surface):
+    import asyncio
+    from uuid import uuid4
+
+    async with canvas_client.canvas_sessions.begin() as db:
+        (await db.get(Model, 'canvas-text')).capability_profile = None
+    if surface == 'draft':
+        path = f'/canvases/drafts/{uuid4()}'
+        canvas = (await canvas_client.get(path)).json()['data']
+    elif surface == 'scene':
+        from tests.test_generation_canvas_api import seed_scene_canvas
+        created = await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '长提案'})
+        assert created.status_code in (200, 201), created.text
+        canvas = created.json()['data']
+        path = f"/canvases/{canvas['id']}"
+    else:
+        canvas = (await canvas_client.post('/canvases', json={'name': '长提案'})).json()['data']
+        path = f"/canvases/{canvas['id']}"
+    url = path + '/assistant' + ('?project_id=p' if surface == 'scene' else '')
+    original = httpx.AsyncClient.send
+    released, started = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    class ProposalStream(httpx.AsyncByteStream):
+        def __init__(self, valid):
+            self.valid = valid
+
+        async def __aiter__(self):
+            changes = [{'kind': 'add_card', 'reference': f'card-{n}',
+                        'card': {'kind': 'add_text_card', 'text': f'镜头 {n}'}} for n in range(59)]
+            payload = {'reply': '请审批逐镜方案', 'groups': [{'title': '镜头', 'changes': changes if self.valid else []}]}
+            for part in ['{', json.dumps(payload)[1:]]:
+                chunk = {'id': 'proposal', 'model': 'canvas-text', 'choices': [{
+                    'index': 0, 'delta': {'role': 'assistant', 'content': part}, 'finish_reason': None}]}
+                yield ('data: ' + json.dumps(chunk) + '\n\n').encode()
+                started.set()
+                await released.wait()
+            yield b'data: [DONE]\n\n'
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original(client, request, **kwargs)
+        calls.append(json.loads(request.content))
+        return httpx.Response(200, request=request, headers={'content-type': 'text/event-stream'},
+                              stream=ProposalStream(len(calls) == 2))
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    command = {'text': '按此方案继续', 'request_id': 'large', 'stream_reply': True,
+               'context': {'draft': canvas['document'], 'revision': max(canvas['revision'], 0), 'scope': 'canvas'}}
+    sending = asyncio.create_task(canvas_client.post(url, json=command))
+    try:
+        await asyncio.wait_for(started.wait(), 3)
+        for _ in range(50):
+            if surface == 'draft':
+                snapshot = (await canvas_client.get(url + '/turns/large')).json()['data']['turn']
+                progress = snapshot.get('progress') or {}
+                assert not snapshot['reply']
+            else:
+                snapshot = (await canvas_client.get(url)).json()['data']
+                progress = snapshot.get('pending_progress') or {}
+                assert not snapshot['turns']
+            if progress.get('phase') == 'generating_proposal':
+                break
+            await asyncio.sleep(.02)
+        assert progress.get('phase') == 'generating_proposal'
+        assert not progress.get('reply')
+    finally:
+        released.set()
+        failed = await sending
+    assert failed.status_code == 422
+    problem = failed.json()
+    assert (problem.get('message') or problem.get('detail')) == 'ASSISTANT_PROPOSAL_INVALID'
+    retried = await canvas_client.post(url, json=command)
+    assert retried.status_code == 200, retried.text
+    assert len(calls) == 2 and '上一份提案未通过校验' in calls[-1]['messages'][-1]['content']
+    turn = retried.json()['data']
+    assert turn['reply'] == '请审批逐镜方案'
+    assert turn['proposal']['state'] == 'pending'
+    assert len(turn['proposal']['groups'][0]['edits']) == 59
+    if surface != 'draft':
+        suffix = '?project_id=p' if surface == 'scene' else ''
+        before = (await canvas_client.get(path + suffix)).json()['data']
+        assert before['revision'] == canvas['revision']
+        events = (await canvas_client.get(path + '/assistant/events' + suffix)).json()['data']
+        assert any((event['payload'].get('progress') or {}).get('phase') == 'validating_proposal'
+                   for event in events)
+        approved = await canvas_client.post(path + '/assistant/proposals/large' + suffix, json={
+            'action': 'approve', 'expected_revision': before['revision'], 'group_ids': ['1'],
+        })
+        assert approved.status_code == 200, approved.text
+        saved = (await canvas_client.get(path + suffix)).json()['data']
+        assert len(saved['document']['cards']) == len(before['document']['cards']) + 59

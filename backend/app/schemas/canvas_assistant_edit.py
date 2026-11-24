@@ -198,7 +198,7 @@ class ProposedEditGroup(BaseModel):
 
     model_config = ConfigDict(extra='forbid')
     title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
-    edits: list[ProposedFieldEdit] = Field(min_length=1, max_length=8)
+    edits: list[ProposedFieldEdit] = Field(min_length=1)
 
 
 class ProposedBatchField(BaseModel):
@@ -251,7 +251,7 @@ class ProposedCanvasBatchGroup(BaseModel):
     title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
     changes: list[Annotated[
         ProposedBatchField | ProposedBatchCard | ProposedBatchRemoval | ProposedBatchConnection, Field(discriminator='kind'),
-    ]] = Field(min_length=1, max_length=8)
+    ]] = Field(min_length=1)
 
 
 ProposedCanvasBatch = Annotated[list[ProposedCanvasBatchGroup], Field(min_length=1, max_length=8)]

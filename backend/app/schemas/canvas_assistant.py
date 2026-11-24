@@ -1,5 +1,6 @@
 """Public request and history contracts for the canvas assistant."""
 
+from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
@@ -133,11 +134,17 @@ class CanvasAssistantInstruction(BaseModel):
     text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 
 
+CanvasAssistantPhase = Literal['waiting_model', 'reasoning', 'generating_proposal', 'validating_proposal']
+
+
 class CanvasAssistantProgress(BaseModel):
     """Evidence available while the leased turn is still running."""
 
     reply: str | None = Field(default=None, exclude_if=lambda value: value is None)
     streaming: bool | None = Field(default=None, exclude_if=lambda value: value is None)
+    error_code: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    phase: CanvasAssistantPhase | None = None
+    phase_started_at: dict[str, datetime] = Field(default_factory=dict)
     request_id: str
     scope: Literal['selection', 'canvas'] | None = None
     revision: int | None = None
@@ -173,6 +180,7 @@ class CanvasAssistantExchange(BaseModel):
     generation: CanvasAssistantGenerationRead | None = None
     stopped: bool = False
     progress: CanvasAssistantProgress | None = None
+    error_code: str | None = Field(default=None, exclude_if=lambda value: value is None)
     layout: CanvasAssistantLayout | None = None
     question: CanvasAssistantQuestion | None = None
     question_answers: list[CanvasAssistantQuestionAnswer] | None = None

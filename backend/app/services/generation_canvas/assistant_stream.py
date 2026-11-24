@@ -6,6 +6,8 @@ import time
 
 from langchain_core.messages import AIMessageChunk
 
+from app.services.generation_canvas.assistant_hitl import PROPOSAL_TOOLS
+
 _active_streams = {}
 
 
@@ -48,12 +50,13 @@ def reply_envelope(reply):
     return reply
 
 
-async def invoke_with_reply(agent, inputs, config, on_reply, **options):
+async def invoke_with_reply(agent, inputs, config, on_reply, *, on_phase=None, **options):
     """Coalesce real model chunks. Internal tool arguments and JSON envelopes remain private."""
     if on_reply is None:
         return await agent.ainvoke(inputs, config, **options)
     state, interrupts, message_id, content, published = {}, (), None, '', ''
     last_update = 0.0
+    phase = None
     async for mode, value in agent.astream(inputs, config, stream_mode=['messages', 'values', 'updates'], version='v1', **options):
         if mode == 'values':
             state = value
@@ -63,11 +66,30 @@ async def invoke_with_reply(agent, inputs, config, on_reply, **options):
             continue
         chunk, metadata = value
         if (not isinstance(chunk, AIMessageChunk) or metadata.get('langgraph_node') != 'model'
-                or '|' in metadata.get('langgraph_checkpoint_ns', '') or chunk.tool_call_chunks):
+                or '|' in metadata.get('langgraph_checkpoint_ns', '')):
+            continue
+        if chunk.tool_call_chunks:
+            if on_phase and phase != 'generating_proposal' and any(
+                call.get('name') in PROPOSAL_TOOLS for call in chunk.tool_call_chunks
+            ):
+                phase = 'generating_proposal'
+                await on_phase(phase)
             continue
         if chunk.id != message_id:
             message_id, content = chunk.id, ''
         content += chunk.text
+        if on_phase:
+            if phase != 'generating_proposal' and (
+                content.lstrip().startswith('{') or _PRIVATE_KEYS.search(content)
+            ):
+                phase = 'generating_proposal'
+                await on_phase(phase)
+            elif phase is None and not content and (
+                chunk.additional_kwargs.get('reasoning_content')
+                or any(block.get('type') == 'reasoning' for block in chunk.content_blocks)
+            ):
+                phase = 'reasoning'
+                await on_phase(phase)
         boundary = _STRUCTURED_BOUNDARY.search(content)
         public = content[:boundary.start()] if boundary else content
         start = public.lstrip()

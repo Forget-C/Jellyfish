@@ -38,6 +38,7 @@ export type CanvasAssistantExchange = {
     generation?: (CanvasAssistantGenerationRead | null);
     stopped?: boolean;
     progress?: (CanvasAssistantProgress | null);
+    error_code?: (string | null);
     layout?: (CanvasAssistantLayout | null);
     question?: (CanvasAssistantQuestion | null);
     question_answers?: (Array<CanvasAssistantQuestionAnswer> | null);

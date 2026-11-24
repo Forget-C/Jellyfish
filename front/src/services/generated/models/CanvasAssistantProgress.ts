@@ -11,6 +11,9 @@ import type { CanvasAssistantSubtask } from './CanvasAssistantSubtask';
 export type CanvasAssistantProgress = {
     reply?: (string | null);
     streaming?: (boolean | null);
+    error_code?: (string | null);
+    phase?: ('waiting_model' | 'reasoning' | 'generating_proposal' | 'validating_proposal' | null);
+    phase_started_at?: Record<string, string>;
     request_id: string;
     scope?: ('selection' | 'canvas' | null);
     revision?: (number | null);

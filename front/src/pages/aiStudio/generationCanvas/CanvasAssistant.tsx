@@ -59,6 +59,28 @@ function updateQueue(queue: CanvasAssistantQueueItem[], item: CanvasAssistantQue
 }
 
 /** Nonmodal conversation for one saved canvas. Closing it keeps the draft and in-flight reply. */
+const assistantPhaseLabels = {
+  waiting_model: '等待模型响应',
+  reasoning: '模型正在思考',
+  generating_proposal: '正在生成画布提案',
+  validating_proposal: '正在校验提案',
+} as const
+
+type AssistantSendError = 'text' | 'tools' | 'reply' | 'context-limit' | 'target' | 'proposal' | 'timeout' | 'model'
+
+function assistantSendError(detail: unknown): AssistantSendError {
+  switch (detail) {
+    case 'ASSISTANT_TOOL_CALLING_REQUIRED': return 'tools'
+    case 'ASSISTANT_TEXT_CAPABILITY_REQUIRED': return 'text'
+    case 'ASSISTANT_CONTEXT_LIMIT_EXCEEDED': return 'context-limit'
+    case 'CANVAS_TARGET_UNRESOLVED': return 'target'
+    case 'ASSISTANT_PROPOSAL_INVALID': return 'proposal'
+    case 'ASSISTANT_MODEL_TIMEOUT': return 'timeout'
+    case 'ASSISTANT_MODEL_FAILED': return 'model'
+    default: return 'reply'
+  }
+}
+
 export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTitles, localDraft, draftPromoting, selectedCards, readDraft, approve, approvalDisabled, applyLayout, openRun, highlight, onHighlight, onLocate, document, assistantUndone }: {
   canvasId: string
   assistantUndone: string[]
@@ -109,7 +131,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const [selectedGroups, setSelectedGroups] = useState<Record<string, string[]>>({})
   const [confirmationHint, setConfirmationHint] = useState<string>()
   const composer = useRef<HTMLFormElement>(null)
-  const [sendError, setSendError] = useState<'text' | 'tools' | 'reply' | 'context-limit' | 'target'>()
+  const [sendError, setSendError] = useState<AssistantSendError>()
+  const [failedReplyId, setFailedReplyId] = useState<string>()
+  const [thinkingExpanded, setThinkingExpanded] = useState(false)
   const [sending, setSending] = useState(false)
   const [stopping, setStopping] = useState<string>()
   const [stopError, setStopError] = useState(false)
@@ -162,6 +186,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const liveTurn: CanvasAssistantExchange | undefined = progress?.reply && liveRequest?.request_id === progress.request_id
     && !turns?.some(turn => turn.request_id === progress.request_id)
     ? { ...liveRequest, sequence: 0, model_id: progress.model_id, reply: progress.reply } : undefined
+  const phaseSteps = Object.entries(progress?.phase_started_at ?? {})
+    .sort(([, first], [, second]) => Date.parse(first) - Date.parse(second))
+  const replyRecovered = !localDraft && !!failedReplyId && turns?.some(turn => turn.request_id === failedReplyId)
   const displayedTurns = liveTurn ? [...(turns ?? []), liveTurn] : turns
   const runningId = activeRequestId || steeringFor || draftStreamId ||
     (progress?.streaming && !pendingQuestion ? progress.request_id : undefined)
@@ -184,6 +211,10 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     setPendingServerRequest(data.pending_request ?? undefined)
     setPendingQuestion(data.pending_question ?? undefined)
     setProgress(data.pending_progress ?? undefined)
+    if (data.pending_progress?.error_code && !data.pending_progress.streaming) {
+      setFailedReplyId(data.pending_progress.request_id)
+      setSendError(assistantSendError(data.pending_progress.error_code))
+    }
     setLiveRequest(data.pending_request ?? undefined)
     setQueue(data.queue ?? [])
     setPendingInstructions(data.pending_instructions ?? [])
@@ -287,6 +318,11 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             setProgress(payload.progress)
           }
           if (type === 'turn.interrupted') {
+            const recovered = updates.some(event => event.turn_id === turn_id && event.type === 'turn.completed')
+            if (turn_id && !recovered && 'error_code' in payload && payload.error_code) {
+              setFailedReplyId(turn_id)
+              setSendError(assistantSendError(payload.error_code))
+            }
             setProgress(current => current?.request_id !== turn_id ? current : current.reply ? { ...current, streaming: false } : undefined)
           }
           if (type === 'turn.steered' || type === 'question.asked' || type === 'turn.completed' || type === 'turn.stopped') {
@@ -334,12 +370,15 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         if (data.state === 'running') {
           writeDraftAssistant(canvasId, { live: { ...saved.live, turn: data.turn } })
           setLiveRequest(data.turn)
-          setProgress({ request_id: data.turn.request_id, model_id: data.turn.model_id, reply: data.turn.reply, streaming: true })
+          setProgress({
+            ...data.turn.progress, request_id: data.turn.request_id, model_id: data.turn.model_id,
+            reply: data.turn.reply, streaming: true,
+          })
         } else {
-          const updated = appendExchange(saved.turns, data.turn)
+          const updated = data.state === 'interrupted' ? saved.turns : appendExchange(saved.turns, data.turn)
           writeDraftAssistant(canvasId, { turns: updated, live: undefined })
           setTurns(updated)
-          if (data.state === 'interrupted') setSendError('reply')
+          if (data.state === 'interrupted') setSendError(assistantSendError(data.turn.error_code))
           setProgress(undefined)
           setDraftStreamId(undefined)
           draftingAssistantReply.delete(canvasId)
@@ -565,7 +604,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     }
   }
 
-  const send = async (resume?: CanvasAssistantMessage, enqueue = false) => {
+  const send = async (resume?: CanvasAssistantMessage, enqueue = false, replan = false) => {
     const text = (resume?.text ?? draft).trim()
     if (draftStreamId || draftPromoting || (enqueue && queueBusy) || savingModel || savingApproval || uploadingReference || !turns || !text) return
     const intent = resume || enqueue ? undefined : confirmationKind(text)
@@ -682,8 +721,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       }
       return
     }
+    const consumeDraft = !resume || (replan && pending.current === resume && draft.trim() === text)
     pending.current = requestBody
-    if (!resume) {
+    if (consumeDraft) {
       setDraft('')
       setReferenceFiles([])
       setCardReferences([])
@@ -695,6 +735,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     sendingNow.current = true
     setSending(true)
     setSendError(undefined)
+    setFailedReplyId(undefined)
     setLiveRequest(requestBody)
     if (localDraft) {
       draftingAssistantReply.add(canvasId)
@@ -746,7 +787,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         const history = await Canvases.canvasAssistantHistory({ canvasId, projectId }).catch(() => undefined)
         if (history?.data && applySnapshot(history.data, epoch) && history.data.pending_instructions?.length) return
       }
-      if (!resume && pending.current === requestBody) {
+      if (consumeDraft && pending.current === requestBody) {
         setDraft(text)
         setReferenceFiles(referenceFiles)
         setCardReferences(cardReferences)
@@ -756,10 +797,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         if (localDraft) writeDraftAssistant(canvasId, { references: referenceFiles })
       }
       const detail = error instanceof ApiError ? error.body?.message ?? error.body?.detail : undefined
-      setSendError(detail === 'ASSISTANT_TOOL_CALLING_REQUIRED' ? 'tools'
-        : detail === 'ASSISTANT_TEXT_CAPABILITY_REQUIRED' ? 'text'
-        : detail === 'ASSISTANT_CONTEXT_LIMIT_EXCEEDED' ? 'context-limit'
-        : detail === 'CANVAS_TARGET_UNRESOLVED' ? 'target' : 'reply')
+      setSendError(assistantSendError(detail))
     } finally {
       if (!readDraftAssistant(canvasId).live) draftingAssistantReply.delete(canvasId)
       sendingNow.current = false
@@ -789,8 +827,12 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         setTurns(current => appendExchange(current || [], data))
         setPendingServerRequest(undefined)
       }
-    } catch {
-      if (stoppedRequest.current !== sourceId) setSendError('reply')
+    } catch (error) {
+      if (stoppedRequest.current !== sourceId) {
+        const failure = assistantSendError(error instanceof ApiError ? error.body?.message ?? error.body?.detail : undefined)
+        setSendError(failure)
+        if (failure === 'proposal') setPendingQuestion(undefined)
+      }
     } finally {
       activeRequest.current = undefined
       setActiveRequestId(undefined)
@@ -1075,7 +1117,23 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           <ul>{pendingInstructions.map(instruction => <li key={instruction.request_id}>{instruction.text}</li>)}</ul>
         </div>}
         {!pendingQuestion && (sending || steeringFor || progress?.streaming) && <div role="status">
-          {!liveTurn && <Think className="canvas-assistant-wait" loading blink expanded={false} title={uiText('助手正在回复')} />}
+          {(!liveTurn || progress?.phase === 'generating_proposal' || progress?.phase === 'validating_proposal') && <Think className="canvas-assistant-wait"
+            loading blink expanded={thinkingExpanded} onExpand={setThinkingExpanded}
+            title={<button type="button" className="canvas-assistant-think-toggle" aria-expanded={thinkingExpanded}
+              onClick={event => { event.stopPropagation(); setThinkingExpanded(value => !value) }}>
+              {uiText(assistantPhaseLabels[progress?.phase ?? 'waiting_model'])}
+            </button>}>
+            {!!phaseSteps.length && <ol>
+              {phaseSteps.map(([phase, at], index) => {
+                const next = phaseSteps[index + 1]?.[1]
+                const elapsed = next && (Date.parse(next) - Date.parse(at)) / 1000
+                return <li key={phase}>
+                  {uiText(assistantPhaseLabels[phase as keyof typeof assistantPhaseLabels])}
+                  {typeof elapsed === 'number' && <span> · {elapsed.toFixed(1)} s</span>}
+                </li>
+              })}
+            </ol>}
+          </Think>}
           {progress && <ThoughtChain items={[
           { key: progress.request_id,
             title: uiText('已接收本轮上下文'),
@@ -1153,12 +1211,19 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         </section>}
         {queueError && <Alert type="warning" message={uiText('暂时无法更新助手队列')} />}
         {confirmationHint && <Alert type="warning" message={confirmationHint} />}
-        {sendError && <Alert type="error" message={sendError === 'tools'
+        {sendError && !replyRecovered && <Alert type="error" message={sendError === 'tools'
           ? uiText("当前模型无法调用画布工具。切换支持提出画布修改的模型后，发送同一消息即可接续。")
           : sendError === 'text' ? uiText("当前模型无法进行文字对话，请切换助手模型。")
           : sendError === 'target' ? uiText('没有找到指令中点名的镜头，请核对镜头或引用对应卡片。')
           : sendError === 'context-limit' ? uiText("内容超出当前模型的上下文上限，请缩小分析范围或切换助手模型。")
-            : uiText("未收到助手回复，请检查助手模型后重试")} />}
+          : sendError === 'proposal' ? uiText('画布提案未通过校验，本轮未修改画布。')
+          : sendError === 'timeout' ? uiText('助手处理超时，请继续或缩小本轮任务。')
+          : sendError === 'model' ? uiText('模型处理失败，可以继续本轮或切换模型。')
+            : uiText("未收到助手回复，请检查助手模型后重试")}
+          action={sendError === 'proposal' && (pendingServerRequest || pending.current) && <WorkbenchButton
+            variant="quiet" disabled={!!runningId} onClick={() => { void send(pendingServerRequest ?? pending.current, false, true) }}>
+            {uiText('重新规划提案')}
+          </WorkbenchButton>} />}
         <CanvasAssistantAttachments projectId={projectId} files={referenceFiles} uploading={uploadingReference}
           onReference={() => setBrowseReferences(value => !value)} setUploading={setUploadingReference} disabled={draftPromoting || sending || !turns}
           onChange={files => {
