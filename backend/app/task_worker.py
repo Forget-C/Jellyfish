@@ -300,13 +300,13 @@ class TaskWorker:
             await self._fail(task_id, 'directing_output_invalid', str(error),
                 result=({'storyboard_structure': error.storyboard_structure} if error.storyboard_structure else
                         {'design_diagnostics': error.diagnostics.model_dump(mode='json')} if error.diagnostics else None))
-        except Exception as error:
-            rejected = (
-                isinstance(error, httpx.HTTPStatusError)
-                and 400 <= error.response.status_code < 500
-                and error.response.status_code != 408
-            )
+        except httpx.HTTPStatusError as error:
+            status_code = error.response.status_code
+            rejected = 400 <= status_code < 500 and status_code != 408
             if rejected or not await self._preserve_unknown_submission(task_id):
+                await self._fail(task_id, "submission_failed", self._error_message(error))
+        except Exception as error:
+            if not await self._preserve_unknown_submission(task_id):
                 await self._fail(task_id, "submission_failed", self._error_message(error))
 
     async def _preserve_unknown_submission(self, task_id: str) -> bool:
