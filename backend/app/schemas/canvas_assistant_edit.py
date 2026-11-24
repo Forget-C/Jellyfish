@@ -32,6 +32,13 @@ class CardTextEdit(BaseModel):
     kind: Literal['card_text']
 
 
+class ReferenceNameEdit(BaseModel):
+    """Set the manually entered name of a reference card."""
+
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['reference_name']
+
+
 class DesignTextFieldEdit(BaseModel):
     """Replace a plain-text parameter exposed in the design card catalog."""
 
@@ -79,12 +86,12 @@ class DisconnectCardsEdit(BaseModel):
 
 
 CanvasAssistantFieldTarget = Annotated[
-    VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit | VideoDurationEdit,
+    VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | ReferenceNameEdit | DesignTextFieldEdit | MovementFieldEdit | VideoDurationEdit,
     Field(discriminator='kind'),
 ]
 CanvasAssistantRemovalTarget = Annotated[DeleteCardEdit | ReleaseBindingEdit | DisconnectCardsEdit, Field(discriminator='kind')]
 CanvasAssistantEditTarget = Annotated[
-    VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | DesignTextFieldEdit | MovementFieldEdit | VideoDurationEdit
+    VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | ReferenceNameEdit | DesignTextFieldEdit | MovementFieldEdit | VideoDurationEdit
     | DeleteCardEdit | ReleaseBindingEdit | DisconnectCardsEdit | AddCanvasCardTarget | AdoptFirstFrameTarget
     | AdjustShotMovementTarget | ConnectCardsTarget,
     Field(discriminator='kind'),
@@ -225,12 +232,25 @@ class ProposedBatchRemoval(BaseModel):
     target: CanvasAssistantRemovalTarget
 
 
+class ProposedBatchConnection(ConnectCards):
+    """Accept the same model envelope as other batch operations for checkpoint replay."""
+
+    @model_validator(mode='before')
+    @classmethod
+    def unwrap_model_change(cls, value):
+        if isinstance(value, dict) and value.keys() == {'kind', 'change'}:
+            endpoints = value['change']
+            if isinstance(endpoints, dict) and endpoints.keys() == cls.model_fields.keys() - {'kind'}:
+                return {'kind': value['kind'], **endpoints}
+        return value
+
+
 class ProposedCanvasBatchGroup(BaseModel):
     """One independently executable set of dependent changes."""
     model_config = ConfigDict(extra='forbid')
     title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
     changes: list[Annotated[
-        ProposedBatchField | ProposedBatchCard | ProposedBatchRemoval | ConnectCards, Field(discriminator='kind'),
+        ProposedBatchField | ProposedBatchCard | ProposedBatchRemoval | ProposedBatchConnection, Field(discriminator='kind'),
     ]] = Field(min_length=1, max_length=8)
 
 

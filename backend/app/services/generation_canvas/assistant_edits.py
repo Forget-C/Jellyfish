@@ -19,14 +19,14 @@ from app.schemas.canvas_assistant_edit import (
     CanvasAssistantApprovalAudit, CanvasAssistantEditTarget, CanvasAssistantEditText, CanvasAssistantFieldTarget,
     CanvasAssistantProposal, CanvasAssistantProposalDecision, CanvasAssistantProposalResult,
     CanvasAssistantRemovalTarget, CardTextEdit, DeleteCardEdit, DesignTextFieldEdit, DisconnectCardsEdit, ModelPromptSegmentEdit,
-    MovementFieldEdit, ProposedBatchCard, ProposedBatchField, ProposedBatchRemoval, ProposedCanvasBatch, ProposedEditGroup, ReleaseBindingEdit,
+    MovementFieldEdit, ProposedBatchCard, ProposedBatchField, ProposedBatchRemoval, ProposedCanvasBatch, ProposedEditGroup, ReferenceNameEdit, ReleaseBindingEdit,
     VideoDurationEdit, VideoPromptSegmentEdit,
 )
 from app.schemas.canvas_assistant_structure import (
     AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCardsTarget,
 )
 from app.schemas.generation_canvas import (
-    CanvasDocument, CanvasSave, CreativeBasisCard, ModelCard, MovementCard, ObjectDescriptionCard, PromptText,
+    CanvasDocument, CanvasSave, CreativeBasisCard, GenerationCanvasEdge, ModelCard, MovementCard, NamedImageReferenceCard, ObjectDescriptionCard, PromptText,
     TextContentCard, VideoModelCard, VideoModelConfig,
 )
 from app.services.generation_canvas.catalog import CARD_TITLES, design_fields
@@ -36,8 +36,10 @@ from app.services.generation_canvas.assistant_auto_review import AutomaticReview
 from app.services.generation_canvas.assistant_hitl import resume_canvas_approval
 from app.services.generation_canvas.assistant_removals import apply_removal, removal_impact
 from app.services.generation_canvas.assistant_structure import (
-    apply_structural_change, assistant_card_configuration, preview_assistant_connection,
+    append_candidate_edge, apply_structural_change, assistant_card_configuration, preview_assistant_connection,
 )
+from app.services.generation_canvas.errors import CanvasDomainError
+from app.services.generation_canvas.graph import validate_graph
 from app.services.generation_canvas.store import CanvasStore
 
 
@@ -57,9 +59,25 @@ class _VideoDuration:
         self.config.seconds = int(value)
 
 
+@dataclass
+class _ReferenceName:
+    card: NamedImageReferenceCard
+
+    @property
+    def text(self) -> str:
+        return self.card.name
+
+    @text.setter
+    def text(self, value: str) -> None:
+        self.card.name = value
+
+
 def _editable_text(card, target: CanvasAssistantEditTarget):
     if isinstance(target, VideoDurationEdit) and isinstance(card, VideoModelCard):
         return _VideoDuration(card.config)
+    if isinstance(target, ReferenceNameEdit) and isinstance(card, NamedImageReferenceCard):
+        if not (card.name_binding or card.scene_object_source):
+            return _ReferenceName(card)
     if isinstance(target, CardTextEdit) and isinstance(card, _TEXT_CONTENT):
         return card
     if isinstance(target, MovementFieldEdit) and isinstance(card, MovementCard):
@@ -94,7 +112,7 @@ class CanvasAssistantEditDraft:
     @property
     def available(self) -> bool:
         """Only an existing editable card can get a proposal tool."""
-        return any((isinstance(card, (ModelCard, *_TEXT_CONTENT)) or design_fields(type(card)))
+        return any((isinstance(card, (ModelCard, NamedImageReferenceCard, *_TEXT_CONTENT)) or design_fields(type(card)))
                    and self.cards[card.id]['type'] == card.type
                    for card in self.saved_cards.values())
 
@@ -104,6 +122,8 @@ class CanvasAssistantEditDraft:
             raise ToolException('Choose an existing card in the locked scope')
         card = type(saved).model_validate(self.cards[card_id])
         field = _editable_text(card, target)
+        if isinstance(target, ReferenceNameEdit) and len(text) > 255:
+            raise ToolException('Reference names must be at most 255 characters')
         if isinstance(target, VideoDurationEdit):
             try:
                 if int(text) < 1:
@@ -164,6 +184,7 @@ class CanvasAssistantEditDraft:
         targets: set[tuple[str, str]] = set()
         for number, group in enumerate(groups, start=1):
             local = copy(self)
+            local.cards = dict(self.cards)
             local.saved_cards = dict(self.saved_cards)
             local.visible_document = self.visible_document.model_copy(deep=True)
             references: dict[str, str] = {}
@@ -175,6 +196,11 @@ class CanvasAssistantEditDraft:
                     raise ToolException('Each proposed change must appear once')
                 targets.add(key)
                 edits.append(change)
+            if any(isinstance(edit.target, ConnectCardsTarget) for edit in edits):
+                try:
+                    validate_graph(local.visible_document, self.visible_document)
+                except CanvasDomainError as error:
+                    raise ToolException(error.detail['message']) from error
             preview.append(CanvasAssistantEditGroup(id=str(number), title=group.title, edits=edits))
         self.proposal = CanvasAssistantProposal(**preview[0].edits[0].model_dump(), groups=preview)
         return self.proposal
@@ -182,7 +208,14 @@ class CanvasAssistantEditDraft:
     def _batch_operation(self, local, operation, references):
         if isinstance(operation, ProposedBatchField):
             edit = operation.change
-            return self._preview(edit.card_id, edit.target, edit.text)
+            card_id = references.get(edit.card_id)
+            if card_id is None:
+                return self._preview(edit.card_id, edit.target, edit.text)
+            change = local._preview(card_id, edit.target, edit.text)
+            card = local.saved_cards[card_id]
+            _apply_text(card, _editable_text(card, edit.target), change)
+            local.cards[card_id] = card.model_dump(mode='json')
+            return change
         if isinstance(operation, ProposedBatchRemoval):
             change = local._preview_removal(operation.card_id, operation.target)
             apply_removal(local.visible_document, change.card_id, change.target)
@@ -199,6 +232,7 @@ class CanvasAssistantEditDraft:
             if not local.visible_document.project_id and card.type not in FREE_CARD_TYPES:
                 raise ToolException(f'当前画布不允许创建 {CARD_TITLES[card.type]}')
             references[operation.reference] = card.id
+            local.cards[card.id] = card.model_dump(mode='json')
             local.saved_cards[card.id] = card
             local.visible_document.cards.append(card)
             return CanvasAssistantChange(card_id=card.id, card_name=CARD_TITLES[card.type], before='', after=text,
@@ -207,7 +241,11 @@ class CanvasAssistantEditDraft:
             'source_card': references.get(operation.source_card, operation.source_card),
             'target_card': references.get(operation.target_card, operation.target_card),
         })
-        return preview_assistant_connection(local, connection)
+        change = preview_assistant_connection(local, connection)
+        append_candidate_edge(local.visible_document, GenerationCanvasEdge(
+            id=change.target.connection_id, **connection.model_dump(exclude={'kind'}),
+        ))
+        return change
 
     def batch_tool(self):
         """Expose the unified operation as a typed read-only preview tool."""

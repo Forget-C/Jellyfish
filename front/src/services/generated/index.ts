@@ -569,6 +569,7 @@ export type { ReferenceBinding_Input } from './models/ReferenceBinding_Input';
 export type { ReferenceBinding_Output } from './models/ReferenceBinding_Output';
 export type { ReferenceDesignField } from './models/ReferenceDesignField';
 export type { ReferenceImageBinding } from './models/ReferenceImageBinding';
+export type { ReferenceNameEdit } from './models/ReferenceNameEdit';
 export type { RegroupRequest } from './models/RegroupRequest';
 export type { ReleaseBindingEdit } from './models/ReleaseBindingEdit';
 export type { RenderedPromptSnapshot } from './models/RenderedPromptSnapshot';

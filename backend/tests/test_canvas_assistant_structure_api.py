@@ -63,7 +63,8 @@ async def approve_structure(client, url, canvas, proposal):
 @pytest.mark.asyncio
 @pytest.mark.usefixtures('assistant_edit_model')
 @pytest.mark.parametrize('structured', [None, 'flat', 'nested'])
-async def test_write_canvas_from_chat_prepares_a_real_preview(canvas_client, monkeypatch, structured):
+@pytest.mark.parametrize('write_request', ['写入画布', '按此方案继续'])
+async def test_write_canvas_from_chat_prepares_a_real_preview(canvas_client, monkeypatch, structured, write_request):
     async with canvas_client.canvas_sessions.begin() as db:
         model = await db.get(Model, 'canvas-text')
         model.capability_profile = None
@@ -83,7 +84,7 @@ async def test_write_canvas_from_chat_prepares_a_real_preview(canvas_client, mon
         elif structured:
             card = {'reference': 'shot-01', 'card': {'kind': 'add_text_card', 'text': '镜头 01 用慢速推近。'}}
             payload = {'change': card} if structured == 'nested' else card
-            content = json.dumps({'reply': '已发起写入请求', 'groups': [{'title': '镜头方案', 'changes': [
+            content = json.dumps({'reply': '原方案 1 镜，本次覆盖 1 镜。' if write_request == '按此方案继续' else '已发起写入请求', 'groups': [{'title': '镜头方案', 'changes': [
                 {'kind': 'add_card', **payload},
             ]}]})
         else:
@@ -94,7 +95,7 @@ async def test_write_canvas_from_chat_prepares_a_real_preview(canvas_client, mon
         })
 
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
-    for request_id, message in [('plan', '先给一个镜头方案'), ('write', '写入画布')]:
+    for request_id, message in [('plan', '先给一个镜头方案'), ('write', write_request)]:
         command = {'request_id': request_id, 'text': message}
         if request_id == 'write':
             command['context'] = {'draft': canvas['document'], 'revision': canvas['revision'], 'scope': 'canvas'}
@@ -102,11 +103,13 @@ async def test_write_canvas_from_chat_prepares_a_real_preview(canvas_client, mon
         assert response.status_code == 200, response.text
     turn = response.json()['data']
     assert ('groups' in str(provider_input[-1])) and ('方案：镜头 01 用慢速推近。' in str(provider_input[-1]))
+    assert '可独立编辑的镜头数' in str(provider_input[-1])
     assert turn['context']['scope'] == 'canvas'
     assert '已发起写入请求' not in turn['reply']
     assert bool(turn['proposal']) is bool(structured)
     if structured:
-        assert turn['reply'] == '已准备提案，请核对待审批的改动。'
+        expected = '原方案 1 镜，本次覆盖 1 镜。' if write_request == '按此方案继续' else '已准备提案，请核对待审批的改动。'
+        assert turn['reply'] == expected
         assert turn['proposal']['state'] == 'pending'
     else:
         assert '没有生成可审批的修改提案' in turn['reply']
@@ -147,9 +150,15 @@ async def test_batch_proposal_edits_creates_and_connects_atomically(canvas_clien
     groups = [{'title': '整理说明与参考来源', 'changes': [
         {'kind': 'edit_field', 'change': {'card_id': 'notes', 'target': {'kind': 'card_text'}, 'text': '定稿'}},
         {'kind': 'add_card', 'reference': 'new-notes', 'card': {'kind': 'add_text_card', 'text': '新增参考'}},
+        {'kind': 'edit_field', 'change': {'card_id': 'new-notes', 'target': {'kind': 'card_text'}, 'text': '最终参考'}},
+        {'kind': 'add_card', 'reference': 'hero', 'card': {'kind': 'add_catalog_card', 'card_type': 'reference.character'}},
+        {'kind': 'edit_field', 'change': {'card_id': 'hero', 'target': {'kind': 'reference_name'}, 'text': '主角'}},
         {'kind': 'connect_cards', 'source_card': 'new-notes', 'source_port': 'text',
          'target_card': 'target', 'target_port': 'text'},
     ]}]
+    if not native_tools:
+        edge = groups[0]['changes'][-1]
+        groups[0]['changes'][-1] = {'kind': 'connect_cards', 'change': {key: val for key, val in edge.items() if key != 'kind'}}
     real_send = httpx.AsyncClient.send
 
     async def respond(client, request, **kwargs):
@@ -176,9 +185,11 @@ async def test_batch_proposal_edits_creates_and_connects_atomically(canvas_clien
     proposal = exchange['proposal']
     assert proposal is not None
     changes = proposal['groups'][0]['edits']
-    assert [item['target']['kind'] for item in changes] == ['card_text', 'add_canvas_card', 'connect_cards']
+    assert [item['target']['kind'] for item in changes] == [
+        'card_text', 'add_canvas_card', 'card_text', 'add_canvas_card', 'reference_name', 'connect_cards',
+    ]
     new_card_id = changes[1]['card_id']
-    assert changes[2]['target']['source_card'] == new_card_id
+    assert changes[-1]['target']['source_card'] == new_card_id
     assert exchange['reply'] == '事项请确认'
     assert (await canvas_client.get(url)).json()['data']['document'] == canvas['document']
 
@@ -218,10 +229,14 @@ async def test_batch_proposal_edits_creates_and_connects_atomically(canvas_clien
     else:
         assert actual['revision'] == canvas['revision'] + 1
         assert {card['id']: card.get('text') for card in actual['document']['cards']} == {
-            'notes': '定稿', 'target': None, new_card_id: '新增参考',
+            'notes': '定稿', 'target': None, new_card_id: '最终参考', changes[3]['card_id']: None,
         }
+        assert next(card for card in actual['document']['cards'] if card['id'] == changes[3]['card_id'])['name'] == '主角'
         edge, = actual['document']['edges']
         assert edge['source_card'] == new_card_id and edge['target_card'] == 'target'
+        replay = await approve_structure(canvas_client, url, canvas, proposal)
+        assert replay.status_code == 200 and replay.json()['data']['receipt'] == result['receipt']
+        assert (await canvas_client.get(url)).json()['data'] == actual
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures('assistant_edit_model')

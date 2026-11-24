@@ -77,6 +77,27 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
   const [error, setError] = useState(false)
   const currentDraft = current()
   const pending = groups.filter(group => (group.state ?? 'pending') === 'pending')
+  const previewEdits = pending.flatMap(group => group.edits)
+  const newCards = new Map<string, string>()
+  const existingCards = new Set<string>()
+  let candidateLinks = 0
+  for (const edit of previewEdits) {
+    const { target } = edit
+    existingCards.add(edit.card_id)
+    if (target.kind === 'add_canvas_card') newCards.set(edit.card_id, edit.card_name)
+    if ('reference_card_id' in target) newCards.set(target.reference_card_id, '图片内容卡')
+    if ('movement_card_id' in target) {
+      existingCards.add(target.movement_card_id)
+      if (target.copy_card_id) newCards.set(target.copy_card_id, '运镜卡')
+    }
+    if ('source_card' in target) {
+      candidateLinks++
+      existingCards.add(target.source_card)
+    }
+  }
+  for (const id of newCards.keys()) existingCards.delete(id)
+  const createdByType = new Map<string, number>()
+  for (const name of newCards.values()) createdByType.set(name, (createdByType.get(name) ?? 0) + 1)
   const selectedPending = pending.filter(group => selected.includes(group.id)).map(group => group.id)
 
   async function confirm(action: Decision, ids = selectedPending) {
@@ -97,12 +118,18 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
       <strong>{uiText('修改建议')}</strong>
       {!!pending.length && <small>{uiText('{{count}} 组待审批', { count: pending.length })}</small>}
     </header>
+    {!!pending.length && <div aria-label={uiText('待审批差异概览')}>
+      <small>{uiText('新增 {{added}} 张 · 涉及现有 {{reused}} 张 · 候选连线 {{links}} 条', {
+        added: newCards.size, reused: existingCards.size, links: candidateLinks,
+      })}</small>
+      {!!createdByType.size && <div><small>{[...createdByType].map(([name, count]) => `${uiText(name)} × ${count}`).join(' · ')}</small></div>}
+    </div>}
     {groups.map(group => {
       const isPending = pending.includes(group)
       const conflict = isPending && group.edits.some(edit => {
         const { target } = edit
-        return (target.kind === 'card_text' || target.kind === 'video_duration' || 'movement_card_id' in target || 'field' in target || 'field_name' in target || 'segment_id' in target)
-          && currentText(currentDraft, edit) !== edit.before
+        return (target.kind === 'card_text' || target.kind === 'reference_name' || target.kind === 'video_duration' || 'movement_card_id' in target || 'field' in target || 'field_name' in target || 'segment_id' in target)
+          && !newCards.has(edit.card_id) && currentText(currentDraft, edit) !== edit.before
       })
       return <div key={group.id} className="canvas-assistant-edit-group">
         {isPending && <Checkbox disabled={!!busy} checked={selectedPending.includes(group.id)}
@@ -137,8 +164,9 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
               {edit.before && <><dt>{uiText('原参考卡')}</dt><dd title={edit.before}>{edit.before.slice(0, 8)}</dd></>}
             </dl>
             if ('source_card' in target) return <dl key={target.connection_id}>
-              <dt>{uiText('连接卡片')}</dt>
-              <dd>{target.source_card} · {target.source_port} → {target.target_card} · {target.target_port}</dd>
+              <dt>{uiText('建立候选连线')}</dt>
+              <dd><span title={target.source_card}>{target.source_card.slice(0, 8)}</span>
+                {' · '}{target.source_port} → {uiText(edit.card_name)} · <span title={target.target_card}>{target.target_card.slice(0, 8)}</span> · {target.target_port}</dd>
             </dl>
             if ('card' in target) return <dl key={edit.card_id}>
               <dt>{uiText('新建卡片')}</dt><dd>{uiText(edit.card_name)} · {edit.card_id.slice(0, 8)}</dd>
@@ -146,14 +174,14 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
             </dl>
             const currentValue = currentText(currentDraft, edit)
             const removal = ['delete_card', 'release_binding', 'disconnect_cards'].includes(edit.target.kind)
-            const changed = !removal && pending.includes(group) && currentValue !== edit.before
+            const changed = !removal && pending.includes(group) && !newCards.has(edit.card_id) && currentValue !== edit.before
             return <dl key={edit.card_id + JSON.stringify(edit.target)}>
               <dt>{uiText(edit.card_name)} · {edit.card_id.slice(0, 8)} · {removal ? uiText(edit.after)
                 : fieldLabel(edit.target, uiText)}</dt>
               <dt>{uiText(removal ? '影响范围' : '原值')}</dt><dd>{edit.before || '—'}</dd>
               {changed && <><dt>{uiText('当前值')}</dt><dd>{currentValue ?? '—'}</dd></>}
               {!removal && <><dt>{uiText('拟议值')}</dt><dd><span>{edit.after}</span>
-                {isPending && reviseField && <WorkbenchButton variant="quiet" disabled={!!busy}
+                {isPending && !newCards.has(edit.card_id) && reviseField && <WorkbenchButton variant="quiet" disabled={!!busy}
                   onClick={() => reviseField(group.id, index)}>{uiText('修订此字段')}</WorkbenchButton>}
               </dd></>}
             </dl>
@@ -178,6 +206,7 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
 }
 
 function fieldLabel(target: CanvasAssistantChange['target'], uiText: ReturnType<typeof useUiText>) {
+  if (target.kind === 'reference_name') return uiText('参考名称')
   if (target.kind === 'video_duration') return uiText('时长（秒）')
   if ('field' in target) return uiText(movementFields[target.field])
   if ('field_name' in target) return target.field_name
@@ -194,6 +223,7 @@ function currentText(draft: Record<string, unknown>, edit: CanvasAssistantChange
   if (target.kind === 'video_duration' && card && 'config' in card && 'seconds' in (card.config ?? {})) {
     return String((card.config as { seconds?: number }).seconds ?? '')
   }
+  if (target.kind === 'reference_name') return card && 'name' in card ? card.name : undefined
   if (target.kind === 'card_text') return card && 'text' in card ? card.text : undefined
   if ('field' in target || 'field_name' in target) {
     if (!card) return undefined

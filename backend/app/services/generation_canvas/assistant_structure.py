@@ -139,6 +139,12 @@ def structural_preview_tool(draft, kind: str, sources):
     return propose_canvas_structure
 
 
+def append_candidate_edge(document: CanvasDocument, edge: GenerationCanvasEdge) -> None:
+    """Keep the candidate and its input order together in previews and saved edits."""
+    document.edges.append(edge)
+    document.input_order.setdefault(edge.target_card, {}).setdefault(edge.target_port, []).append(edge.id)
+
+
 async def apply_structural_change(store, canvas, document: CanvasDocument, edit: CanvasAssistantChange) -> bool:
     """Apply a structural edit to a tentative document after checking its current basis."""
     change = edit.target
@@ -149,8 +155,7 @@ async def apply_structural_change(store, canvas, document: CanvasDocument, edit:
         edge = _candidate_edge(change, change.connection_id, document, existing)
         if not edge:
             return False
-        document.edges.append(edge)
-        document.input_order.setdefault(edge.target_card, {}).setdefault(edge.target_port, []).append(edge.id)
+        append_candidate_edge(document, edge)
         return True
     if isinstance(change, AddCanvasCardTarget):
         card, _ = assistant_card_configuration(change.card, edit.card_id)

@@ -75,12 +75,14 @@ CANVAS_ASSISTANT_PROMPT = ('你是 Jellyfish 的画布助手。使用用户的�
 TEXT_PROPOSAL_PROMPT = (
     '仅在用户明确要求变更时返回 JSON 对象，不使用 Markdown 围栏，字段为 reply 和 groups。'
     'groups 是数组，每组有 title 与 changes。change.kind 为 edit_field 时，change.change 包含 card_id、'
-    'target 和 text，target.kind 为 card_text、design_text_field（field_name）、'
+    'target 和 text；card_id 可用同组已创建的 reference。target.kind 为 card_text、reference_name（参考卡名称）、design_text_field（field_name）、'
     'movement_field（field）、model_prompt_segment（segment_id）或 video_duration（text 填秒数）。'
     '建卡直接返回 {"kind":"add_card","reference":"notes","card":{"kind":"add_text_card","text":"内容"}}。'
     'add_card 的 reference 和 card 与 kind 同级，card.kind 为 add_text_card（text）、'
     'add_model_card（modality、prompt）、add_movement_card（movement_speed）或 add_catalog_card（card_type）。'
-    'connect_cards 包含 source_card、target_card、source_port、target_port，可以引用同组已创建的 reference。'
+    '按当前目录与既有卡决定类型和依赖；逐镜方案说明实际覆盖和缺项。候选线不等于采用输入。'
+    '连线直接返回 {"kind":"connect_cards","source_card":"source","source_port":"text","target_card":"notes","target_port":"text"}。'
+    'source_card 与 target_card 可引用同组已创建的 reference。'
     'remove 包含 card_id 和 target，target.kind 为 delete_card、release_binding（binding_id）或 disconnect_cards（edge_id）。'
     '依赖的操作放在同一组。纯咨询直接回答，不返回 JSON。'
 )
@@ -675,7 +677,9 @@ class CanvasAssistant:
                      ) -> tuple[str, list[CanvasAssistantSkillUse], list[str] | None]:
         request_text = messages[-1].text
         planning = planning_request(request_text)
-        write_plan = request_text.split('\n\n', 1)[0].strip().rstrip('。！!') == '写入画布'
+        opening_request = request_text.split('\n\n', 1)[0].strip().rstrip('。！!')
+        write_plan = opening_request == '写入画布'
+        continue_plan = opening_request == '按此方案继续'
         cards = prioritize_context_cards(context, request_text) if context else []
         page_size = CANVAS_PAGE_SIZE if max_input_tokens is None else max(1, min(CANVAS_PAGE_SIZE, max_input_tokens // 512))
 
@@ -708,9 +712,12 @@ class CanvasAssistant:
         if planning:
             professional += ('\n当前轮仅给出只读方案。说明镜头取舍、各段时长和合计、实施步骤与涉及的卡片。'
                              '基于实际读取的资料，明确缺失依据。等待用户要求按此方案继续。')
-        if write_plan:
+        if write_plan or continue_plan:
             professional += ('将当前对话中最近一份创作方案转换为可审批的修改提案。'
-                             '只用当前画布支持的卡片类型，无法直接表示的镜头或设定可写入文本卡。'
+                             '逐项核对方案与现有卡，优先复用，并按当前画布目录选择专用卡、填写有效字段。'
+                             '明确交代原方案镜头数、可独立编辑的镜头数、复用或新增内容、已表达的依赖和未能表达的差异。'
+                             '需要逐镜制作时保留各镜头标识，不擅自合并为总表。无法完整表达时在提案说明中列出差异。'
+                             '只有真实输入依赖才建立候选连线，按目录端口匹配；缺素材时明确指出，禁止把候选当作已采用。'
                              '没有足够的方案内容时请说明缺失内容。')
         if context is not None and not supports_tools:
             guidance = ('当前模型接收已锁定的画布文字作为参考数据。只提供分析与可供用户核对的建议，'
@@ -718,9 +725,16 @@ class CanvasAssistant:
             if edit_draft is not None and not planning:
                 guidance += TEXT_PROPOSAL_PROMPT
             kind = 'scene' if edit_draft and edit_draft.visible_document.project_id else 'free'
-            available = ', '.join(f'{card.type}（{card.title}）' for card in canvas_catalog(kind=kind).cards)
-            messages = text_context_for_budget(messages, context, cards, page_size, available,
-                                               SystemMessage(content=CANVAS_ASSISTANT_PROMPT + guidance + professional), max_input_tokens)
+            catalog = canvas_catalog(kind=kind)
+            compact = ', '.join(f'{card.type}（{card.title}）' for card in catalog.cards)
+            system = SystemMessage(content=CANVAS_ASSISTANT_PROMPT + guidance + professional)
+            try:
+                messages = text_context_for_budget(messages, context, cards, page_size,
+                                                   assistant_card_catalog(kind), system, max_input_tokens)
+            except HTTPException as error:
+                if error.detail != CONTEXT_LIMIT_ERROR:
+                    raise
+                messages = text_context_for_budget(messages, context, cards, page_size, compact, system, max_input_tokens)
         if delegation:
             professional += ('必要时可委派分镜设计（storyboard-design）或素材与连续性审看（footage-continuity-review）。'
                              '仅在复杂任务中使用，依赖必须显式列出，已失败依据不能声称已审看。')
@@ -740,7 +754,10 @@ class CanvasAssistant:
                 tools.append(structure_tool)
                 if edit_draft is not None:
                     tools.append(edit_draft.batch_tool())
-                    guidance += '混合编辑、建卡和连接使用 propose_canvas_changes。视频秒数使用 video_duration。'
+                    if write_plan or continue_plan:
+                        kind = 'scene' if edit_draft.visible_document.project_id else 'free'
+                        guidance += '\n可用卡片与端口：' + assistant_card_catalog(kind) + '\n'
+                    guidance += '混合编辑、建卡和连接使用 propose_canvas_changes。同组新增卡可用 reference 填字段；参考卡名称使用 reference_name，视频秒数使用 video_duration。'
                 guidance += ('用户明确要求建卡、连接候选卡片、使用本次附图作首帧，或调整所选镜头实际采用的运镜时，使用 propose_canvas_structure。'
                              '局部调整采用运镜卡的视频镜头使用 adjust_shot_movement，避免直接改变共享运镜或覆盖视频提示词。'
                              '如果没有采用运镜卡，可以改实际使用的视频提示词。工具仅预览，用户确认后才写入。')
@@ -824,9 +841,10 @@ class CanvasAssistant:
                 reply = structured.reply
             except (ValidationError, ToolException) as exc:
                 raise HTTPException(422, 'Canvas assistant could not validate the proposed change') from exc
-        if write_plan:
+        if write_plan or continue_plan:
             if (edit_draft and edit_draft.proposal) or (layout_draft and layout_draft.proposal):
-                reply = '已准备提案，请核对待审批的改动。'
+                if write_plan:
+                    reply = '已准备提案，请核对待审批的改动。'
             else:
                 reply = '本轮没有生成可审批的修改提案，也未写入画布。请补充要写入的内容，或指定需要修改的卡片。'
         observed = None
@@ -893,6 +911,22 @@ def budgeted_tool_page(context, cards, *, offset, limit, runtime, tools, system,
     payload = context_page(context, cards, offset=offset, limit=0)
     payload.update(next_offset=None, context_limited=offset < len(cards))
     return json.dumps(payload, ensure_ascii=False)
+
+
+def assistant_card_catalog(kind):
+    """Describe allowed types and port values without repeating every connection pair."""
+    catalog = canvas_catalog(kind=kind)
+    ports = '；'.join(
+        f'{card.type}（{card.title}） 输入 ' + ','.join(
+            f'{port.id}:{"/".join(port.accepts)}' for port in card.inputs
+        ) + ' 输出 ' + ','.join(f'{port.id}:{port.value_kind}' for port in card.outputs)
+        for card in catalog.cards
+    )
+    exceptions = '、'.join(
+        f'{policy.source_type}.{policy.source_port}→{policy.target_type}.{policy.target_port}'
+        for policy in catalog.connection_policies if policy.connect != 'candidate'
+    )
+    return f'{ports}。候选连线须匹配目录端口和对象类别。以下端点需要专用采用操作：{exceptions}' if exceptions else ports
 
 
 def text_context_for_budget(messages, context, cards, page_size, available, system_message, budget):
