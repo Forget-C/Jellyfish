@@ -9,6 +9,8 @@ import type { CanvasAssistantSubtask } from './CanvasAssistantSubtask';
  * Evidence available while the leased turn is still running.
  */
 export type CanvasAssistantProgress = {
+    reply?: (string | null);
+    streaming?: (boolean | null);
     request_id: string;
     scope?: ('selection' | 'canvas' | null);
     revision?: (number | null);

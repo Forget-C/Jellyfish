@@ -1,6 +1,6 @@
 """Exchange and promotion of a browser-owned free canvas conversation."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 
@@ -34,6 +34,13 @@ class DraftAssistantConversation(BaseModel):
 
 class DraftAssistantMessage(CanvasAssistantMessage, DraftAssistantConversation):
     """Reply without storing a conversation or requiring a saved canvas."""
+
+
+class DraftAssistantReply(BaseModel):
+    """Short-lived reply snapshot while the transcript belongs to the browser."""
+
+    state: Literal['running', 'completed', 'stopped', 'interrupted']
+    turn: CanvasAssistantExchange
 
 
 class DraftAssistantApproval(BaseModel):

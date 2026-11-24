@@ -1,5 +1,8 @@
 """Keep unsaved free canvas conversations in the browser until first save."""
 
+import asyncio
+from hashlib import sha256
+
 from fastapi import HTTPException
 from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import ValidationError
@@ -8,7 +11,7 @@ from app.models.canvas_assistant import CanvasAssistantSession, CanvasAssistantT
 from app.models.generation_canvas import GenerationCanvas
 from app.schemas.canvas_assistant import CanvasAssistantExchange
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposal
-from app.schemas.canvas_assistant_draft import CanvasDraftSave, DraftAssistantMessage
+from app.schemas.canvas_assistant_draft import CanvasDraftSave, DraftAssistantMessage, DraftAssistantReply
 from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, ConnectCardsTarget
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
@@ -22,6 +25,23 @@ from app.services.generation_canvas.assistant_media import (
 from app.services.generation_canvas.assistant_structure import (
     apply_structural_change, assistant_card_configuration, structural_preview_tool,
 )
+
+
+# Unsaved conversations stay browser-owned. Keep an in-flight response and a short
+# reconnect window on this API process; first save still uses the browser transcript.
+_draft_replies = {}
+
+
+def draft_reply_snapshot(canvas_id, request_id, *, stop=False):
+    record = _draft_replies.get((canvas_id, request_id))
+    if record is None:
+        raise HTTPException(404, 'Draft reply unavailable')
+    snapshot, task, _ = record
+    if stop and snapshot.state == 'running':
+        snapshot.turn.stopped = True
+        snapshot.state = 'stopped'
+        task.cancel()
+    return snapshot
 
 
 class DraftCanvasAssistant(CanvasAssistant):
@@ -56,16 +76,50 @@ class DraftCanvasAssistant(CanvasAssistant):
             text, command.attachment_file_ids, sources, capability=capability,
         )
         messages.append(HumanMessage(content=content))
-        reply, skills, observed = await self._reply(
-            client, messages, context, edit_draft, supports_tools=capability.tool_calling, structure_tool=structure_tool,
-            max_input_tokens=capability.max_input_tokens,
-        )
-        if context is not None:
-            context.observed_card_ids = observed
-        return CanvasAssistantExchange(request_id=command.request_id, text=command.text, context=context,
-            sequence=len(command.turns) + 1, model_id=model_id, reply=reply, attachments=attachments,
-            canvas_references=command.canvas_references or None,
-            skills=skills or None, proposal=edit_draft.proposal if edit_draft else None, revises=command.revises)
+        async def complete(on_reply=None):
+            reply, skills, observed = await self._reply(
+                client, messages, context, edit_draft, supports_tools=capability.tool_calling, structure_tool=structure_tool,
+                max_input_tokens=capability.max_input_tokens, on_reply=on_reply,
+            )
+            if context is not None:
+                context.observed_card_ids = observed
+            return CanvasAssistantExchange(request_id=command.request_id, text=command.text, context=context,
+                sequence=len(command.turns) + 1, model_id=model_id, reply=reply, attachments=attachments,
+                canvas_references=command.canvas_references or None,
+                skills=skills or None, proposal=edit_draft.proposal if edit_draft else None, revises=command.revises)
+        if not command.stream_reply:
+            return await complete()
+        key = canvas_id, command.request_id
+        digest = sha256(command.model_dump_json().encode()).digest()
+        if existing := _draft_replies.get(key):
+            snapshot, _, original = existing
+            if digest != original or snapshot.state == 'running':
+                raise HTTPException(409, 'Draft assistant request already active or changed')
+            if snapshot.state == 'interrupted':
+                raise HTTPException(409, 'Draft assistant reply interrupted')
+            return snapshot.turn
+        snapshot = DraftAssistantReply(state='running', turn=CanvasAssistantExchange(
+            request_id=command.request_id, text=command.text, model_id=model_id, sequence=len(turns) + 1, reply='',
+        ))
+
+        async def publish(text):
+            snapshot.turn.reply = text
+
+        task = asyncio.create_task(complete(publish))
+        _draft_replies[key] = snapshot, task, digest
+        try:
+            snapshot.turn = await task
+            snapshot.state = 'completed'
+        except asyncio.CancelledError:
+            if snapshot.state != 'stopped':
+                snapshot.state = 'interrupted'
+                raise
+        except Exception:
+            snapshot.state = 'interrupted'
+            raise
+        finally:
+            asyncio.get_running_loop().call_later(900, _draft_replies.pop, key, None)
+        return snapshot.turn
 
 
 def _valid_free_card(target: AddCanvasCardTarget, card_id: str) -> bool:

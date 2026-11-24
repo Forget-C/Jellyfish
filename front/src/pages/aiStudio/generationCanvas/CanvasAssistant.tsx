@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SetStateAction } from 'react'
 import { ArrowUpOutlined, CommentOutlined, CloseOutlined } from '@ant-design/icons'
 import { Alert, Input, Select, Spin } from 'antd'
+import { XMarkdown } from '@ant-design/x-markdown'
 import { Sender, ThoughtChain } from '@ant-design/x'
 import { WorkbenchConversation } from '../../../components/workbench/WorkbenchConversation'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
@@ -136,6 +137,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const sendingNow = useRef(false)
   const [activeRequestId, setActiveRequestId] = useState<string>()
   const [pendingServerRequest, setPendingServerRequest] = useState<CanvasAssistantMessage>()
+  const [liveRequest, setLiveRequest] = useState<{ request_id: string; text: string }>()
+  const [draftStreamId, setDraftStreamId] = useState<string>()
   const [progress, setProgress] = useState<CanvasAssistantProgress>()
   const [pendingQuestion, setPendingQuestion] = useState<CanvasAssistantQuestion>()
   const [questionAnswer, setQuestionAnswer] = useState('')
@@ -155,6 +158,12 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const history = useRef<HTMLDivElement>(null)
   const historyPosition = useRef({ top: 0, follow: true })
   const [readingEarlier, setReadingEarlier] = useState(false)
+  const liveTurn: CanvasAssistantExchange | undefined = progress?.reply && liveRequest?.request_id === progress.request_id
+    && !turns?.some(turn => turn.request_id === progress.request_id)
+    ? { ...liveRequest, sequence: 0, model_id: progress.model_id, reply: progress.reply } : undefined
+  const displayedTurns = liveTurn ? [...(turns ?? []), liveTurn] : turns
+  const runningId = activeRequestId || steeringFor || draftStreamId ||
+    (progress?.streaming && !pendingServerRequest ? progress.request_id : undefined)
   const panelId = 'canvas-assistant-' + canvasId
   const applySnapshot = useCallback((data: CanvasAssistantHistory, epoch: number) => {
     if (mutationEpoch.current !== epoch) return false
@@ -165,6 +174,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     setPendingServerRequest(data.pending_request ?? undefined)
     setPendingQuestion(data.pending_question ?? undefined)
     setProgress(data.pending_progress ?? undefined)
+    setLiveRequest(data.pending_request ?? undefined)
     setQueue(data.queue ?? [])
     setPendingInstructions(data.pending_instructions ?? [])
     setModelId(data.model_id ?? null)
@@ -219,6 +229,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     if (localDraft) {
       if (!open) return
       const saved = readDraftAssistant(canvasId)
+      setDraftStreamId(saved.live?.id)
       setTurns(saved.turns)
       setModelId(saved.modelId)
       setReferenceFiles(saved.references)
@@ -261,8 +272,14 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           } : turn) : appendExchange(history, payload)
         }, turns ?? []))
         for (const { type, turn_id, payload } of updates) {
-          if (type === 'turn.progress' && 'progress' in payload && payload.progress) setProgress(payload.progress)
-          if (type === 'turn.completed' || type === 'turn.stopped' || type === 'turn.interrupted') {
+          if (type === 'turn.progress' && 'progress' in payload && payload.progress) {
+            setLiveRequest(payload)
+            setProgress(payload.progress)
+          }
+          if (type === 'turn.interrupted') {
+            setProgress(current => current?.request_id !== turn_id ? current : current.reply ? { ...current, streaming: false } : undefined)
+          }
+          if (type === 'turn.steered' || type === 'question.asked' || type === 'turn.completed' || type === 'turn.stopped') {
             setProgress(current => current?.request_id === turn_id ? undefined : current)
           }
         }
@@ -287,9 +304,59 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       } finally {
         request = undefined
       }
-    }, 1500)
+    }, activeRequestId || pendingServerRequest ? 250 : 1500)
     return () => { active = false; window.clearInterval(timer); request?.cancel() }
-  }, [open, canvasId, projectId, localDraft, pendingServerRequest, setTurns])
+  }, [open, canvasId, projectId, localDraft, pendingServerRequest, activeRequestId, setTurns])
+
+  useEffect(() => {
+    if (!open || !localDraft || !draftStreamId) return
+    let active = true
+    let loading = false
+    let missingSince = 0
+    const poll = async () => {
+      if (loading) return
+      loading = true
+      try {
+        const { data } = await Canvases.canvasDraftAssistantReply({ canvasId, sourceId: draftStreamId })
+        const saved = readDraftAssistant(canvasId)
+        if (!active || !data || saved.live?.id !== draftStreamId) return
+        missingSince = 0
+        if (data.state === 'running') {
+          writeDraftAssistant(canvasId, { live: { ...saved.live, turn: data.turn } })
+          setLiveRequest(data.turn)
+          setProgress({ request_id: data.turn.request_id, model_id: data.turn.model_id, reply: data.turn.reply, streaming: true })
+        } else {
+          const updated = appendExchange(saved.turns, data.turn)
+          writeDraftAssistant(canvasId, { turns: updated, live: undefined })
+          setTurns(updated)
+          if (data.state === 'interrupted') setSendError('reply')
+          setProgress(undefined)
+          setDraftStreamId(undefined)
+          draftingAssistantReply.delete(canvasId)
+        }
+      } catch (error) {
+        const live = readDraftAssistant(canvasId).live
+        if (!(error instanceof ApiError) || error.status !== 404) missingSince = 0
+        else if (!missingSince) missingSince = Date.now()
+        if (active && live?.id === draftStreamId && missingSince && Date.now() - missingSince > 15000) {
+          const saved = readDraftAssistant(canvasId)
+          const updated = live.turn?.reply ? appendExchange(saved.turns, live.turn) : saved.turns
+          writeDraftAssistant(canvasId, { live: undefined, turns: updated })
+          setTurns(updated)
+          setSendError('reply')
+          setProgress(undefined)
+          setDraftStreamId(undefined)
+          draftingAssistantReply.delete(canvasId)
+        }
+      } finally {
+        loading = false
+      }
+    }
+    draftingAssistantReply.add(canvasId)
+    void poll()
+    const timer = window.setInterval(() => void poll(), 300)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [open, localDraft, canvasId, draftStreamId, setTurns])
 
   const queueHead = queue[0]
   useEffect(() => {
@@ -351,7 +418,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     if (!history.current) return
     const { follow, top } = historyPosition.current
     history.current.scrollTop = follow ? history.current.scrollHeight : top
-  }, [open, turns, sending, referenceFiles.length])
+  }, [open, turns, sending, progress?.reply, referenceFiles.length])
 
   useEffect(() => {
     const element = panel.current
@@ -375,6 +442,20 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     setStopping(sourceId)
     setStopError(false)
     try {
+      if (localDraft) {
+        const { data } = await Canvases.canvasDraftAssistantStop({ canvasId, sourceId })
+        if (!data) throw new Error('missing draft stop receipt')
+        const updated = appendExchange(readDraftAssistant(canvasId).turns, data.turn)
+        writeDraftAssistant(canvasId, { live: undefined, turns: updated })
+        setTurns(updated)
+        setDraftStreamId(undefined)
+        draftingAssistantReply.delete(canvasId)
+        stoppedRequest.current = sourceId
+        activeRequest.current?.cancel()
+        setDraft('')
+        setProgress(undefined)
+        return
+      }
       const { data } = await Canvases.canvasAssistantStop({ canvasId, projectId, sourceId })
       if (!data) throw new Error('missing assistant stop receipt')
       setTurns(current => current?.some(turn => turn.request_id === sourceId)
@@ -482,11 +563,11 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
 
   const send = async (resume?: CanvasAssistantMessage, enqueue = false) => {
     const text = (resume?.text ?? draft).trim()
-    if (draftPromoting || (enqueue && queueBusy) || savingModel || savingApproval || uploadingReference || !turns || !text) return
+    if (draftStreamId || draftPromoting || (enqueue && queueBusy) || savingModel || savingApproval || uploadingReference || !turns || !text) return
     const intent = resume || enqueue ? undefined : confirmationKind(text)
     const replyInProgress = sendingNow.current || !!steeringFor
     if (!enqueue && replyInProgress && !intent) {
-      if (!resume && activeRequestId && !pendingQuestion && !steeringFor) await steer(activeRequestId, text)
+      if (!localDraft && !resume && activeRequestId && !pendingQuestion && !steeringFor) await steer(activeRequestId, text)
       return
     }
     if (replyInProgress && intent === 'revise') return
@@ -561,6 +642,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       ? pending.current : {
           text,
           request_id: crypto.randomUUID(),
+          stream_reply: true,
           attachment_file_ids: referenceFiles.length ? referenceFiles.map(file => file.id) :
             revision?.attachments?.map(file => file.file_id) ?? [],
           revises: revision?.request_id,
@@ -601,17 +683,20 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     sendingNow.current = true
     setSending(true)
     setSendError(undefined)
-    if (localDraft) draftingAssistantReply.add(canvasId)
+    setLiveRequest(requestBody)
+    if (localDraft) {
+      draftingAssistantReply.add(canvasId)
+      writeDraftAssistant(canvasId, { live: { id: requestBody.request_id } })
+      setDraftStreamId(requestBody.request_id)
+    }
     try {
       const request = localDraft
         ? Canvases.canvasDraftAssistantSend({ canvasId, requestBody: {
           ...requestBody, turns: readDraftAssistant(canvasId).turns, model_id: modelId,
         } })
         : Canvases.canvasAssistantSend({ canvasId, projectId, requestBody })
-      if (!localDraft) {
-        setActiveRequestId(requestBody.request_id)
-        activeRequest.current = request
-      }
+      setActiveRequestId(requestBody.request_id)
+      activeRequest.current = request
       const { data: turn } = await request
       if (!turn) throw new Error('missing assistant reply')
       if (turn.question) {
@@ -619,7 +704,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         setPendingServerRequest(requestBody)
       } else if (localDraft) {
         const updated = appendExchange(readDraftAssistant(canvasId).turns, turn)
-        writeDraftAssistant(canvasId, { turns: updated, references: [] })
+        writeDraftAssistant(canvasId, { turns: updated, references: [], live: undefined })
+        setDraftStreamId(undefined)
+        setProgress(undefined)
         setTurns(updated)
       } else setTurns(current => appendExchange(current || [], turn))
       setRevising(undefined)
@@ -659,7 +746,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         : detail === 'ASSISTANT_CONTEXT_LIMIT_EXCEEDED' ? 'context-limit'
         : detail === 'CANVAS_TARGET_UNRESOLVED' ? 'target' : 'reply')
     } finally {
-      draftingAssistantReply.delete(canvasId)
+      if (!readDraftAssistant(canvasId).live) draftingAssistantReply.delete(canvasId)
       sendingNow.current = false
       activeRequest.current = undefined
       setActiveRequestId(undefined)
@@ -814,7 +901,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           action={<WorkbenchButton onClick={() => { setHistoryError(false); setRetryLoad(value => value + 1) }}>{uiText("重试")}</WorkbenchButton>} />}
         {stopError && <Alert type="error" message={uiText("暂时无法停止助手")} />}
         {!turns && !historyError && <Spin aria-label={uiText("正在读取助手对话")} />}
-        {turns?.map(turn => <article className="canvas-assistant-turn" data-assistant-turn={turn.request_id} key={turn.request_id}>
+        {displayedTurns?.map(turn => <article className="canvas-assistant-turn" data-assistant-turn={turn.request_id} key={turn.request_id}>
           <WorkbenchConversation items={[
             {
               key: 'user', role: 'user', placement: 'end', variant: 'borderless',
@@ -827,7 +914,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
               </div>}</>,
             },
             {
-              key: 'assistant', role: 'ai', variant: 'borderless', content: turn.reply,
+              key: 'assistant', role: 'ai', variant: 'borderless', streaming: turn === liveTurn && !!progress?.streaming && !pendingQuestion,
+              content: <XMarkdown escapeRawHtml className="canvas-assistant-markdown" content={turn.reply}
+                streaming={{ hasNextChunk: turn === liveTurn && !!progress?.streaming && !pendingQuestion }} />,
               styles: { content: { padding: 0, color: 'var(--wb-text)' } },
             },
           ]} />
@@ -959,7 +1048,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           <strong>{uiText('本轮已接收补充指令')}</strong>
           <ul>{pendingInstructions.map(instruction => <li key={instruction.request_id}>{instruction.text}</li>)}</ul>
         </div>}
-        {!pendingQuestion && (sending || steeringFor || progress) && <div role="status"><ThoughtChain items={[
+        {!pendingQuestion && (sending || steeringFor || progress?.streaming) && <div role="status"><ThoughtChain items={[
           { key: progress?.request_id ?? 'reply',
             title: progress ? uiText('已接收本轮上下文') : uiText('助手正在回复'),
             status: 'loading',
@@ -977,8 +1066,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
               </section>)}
             </div> },
         ]} /></div>}
-        {(activeRequestId || steeringFor) && <WorkbenchButton variant="quiet" loading={stopping === (activeRequestId || steeringFor)}
-          onClick={() => { const runningId = activeRequestId || steeringFor; if (runningId) void stopTurn(runningId) }}>{uiText("停止助手")}</WorkbenchButton>}
+        {runningId && <WorkbenchButton variant="quiet" loading={stopping === runningId}
+          onClick={() => { void stopTurn(runningId) }}>{uiText("停止助手")}</WorkbenchButton>}
         {!activeRequestId && !steeringFor && pendingServerRequest && <div>
           {pendingQuestion ? <form aria-label={uiText('创作问题')} onSubmit={event => {
             event.preventDefault(); void answerQuestion(questionAnswer)
@@ -992,7 +1081,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             <Input aria-label={uiText('自定义回答')} value={questionAnswer} maxLength={2000}
               onChange={event => setQuestionAnswer(event.target.value)} disabled={sending} />
             <WorkbenchButton htmlType="submit" disabled={sending || !questionAnswer.trim()}>{uiText('提交回答')}</WorkbenchButton>
-          </form> : <WorkbenchButton variant="quiet" onClick={() => { void send(pendingServerRequest) }}>{uiText("继续回复")}</WorkbenchButton>}
+          </form> : !progress?.streaming && <WorkbenchButton variant="quiet" onClick={() => { void send(pendingServerRequest) }}>{uiText("继续回复")}</WorkbenchButton>}
           <WorkbenchButton variant="quiet" loading={stopping === pendingServerRequest.request_id}
             onClick={() => { void stopTurn(pendingServerRequest.request_id) }}>{uiText("停止助手")}</WorkbenchButton>
         </div>}

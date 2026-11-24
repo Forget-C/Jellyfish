@@ -24,6 +24,7 @@
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
     "@ant-design/x": "2.10.0",
+    "@ant-design/x-markdown": "2.10.0",
     "antd": "^6.7.2",
     "axios": "^1.13.6",
     "fflate": "^0.8.3",

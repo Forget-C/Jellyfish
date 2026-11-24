@@ -27,6 +27,7 @@ const videoRequests = []
 const reviewInputs = []
 const prompts = []
 const observed = []
+const replyGates = new Map()
 let acceptSlowReply
 let slowReplyArrived
 const slowReplyStarted = new Promise(resolve => { slowReplyArrived = resolve })
@@ -87,8 +88,34 @@ const provider = createHttpServer(async (request, response) => {
     return
   }
   const turns = messages.filter(message => message.role === 'user').map(message => message.content)
+  const streamingChat = stream && messages.some(message => message.role === 'system' && message.content?.includes('你是 Jellyfish 的画布助手'))
+  const replyJson = content => {
+    if (!streamingChat) {
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(JSON.stringify(content))
+      return
+    }
+    const { message, ...choice } = content.choices[0]
+    response.writeHead(200, { 'Content-Type': 'text/event-stream' })
+    response.end('data: ' + JSON.stringify({ ...content, choices: [{ ...choice, delta: message }] }) + '\n\ndata: [DONE]\n\n')
+  }
   const combined = turns.at(-1) === journey
-  if (stream && !combined) {
+  const reading = typeof turns.at(-1) === 'string' && turns.at(-1).split('\n\n用户请求：\n').at(-1)
+  if (reading?.startsWith('流式回归')) {
+    assert.ok(stream)
+    response.writeHead(200, { 'Content-Type': 'text/event-stream' })
+    const chunk = content => response.write('data: ' + JSON.stringify({ id: 'live-reply', model, choices: [{
+      index: 0, delta: { role: 'assistant', content }, finish_reason: null,
+    }] }) + '\n\n')
+    const proposal = reading.endsWith('提案')
+    chunk(proposal ? '预览正在整理\n\n  ```json\n{"reply":"校验完成","groups":[' : '## 已到达的首段\n\n')
+    await new Promise(resolve => replyGates.set(reading, resolve))
+    chunk(proposal ? '{"title":"镜头","changes":[{"kind":"add_card","reference":"shot","card":{"kind":"add_text_card","text":"定稿镜头"}}]}]}\n  ```'
+      : '| 镜头 | 景别 |\n| --- | --- |\n| 01 | 中景 |')
+    response.end('data: [DONE]\n\n')
+    return
+  }
+  if (stream && !combined && !streamingChat) {
     assert.equal(turns.at(-1), '准备两版短片旁白')
     response.writeHead(200, { 'Content-Type': 'text/event-stream' })
     response.end('data: ' + JSON.stringify({ choices: [{
@@ -226,11 +253,10 @@ const provider = createHttpServer(async (request, response) => {
   const plainContext = typeof turns.at(-1) === 'string' && turns.at(-1).match(/本轮画布参考数据：\n(.+)\n\n用户请求：\n分析原卡片$/)
   if (plainContext) {
     observed.push(JSON.parse(plainContext[1]))
-    response.writeHead(200, { 'Content-Type': 'application/json' })
-    response.end(JSON.stringify({
+    replyJson({
       id: 'plain-context', object: 'chat.completion', created: 1, model,
       choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '文字模型找到了当前草稿' } }],
-    }))
+    })
     return
   }
   const writeRequest = turns.at(-1)
@@ -239,11 +265,10 @@ const provider = createHttpServer(async (request, response) => {
     const content = JSON.stringify({ reply: '请审批镜头卡', groups: [{ title: '镜头方案', changes: [{
       kind: 'add_card', reference: 'shot-01', card: { kind: 'add_text_card', text: '镜头 01 用慢速推近。' },
     }] }] })
-    response.writeHead(200, { 'Content-Type': 'application/json' })
-    response.end(JSON.stringify({
+    replyJson({
       id: 'write-plan', object: 'chat.completion', created: 1, model,
       choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
-    }))
+    })
     return
   }
   turns[turns.length - 1] = actualText
@@ -257,22 +282,20 @@ const provider = createHttpServer(async (request, response) => {
     await steerSourceReleased
   }
   if (turns.at(-1).includes('先别生成，先给简洁方案')) {
-    response.writeHead(200, { 'Content-Type': 'application/json' })
-    response.end(JSON.stringify({
+    replyJson({
       id: 'current-turn-steer', object: 'chat.completion', created: 1, model,
       choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '已采纳补充，先给简洁方案' } }],
-    }))
+    })
     return
   }
   if (turns.at(-1) === '自由二') {
     slowReplyArrived()
     await slowReplyAllowed
   }
-  response.writeHead(200, { 'Content-Type': 'application/json' })
-  response.end(JSON.stringify({
+  replyJson({
     id: 'test-reply', object: 'chat.completion', created: 1, model,
     choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '答复 ' + turns.at(-1) } }],
-  }))
+  })
 })
 await new Promise((resolve, reject) => provider.once('error', reject).listen(0, '127.0.0.1', resolve))
 const python = process.env.CANVAS_BROWSER_PYTHON
@@ -320,6 +343,58 @@ try {
     await panel.getByRole('button', { name: '发送消息' }).click()
     await panel.getByText('答复 ' + text, { exact: true }).waitFor()
   }
+  if (process.env.CANVAS_ASSISTANT_STREAM_ONLY) {
+    const sendLive = async text => {
+      await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill(text)
+      await panel.getByRole('button', { name: '发送消息' }).click()
+      for (let i = 0; i < 80 && !replyGates.has(text); i++) await delay(50)
+      assert.ok(replyGates.has(text))
+    }
+    const first = panel.getByRole('heading', { name: '已到达的首段' })
+    for (const [path, name] of [[base + '/canvases/' + free.id, '自由'], [base + storyboardCanvasPath(scene), '分镜']]) {
+      await page.goto(path)
+      await open()
+      const text = '流式回归' + name
+      await sendLive(text)
+      await first.waitFor()
+      assert.equal(await panel.getByRole('table').count(), 0)
+      await page.reload()
+      await open()
+      await first.waitFor()
+      await page.route('**/assistant/events?*', route => route.abort())
+      replyGates.get(text)()
+      await delay(550)
+      assert.equal(await panel.getByRole('table').count(), 0)
+      await page.unroute('**/assistant/events?*')
+      await panel.getByRole('cell', { name: '中景' }).waitFor()
+      await page.reload()
+      await open()
+      await panel.getByRole('cell', { name: '中景' }).waitFor()
+    }
+    await sendLive('流式回归提案')
+    await delay(650)
+    assert.equal(await panel.getByText(/"groups"/).count(), 0)
+    assert.equal(await panel.getByRole('region', { name: '修改建议' }).count(), 0)
+    replyGates.get('流式回归提案')()
+    await panel.getByRole('region', { name: '修改建议' }).getByText('定稿镜头', { exact: true }).waitFor()
+    await page.goto(base + '/canvases')
+    await page.getByRole('button', { name: /新建画布/ }).click()
+    await page.getByText('尚未创建', { exact: true }).waitFor()
+    await open()
+    await sendLive('流式回归草稿')
+    await first.waitFor()
+    await page.reload()
+    await open()
+    await first.waitFor()
+    await panel.getByRole('button', { name: '停止助手', exact: true }).click()
+    await panel.getByText('助手已停止', { exact: true }).waitFor()
+    replyGates.get('流式回归草稿')()
+    await page.reload()
+    await open()
+    await first.waitFor()
+    assert.equal(await panel.getByRole('table').count(), 0)
+    console.log('双画布与草稿真实流式、刷新续接、停止和审批隔离通过。')
+  } else {
   await page.goto(base + '/canvases/' + free.id)
   await open()
   assert.equal(await panel.getByRole('combobox', { name: '提问范围' }).count(), 0)
@@ -1034,7 +1109,9 @@ try {
 
 
   console.log('Assistant conversation persisted independently on both real canvas entries.')
+  }
 } finally {
+  for (const release of replyGates.values()) release()
   acceptSlowReply()
   releaseSteerSource()
   releaseSceneSource()

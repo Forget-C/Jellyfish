@@ -264,3 +264,15 @@
 }
 
 .canvas-assistant-x-attachments { min-inline-size: 0; }
+
+.canvas-assistant-markdown {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  color: inherit;
+}
+.canvas-assistant-markdown table { border-collapse: collapse; }
+.canvas-assistant-markdown :is(th, td) { border: 1px solid var(--wb-border); padding: 4px 8px; }
+.canvas-assistant-markdown :is(pre, code) { white-space: pre-wrap; }

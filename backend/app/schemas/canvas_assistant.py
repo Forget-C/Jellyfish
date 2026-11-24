@@ -91,6 +91,7 @@ class CanvasAssistantMessage(BaseModel):
 
     request_id: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')]
     text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16000)]
+    stream_reply: bool = Field(default=False, exclude_if=lambda value: not value)
     context: CanvasAssistantDraftContext | None = None
     revises: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')] | None = None
     revises_field: CanvasAssistantFieldRevision | None = None
@@ -135,6 +136,8 @@ class CanvasAssistantInstruction(BaseModel):
 class CanvasAssistantProgress(BaseModel):
     """Evidence available while the leased turn is still running."""
 
+    reply: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    streaming: bool | None = Field(default=None, exclude_if=lambda value: value is None)
     request_id: str
     scope: Literal['selection', 'canvas'] | None = None
     revision: int | None = None

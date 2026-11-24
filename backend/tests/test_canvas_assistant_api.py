@@ -701,3 +701,51 @@ async def test_cross_canvas_reference_observes_allowed_source_and_rejects_other_
     })
     assert denied.status_code == 404, denied.text
     assert len(prompt) == 1
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stop', [False, True])
+async def test_visible_reply_precedes_completion_and_survives_reconnect(canvas_client, monkeypatch, stop):
+    released, paused = asyncio.Event(), asyncio.Event()
+    original = httpx.AsyncClient.send
+
+    class Stream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            for content in ['## 第一段', '\n第二段']:
+                data = {'id': 's', 'model': 'canvas-text', 'choices': [
+                    {'index': 0, 'delta': {'role': 'assistant', 'content': content}, 'finish_reason': None}]}
+                yield ('data: ' + json.dumps(data) + '\n\n').encode()
+                paused.set()
+                await released.wait()
+            yield b'data: [DONE]\n\n'
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original(client, request, **kwargs)
+        assert json.loads(request.content)['stream']
+        return httpx.Response(200, request=request, headers={'content-type': 'text/event-stream'}, stream=Stream())
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    async with canvas_client.canvas_sessions.begin() as db:
+        (await db.get(Provider, 'canvas-provider')).api_key = 'test-key'
+        db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
+    canvas = (await canvas_client.post('/canvases', json={'name': '流式回归'})).json()['data']
+    url = '/canvases/' + canvas['id'] + '/assistant'
+    send = asyncio.create_task(canvas_client.post(url, json={'text': '给我建议', 'request_id': 'live', 'stream_reply': True}))
+    try:
+        await asyncio.wait_for(paused.wait(), 3)
+        for _ in range(40):
+            history = (await canvas_client.get(url)).json()['data']
+            if (history.get('pending_progress') or {}).get('reply') == '## 第一段':
+                break
+            await asyncio.sleep(.05)
+        assert history['pending_progress']['reply'] == '## 第一段' and not send.done()
+        if stop:
+            result = await canvas_client.post(url + '/turns/live/stop')
+            assert result.status_code == 200, result.text
+            await asyncio.wait_for(asyncio.shield(send), 3)
+    finally:
+        released.set()
+        response = await send
+    assert response.status_code == 200, response.text
+    actual = (await canvas_client.get(url)).json()['data']['turns'][0]
+    assert actual['reply'] == ('## 第一段' if stop else '## 第一段\n第二段')

@@ -16,6 +16,7 @@ export type DraftAssistantMessage = {
     model_id?: (string | null);
     request_id: string;
     text: string;
+    stream_reply?: boolean;
     context?: (CanvasAssistantDraftContext | null);
     revises?: (string | null);
     revises_field?: (CanvasAssistantFieldRevision | null);

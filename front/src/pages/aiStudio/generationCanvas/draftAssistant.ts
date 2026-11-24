@@ -1,6 +1,6 @@
 import type { CanvasAssistantExchange, DraftAssistantConversation, FileRead } from '../../../services/generated'
 
-type LocalConversation = { turns: CanvasAssistantExchange[]; modelId: string | null; references: FileRead[] }
+type LocalConversation = { live?: { id: string; turn?: CanvasAssistantExchange }; turns: CanvasAssistantExchange[]; modelId: string | null; references: FileRead[] }
 const key = (canvasId: string) => `jellyfish:generation:${canvasId}:draft-assistant`
 const memory = new Map<string, LocalConversation>()
 export const draftingAssistantReply = new Set<string>()

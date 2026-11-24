@@ -67,6 +67,7 @@ export type { ApiResponse_DivisionHistoryPage_ } from './models/ApiResponse_Divi
 export type { ApiResponse_DivisionPreview_ } from './models/ApiResponse_DivisionPreview_';
 export type { ApiResponse_DivisionSaved_ } from './models/ApiResponse_DivisionSaved_';
 export type { ApiResponse_DivisionVersionDetail_ } from './models/ApiResponse_DivisionVersionDetail_';
+export type { ApiResponse_DraftAssistantReply_ } from './models/ApiResponse_DraftAssistantReply_';
 export type { ApiResponse_EditableRevisionFields_ } from './models/ApiResponse_EditableRevisionFields_';
 export type { ApiResponse_EntityNameExistenceCheckResponse_ } from './models/ApiResponse_EntityNameExistenceCheckResponse_';
 export type { ApiResponse_ExperimentSessionRead_ } from './models/ApiResponse_ExperimentSessionRead_';
@@ -390,6 +391,7 @@ export type { DraftAssetPromptRenderBody } from './models/DraftAssetPromptRender
 export type { DraftAssistantApproval } from './models/DraftAssistantApproval';
 export type { DraftAssistantConversation } from './models/DraftAssistantConversation';
 export type { DraftAssistantMessage } from './models/DraftAssistantMessage';
+export type { DraftAssistantReply } from './models/DraftAssistantReply';
 export type { EditableRevisionField } from './models/EditableRevisionField';
 export type { EditableRevisionFields } from './models/EditableRevisionFields';
 export type { EffectiveModelCapabilities } from './models/EffectiveModelCapabilities';

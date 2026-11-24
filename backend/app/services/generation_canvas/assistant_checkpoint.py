@@ -129,7 +129,7 @@ class CanvasCheckpointer(CanvasGraphSnapshot):
             if observed := changes.pop('observed', None):
                 changes['observed_card_ids'] = list(dict.fromkeys([*previous.get('observed_card_ids', []), *observed]))
             progress = CanvasAssistantProgress.model_validate({
-                **previous, **changes, 'active_tasks': active_tasks,
+                **previous, **changes, 'active_tasks': active_tasks, 'streaming': True,
                 'request_id': pending['command']['request_id'], 'model_id': pending['model_id'],
             })
             value = progress.model_dump(mode='json')

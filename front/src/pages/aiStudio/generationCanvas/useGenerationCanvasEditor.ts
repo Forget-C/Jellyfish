@@ -4,7 +4,7 @@ import { createCanvasOperations } from './canvasOperations'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCatalog, CanvasDiagnostic, CanvasDocument, CanvasDraftSave, CanvasRead, CanvasSave, StoryboardApplication, StoryboardCandidate } from '../../../services/generated'
-import { clearDraftAssistant, draftAssistantSnapshot, draftingAssistantReply } from './draftAssistant'
+import { clearDraftAssistant, draftAssistantSnapshot, draftingAssistantReply, readDraftAssistant } from './draftAssistant'
 import { cleanObjectSources } from './objectSourceCleanup'
 import { generationCanvasEditScope, useCanvasEditOwnership } from './useCanvasEditOwnership'
 
@@ -249,7 +249,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     const s = state.current
     if (!ownership.canEdit() || !s.current || !s.document || s.recovery || s.conflict) return Promise.resolve(false)
     if (s.current.revision === -1) {
-      if (draftingAssistantReply.has(s.current.id)) {
+      if (draftingAssistantReply.has(s.current.id) || readDraftAssistant(s.current.id).live) {
         if (explicit) setError(uiText("请等待助手回复后再保存画布"))
         return Promise.resolve(false)
       }

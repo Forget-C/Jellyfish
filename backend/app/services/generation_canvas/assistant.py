@@ -51,6 +51,7 @@ from app.services.generation_canvas.assistant_layout import CanvasAssistantLayou
 from app.services.generation_canvas.assistant_generation import (
     freeze_generation_basis, generation_authorization, read_generation, update_generation_for_decision,
 )
+from app.services.generation_canvas.assistant_stream import invoke_with_reply, reply_envelope, run_reply_stream, stop_reply_stream
 from app.services.generation_canvas.assistant_structure import structural_preview_tool
 from app.services.generation_canvas.assistant_media import (
     describe_assistant_media, resolve_assistant_media, retain_assistant_media,
@@ -129,9 +130,9 @@ class CanvasAssistant:
             turns=[await self._exchange(turn) for turn in turns],
             pending_request=pending,
             pending_question=session.pending_request.get('question') if pending and session else None,
-            pending_progress=session.pending_request.get('progress') if (
-                pending and session and session.pending_until and session.pending_until > datetime.now(UTC).replace(tzinfo=None)
-            ) else None,
+            pending_progress={
+                **progress, 'streaming': bool(session.pending_until and session.pending_until > datetime.now(UTC).replace(tzinfo=None)),
+            } if pending and session and (progress := session.pending_request.get('progress')) else None,
             pending_instructions=session.pending_request.get('instructions', []) if pending and session else [],
             queue=[queue_item(entry) for entry in await pending_queue(self.db, canvas_id)] if session else [],
             model_id=session.model_id if session else None,
@@ -222,7 +223,7 @@ class CanvasAssistant:
         session.sequence += 1
         turn = CanvasAssistantTurn(
             canvas_id=session.canvas_id, request_id=source_id, sequence=session.sequence, text=command['text'],
-            model_id=pending['model_id'], reply='', stopped=True, context=pending['context'], revises=command['revises'],
+            model_id=pending['model_id'], reply=(pending.get('progress') or {}).get('reply') or '', stopped=True, context=pending['context'], revises=command['revises'],
             instructions=pending.get('instructions'), revises_field=command.get('revises_field'),
             attachments=[{'file_id': file_id, 'observation': 'unavailable'} for file_id in command['attachment_file_ids']],
         )
@@ -233,6 +234,8 @@ class CanvasAssistant:
         exchange = await self._exchange(turn)
         publish_events(self.db, session, exchange, 'turn.completed')
         await complete_queued_turn(self.db, session, turn.request_id)
+        await self.db.commit()
+        stop_reply_stream(session.canvas_id, source_id)
         return exchange
 
     async def set_model(self, canvas_id: str, choice: CanvasAssistantModelSelection) -> CanvasAssistantModelSelection:
@@ -490,6 +493,8 @@ class CanvasAssistant:
         session.pending_token = token
         session.pending_until = now + timedelta(seconds=TURN_LEASE_SECONDS)
         session.pending_request = {'command': request, 'model_id': model_id, 'context': context, 'referenced': referenced}
+        if resuming and pending.get('progress'):
+            session.pending_request = {**session.pending_request, 'progress': pending['progress']}
         if answers or instructions:
             session.pending_request = {**session.pending_request, 'answers': answers, 'instructions': instructions}
         if prior_delegations:
@@ -522,12 +527,19 @@ class CanvasAssistant:
             delegation = CanvasDelegation(
                 client, model_id, scoped, content, attachments or [], checkpoint, prior_delegations,
             ) if scoped or attachments else None
-            reply, skills, observed = await self._reply(
+            result = self._reply(
                 client, messages, scoped, edit_draft, supports_tools=capability.tool_calling, structure_tool=structure_tool,
                 layout_draft=layout_draft,
-                checkpoint=checkpoint,
+                checkpoint=checkpoint, on_reply=(lambda text: checkpoint.report_progress(reply=text)) if command.stream_reply else None,
                 max_input_tokens=capability.max_input_tokens, question_answers=answers, delegation=delegation,
             )
+            reply, skills, observed = await run_reply_stream(canvas_id, command.request_id, result) if command.stream_reply else await result
+        except asyncio.CancelledError:
+            await self.db.rollback()
+            stopped = await self._stopped_exchange(canvas_id, command.request_id)
+            if stopped is None:
+                raise
+            return stopped
         except CreativeQuestionPending as pause:
             return await self._pause_question(canvas_id, command, token, pause.question)
         except HTTPException:
@@ -537,7 +549,8 @@ class CanvasAssistant:
                 failed_session.pending_token = failed_session.pending_until = None
                 pending = failed_session.pending_request
                 if pending and pending.get('progress'):
-                    failed_session.pending_request = {key: value for key, value in pending.items() if key != 'progress'}
+                    if not pending['progress'].get('reply'):
+                        failed_session.pending_request = {key: value for key, value in pending.items() if key != 'progress'}
                     publish_events(self.db, failed_session, CanvasAssistantExchange(
                         request_id=command.request_id, text=command.text, sequence=failed_session.sequence + 1,
                         model_id=model_id, reply='',
@@ -672,7 +685,7 @@ class CanvasAssistant:
     async def _reply(client, messages, context: CanvasAssistantReadContext | None,
                      edit_draft: CanvasAssistantEditDraft | None, *, supports_tools: bool, structure_tool=None,
                      layout_draft: CanvasAssistantLayoutDraft | None = None,
-                     checkpoint: CanvasCheckpointer | None = None, max_input_tokens: int | None = None,
+                     checkpoint: CanvasCheckpointer | None = None, on_reply=None, max_input_tokens: int | None = None,
                      question_answers: list[dict] | None = None, delegation: CanvasDelegation | None = None,
                      ) -> tuple[str, list[CanvasAssistantSkillUse], list[str] | None]:
         request_text = messages[-1].text
@@ -789,10 +802,10 @@ class CanvasAssistant:
         try:
             async with asyncio.timeout(MODEL_DEADLINE_SECONDS):
                 if checkpoint is None:
-                    state = await agent.ainvoke({'messages': messages})
+                    state = await invoke_with_reply(agent, {'messages': messages}, None, on_reply)
                 else:
                     state = await CanvasAssistant._resume_reply(
-                        agent, checkpoint, messages, used_skills, edit_draft, layout_draft, question_answers or [],
+                        agent, checkpoint, messages, used_skills, edit_draft, layout_draft, question_answers or [], on_reply,
                     )
         except (HTTPException, CreativeQuestionPending):
             raise
@@ -803,7 +816,7 @@ class CanvasAssistant:
         if supports_tools and context is not None and not any(isinstance(message, ToolMessage) and message.name == 'read_canvas_context'
                                            for message in history):
             raise HTTPException(502, 'Canvas assistant model did not read the requested canvas context')
-        reply = history[-1].text.strip()
+        reply = reply_envelope(history[-1].text.strip())
         if not reply:
             raise HTTPException(502, 'Canvas assistant model returned an empty response')
         if delegation and not supports_tools and reply.startswith('{'):
@@ -823,18 +836,20 @@ class CanvasAssistant:
                 try:
                     async with asyncio.timeout(MODEL_DEADLINE_SECONDS):
                         if checkpoint:
-                            synthesis = await agent.ainvoke({'messages': [HumanMessage(content=follow_up)]},
-                                                           checkpoint.config, durability='sync')
+                            synthesis = await invoke_with_reply(agent, {'messages': [HumanMessage(content=follow_up)]},
+                                                               checkpoint.config, on_reply, durability='sync')
                         else:
-                            synthesis = await agent.ainvoke({'messages': [*messages, HumanMessage(content=follow_up)]})
+                            synthesis = await invoke_with_reply(agent, {'messages': [*messages, HumanMessage(content=follow_up)]}, None, on_reply)
                 except HTTPException:
                     raise
                 except Exception as exc:
                     raise HTTPException(502, 'Canvas assistant could not synthesize specialist results') from exc
-                reply = synthesis['messages'][-1].text.strip()
+                reply = reply_envelope(synthesis['messages'][-1].text.strip())
                 if not reply:
                     raise HTTPException(502, 'Canvas assistant returned no specialist synthesis')
-        if not supports_tools and edit_draft is not None and not planning and reply.startswith('{'):
+        if reply.startswith('{'):
+            if supports_tools or edit_draft is None or planning:
+                raise HTTPException(422, 'Canvas assistant returned an unexpected structured response')
             try:
                 structured = TextCanvasBatchResponse.model_validate_json(reply)
                 edit_draft.preview_batch(structured.groups)
@@ -858,7 +873,7 @@ class CanvasAssistant:
 
 
     @staticmethod
-    async def _resume_reply(agent, checkpoint, messages, skills, edits, layout, answers):
+    async def _resume_reply(agent, checkpoint, messages, skills, edits, layout, answers, on_reply=None):
         config = checkpoint.config
         try:
             prior = await agent.aget_state(config)
@@ -877,7 +892,7 @@ class CanvasAssistant:
             state = {**prior.values, '__interrupt__': prior.interrupts}
         else:
             input_ = resume_question(prior, answers) if prior.values else {'messages': messages}
-            state = await agent.ainvoke(input_, config, durability='sync')
+            state = await invoke_with_reply(agent, input_, config, on_reply, durability='sync')
         checkpoint.waiting_approval = any(is_approval_pause(pause) for pause in state.get('__interrupt__', ()))
         if not checkpoint.waiting_approval:
             check_new_question(state)
