@@ -19,10 +19,10 @@ from app.schemas.generation_canvas import CanvasRead
 from app.core.contracts.directing.scene_storyboard import (StoryboardApplication, StoryboardBasis, StoryboardCheckRequest, StoryboardDiff,
     StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardRetry, StoryboardRetryBasis,
     StoryboardTaskRead, StoryboardTaskSummary)
-from app.services.directing.scene_storyboard import SceneStoryboardService
 from app.services.generation_canvas.edits import scene_storyboard_edits
 from app.services.generation_canvas.generation_inputs import storyboard_generation_inputs
 from app.services.generation_canvas.lifecycle import scene_canvas_lifecycle
+from app.services.generation_canvas.runs import storyboard_runs
 from app.core.contracts.directing.scene_objects import (
     ObjectExtractionRequest, SceneObjectCandidateApplication, SceneObjectCandidateReceipt, SceneObjectCandidateReview,
     SceneObjectChoice, SceneObjectsRead, SceneObjectTaskRead,
@@ -184,7 +184,7 @@ async def choose_scene_object_reference(project_id: str, chapter_id: str, sequen
 async def submit_storyboard(project_id: str, chapter_id: str, sequence_id: str, body: StoryboardRequest,
                             db: AsyncSession = Depends(get_db, scope="function")):
     """显式建立目标画布并提交文本分镜任务。"""
-    return created_response(await _call(SceneStoryboardService(db, project_id).submit_storyboard(chapter_id, sequence_id, body)))
+    return created_response(await _call(storyboard_runs(db, project_id).submit_storyboard(chapter_id, sequence_id, body)))
 
 
 @router.get("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/basis",
@@ -200,7 +200,7 @@ async def storyboard_basis(project_id: str, chapter_id: str, sequence_id: str,
 async def read_canvas_candidate(project_id: str, chapter_id: str, sequence_id: str, canvas_id: str,
                                 task_id: str | None = None, db: AsyncSession = Depends(get_db, scope="function")):
     """为共同工作区读取同一目标画布的待应用候选。"""
-    return success_response(await SceneStoryboardService(db, project_id).read_canvas_candidate(
+    return success_response(await storyboard_runs(db, project_id).read_canvas_candidate(
         chapter_id, sequence_id, canvas_id, task_id))
 
 
@@ -209,7 +209,7 @@ async def read_canvas_candidate(project_id: str, chapter_id: str, sequence_id: s
 async def reextract_storyboard(project_id: str, chapter_id: str, sequence_id: str, canvas_id: str,
                                body: StoryboardReextractRequest, db: AsyncSession = Depends(get_db, scope="function")):
     """针对既有场次画布创建可核对的重新提取任务。"""
-    return created_response(await _call(SceneStoryboardService(db, project_id).reextract_storyboard(
+    return created_response(await _call(storyboard_runs(db, project_id).reextract_storyboard(
         chapter_id, sequence_id, canvas_id, body)))
 
 
@@ -218,7 +218,7 @@ async def reextract_storyboard(project_id: str, chapter_id: str, sequence_id: st
 async def list_storyboards(project_id: str, chapter_id: str, sequence_id: str, canvas_id: str | None = None,
                            db: AsyncSession = Depends(get_db, scope="function")):
     """读取本场或本画布近期任务的真实状态。"""
-    return success_response(await _call(SceneStoryboardService(db, project_id).list_storyboards(chapter_id, sequence_id, canvas_id)))
+    return success_response(await _call(storyboard_runs(db, project_id).list_storyboards(chapter_id, sequence_id, canvas_id)))
 
 
 @router.post("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}/retry",
@@ -226,7 +226,7 @@ async def list_storyboards(project_id: str, chapter_id: str, sequence_id: str, c
 async def retry_storyboard(project_id: str, chapter_id: str, sequence_id: str, task_id: str, body: StoryboardRetry,
                            db: AsyncSession = Depends(get_db, scope="function")):
     """在同一画布恢复失败任务，原任务及已保存内容保持可查。"""
-    return created_response(await _call(SceneStoryboardService(db, project_id).retry_storyboard(chapter_id, sequence_id, task_id, body)))
+    return created_response(await _call(storyboard_runs(db, project_id).retry_storyboard(chapter_id, sequence_id, task_id, body)))
 
 
 @router.get("/chapters/{chapter_id}/sequences/{sequence_id}/canvases/{canvas_id}/continuity-check",
@@ -234,7 +234,7 @@ async def retry_storyboard(project_id: str, chapter_id: str, sequence_id: str, t
 async def read_saved_storyboard_check(project_id: str, chapter_id: str, sequence_id: str, canvas_id: str,
                                       db: AsyncSession = Depends(get_db, scope="function")):
     """Read the latest explicit check without starting work."""
-    return success_response(await _call(SceneStoryboardService(db, project_id).saved_check(chapter_id, sequence_id, canvas_id)))
+    return success_response(await _call(storyboard_runs(db, project_id).saved_check(chapter_id, sequence_id, canvas_id)))
 
 
 @router.post("/chapters/{chapter_id}/sequences/{sequence_id}/canvases/{canvas_id}/continuity-check",
@@ -242,7 +242,7 @@ async def read_saved_storyboard_check(project_id: str, chapter_id: str, sequence
 async def submit_saved_storyboard_check(project_id: str, chapter_id: str, sequence_id: str, canvas_id: str, body: StoryboardCheckRequest,
                                         db: AsyncSession = Depends(get_db, scope="function")):
     """Review the saved design only after explicit admission."""
-    return created_response(await _call(SceneStoryboardService(db, project_id).saved_check(chapter_id, sequence_id, canvas_id, body)))
+    return created_response(await _call(storyboard_runs(db, project_id).saved_check(chapter_id, sequence_id, canvas_id, body)))
 
 
 @router.get("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}/retry/basis",
@@ -259,7 +259,7 @@ async def storyboard_retry_basis(project_id: str, chapter_id: str, sequence_id: 
 async def read_storyboard(project_id: str, chapter_id: str, sequence_id: str, task_id: str,
                           db: AsyncSession = Depends(get_db, scope="function")):
     """读取当前任务状态、候选和应用基线。"""
-    return success_response(await _call(SceneStoryboardService(db, project_id).read_storyboard(chapter_id, sequence_id, task_id)))
+    return success_response(await _call(storyboard_runs(db, project_id).read_storyboard(chapter_id, sequence_id, task_id)))
 
 
 @router.post("/chapters/{chapter_id}/sequences/{sequence_id}/storyboards/{task_id}/diff",

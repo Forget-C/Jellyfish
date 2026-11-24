@@ -243,7 +243,7 @@ async def compile_canvas_card(canvas_id: str, card_id: str, project_id: str = ''
 
 from app.schemas.generation_canvas import (CanvasPrecheckRequest, CanvasPrecheck, CanvasRunSubmit,
     CanvasRunAccepted, CanvasSnapshot, CanvasRuntimeEvent, CanvasStreamConnection)
-from app.services.generation_canvas.runtime import CanvasRuntime
+from app.services.generation_canvas.runs import canvas_check_runs, canvas_runs
 
 
 @router.post('/{canvas_id}/precheck', response_model=ApiResponse[CanvasPrecheck], operation_id='canvas_precheck')
@@ -255,13 +255,13 @@ async def precheck_canvas(canvas_id: str, body: CanvasPrecheckRequest, project_i
 @router.post('/{canvas_id}/runs', response_model=ApiResponse[CanvasRunAccepted], operation_id='canvas_run_submit')
 async def submit_canvas_run(canvas_id: str, body: CanvasRunSubmit, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """原子受理并返回原或新运行；不在 HTTP 请求中调用供应商。"""
-    return success_response(await CanvasRuntime(db, project_id).submit(canvas_id, body))
+    return success_response(await canvas_runs(db, project_id).submit(canvas_id, body))
 
 
 @router.get('/{canvas_id}/runtime', response_model=ApiResponse[CanvasSnapshot], operation_id='canvas_runtime')
 async def get_canvas_runtime(canvas_id: str, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """读取运行、累计正文和当前输出的一致切点。"""
-    return success_response(await CanvasRuntime(db, project_id).snapshot(canvas_id))
+    return success_response(await canvas_runs(db, project_id).snapshot(canvas_id))
 
 
 @router.get('/{canvas_id}/events/connection', response_model=ApiResponse[CanvasStreamConnection], operation_id='canvas_stream_connection')
@@ -290,13 +290,13 @@ from app.schemas.generation_canvas import CanvasRunRead
 @router.post('/{canvas_id}/runs/{run_id}/cancel', response_model=ApiResponse[CanvasRunRead], operation_id='canvas_cancel_run')
 async def cancel_canvas_run(canvas_id: str, run_id: str, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """取消明确的一轮运行，返回真实节点状态而非提前宣告终态。"""
-    return success_response(await CanvasRuntime(db, project_id).cancel(canvas_id, run_id))
+    return success_response(await canvas_runs(db, project_id).cancel(canvas_id, run_id))
 
 
 @router.post('/{canvas_id}/runs/{run_id}/nodes/{node_id}/cancel', response_model=ApiResponse[CanvasRunRead], operation_id='canvas_cancel_node')
 async def cancel_canvas_node(canvas_id: str, run_id: str, node_id: str, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """仅请求取消目标节点，终态由 TaskService 确认。"""
-    return success_response(await CanvasRuntime(db, project_id).cancel(canvas_id, run_id, node_id))
+    return success_response(await canvas_runs(db, project_id).cancel(canvas_id, run_id, node_id))
 
 
 from app.schemas.generation_canvas import TextContentCard, ImageContentCard, VideoContentCard, CanvasVideoFrameRequest
@@ -305,8 +305,7 @@ from app.schemas.generation_canvas import TextContentCard, ImageContentCard, Vid
 @router.get('/{canvas_id}/runs/{run_id}/nodes/{node_id}/outputs/{position}/content', response_model=ApiResponse[TextContentCard | ImageContentCard | VideoContentCard], operation_id='canvas_output_content')
 async def canvas_output_content(canvas_id: str, run_id: str, node_id: str, position: int, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """准备独立内容卡；调用方通过已有文档保存队列显式持久化。"""
-    from app.services.generation_canvas.historical_content import CanvasHistoricalContent
-    return success_response(await CanvasHistoricalContent(db, project_id).prepare_content(canvas_id, run_id, node_id, position))
+    return success_response(await canvas_runs(db, project_id).prepare_output_content(canvas_id, run_id, node_id, position))
 
 
 @router.post('/{canvas_id}/video-frames', response_model=ApiResponse[ImageContentCard], operation_id='canvas_prepare_video_frame')
@@ -324,7 +323,7 @@ from app.schemas.generation_canvas import CanvasCardOutputs
 async def get_card_outputs(canvas_id: str, card_id: str,
                            project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """展示已保存修订的明确出口及直接候选，不修改绑定。"""
-    return success_response(await CanvasStore(db, project_id).card_outputs(canvas_id, card_id))
+    return success_response(await canvas_runs(db, project_id).card_outputs(canvas_id, card_id))
 
 
 from app.core.contracts.canvas_catalog import CanvasCatalog
@@ -344,7 +343,6 @@ async def get_canvas_catalog(canvas_id: str, project_id: str = '', db: AsyncSess
 
 
 from app.schemas.canvas_checks import CanvasCheckPreview, CanvasCheckReportRead, CanvasCheckRequest
-from app.services.generation_canvas.checks import CanvasChecks
 
 
 @router.get('/{canvas_id}/checks/{card_id}', response_model=ApiResponse[CanvasCheckPreview],
@@ -360,7 +358,7 @@ async def preview_canvas_check(canvas_id: str, card_id: str,
 async def run_canvas_check(canvas_id: str, card_id: str, body: CanvasCheckRequest,
                            project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """执行用户选择的检查范围，写入独立报告。"""
-    return success_response(await CanvasChecks(db, project_id).run(canvas_id, card_id, body))
+    return success_response(await canvas_check_runs(db, project_id).run_check(canvas_id, card_id, body))
 
 
 @router.get('/{canvas_id}/checks/{card_id}/reports', response_model=ApiResponse[list[CanvasCheckReportRead]],
@@ -368,11 +366,10 @@ async def run_canvas_check(canvas_id: str, card_id: str, body: CanvasCheckReques
 async def get_canvas_check_reports(canvas_id: str, card_id: str,
                                    project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """按原检查卡身份读取该项目画布内的报告。"""
-    return success_response(await CanvasChecks(db, project_id).reports(canvas_id, card_id))
+    return success_response(await canvas_check_runs(db, project_id).reports(canvas_id, card_id))
 
 
 from app.schemas.canvas_checks import CanvasCheckProduct, CanvasPostCheckPreview, CanvasPostCheckRequest
-from app.services.generation_canvas.post_checks import CanvasPostChecks
 
 
 @router.get('/{canvas_id}/checks/{card_id}/products', response_model=ApiResponse[list[CanvasCheckProduct]],
@@ -397,14 +394,14 @@ async def canvas_post_check_preview(canvas_id: str, card_id: str, run_id: str, n
 async def canvas_post_check_run(canvas_id: str, card_id: str, run_id: str, node_id: str, position: int,
                                 body: CanvasPostCheckRequest, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """Admit an explicit historical product inspection."""
-    return success_response(await CanvasPostChecks(db, project_id).run(canvas_id, card_id, run_id, node_id, position, body))
+    return success_response(await canvas_check_runs(db, project_id).run_post_check(canvas_id, card_id, run_id, node_id, position, body))
 
 @router.post('/{canvas_id}/checks/{card_id}/reports/{report_id}/cancel',
              response_model=ApiResponse[CanvasCheckReportRead], operation_id='canvas_check_cancel')
 async def cancel_canvas_check(canvas_id: str, card_id: str, report_id: str,
                               project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """请求停止该报告尚未完成的检查任务，并返回当前执行事实。"""
-    return success_response(await CanvasChecks(db, project_id).cancel(canvas_id, card_id, report_id))
+    return success_response(await canvas_check_runs(db, project_id).cancel_check(canvas_id, card_id, report_id))
 
 
 @router.get('/{canvas_id}/check-reports/archived', response_model=ApiResponse[list[CanvasCheckReportRead]],
@@ -412,11 +409,10 @@ async def cancel_canvas_check(canvas_id: str, card_id: str, report_id: str,
 async def get_archived_canvas_check_reports(canvas_id: str,
                                             project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """读取当前画布中已删检查卡留下的原报告。"""
-    return success_response(await CanvasChecks(db, project_id).archived_reports(canvas_id))
+    return success_response(await canvas_check_runs(db, project_id).archived_reports(canvas_id))
 
 
 from app.schemas.canvas_checks import CanvasCheckRecheckRequest
-from app.services.generation_canvas.check_rechecks import CanvasCheckRechecks
 
 
 @router.post('/{canvas_id}/checks/{card_id}/reports/{report_id}/recheck',
@@ -425,4 +421,4 @@ from app.services.generation_canvas.check_rechecks import CanvasCheckRechecks
 async def recheck_canvas_report(canvas_id: str, card_id: str, report_id: str,
                                 body: CanvasCheckRecheckRequest, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """Run one completed finding against the evidence of its original report."""
-    return success_response(await CanvasCheckRechecks(db, project_id).run(canvas_id, card_id, report_id, body))
+    return success_response(await canvas_check_runs(db, project_id).recheck(canvas_id, card_id, report_id, body))

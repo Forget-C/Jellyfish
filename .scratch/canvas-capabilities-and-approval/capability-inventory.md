@@ -17,3 +17,16 @@
 | 生命周期、生成运行与结果 | 分镜 | 通过场次业务创建目标画布、提交和重试分镜提取、读取任务与候选、提交和读取连续性检查（`directing_storyboard_submit`、`directing_storyboard_reextract`、`directing_storyboard_retry`、`directing_storyboard_list`、`directing_storyboard_get`、`directing_storyboard_candidate`、`directing_saved_storyboard_check_submit`、`directing_saved_storyboard_check_get`）。保留场次准入和候选语义，验收这些入口所用的画布生命周期、编辑与运行能力。 | 04 |
 
 首页近期画布摘要（`home_recent_canvases`）是面向首页、跨项目的限量投影，依赖同一归属语义。它保留独立查询，核对两种画布的归属和可跳转身份。对话队列、消息、模型选择、审批偏好和提案决定由会话及审批层承接。运行事件的 SSE 连接与事件传输仍由 HTTP 适配器负责。
+
+## 协议验收
+
+已将上述 47 个 operation ID 与现有路由核对。普通后端调用方可按职责组合以下入口，使用调用方已授权的画布作用域和事务。
+
+| 职责 | 协议入口 | 特殊宿主行为 |
+| --- | --- | --- |
+| 生命周期、读取与能力 | `canvas_lifecycle`、`free_canvas_lifecycle`、`scene_canvas_lifecycle` | 新建自由画布的未绑定卡片目录复用同一份目录。首页跨项目摘要保留聚合查询。 |
+| 编辑预演、提交与回执 | `canvas_edits`、`free_canvas_edits`、`scene_storyboard_edits` | 布局投影以宿主提供的浏览器坐标为依据，由宿主应用。 |
+| 生成输入解析与编译 | `canvas_generation_inputs`、`storyboard_generation_inputs` | 预检可返回运行凭据。参考帧准备单独产出素材，采用由编辑操作确认。 |
+| 生成运行与结果 | `canvas_runs`、`canvas_check_runs`、`storyboard_runs` | HTTP 组织 SSE 地址、连接和心跳，每次读取短事务调用运行事件协议。 |
+
+普通后端调用方可按原请求标识读取受理回执，并按其中的任务标识查运行和产出。双画布用例贯穿两个镜头的编辑、编译与单卡提交，模拟调用方未收到受理响应和供应商完成产出，核对恢复时只派发一次。
