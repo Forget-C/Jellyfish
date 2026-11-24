@@ -199,6 +199,7 @@ export type { CanvasAssistantGenerationRead } from './models/CanvasAssistantGene
 export type { CanvasAssistantGenerationReview } from './models/CanvasAssistantGenerationReview';
 export type { CanvasAssistantGenerationVersion } from './models/CanvasAssistantGenerationVersion';
 export type { CanvasAssistantGrouping } from './models/CanvasAssistantGrouping';
+export type { CanvasAssistantGroupReference } from './models/CanvasAssistantGroupReference';
 export type { CanvasAssistantHistory } from './models/CanvasAssistantHistory';
 export type { CanvasAssistantIndependentReview } from './models/CanvasAssistantIndependentReview';
 export type { CanvasAssistantInstruction } from './models/CanvasAssistantInstruction';
@@ -208,6 +209,7 @@ export type { CanvasAssistantMessage } from './models/CanvasAssistantMessage';
 export type { CanvasAssistantModelSelection } from './models/CanvasAssistantModelSelection';
 export type { CanvasAssistantPendingRequest } from './models/CanvasAssistantPendingRequest';
 export type { CanvasAssistantPoint } from './models/CanvasAssistantPoint';
+export type { CanvasAssistantProgress } from './models/CanvasAssistantProgress';
 export type { CanvasAssistantProposal } from './models/CanvasAssistantProposal';
 export type { CanvasAssistantProposalDecision } from './models/CanvasAssistantProposalDecision';
 export type { CanvasAssistantProposalResult } from './models/CanvasAssistantProposalResult';

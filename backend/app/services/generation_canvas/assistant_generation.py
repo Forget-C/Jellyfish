@@ -85,13 +85,12 @@ def generation_authorization(turn: CanvasAssistantTurn, document: CanvasDocument
     if authority is None or turn.revises or not context or context['scope'] != 'selection':
         return None
     count, waits_for_edit, review = authority
-    target_ids = context['target_card_ids']
-    if len(target_ids) != 1:
+    target_ids = set(context['target_card_ids'])
+    model_cards = [card for card in document.cards if card.id in target_ids and card.type.startswith('model.')
+                   and shot_request_matches(turn.text, document, card.id)]
+    if len(model_cards) != 1:
         return None
-    card_id, = target_ids
-    card = next((item for item in document.cards if item.id == card_id and item.type.startswith('model.')), None)
-    if card is None or not shot_request_matches(turn.text, document, card_id):
-        return None
+    card_id = model_cards[0].id
     state, error = ('waiting_approval', None) if waits_for_edit else ('queued', None)
     if waits_for_edit and not turn.proposal:
         state, error = 'failed', '未获得可审批的修改建议，因此未生成'
@@ -160,11 +159,15 @@ async def decide_assistant_generation_edit(
     exchange = CanvasAssistantExchange.model_validate(turn)
     exchange.generation = result.generation
     needs_manual = result.automatic_review and result.automatic_review.status in ('manual_required', 'unavailable')
-    publish_events(db, session, exchange, 'proposal.reviewed' if needs_manual else 'proposal.decided')
+    groups = body.group_ids
+    blocked = list(dict.fromkeys(conflict.group_id for conflict in result.conflicts if conflict.group_id))
+    applied = [group.id for group in result.proposal.groups or [] if group.state == 'applied' and group.id in (groups or [])]
+    publish_events(db, session, exchange, 'proposal.reviewed' if needs_manual else 'approval.decided',
+                   subject='edit', group_ids=groups)
     if result.receipt:
-        publish_events(db, session, exchange, 'proposal.applied')
+        publish_events(db, session, exchange, 'execution.succeeded', subject='edit', group_ids=applied or None)
     if result.conflicts:
-        publish_events(db, session, exchange, 'proposal.blocked')
+        publish_events(db, session, exchange, 'execution.blocked', subject='edit', group_ids=blocked or None)
     return result
 
 
@@ -256,6 +259,47 @@ async def advance_assistant_generations(sessions) -> None:
         async with sessions() as db:
             await _advance_generation(db, canvas_id, source_id, project_id)
             await db.commit()
+    await publish_generation_changes(sessions)
+
+
+async def publish_generation_changes(sessions):
+    """Publish durable Worker receipts once, including completion after browser exit."""
+    async with sessions() as db:
+        rows = list(await db.execute(select(
+            CanvasAssistantGeneration.canvas_id, CanvasAssistantGeneration.source_id,
+        ).where(~CanvasAssistantGeneration.events_closed,
+            CanvasAssistantGeneration.state.in_(('queued', 'submitted', 'failed', 'reapproval_required', 'stopped', 'rejected')),
+        ).order_by(CanvasAssistantGeneration.event_checked_at, CanvasAssistantGeneration.created_at,
+                   CanvasAssistantGeneration.canvas_id, CanvasAssistantGeneration.source_id).limit(64)))
+    for canvas_id, source_id in rows:
+        async with sessions() as db:
+            await db.get(GenerationCanvas, canvas_id, with_for_update=True)
+            entry = await db.get(CanvasAssistantGeneration, (canvas_id, source_id), with_for_update=True)
+            if not entry or entry.events_closed:
+                continue
+            entry.event_checked_at = utcnow()
+            generation = await read_generation(db, canvas_id, source_id)
+            digest = sha256(generation.model_dump_json().encode()).hexdigest()
+            if entry.event_digest == digest or entry.event_digest is None and generation.state == 'queued':
+                await db.commit()
+                continue
+            session = await db.get(CanvasAssistantSession, canvas_id, with_for_update=True)
+            turn = await db.get(CanvasAssistantTurn, (canvas_id, source_id))
+            if not session or not turn:
+                continue
+            exchange = CanvasAssistantExchange.model_validate(turn)
+            exchange.generation = generation
+            status = {
+                'reapproval_required': 'execution.blocked', 'failed': 'execution.failed',
+                'completed': 'execution.succeeded',
+            }.get(generation.state, 'generation.updated')
+            publish_events(db, session, exchange, status, subject='generation')
+            entry.event_digest = digest
+            entry.events_closed = generation.state in ('reapproval_required', 'failed', 'stopped', 'rejected') or (
+                generation.state == 'completed' and (
+                    not generation.review or generation.review.state not in ('waiting', 'reviewing')))
+
+            await db.commit()
 
 
 def _input_details(preview):
@@ -305,9 +349,20 @@ async def reapprove_generation(db, project_id, canvas_id, source_id, command: Ca
         entry.basis_hash, entry.expected_revision = basis.basis_hash, preview.revision
         entry.state, entry.error = 'queued', None
         entry.input_approval = {'authorized': _input_details(preview), 'decisions': {**known, command.decision_id: body}}
+    entry.events_closed = False
     await db.delete(basis)
     await db.flush()
-    return await read_generation(db, canvas_id, source_id)
+    generation = await read_generation(db, canvas_id, source_id)
+    session = await db.get(CanvasAssistantSession, canvas_id, with_for_update=True, populate_existing=True)
+    turn = await db.get(CanvasAssistantTurn, (canvas_id, source_id))
+    if session and turn:
+        exchange = CanvasAssistantExchange.model_validate(turn)
+        exchange.generation = generation
+        event = 'approval.decided' if entry.state == 'queued' else 'execution.blocked'
+        publish_events(db, session, exchange, event, subject='generation')
+        entry.event_digest = sha256(generation.model_dump_json().encode()).hexdigest()
+        entry.events_closed = entry.state == 'reapproval_required'
+    return generation
 
 
 async def _advance_generation(db, canvas_id: str, source_id: str, project_id: str | None) -> None:  # pylint: disable=too-many-return-statements

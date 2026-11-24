@@ -106,7 +106,7 @@ const provider = createHttpServer(async (request, response) => {
     const draftText = Array.isArray(turns.at(-1)) ? turns.at(-1)[0]?.text : turns.at(-1)
     const requestDraftCard = draftText?.startsWith('新增潮水文本卡')
     const requestEdit = turns.at(-1) === '把这张卡的推近放慢'
-    const requestLocalMovement = turns.at(-1) === '只把镜头三的推近放慢'
+    const requestLocalMovement = turns.at(-1) === '只把 target 的推近放慢'
     const reference = Array.isArray(turns.at(-1)) && turns.at(-1).find(block => block.text?.startsWith('参考素材 1 '))
     const layoutRequest = typeof turns.at(-1) === 'string' && turns.at(-1).startsWith('把布局卡')
     const useSkill = turns.at(-1) === '只从摄影角度看'
@@ -234,7 +234,8 @@ const provider = createHttpServer(async (request, response) => {
     return
   }
   const writeRequest = turns.at(-1)
-  if (typeof writeRequest === 'string' && writeRequest.endsWith('用户请求：\n写入画布')) {
+  const actualText = typeof writeRequest === 'string' ? writeRequest.split('\n\n用户请求：\n').at(-1) : writeRequest
+  if (typeof writeRequest === 'string' && /用户请求：\n(?:写入画布|按此方案继续)$/.test(writeRequest)) {
     const content = JSON.stringify({ reply: '请审批镜头卡', groups: [{ title: '镜头方案', changes: [{
       kind: 'add_card', reference: 'shot-01', card: { kind: 'add_text_card', text: '镜头 01 用慢速推近。' },
     }] }] })
@@ -245,6 +246,7 @@ const provider = createHttpServer(async (request, response) => {
     }))
     return
   }
+  turns[turns.length - 1] = actualText
   if (!turns.some(value => typeof value === 'string' && value.startsWith('分镜准备中'))) prompts.push(turns)
   if (turns.at(-1) === '分镜准备中') {
     noteSceneSource()
@@ -254,11 +256,11 @@ const provider = createHttpServer(async (request, response) => {
     noteSteerSource()
     await steerSourceReleased
   }
-  if (turns.at(-1).includes('先别生成，我只想修改镜头 03')) {
+  if (turns.at(-1).includes('先别生成，先给简洁方案')) {
     response.writeHead(200, { 'Content-Type': 'application/json' })
     response.end(JSON.stringify({
       id: 'current-turn-steer', object: 'chat.completion', created: 1, model,
-      choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '已采纳补充，只处理镜头 03' } }],
+      choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '已采纳补充，先给简洁方案' } }],
     }))
     return
   }
@@ -320,6 +322,7 @@ try {
   }
   await page.goto(base + '/canvases/' + free.id)
   await open()
+  assert.equal(await panel.getByRole('combobox', { name: '提问范围' }).count(), 0)
   assert.deepEqual(prompts, [])
   await panel.getByRole('button', { name: '帮我构思一张起始画面' }).click()
   assert.equal(await panel.getByRole('textbox', { name: '给画布助手发消息' }).inputValue(), '帮我构思一张起始画面')
@@ -329,6 +332,7 @@ try {
   await panel.waitFor({ state: 'hidden' })
   await page.goto(base + storyboardCanvasPath(scene))
   await open()
+  assert.equal(await panel.getByRole('combobox', { name: '提问范围' }).count(), 0)
   await ask('分镜一')
   const sceneComposer = panel.getByRole('textbox', { name: '给画布助手发消息' })
   const sceneSend = panel.getByRole('button', { name: '发送消息' })
@@ -339,9 +343,9 @@ try {
   await panel.getByRole('button', { name: '排到下一轮' }).click()
   const sceneQueue = panel.getByRole('region', { name: '下一轮队列' })
   await sceneQueue.getByText('分镜后续只分析第四场').waitFor()
-  await sceneComposer.fill('先别生成，我只想修改镜头 03')
+  await sceneComposer.fill('先别生成，先给简洁方案')
   await sceneSend.click()
-  await panel.getByText('已采纳补充，只处理镜头 03', { exact: true }).waitFor()
+  await panel.getByText('已采纳补充，先给简洁方案', { exact: true }).waitFor()
   releaseSceneSource()
   await panel.getByText('答复 分镜后续只分析第四场', { exact: true }).waitFor()
   assert.equal(await panel.getByText('答复 分镜准备中', { exact: true }).count(), 0)
@@ -352,6 +356,10 @@ try {
   assert.equal(await panel.getByText('答复 分镜一', { exact: true }).count(), 0)
   const askWhileEditing = ask('自由二')
   await Promise.race([slowReplyStarted, askWhileEditing])
+  const liveProgress = panel.getByText('已接收本轮上下文', { exact: true })
+  await liveProgress.click()
+  await panel.getByText(/助手模型 · browser-assistant-model/).waitFor()
+  await panel.getByText(/画布修订 [0-9]+/).waitFor()
   const queuedComposer = panel.getByRole('textbox', { name: '给画布助手发消息' })
   await queuedComposer.fill('待编辑的后续任务')
   await panel.getByRole('button', { name: '排到下一轮' }).click()
@@ -381,13 +389,13 @@ try {
   await queuedComposer.fill('需要补充的一轮')
   await panel.getByRole('button', { name: '发送消息' }).click()
   await Promise.race([steerSourceStarted, delay(8000).then(() => { throw Error('原轮次未进入供应商') })])
-  await queuedComposer.fill('先别生成，我只想修改镜头 03')
+  await queuedComposer.fill('先别生成，先给简洁方案')
   await panel.getByRole('button', { name: '发送消息' }).click()
-  await panel.getByText('已采纳补充，只处理镜头 03', { exact: true }).waitFor()
+  await panel.getByText('已采纳补充，先给简洁方案', { exact: true }).waitFor()
   releaseSteerSource()
   const steeringHistory = (await (await fetch(canvasApi + '/' + free.id + '/assistant')).json()).data
   const steeredTurn = steeringHistory.turns.find(turn => turn.text === '需要补充的一轮')
-  assert.deepEqual(steeredTurn.instructions.map(value => value.text), ['先别生成，我只想修改镜头 03'])
+  assert.deepEqual(steeredTurn.instructions.map(value => value.text), ['先别生成，先给简洁方案'])
   assert.equal(steeredTurn.generation, null)
   assert.equal(await panel.getByText('答复 需要补充的一轮', { exact: true }).count(), 0)
   await page.screenshot({ path: join(output, 'assistant-desktop.png') })
@@ -448,7 +456,6 @@ try {
     assert.equal(await draft.textContent(), '只在本地编辑器看到')
     await open()
     assert.equal(await draft.textContent(), '只在本地编辑器看到')
-    await panel.getByText('选中 1 张卡', { exact: true }).waitFor()
     await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('分析原卡片')
     await panel.getByRole('button', { name: '发送消息' }).click()
     await panel.getByText('文字模型找到了当前草稿', { exact: true }).waitFor()
@@ -471,7 +478,6 @@ try {
     await panel.getByText('本轮使用的技能', { exact: true }).last().click()
     await panel.getByText('镜头与场面调度', { exact: true }).waitFor()
     await page.locator('[data-card-id="other"]').click()
-    await panel.getByText('选中 1 张卡', { exact: true }).waitFor()
     const assistantDraft = panel.getByRole('textbox', { name: '给画布助手发消息' })
     await assistantDraft.fill('继续检查这张卡')
     const blank = await page.evaluate(() => {
@@ -487,8 +493,7 @@ try {
     })
     assert.ok(blank, 'the assistant leaves blank canvas reachable')
     await page.mouse.click(blank.x, blank.y)
-    await panel.getByText('请选择卡片', { exact: true }).waitFor()
-    assert.ok(await panel.getByRole('button', { name: '发送消息' }).isDisabled())
+    assert.ok(await panel.getByRole('button', { name: '发送消息' }).isEnabled())
     assert.equal(await assistantDraft.inputValue(), '继续检查这张卡')
     await assistantDraft.fill('')
     const after = (await (await fetch(url)).json()).data
@@ -616,7 +621,7 @@ try {
       assert.notEqual((await storedMovement()).movement_path.text, '弧线')
       await page.locator('[data-card-id="target"]').click()
       await open()
-      await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('只把镜头三的推近放慢')
+      await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('只把 target 的推近放慢')
       await panel.getByRole('button', { name: '发送消息' }).click()
       const isolated = panel.getByRole('region', { name: '修改建议' }).last()
       await isolated.getByText('新建专属运镜', { exact: true }).waitFor()
@@ -716,11 +721,7 @@ try {
   assert.ok(Number.isFinite(beforeLayout))
   await open()
   const requestLayout = async text => {
-    if (!await panel.locator('.ant-select-content').filter({ hasText: '审看整张画布' }).count()) {
-      await panel.getByRole('combobox', { name: '提问范围' }).click()
-      await page.locator('.ant-select-item-option').getByText('审看整张画布', { exact: true }).click()
-    }
-    await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill(text)
+    await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill(text + '，对象是 layout-left 与 layout-right')
     await panel.getByRole('button', { name: '发送消息' }).click()
     const proposal = panel.getByRole('region', { name: '布局建议' }).last()
     await proposal.getByRole('button', { name: '确认布局' }).waitFor()
@@ -987,7 +988,8 @@ try {
     await writeComposer.fill('写入画布')
     await writeComposer.press('Enter')
   }
-  await sendWrite()
+  await writeComposer.fill('按此方案继续')
+  await writeComposer.press('Enter')
   const writeProposal = panel.getByRole('region', { name: '修改建议' })
   await writeProposal.getByText('镜头 01 用慢速推近。', { exact: true }).last().waitFor()
   assert.equal((await (await fetch(writePath)).json()).data.revision, writeCanvas.revision)
@@ -995,6 +997,41 @@ try {
   await writeProposal.getByText('已写入画布', { exact: true }).waitFor()
   const savedPlan = (await (await fetch(writePath)).json()).data
   assert.equal(savedPlan.document.cards.filter(card => card.text === '镜头 01 用慢速推近。').length, 1)
+  const existingId = savedPlan.document.cards[0].id
+  const saveGroup = (document, revision, request_id) => fetch(writePath, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request_id, expected_revision: revision, document }),
+  })
+  const group = { id: 'copied-group', name: '正式编组', card_ids: [existingId] }
+  const withGroup = await saveGroup({ ...savedPlan.document, groups: [group] }, savedPlan.revision, 'group-copy')
+  assert.ok(withGroup.ok, await withGroup.clone().text())
+  await page.reload()
+  const groupTitle = page.getByRole('button', { name: '选择编组 正式编组' })
+  await groupTitle.press('Enter')
+  assert.equal(await groupTitle.getAttribute('aria-pressed'), 'true')
+  await groupTitle.press('Control+c')
+  const copiedGroup = await page.waitForFunction(async () => {
+    const text = await navigator.clipboard.readText()
+    return text.includes('"id":"copied-group"') ? text : false
+  })
+  const beforeMemberChange = (await (await fetch(writePath)).json()).data
+  const changedGroup = await saveGroup({ ...beforeMemberChange.document,
+    cards: [...beforeMemberChange.document.cards, { id: 'added-group-member', type: 'content.text' }],
+    groups: [{ ...group, card_ids: [existingId, 'added-group-member'] }],
+  }, beforeMemberChange.revision, 'add-group-member')
+  assert.ok(changedGroup.ok, await changedGroup.clone().text())
+  await page.reload()
+  await open()
+  await writeComposer.evaluate((input, value) => {
+    const clipboardData = new DataTransfer()
+    clipboardData.setData('text/plain', value)
+    input.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }))
+  }, await copiedGroup.jsonValue())
+  await panel.getByText('正式编组 · 1', { exact: true }).click()
+  await panel.getByRole('button', { name: '更新编组引用' }).click()
+  await panel.getByText('正式编组 · 2', { exact: true }).waitFor()
+  await panel.getByText('added-group-member', { exact: true }).waitFor()
+
 
   console.log('Assistant conversation persisted independently on both real canvas entries.')
 } finally {

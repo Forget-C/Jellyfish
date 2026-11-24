@@ -57,6 +57,7 @@ type LocalMessage = {
   status?: 'running' | 'succeeded' | 'failed' | 'cancelled'
   progress?: number
   partial?: boolean
+  recoveredFromHistory?: boolean
   error?: string
 }
 
@@ -78,16 +79,21 @@ export type TextExperimentModeProps = {
 }
 
 /** 将服务端原始消息限制为文本模态可呈现的用户和助手消息。 */
-function toLocalMessages(messages: ExperimentMessageRead[]): LocalMessage[] {
-  return messages
-    .filter((item) => item.role === 'user' || item.role === 'assistant')
-    .map((item) => ({
+function toLocalMessages(messages: ExperimentMessageRead[], includePartial: boolean): LocalMessage[] {
+  return messages.flatMap<LocalMessage>(item => {
+    if (item.role !== 'user' && item.role !== 'assistant') return []
+    const row: LocalMessage = {
       id: item.id,
-      role: item.role === 'assistant' ? 'assistant' : 'user',
+      role: item.role,
       content: item.content ?? '',
       status: item.role === 'assistant' ? (item.status === 'failed' || item.status === 'cancelled' ? item.status : 'succeeded') : undefined,
       inputSnapshot: item.role === 'user' ? readExperimentInputSnapshot(item) : undefined,
-    }))
+    }
+    const partial = item.payload?.partial_text
+    return includePartial && item.role === 'user' && typeof partial === 'string' && partial ? [row, {
+      id: 'recovered-' + item.id, role: 'assistant', content: partial, partial: true, recoveredFromHistory: true,
+    }] : [row]
+  })
 }
 
 /** 为刚提交、尚未完成下一次历史读取的消息生成稳定的浏览器内标识。 */
@@ -140,7 +146,7 @@ export function TextExperimentMode({
    * 尚未在本地出现的消息，避免用旧快照覆盖乐观追加的消息；切换会话时则完整替换。
    */
   useEffect(() => {
-    const persistedMessages = toLocalMessages(historyState.messages)
+    const persistedMessages = toLocalMessages(historyState.messages, !submitting)
     if (previousSessionIdRef.current !== sessionId) {
       previousSessionIdRef.current = sessionId
       setLocalMessages(persistedMessages)
@@ -148,9 +154,9 @@ export function TextExperimentMode({
     }
     setLocalMessages((current) => {
       const persistedIds = new Set(persistedMessages.map((item) => item.id))
-      return [...persistedMessages, ...current.filter((item) => !persistedIds.has(item.id))]
+      return [...persistedMessages, ...current.filter((item) => !persistedIds.has(item.id) && !item.recoveredFromHistory)]
     })
-  }, [historyState.messages, sessionId])
+  }, [historyState.messages, sessionId, submitting])
 
   /** 向页面壳同步提交状态，以便侧栏等共享操作在生成期间保持一致。 */
   useEffect(() => {
@@ -243,6 +249,11 @@ export function TextExperimentMode({
           setLocalMessages(current => current.filter(item => item.id !== assistantId))
           void historyState.refresh()
         } else if (event.event === 'error') {
+          if (event.data.error.code === 'stream_result_unknown') {
+            setLocalMessages(current => current.filter(item => item.id !== assistantId))
+            await historyState.refresh()
+            break
+          }
           terminal = true
           terminalRunRef.current = acceptedTaskId
           setLocalMessages(current => current.map(item => (
@@ -355,7 +366,7 @@ export function TextExperimentMode({
             status={item.status ? <ExperimentTaskStatus status={item.status} progress={item.progress} /> : null}
             tone={item.role === 'user' ? 'user' : 'assistant'}
           >
-            {item.partial ? <><div>{item.content}</div><p className="experiment-result-note">{uiText("流连接中断前收到的部分回复")}</p></> : item.content}{item.error ? <p className="experiment-result-error">{item.error}</p> : null}
+            {item.partial ? <><div>{item.content}</div><p className="experiment-result-note">{item.recoveredFromHistory ? uiText("已恢复部分回复，最终状态待核实") : uiText("流连接中断前收到的部分回复")}</p></> : item.content}{item.error ? <p className="experiment-result-error">{item.error}</p> : null}
           </ExperimentMessageBubble>
         ))}
         {liveRun && !streamTaskIdRef.current ? <p className="experiment-history-loading" role="status">{uiText("正在发送…")}</p> : null}

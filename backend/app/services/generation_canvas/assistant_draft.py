@@ -38,7 +38,7 @@ class DraftCanvasAssistant(CanvasAssistant):
         context, edit_draft = None, None
         if command.context:
             canvas = GenerationCanvas(id=canvas_id, kind='free', revision=0)
-            context = resolve_assistant_context(canvas, command.context)
+            context = resolve_assistant_context(canvas, command.context, command.text)
             edit_draft = CanvasAssistantEditDraft(context, empty, CanvasDocument.model_validate(command.context.draft))
         model, provider, capability = await self._resolve_model(command.model_id)
         client = await self._model_client(model, provider, capability)

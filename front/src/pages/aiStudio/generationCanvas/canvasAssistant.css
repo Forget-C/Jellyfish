@@ -256,8 +256,6 @@
 .canvas-assistant-edit-group details { padding-inline-start: 22px; }
 .canvas-assistant-edit-group dl { margin-block: 4px 10px; }
 
-.canvas-assistant-context:empty { display: none; }
-
 .canvas-assistant-proposal-heading {
   display: flex;
   align-items: baseline;
@@ -265,9 +263,4 @@
   gap: 8px;
 }
 
-.canvas-assistant-scope-cards {
-  display: block;
-  max-inline-size: min(290px, 75vw);
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
+.canvas-assistant-x-attachments { min-inline-size: 0; }

@@ -12,7 +12,7 @@ export type CanvasAssistantDraftContext = {
      */
     draft: Record<string, any>;
     revision: number;
-    scope: 'selection' | 'canvas';
+    scope: 'selection' | 'canvas' | 'auto';
     card_ids?: Array<string>;
     layout_positions?: (Record<string, CanvasAssistantPoint> | null);
 };

@@ -1,6 +1,7 @@
 """Restrict send-time draft context to the requested cards and adopted inputs."""
 
 import json
+import re
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -9,9 +10,11 @@ from app.models.generation_canvas import GenerationCanvas
 from app.schemas.canvas_assistant import CanvasAssistantDraftContext, CanvasAssistantReadContext
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.allowed_cards import validate_canvas_cards
+from app.services.generation_canvas.assistant_targets import named_shot_cards
 
 
-def resolve_assistant_context(canvas: GenerationCanvas, request: CanvasAssistantDraftContext) -> CanvasAssistantReadContext:
+def resolve_assistant_context(canvas: GenerationCanvas, request: CanvasAssistantDraftContext,
+                              intent: str = '', supplements: tuple[str, ...] = ()) -> CanvasAssistantReadContext:
     """Read the local snapshot without modifying or resolving any other canvas."""
     try:
         draft = CanvasDocument.model_validate(request.draft)
@@ -21,11 +24,24 @@ def resolve_assistant_context(canvas: GenerationCanvas, request: CanvasAssistant
         raise HTTPException(422, 'Canvas assistant context does not match this canvas')
     validate_canvas_cards(canvas, draft)
     cards = {card.id: card for card in draft.cards}
-    targets = list(cards) if request.scope == 'canvas' else list(dict.fromkeys(request.card_ids))
-    if len(cards) != len(draft.cards) or any(card_id not in cards for card_id in targets):
+    selection = list(dict.fromkeys(request.card_ids))
+    if len(cards) != len(draft.cards) or any(card_id not in cards for card_id in selection):
         raise HTTPException(422, 'Canvas assistant context contains an invalid target')
+    targets = list(cards) if request.scope == 'canvas' else selection
+    priority = set()
+    scope = 'canvas' if request.scope == 'auto' else request.scope
+    if request.scope == 'auto':
+        intent, shots, priority, whole_canvas = automatic_targets(draft, intent, supplements)
+        creating = bool(re.search(r'新建|新增|创建|添加|构思|先给方案|/plan|\bcreate\b|\badd\b', intent, re.I))
+        if shots is None and not creating:
+            raise HTTPException(422, 'CANVAS_TARGET_UNRESOLVED')
+        if whole_canvas or not (priority or selection):
+            targets = list(cards)
+        else:
+            targets = [card_id for card_id in cards if card_id in priority] if priority else selection
+            scope = 'selection'
 
-    adopted = dict.fromkeys(targets)
+    adopted = dict.fromkeys(sorted(targets, key=lambda card_id: card_id not in priority))
     pending = list(targets)
     while pending:
         card = cards[pending.pop()]
@@ -35,11 +51,31 @@ def resolve_assistant_context(canvas: GenerationCanvas, request: CanvasAssistant
                 adopted[source.card_id] = None
                 pending.append(source.card_id)
     return CanvasAssistantReadContext(
-        revision=request.revision, scope=request.scope, target_card_ids=targets,
+        revision=request.revision, scope=scope, target_card_ids=targets,
         cards=[cards[card_id].model_dump(mode='json') for card_id in adopted],
         layout_positions={card_id: request.layout_positions[card_id] for card_id in targets
                           if card_id in request.layout_positions} if request.layout_positions is not None else None,
     )
+
+
+def automatic_targets(draft, intent, supplements):
+    """Use the last supplemental directive that actually specifies a target or a wider read."""
+    for candidate in (*reversed(supplements), intent):
+        shots = named_shot_cards(candidate, draft)
+        names = (shots or set()) | {card.id for card in draft.cards if names_card(candidate, card)}
+        whole = bool(re.search(r'整张画布|整个画布|整场|全场|全画布|全部卡片|whole canvas|all cards', candidate, re.I))
+        if names or whole or shots is None and draft.cards:
+            return candidate, shots, names, whole
+    return intent, named_shot_cards(intent, draft), set(), False
+
+
+def names_card(intent, card) -> bool:
+    """Match existing card labels or an ID delimited from nearby identifier characters."""
+    folded = intent.casefold()
+    names = [getattr(card, field, None) for field in ('name', 'title')]
+    return (any(isinstance(name, str) and len(name) >= 2 and name.casefold() in folded for name in names)
+            or len(card.id) >= 2 and bool(re.search(r'(?<![a-z0-9_-])' + re.escape(card.id.casefold())
+                                                   + r'(?![a-z0-9_-])', folded)))
 
 
 CANVAS_PAGE_SIZE = 20
@@ -115,8 +151,14 @@ async def resolve_external_canvas_cards(store, canvas_id, references):
         cards = {item['id']: item for item in document.get('cards', [])}
         if any(card_id not in cards for card_id in reference.card_ids):
             raise HTTPException(409, 'A referenced source card is no longer available')
-        snapshots.append({'canvas_id': source.id, 'name': document.get('name', source.id), 'revision': source.revision,
-                          'cards': [cards[card_id] for card_id in dict.fromkeys(reference.card_ids)]})
+        names = {group['id']: group.get('name', group['id']) for group in document.get('groups', [])}
+        groups = [{'id': group.id, 'name': names.get(group.id, group.name), 'card_ids': group.card_ids}
+                  for group in reference.groups]
+        snapshot = {'canvas_id': source.id, 'name': document.get('name', source.id), 'revision': source.revision,
+                    'cards': [cards[card_id] for card_id in dict.fromkeys(reference.card_ids)]}
+        if groups:
+            snapshot['groups'] = groups
+        snapshots.append(snapshot)
     payload = json.dumps(snapshots, ensure_ascii=False)
     if len(payload) > 24000:
         raise HTTPException(422, 'Referenced canvas cards exceed the assistant reading limit')

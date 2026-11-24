@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CloseOutlined, FolderOpenOutlined, PaperClipOutlined, PlusOutlined } from '@ant-design/icons'
+import { Attachments } from '@ant-design/x'
 import { Alert, Dropdown, Empty, Input, Pagination, Select, Spin } from 'antd'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { WorkbenchModal } from '../../../components/workbench/WorkbenchModal'
@@ -94,13 +95,12 @@ export function CanvasAssistantAttachments({ projectId, files, onChange, disable
           loading={uploading} disabled={unavailable} />
       </Dropdown>,
       <>
-        {files.length > 0 && <ul className="canvas-assistant-files">
-          {files.map(file => <li key={file.id}>
-            <span title={file.name}>{file.name}</span>
-            <WorkbenchIconButton label={uiText("移除") + ' ' + file.name} icon={<CloseOutlined />} variant="quiet"
-              disabled={disabled || uploading} onClick={() => remove(file.id)} />
-          </li>)}
-        </ul>}
+        {!!files.length && <Attachments className="canvas-assistant-x-attachments" disabled items={files.map(file => ({
+          uid: file.id, name: file.name, status: 'done',
+          icon: file.type === 'image' ? 'image' : 'video',
+          description: <WorkbenchIconButton label={uiText("移除") + ' ' + file.name} icon={<CloseOutlined />} variant="quiet"
+            disabled={disabled || uploading} onClick={() => remove(file.id)} />,
+        }))} overflow="wrap" />}
         {files.length >= attachmentLimit && <small>{uiText("每条消息最多添加 4 份参考素材")}</small>}
         {error && <Alert type="error" message={uiText("参考素材上传失败，请选择图片或视频后重试")} />}
       </>,
@@ -144,14 +144,14 @@ function assistantObservation(attachment: CanvasAssistantAttachment, uiText: Ret
 }
 
 /** Display the attachment and the actual evidence accompanying a completed turn. */
-export function CanvasAssistantEvidence({ attachments }: { attachments: CanvasAssistantAttachment[] }) {
+export function CanvasAssistantEvidence({ attachments, prepared = false }: { attachments: CanvasAssistantAttachment[]; prepared?: boolean }) {
   const uiText = useUiText()
   return <ol className="canvas-assistant-reference-list" aria-label={uiText("对话参考素材")}>
     {attachments.map(attachment => <li key={attachment.file_id}>
       {attachment.name
         ? <a href={buildFileDownloadUrl(attachment.file_id)}>{attachment.name}</a>
         : <span>{uiText("素材不可用")}</span>}
-      <small>{assistantObservation(attachment, uiText)}</small>
+      <small>{prepared ? uiText('素材已准备') : assistantObservation(attachment, uiText)}</small>
     </li>)}
   </ol>
 }

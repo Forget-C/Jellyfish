@@ -4077,5 +4077,13 @@
   "资源预览": "Resource preview",
   "按新增时间": "Newest first",
   "查看全部{{category}}": "View all {{category}}",
-  "该分类暂无资源": "No resources in this category"
+  "该分类暂无资源": "No resources in this category",
+  "已接收本轮上下文": "Turn context received",
+  "画布修订": "Canvas revision",
+  "已读取卡片": "Cards read",
+  "正在处理": "In progress",
+  "已恢复部分回复，最终状态待核实": "Partial reply recovered. The final status is unverified.",
+  "没有找到指令中点名的镜头，请核对镜头或引用对应卡片。": "The named shot could not be found. Check the shot or reference its card.",
+  "素材已准备": "Media prepared",
+  "其他画布的编组超过单轮可引用范围，请减少引用卡片。": "This group exceeds the reference limit. Reduce the number of referenced cards."
 }

@@ -73,9 +73,9 @@ async def test_assistant_reopens_isolated_canvas_history_and_replays_turn(canvas
         snapshot = (await canvas_client.get(url)).json()['data']
         events_url = append_canvas_path(url, '/events')
         events = (await canvas_client.get(events_url)).json()['data']
-        assert [item['cursor'] for item in events] == list(range(1, len(replies) + 1))
-        assert [item['payload']['reply'] for item in events] == replies
-        assert all(item['session_id'] == snapshot['session_id'] and item['type'] == 'turn.completed'
+        assert [item['cursor'] for item in events] == list(range(1, len(events) + 1))
+        assert [item['payload']['reply'] for item in events if item['type'] == 'turn.completed'] == replies
+        assert all(item['session_id'] == snapshot['session_id'] and item['type'] in ('turn.completed', 'turn.progress')
                    and item['turn_id'] == item['payload']['request_id'] for item in events)
         assert snapshot['cursor'] == events[-1]['cursor']
         cursor_url = str(events_url) + ('&' if '?' in events_url else '?') + 'after='
@@ -504,7 +504,7 @@ async def test_queue_recovers_edited_message_and_never_runs_removed_message(canv
     assert (await canvas_client.post(url + '/queue/waiting-one/run')).json() == processed.json()
     assert (await canvas_client.post(url + '/queue/waiting-two/run')).status_code == 409
     events = (await canvas_client.get(url + '/events', params={'after': cursor})).json()['data']
-    assert [event['type'] for event in events] == [
+    assert [event['type'] for event in events if event['type'] != 'turn.progress'] == [
         'queue.added', 'queue.added', 'queue.edited', 'queue.removed', 'queue.admitted', 'turn.completed', 'queue.completed',
     ]
     assert events[-1]['turn_id'] == exchange['request_id']
@@ -534,6 +534,7 @@ async def test_running_turn_takes_latest_instruction_and_discards_late_reply(can
             reply = '迟到的原答复'
         else:
             assert '只改镜头 03，先别生成' in text
+            assert '"target_card_ids":["shot-three"]' in text.replace(' ', '')
             reply = '只准备镜头 03 的改动'
         return httpx.Response(200, request=request, json={
             'id': 'steered', 'object': 'chat.completion', 'created': 1, 'model': 'canvas-text',
@@ -547,7 +548,17 @@ async def test_running_turn_takes_latest_instruction_and_discards_late_reply(can
         db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
     canvas = (await canvas_client.post('/canvases', json={'name': '补充指令'})).json()['data']
     url = f"/canvases/{canvas['id']}/assistant"
-    request = {'request_id': 'active', 'text': '检查镜头后生成一版'}
+    document = {**canvas['document'], 'cards': [
+        {'id': 'shot-three', 'type': 'content.text', 'text': '第三镜头'},
+        {'id': 'shot-four', 'type': 'content.text', 'text': '第四镜头'},
+    ], 'groups': [
+        {'id': 'group-three', 'name': '镜头三', 'card_ids': ['shot-three']},
+        {'id': 'group-four', 'name': '镜头四', 'card_ids': ['shot-four']},
+    ]}
+    request = {'request_id': 'active', 'text': '检查镜头后生成一版',
+        'context': {'draft': document, 'revision': canvas['revision'], 'scope': 'auto', 'card_ids': ['shot-four']}}
+    unresolved = await canvas_client.post(url, json={**request, 'request_id': 'unresolved', 'text': '修改镜头 99'})
+    assert unresolved.status_code == 422 and unresolved.json()['detail'] == 'CANVAS_TARGET_UNRESOLVED'
     original_reply = create_task(canvas_client.post(url, json=request))
     try:
         await wait_for(first_entered.wait(), timeout=4)
@@ -560,13 +571,16 @@ async def test_running_turn_takes_latest_instruction_and_discards_late_reply(can
         late = await original_reply
     assert late.status_code == 409, late.text
     assert (await canvas_client.post(url + '/turns/active/steer', json=body)).json() == steered.json()
+    assert (await canvas_client.post(url, json=request)).json() == steered.json()
     history = (await canvas_client.get(url)).json()['data']
     turn, = history['turns']
     assert turn['text'] == request['text']
     assert turn['reply'] == '只准备镜头 03 的改动'
     assert turn['instructions'] == [body]
+    assert turn['context']['target_card_ids'] == ['shot-three']
     assert turn['generation'] is None
-    assert [entry['type'] for entry in (await canvas_client.get(url + '/events')).json()['data']] == [
+    events = (await canvas_client.get(url + '/events')).json()['data']
+    assert [entry['type'] for entry in events if entry['type'] != 'turn.progress'] == [
         'turn.steered', 'turn.completed',
     ]
 
@@ -605,7 +619,12 @@ async def test_registered_specialists_keep_independent_work_when_review_fails(ca
             consulted.append(task)
             answer['content'] = '可保留一个独立反应镜头' if task.startswith('规划') else ''
         elif not native_tools:
-            answer['content'] = json.dumps({'delegations': tasks}, ensure_ascii=False)
+            if '请复核并综合' in body['messages'][-1]['content']:
+                facts = body['messages'][-1]['content']
+                assert '可保留一个独立反应镜头' in facts and '"status": "blocked"' in facts
+                answer['content'] = '主助手复核：可保留独立镜头，素材审看未完成。'
+            else:
+                answer['content'] = json.dumps({'delegations': tasks}, ensure_ascii=False)
         elif 'delegate' not in observed:
             name, key, args = ('delegate_canvas_tasks', 'delegate', {'tasks': tasks}) if observed else (
                 'read_canvas_context', 'read', {},
@@ -630,6 +649,8 @@ async def test_registered_specialists_keep_independent_work_when_review_fails(ca
     assert {entry['id']: entry['status'] for entry in result['subtasks']} == {
         'footage': 'failed', 'independent': 'completed', 'dependent': 'blocked',
     }
+    if not native_tools:
+        assert result['reply'].startswith('主助手复核')
     assert sorted(consulted) == ['审看素材', '规划独立的节拍']
     assert (await canvas_client.get(url + '/assistant')).json()['data']['turns'][0]['subtasks'] == result['subtasks']
 
@@ -645,7 +666,8 @@ async def test_cross_canvas_reference_observes_allowed_source_and_rejects_other_
     hidden = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '项目内分镜'})).json()['data']
     updated = await canvas_client.put(f"/canvases/{source['id']}", json={
         'request_id': 'set-evidence', 'expected_revision': source['revision'],
-        'document': {**source['document'], 'cards': [{'id': 'notes', 'type': 'content.text', 'text': '海面在晨雾里'}]},
+        'document': {**source['document'], 'cards': [{'id': 'notes', 'type': 'content.text', 'text': '海面在晨雾里'}],
+                     'groups': [{'id': 'coast', 'name': '岸边', 'card_ids': ['notes']}]},
     })
     assert updated.status_code == 200, updated.text
     original = httpx.AsyncClient.send
@@ -666,10 +688,11 @@ async def test_cross_canvas_reference_observes_allowed_source_and_rejects_other_
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
     url = f"/canvases/{primary['id']}/assistant"
     message = {'request_id': 'analysis', 'text': '用这张卡给建议',
-               'canvas_references': [{'canvas_id': source['id'], 'card_ids': ['notes']}]}
+               'canvas_references': [{'canvas_id': source['id'], 'card_ids': ['notes'],
+                                      'groups': [{'id': 'coast', 'name': '岸边', 'card_ids': ['notes']}]}]}
     allowed = await canvas_client.post(url, json=message)
     assert allowed.status_code == 200, allowed.text
-    assert '海面在晨雾里' in prompt[0]
+    assert '海面在晨雾里' in prompt[0] and '岸边' in prompt[0]
     assert allowed.json()['data']['canvas_references'] == message['canvas_references']
     assert allowed.json()['data']['proposal'] is None
     assert (await canvas_client.post(url, json=message)).json() == allowed.json()

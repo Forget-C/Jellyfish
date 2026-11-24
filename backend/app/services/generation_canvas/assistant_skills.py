@@ -94,12 +94,12 @@ def text_skill_context(text: str, *, planning: bool) -> list[ProductSkill]:
             if (planning and skill_id == 'script-planning') or any(keyword in text for keyword in keywords)]
 
 
-def skill_tools(used: dict[str, CanvasAssistantSkillUse]) -> list:
+def skill_tools(used: dict[str, CanvasAssistantSkillUse], report=None) -> list:
     """Expose product guidance and track successfully loaded versions for this reply."""
     catalog = skill_catalog()
 
     @tool
-    def load_canvas_skill(skill_id: str) -> str:
+    async def load_canvas_skill(skill_id: str) -> str:
         """Load the instructions for a professional skill from the listed canvas skill catalog."""
         if skill_id not in catalog:
             return 'Unknown canvas skill. Choose an identifier from the supplied catalog.'
@@ -107,6 +107,8 @@ def skill_tools(used: dict[str, CanvasAssistantSkillUse]) -> list:
         body = skill.instructions()
         receipt = skill.receipt()
         used[skill_id] = receipt
+        if report:
+            await report(skills=list(used.values()))
         return json.dumps({**receipt.model_dump(), 'instructions': body}, ensure_ascii=False)
 
     @tool

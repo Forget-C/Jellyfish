@@ -66,6 +66,9 @@ async def read_experiment_messages(
     result = []
     for message in messages:
         view = ExperimentMessageRead.model_validate(message)
+        if view.payload and (partial := view.payload.get('_stream_partial')):
+            view.payload = {key: value for key, value in view.payload.items() if key != '_stream_partial'}
+            view.payload['partial_text'] = ''.join(chunk for _, chunk in partial)
         if message.task_id:
             task = tasks.get(message.task_id) if owners.get(message.task_id) == message.session_id else None
             payload = task_message_display_payload(modality=str((message.payload or {}).get("modality") or "generation"))

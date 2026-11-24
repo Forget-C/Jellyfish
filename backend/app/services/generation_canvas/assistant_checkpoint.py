@@ -11,6 +11,8 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from sqlalchemy import update
 
 from app.models.canvas_assistant import CanvasAssistantSession
+from app.schemas.canvas_assistant import CanvasAssistantExchange, CanvasAssistantProgress
+from app.services.generation_canvas.assistant_events import publish_events
 
 CHECKPOINT_LIMIT = 8 * 1024 * 1024
 CHECKPOINT_DATA_LIMIT = 32 * 1024 * 1024
@@ -108,6 +110,36 @@ class CanvasCheckpointer(CanvasGraphSnapshot):
         await self._db.commit()
         if not result.rowcount:
             raise HTTPException(409, 'Canvas assistant reply lease expired')
+
+    async def report_progress(self, **changes):
+        """Commit observed facts only while this execution owns the turn lease."""
+        async with self._lock:
+            session = await self._db.get(CanvasAssistantSession, self._canvas_id, with_for_update=True, populate_existing=True)
+            if session is None or session.pending_token != self._token:
+                await self._db.rollback()
+                raise HTTPException(409, 'Canvas assistant reply lease expired')
+            pending = session.pending_request
+            previous = pending.get('progress') or {}
+            active_tasks = dict(previous.get('active_tasks', {}))
+            if task := changes.pop('started_task', None):
+                active_tasks[task[0]] = task[1]
+            if completed := changes.pop('finished_task', None):
+                active_tasks.pop(completed['id'], None)
+                changes['subtasks'] = [*previous.get('subtasks', []), completed]
+            if observed := changes.pop('observed', None):
+                changes['observed_card_ids'] = list(dict.fromkeys([*previous.get('observed_card_ids', []), *observed]))
+            progress = CanvasAssistantProgress.model_validate({
+                **previous, **changes, 'active_tasks': active_tasks,
+                'request_id': pending['command']['request_id'], 'model_id': pending['model_id'],
+            })
+            value = progress.model_dump(mode='json')
+            if previous != value:
+                session.pending_request = {**pending, 'progress': value}
+                publish_events(self._db, session, CanvasAssistantExchange(
+                    request_id=progress.request_id, text=pending['command']['text'], sequence=session.sequence + 1,
+                    model_id=progress.model_id, reply='', progress=progress,
+                ), 'turn.progress')
+            await self._db.commit()
 
     async def save_delegation(self, identity, receipt):
         """Commit one completed specialist result while this turn still owns its lease."""

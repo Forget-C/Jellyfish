@@ -10,4 +10,8 @@ export type InteractionEvent_Union_CanvasAssistantExchange__CanvasAssistantQueue
     cursor: number;
     type: string;
     payload: (CanvasAssistantExchange | CanvasAssistantQueueItem);
+    occurred_at?: (string | null);
+    target_version?: (string | null);
+    group_ids?: (Array<string> | null);
+    subject?: (string | null);
 };

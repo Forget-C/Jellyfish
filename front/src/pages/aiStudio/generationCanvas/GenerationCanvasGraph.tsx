@@ -187,7 +187,6 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const historicalPositions = useRef<Record<string, { x: number; y: number }>>({})
   const retainedPositions = useRef<Record<string, { x: number; y: number }>>({})
   const [selected, setSelected] = useState<string[]>([])
-  useLayoutEffect(() => { onAssistantSelection?.(selected) }, [onAssistantSelection, selected])
   const [movingIds, setMovingIds] = useState<readonly string[]>([])
   const [expandRequest, setExpandRequest] = useState<{id:string;serial:number}>()
   const [detailId, setRawDetailId] = useState<string | undefined>()
@@ -234,6 +233,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const [detaching, setDetaching] = useState(false)
   const [selectedResultSource, setSelectedResultSource] = useState<OutputIdentity>()
   const [selectedGroupId, setSelectedGroupId] = useState<string>()
+  useLayoutEffect(() => {
+    onAssistantSelection?.(groups.find(group => group.id === selectedGroupId)?.card_ids ?? selected)
+  }, [groups, onAssistantSelection, selected, selectedGroupId])
   const [groupPanel, setGroupPanel] = useState<'name' | 'members'>()
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string>()
   const [cardMenuId, setCardMenuId] = useState<string>()
@@ -954,12 +956,12 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     return { card, reason: stackFor(id) ? '请先解除堆叠' : copyRestriction(card) }
   }
   const copyReason = (ids: string[]) => ids.map(id => copyTarget(id).reason).find(Boolean)
-  const copyCards = (ids: string[], duplicate=false) => {
+  const copyCards = (ids: string[], duplicate=false, group?: { id: string; name: string }) => {
     const entries = ids.map(copyTarget)
     const targets = entries.flatMap(({ card }) => card ? [card] : [])
     const reason = entries.find(entry => entry.reason)?.reason
     if (!duplicate && targets.length && targets.every(card => latest.current.cards?.some(item => item.id === card.id))) {
-      void writeCardReference({ canvasId: document.id, cardIds: targets.map(card => card.id) })?.catch(() => undefined)
+      void writeCardReference({ canvasId: document.id, cardIds: targets.map(card => card.id), group })?.catch(() => undefined)
     }
     if (!targets.length || reason) {setReason(reason || uiText("请选择卡片"));return}
     const value:CardClipboard={schema:1,projectId:(document.project_id || ''),cards:structuredClone(targets),positions:targets.map(card=>point(card.id))}
@@ -990,6 +992,15 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
 
     if(contextMenu || readonly && event.key.toLowerCase()!=='c' || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.isComposing || event.defaultPrevented || movement.pointerActive) return
     const target=event.target as Element
+    const group = groups.find(item => item.id === selectedGroupId && item.kind !== 'stack')
+    const groupFocus = target.closest('[data-group-id]')?.getAttribute('data-group-id') === group?.id
+      && target.matches('[data-group-id], .generation-group-title')
+    if (event.key.toLowerCase() === 'c' && group?.card_ids?.length && groupFocus && container.current?.contains(target)) {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      copyCards(group.card_ids, false, { id: group.id, name: group.name })
+      return
+    }
     if(!container.current?.contains(target) || !ownsCardShortcut(target) || target.closest('input,textarea,select,[contenteditable],[data-card-details],[role="dialog"],[role="menu"],.generation-card-menu') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
     const key=event.key.toLowerCase()
     if(!['c','v','d'].includes(key))return

@@ -19,7 +19,7 @@ class CanvasAssistantDraftContext(BaseModel):
 
     draft: dict = Field(description='当前可见的画布文档，遵循 CanvasDocument 契约')
     revision: int = Field(ge=0)
-    scope: Literal['selection', 'canvas']
+    scope: Literal['selection', 'canvas', 'auto']
     card_ids: list[str] = Field(default_factory=list)
     layout_positions: dict[CardId, CanvasAssistantPoint] | None = Field(default=None, max_length=1000)
 
@@ -61,12 +61,29 @@ class CanvasAssistantFieldRevision(BaseModel):
     change_index: int = Field(ge=0, le=7)
 
 
+class CanvasAssistantGroupReference(BaseModel):
+    """The named group and member identities captured by the clipboard."""
+
+    model_config = ConfigDict(extra='forbid')
+    id: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=255)
+    card_ids: list[str] = Field(min_length=1, max_length=20)
+
+
 class CanvasAssistantCardReference(BaseModel):
     """Explicit read-only reference to cards in another saved canvas."""
 
     model_config = ConfigDict(extra='forbid')
     canvas_id: str = Field(min_length=1, max_length=64)
     card_ids: list[Annotated[str, StringConstraints(min_length=1, max_length=64)]] = Field(min_length=1, max_length=20)
+    groups: list[CanvasAssistantGroupReference] = Field(default_factory=list, max_length=20, exclude_if=lambda value: not value)
+
+    @model_validator(mode='after')
+    def check_group_members(self):
+        if any(set(group.card_ids) - set(self.card_ids) for group in self.groups):
+            raise ValueError('Group references must contain only captured card identities')
+        return self
+
 
 
 class CanvasAssistantMessage(BaseModel):
@@ -115,6 +132,21 @@ class CanvasAssistantInstruction(BaseModel):
     text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 
 
+class CanvasAssistantProgress(BaseModel):
+    """Evidence available while the leased turn is still running."""
+
+    request_id: str
+    scope: Literal['selection', 'canvas'] | None = None
+    revision: int | None = None
+    target_card_ids: list[str] = Field(default_factory=list)
+    observed_card_ids: list[str] = Field(default_factory=list)
+    model_id: str
+    skills: list[CanvasAssistantSkillUse] = Field(default_factory=list)
+    attachments: list[CanvasAssistantAttachment] = Field(default_factory=list)
+    active_tasks: dict[str, str] = Field(default_factory=dict)
+    subtasks: list[CanvasAssistantSubtask] = Field(default_factory=list)
+
+
 class CanvasAssistantExchange(BaseModel):
     """A completed turn in the order visible to the user."""
 
@@ -137,6 +169,7 @@ class CanvasAssistantExchange(BaseModel):
     approval_audit: list[CanvasAssistantApprovalAudit] | None = None
     generation: CanvasAssistantGenerationRead | None = None
     stopped: bool = False
+    progress: CanvasAssistantProgress | None = None
     layout: CanvasAssistantLayout | None = None
     question: CanvasAssistantQuestion | None = None
     question_answers: list[CanvasAssistantQuestionAnswer] | None = None
@@ -173,6 +206,7 @@ class CanvasAssistantHistory(InteractionSnapshot):
     turns: list[CanvasAssistantExchange]
     pending_request: CanvasAssistantPendingRequest | None = None
     pending_question: CanvasAssistantQuestion | None = None
+    pending_progress: CanvasAssistantProgress | None = None
     pending_instructions: list[CanvasAssistantInstruction] = Field(default_factory=list)
     queue: list[CanvasAssistantQueueItem] = Field(default_factory=list)
     model_id: str | None = None

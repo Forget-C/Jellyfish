@@ -1,11 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SetStateAction } from 'react'
 import { ArrowUpOutlined, CommentOutlined, CloseOutlined } from '@ant-design/icons'
-import { Alert, Select, Spin } from 'antd'
+import { Alert, Input, Select, Spin } from 'antd'
 import { Sender, ThoughtChain } from '@ant-design/x'
 import { WorkbenchConversation } from '../../../components/workbench/WorkbenchConversation'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasDocument, CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantFieldRevision, CanvasAssistantInstruction, CanvasAssistantLayout, CanvasAssistantMessage, CanvasAssistantQuestion, CanvasAssistantQueueItem, FileRead, ModelRead } from '../../../services/generated'
+import type { CanvasDocument, CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantFieldRevision, CanvasAssistantGroupReference, CanvasAssistantHistory, CanvasAssistantInstruction, CanvasAssistantLayout, CanvasAssistantMessage, CanvasAssistantProgress, CanvasAssistantQuestion, CanvasAssistantQueueItem, FileRead, ModelRead } from '../../../services/generated'
 import { AssistantEditGroups, AssistantProposal } from './AssistantProposal'
 import { AssistantLayout } from './AssistantLayout'
 import type { AssistantLayoutOutcome } from './assistantLayoutEditor'
@@ -25,8 +25,6 @@ function confirmationKind(text: string) {
   if (/^确认[，,]\s*(不过|但是|但)\s*.+/.test(text)) return 'revise'
   return undefined
 }
-
-type AssistantScope = NonNullable<CanvasAssistantMessage['context']>['scope'] | 'text'
 
 function appendExchange(turns: CanvasAssistantExchange[], incoming: CanvasAssistantExchange) {
   if (turns.some(turn => turn.request_id === incoming.request_id)) return turns
@@ -82,12 +80,18 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const uiText = useUiText()
   const trigger = useRef<HTMLElement>(null)
   const [open, setOpen] = useState(false)
-  const [turns, setTurns] = useState<CanvasAssistantExchange[]>()
+  const [turns, setTurnState] = useState<CanvasAssistantExchange[]>()
+  const mutationEpoch = useRef(0)
+  const setTurns = useCallback((update: SetStateAction<CanvasAssistantExchange[] | undefined>) => {
+    mutationEpoch.current += 1
+    setTurnState(update)
+  }, [])
   const [historyError, setHistoryError] = useState(false)
   const [retryLoad, setRetryLoad] = useState(0)
   const [draft, setDraft] = useState('')
   const [cardReferences, setCardReferences] = useState<string[]>([])
   const [externalReferences, setExternalReferences] = useState<Record<string, string[]>>({})
+  const [externalGroups, setExternalGroups] = useState<Record<string, CanvasAssistantGroupReference[]>>({})
   const [referenceGroups, setReferenceGroups] = useState<{ id: string; name: string; members: string[] }[]>([])
   const [browseReferences, setBrowseReferences] = useState(false)
   const referenceIds = [...new Set([...cardReferences, ...referenceGroups.flatMap(group => group.members)])]
@@ -103,7 +107,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const [selectedGroups, setSelectedGroups] = useState<Record<string, string[]>>({})
   const [confirmationHint, setConfirmationHint] = useState<string>()
   const composer = useRef<HTMLFormElement>(null)
-  const [sendError, setSendError] = useState<'text' | 'tools' | 'reply' | 'context-limit'>()
+  const [sendError, setSendError] = useState<'text' | 'tools' | 'reply' | 'context-limit' | 'target'>()
   const [sending, setSending] = useState(false)
   const [stopping, setStopping] = useState<string>()
   const [stopError, setStopError] = useState(false)
@@ -115,9 +119,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const [automaticApproval, setAutomaticApproval] = useState(false)
   const [savingApproval, setSavingApproval] = useState(false)
   const [approvalError, setApprovalError] = useState(false)
-  const [scope, setScope] = useState<AssistantScope>()
-  const [starterScope, setStarterScope] = useState<AssistantScope>()
-  const [draftUsesSelection, setDraftUsesSelection] = useState(false)
   const pending = useRef<CanvasAssistantMessage>()
   const pendingRejections = useRef(new Map<string, { decision_id: string; expected_revision: number }>())
   const rejectProposal = async (sourceId: string, groupIds?: string[]) => {
@@ -135,6 +136,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const sendingNow = useRef(false)
   const [activeRequestId, setActiveRequestId] = useState<string>()
   const [pendingServerRequest, setPendingServerRequest] = useState<CanvasAssistantMessage>()
+  const [progress, setProgress] = useState<CanvasAssistantProgress>()
   const [pendingQuestion, setPendingQuestion] = useState<CanvasAssistantQuestion>()
   const [questionAnswer, setQuestionAnswer] = useState('')
   const [queue, setQueue] = useState<CanvasAssistantQueueItem[]>([])
@@ -154,21 +156,21 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const historyPosition = useRef({ top: 0, follow: true })
   const [readingEarlier, setReadingEarlier] = useState(false)
   const panelId = 'canvas-assistant-' + canvasId
-  const canUseDraftTools = localDraft && models.some(model =>
-    model.id === (modelId ?? defaultModelId) && model.effective_capabilities?.tool_calling)
-  const selectionInDraft = selectedCards.length > 0 || (Boolean(draft.trim()) && draftUsesSelection)
-  const planning = /(?:^|\s)\/plan(?![\w-])|先给方案/.test(draft)
-  const chosenScope = scope ?? (
-    selectionInDraft ? 'selection' : starterScope ?? (canUseDraftTools || planning ? 'canvas' : 'text')
-  )
-  const effectiveScope = chosenScope === 'text' && confirmationKind(draft.trim()) === 'write' ? 'canvas' : chosenScope
-  const awaitingSelection = !revising && !pending.current && effectiveScope === 'selection' && !selectedCards.length && !referenceIds.length && !Object.values(externalReferences).some(ids => ids.length)
-  useLayoutEffect(() => {
-    if (!draft.trim()) setStarterScope(undefined)
-    if (!draft.trim() || selectedCards.length) {
-      setDraftUsesSelection(Boolean(draft.trim() && selectedCards.length))
-    }
-  }, [draft, selectedCards.length])
+  const applySnapshot = useCallback((data: CanvasAssistantHistory, epoch: number) => {
+    if (mutationEpoch.current !== epoch) return false
+    const checkpoint = snapshotCursor.current
+    if (checkpoint?.canvasId === canvasId && checkpoint.cursor > data.cursor) return false
+    snapshotCursor.current = { canvasId, cursor: data.cursor }
+    setTurns(data.turns)
+    setPendingServerRequest(data.pending_request ?? undefined)
+    setPendingQuestion(data.pending_question ?? undefined)
+    setProgress(data.pending_progress ?? undefined)
+    setQueue(data.queue ?? [])
+    setPendingInstructions(data.pending_instructions ?? [])
+    setModelId(data.model_id ?? null)
+    setAutomaticApproval(data.approval_mode === 'automatic')
+    return true
+  }, [canvasId, setTurns])
 
   const updateDraft = (value: string) => {
     setConfirmationHint(undefined)
@@ -176,11 +178,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     pending.current = undefined
     setSendError(undefined)
   }
-  const activeGeneration = turns?.some(({ generation }) => generation && (
-    ['queued', 'running'].includes(generation.state)
-    || ['waiting', 'reviewing'].includes(generation.review?.state ?? '')
-    || generation.versions?.some(version => ['queued', 'running'].includes(version.state))
-  ))
+
   const waitingLayout = turns?.find(turn => turn.layout?.state === 'executing' || !turn.stopped && turn.layout?.state === 'waiting')
   const layoutEditor = useRef(applyLayout)
   layoutEditor.current = applyLayout
@@ -205,8 +203,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           turn.request_id === sourceId ? { ...turn, layout: data } : turn))
       } catch (error) {
         if (active && error instanceof ApiError && error.status === 409) {
+          const epoch = mutationEpoch.current
           const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId }).catch(() => ({ data: undefined }))
-          if (active && data) setTurns(data.turns ?? [])
+          if (active && data) applySnapshot(data, epoch)
         }
         // Retry pending work and reuse the browser receipt when delivery fails.
       }
@@ -214,27 +213,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     }
     const timer = window.setInterval(() => void execute(), 500)
     return () => { active = false; window.clearInterval(timer) }
-  }, [waitingLayout, approvalDisabled, canvasId, projectId])
-
-  useEffect(() => {
-    if (!open || !activeGeneration) return
-    let request: ReturnType<typeof Canvases.canvasAssistantHistory> | undefined
-    let active = true
-    const timer = window.setInterval(() => {
-      if (request) return
-      request = Canvases.canvasAssistantHistory({ canvasId, projectId })
-      void request.then(response => {
-        if (!active || !response.data) return
-        const updates = new Map(response.data?.turns.map(turn => [turn.request_id, turn.generation]))
-        setTurns(previous => previous?.map(turn => {
-          const generation = updates.get(turn.request_id)
-          return generation ? { ...turn, generation } : turn
-        }))
-      }).catch(() => { /* The next observation resumes after a transient read failure. */ })
-        .finally(() => { request = undefined })
-    }, 1500)
-    return () => { active = false; window.clearInterval(timer); request?.cancel() }
-  }, [open, activeGeneration, canvasId, projectId])
+  }, [waitingLayout, approvalDisabled, canvasId, projectId, applySnapshot, setTurns])
 
   useEffect(() => {
     if (localDraft) {
@@ -245,28 +224,15 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       setReferenceFiles(saved.references)
       return
     }
+    const epoch = mutationEpoch.current
     const request = Canvases.canvasAssistantHistory({ canvasId, projectId })
     let current = true
     void request.then(response => {
       if (!response.data) throw new Error('missing assistant history')
-      const saved = response.data.turns
-      if (current) {
-        const checkpoint = snapshotCursor.current
-        const cursor = response.data.cursor
-        if (checkpoint?.canvasId === canvasId && checkpoint.cursor > cursor) return
-        snapshotCursor.current = { canvasId, cursor }
-        setTurns(previous => (previous?.[previous.length - 1]?.sequence ?? 0) > cursor
-          ? previous : saved)
-        setModelId(response.data.model_id ?? null)
-        setPendingServerRequest(response.data.pending_request ?? undefined)
-        setPendingQuestion(response.data.pending_question ?? undefined)
-        setQueue(response.data.queue ?? [])
-        setPendingInstructions(response.data.pending_instructions ?? [])
-        setAutomaticApproval(response.data.approval_mode === 'automatic')
-      }
+      if (current) applySnapshot(response.data, epoch)
     }).catch(() => { if (current) setHistoryError(true) })
     return () => { current = false; request.cancel() }
-  }, [open, canvasId, projectId, retryLoad, localDraft])
+  }, [open, canvasId, projectId, retryLoad, localDraft, applySnapshot, setTurns])
 
   useEffect(() => {
     if (!open || localDraft) return
@@ -287,13 +253,19 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         if (queueUpdates.length) setQueue(current => queueUpdates.reduce(updateQueue, current))
         setTurns(turns => updates.reduce<CanvasAssistantExchange[]>((history, event) => {
           const payload = event.payload
-          if ('message' in payload || event.type === 'question.asked' || event.type === 'turn.steered') return history
+          if ('message' in payload || event.type === 'question.asked' || event.type === 'turn.steered' || event.type === 'turn.progress' || event.type === 'turn.interrupted') return history
           if (event.type === 'turn.completed') return appendExchange(history, payload)
           const existing = history.find(turn => turn.request_id === event.turn_id)
           return existing ? history.map(turn => turn === existing ? {
             ...turn, ...payload, generation: payload.generation ?? turn.generation,
           } : turn) : appendExchange(history, payload)
         }, turns ?? []))
+        for (const { type, turn_id, payload } of updates) {
+          if (type === 'turn.progress' && 'progress' in payload && payload.progress) setProgress(payload.progress)
+          if (type === 'turn.completed' || type === 'turn.stopped' || type === 'turn.interrupted') {
+            setProgress(current => current?.request_id === turn_id ? undefined : current)
+          }
+        }
         const steerUpdate = [...updates].reverse().find(event => event.type === 'turn.steered')
         if (steerUpdate && !('message' in steerUpdate.payload)) {
           const stillRunning = !updates.some(event => event.turn_id === steerUpdate.turn_id && event.type === 'turn.completed')
@@ -317,7 +289,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       }
     }, 1500)
     return () => { active = false; window.clearInterval(timer); request?.cancel() }
-  }, [open, canvasId, projectId, localDraft, pendingServerRequest])
+  }, [open, canvasId, projectId, localDraft, pendingServerRequest, setTurns])
 
   const queueHead = queue[0]
   useEffect(() => {
@@ -346,7 +318,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     }
     const timer = window.setInterval(() => void pump(), 1200)
     return () => { active = false; window.clearInterval(timer) }
-  }, [canvasId, localDraft, open, pendingQuestion, projectId, queueHead, sending])
+  }, [canvasId, localDraft, open, pendingQuestion, projectId, queueHead, sending, setTurns])
 
   useEffect(() => {
     if (!open) return
@@ -423,6 +395,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         setCardReferences([])
         setReferenceGroups([])
         setExternalReferences({})
+        setExternalGroups({})
       }
       if (revising?.request_id === sourceId) {
         setRevising(undefined)
@@ -443,8 +416,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
 
   const cancelRun = async (runId: string) => {
     await Canvases.canvasCancelRun({ canvasId, projectId, runId })
+    const epoch = mutationEpoch.current
     const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId })
-    if (data) setTurns(data.turns)
+    if (data) applySnapshot(data, epoch)
   }
 
   const close = () => {
@@ -453,19 +427,13 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   }
 
   const refreshDecision = async (sourceId: string, clearSelection = true) => {
+    const epoch = mutationEpoch.current
     const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId }).catch(() => ({ data: undefined }))
     if (!data) {
       setRetryLoad(value => value + 1)
       return false
     }
-    if (data.cursor >= (snapshotCursor.current?.cursor ?? 0)) {
-      snapshotCursor.current = { canvasId, cursor: data.cursor }
-      setTurns(data.turns)
-      setPendingServerRequest(data.pending_request ?? undefined)
-      setPendingQuestion(data.pending_question ?? undefined)
-      setQueue(data.queue ?? [])
-      setPendingInstructions(data.pending_instructions ?? [])
-    }
+    applySnapshot(data, epoch)
     if (clearSelection) setSelectedGroups(current => ({ ...current, [sourceId]: [] }))
     if (revising?.request_id === sourceId) {
       pending.current = undefined
@@ -575,11 +543,14 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         return
       }
     }
-    if (!resume && ((!enqueue && pendingQuestion) || referenceIsMissing || awaitingSelection && !revision)) return
+    if (!resume && ((!enqueue && pendingQuestion) || referenceIsMissing)) return
     const useCurrentSelection = /(?:当前选区|当前选择)/.test(text)
     const explicitReferences = useCurrentSelection ? [] : referenceIds
     const crossCanvas = useCurrentSelection ? [] : Object.entries(externalReferences).filter(([, ids]) => ids.length)
-      .map(([canvas_id, card_ids]) => ({ canvas_id, card_ids }))
+      .map(([canvas_id, card_ids]) => ({
+        canvas_id, card_ids,
+        groups: externalGroups[canvas_id]?.filter(group => group.card_ids.every(id => card_ids.includes(id))),
+      }))
     const revisionTargets = revision?.proposal?.groups
       ? [...new Set(revision.proposal.groups.filter(group => group.state === 'pending' &&
         (!fieldRevision || group.id === fieldRevision.group_id))
@@ -599,8 +570,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             ...readDraft(), scope: revisionTargets.length ? 'selection' : 'canvas', card_ids: revisionTargets,
           } : explicitReferences.length ? {
             ...readDraft(), scope: 'selection', card_ids: explicitReferences,
-          } : crossCanvas.length || effectiveScope === 'text' ? undefined : {
-            ...readDraft(), scope: effectiveScope, card_ids: effectiveScope === 'selection' ? selectedCards : [],
+          } : crossCanvas.length ? undefined : {
+            ...readDraft(), scope: 'auto', card_ids: selectedCards,
           },
         })
     if (enqueue) {
@@ -617,6 +588,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         setCardReferences([])
         setReferenceGroups([])
         setExternalReferences({})
+        setExternalGroups({})
       } catch {
         setQueueError(true)
       } finally {
@@ -657,6 +629,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       setCardReferences([])
       setReferenceGroups([])
       setExternalReferences({})
+      setExternalGroups({})
       pending.current = undefined
       if (!turn.question) {
         setPendingQuestion(undefined)
@@ -666,8 +639,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         const groupIds = turn.proposal.groups?.map(group => group.id)
         try {
           if (!await approve(turn.request_id, groupIds, true)) setApprovalError(true)
+          const epoch = mutationEpoch.current
           const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId })
-          if (data) setTurns(data.turns)
+          if (data) applySnapshot(data, epoch)
         } catch {
           setApprovalError(true)
         }
@@ -675,16 +649,15 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     } catch (error) {
       if (stoppedRequest.current === requestBody.request_id) return
       if (!localDraft) {
+        const epoch = mutationEpoch.current
         const history = await Canvases.canvasAssistantHistory({ canvasId, projectId }).catch(() => undefined)
-        setPendingServerRequest(history?.data?.pending_request ?? undefined)
-        setPendingQuestion(history?.data?.pending_question ?? undefined)
-        setPendingInstructions(history?.data?.pending_instructions ?? [])
-        if (history?.data?.pending_instructions?.length) return
+        if (history?.data && applySnapshot(history.data, epoch) && history.data.pending_instructions?.length) return
       }
       const detail = error instanceof ApiError ? error.body?.message ?? error.body?.detail : undefined
       setSendError(detail === 'ASSISTANT_TOOL_CALLING_REQUIRED' ? 'tools'
         : detail === 'ASSISTANT_TEXT_CAPABILITY_REQUIRED' ? 'text'
-        : detail === 'ASSISTANT_CONTEXT_LIMIT_EXCEEDED' ? 'context-limit' : 'reply')
+        : detail === 'ASSISTANT_CONTEXT_LIMIT_EXCEEDED' ? 'context-limit'
+        : detail === 'CANVAS_TARGET_UNRESOLVED' ? 'target' : 'reply')
     } finally {
       draftingAssistantReply.delete(canvasId)
       sendingNow.current = false
@@ -755,6 +728,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         canvasId, projectId, requestBody: { model_id: selected || null },
       })
       if (!data) throw new Error('missing assistant model preference')
+      mutationEpoch.current += 1
       setModelId(data.model_id)
     } catch {
       setModelError(true)
@@ -771,6 +745,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         canvasId, projectId, requestBody: { approval_mode: enabled ? 'automatic' : 'manual' },
       })
       if (!data) throw new Error('missing assistant approval preference')
+      mutationEpoch.current += 1
       setAutomaticApproval(data.approval_mode === 'automatic')
     } catch {
       setApprovalError(true)
@@ -792,11 +767,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     return [model.name, ...(modes.length ? modes : [uiText("仅文字对话")])].join(' · ')
   }
   const defaultModel = models.find(model => model.id === defaultModelId)
-  const selectedNames = selectedCards.map(id => {
-    const card = cards.find(entry => entry.id === id)
-    const name = (card && 'name' in card && card.name) || cardTitles[card?.type ?? ''] || uiText("卡片")
-    return uiText(name) + ' · ' + id.slice(0, 8)
-  })
   const starters = storyboard
     ? selectedCards.length ? ['帮我看看这个镜头的推进节奏', '帮我检查选中卡片的连续性']
       : cards.length ? ['帮我梳理这场戏的镜头节奏', '看看哪些镜头还需要补充']
@@ -804,16 +774,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     : selectedCards.length ? ['帮我优化这张卡的提示词', '帮我看看选中的素材适合怎么用']
       : cards.length ? ['帮我梳理画布上的素材和生成方向', '帮我检查当前画布的提示词']
         : ['帮我构思一张起始画面', '帮我拟一版图片生成提示词']
-  const selectionLabel = selectedCards.length
-    ? uiText("选中 {{count}} 张卡", { count: selectedCards.length }) : uiText("请选择卡片")
-  const scopeOptions = [
-    { label: uiText("仅对话"), short: uiText("仅对话"), value: 'text' },
-    { label: <>{selectionLabel}{selectedNames.length > 0 &&
-        <small className="canvas-assistant-scope-cards">{selectedNames.join('、')}</small>}</>,
-      short: selectionLabel, value: 'selection', disabled: !selectedCards.length },
-    { label: uiText("审看整张画布"), short: uiText("审看整张画布"), value: 'canvas' },
-  ]
-
   return <div className="canvas-assistant-dock" data-open={open}>
     <WorkbenchIconButton ref={trigger} label={uiText(open ? "收起画布助手" : "打开画布助手")} icon={<CommentOutlined />}
       aria-expanded={open} aria-controls={open ? panelId : undefined}
@@ -846,8 +806,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         {turns?.length === 0 && !pendingServerRequest && !sending && !draft.trim() &&
           <div className="canvas-assistant-starters">
             {starters.map(starter => <WorkbenchButton key={starter} onClick={() => {
-              setScope(undefined)
-              setStarterScope(cards.length ? 'canvas' : 'text')
               updateDraft(uiText(starter))
               composer.current?.querySelector('textarea')?.focus()
             }}>{uiText(starter)}</WorkbenchButton>)}
@@ -876,7 +834,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             {!!turn.attachments?.length && <CanvasAssistantEvidence attachments={turn.attachments} />}
           {!!turn.canvas_references?.length && <details className="canvas-assistant-evidence">
             <summary>{uiText('其他画布的只读引用')}</summary>
-            <ul>{turn.canvas_references.map(ref => <li key={ref.canvas_id}>{ref.canvas_id} · {ref.card_ids.join('、')}</li>)}</ul>
+            <ul>{turn.canvas_references.map(ref => <li key={ref.canvas_id}>{ref.canvas_id} · {ref.groups?.map(group => group.name).join('、') || ref.card_ids.join('、')}</li>)}</ul>
           </details>}
           {turn.context?.observed_card_ids && <details className="canvas-assistant-evidence">
             <summary>{uiText('本轮读取 {{count}}/{{total}} 张卡片', {
@@ -1001,8 +959,23 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           <strong>{uiText('本轮已接收补充指令')}</strong>
           <ul>{pendingInstructions.map(instruction => <li key={instruction.request_id}>{instruction.text}</li>)}</ul>
         </div>}
-        {(sending || steeringFor) && <div role="status"><ThoughtChain items={[
-          { key: 'reply', title: uiText("助手正在回复"), status: 'loading' },
+        {!pendingQuestion && (sending || steeringFor || progress) && <div role="status"><ThoughtChain items={[
+          { key: progress?.request_id ?? 'reply',
+            title: progress ? uiText('已接收本轮上下文') : uiText('助手正在回复'),
+            status: 'loading',
+            collapsible: Boolean(progress),
+            content: progress && <div className="canvas-assistant-live-evidence">
+              <p>{uiText('助手模型')} · {models.find(model => model.id === progress.model_id)?.name ?? progress.model_id}</p>
+              {typeof progress.revision === 'number' && <p>{uiText('画布修订')} {progress.revision}</p>}
+              {!!progress.observed_card_ids?.length && <p>{uiText('已读取卡片')} · {progress.observed_card_ids.join('、')}</p>}
+              {!!progress.skills?.length && <p>{uiText('本轮使用的技能')} · {progress.skills.map(skill => skill.name).join('、')}</p>}
+              {!!progress.attachments?.length && <CanvasAssistantEvidence attachments={progress.attachments} prepared />}
+              {Object.entries(progress.active_tasks ?? {}).map(([id, task]) => <p key={id}>{uiText('正在处理')} · {task}</p>)}
+              {progress.subtasks?.map(task => <section key={task.id}>
+                <strong>{task.task}</strong><p>{task.result}</p>
+                {!!task.evidence.length && <CanvasAssistantEvidence attachments={task.evidence} />}
+              </section>)}
+            </div> },
         ]} /></div>}
         {(activeRequestId || steeringFor) && <WorkbenchButton variant="quiet" loading={stopping === (activeRequestId || steeringFor)}
           onClick={() => { const runningId = activeRequestId || steeringFor; if (runningId) void stopTurn(runningId) }}>{uiText("停止助手")}</WorkbenchButton>}
@@ -1016,7 +989,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
               {pendingQuestion.options.map(option => <WorkbenchButton key={option} variant="quiet" disabled={sending}
                 onClick={() => { void answerQuestion(option) }}>{option}</WorkbenchButton>)}
             </div>
-            <input aria-label={uiText('自定义回答')} value={questionAnswer} maxLength={2000}
+            <Input aria-label={uiText('自定义回答')} value={questionAnswer} maxLength={2000}
               onChange={event => setQuestionAnswer(event.target.value)} disabled={sending} />
             <WorkbenchButton htmlType="submit" disabled={sending || !questionAnswer.trim()}>{uiText('提交回答')}</WorkbenchButton>
           </form> : <WorkbenchButton variant="quiet" onClick={() => { void send(pendingServerRequest) }}>{uiText("继续回复")}</WorkbenchButton>}
@@ -1041,7 +1014,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           <strong>{uiText('下一轮队列')}</strong>
           <ul>{queue.map(item => <li key={item.request_id}>
             {queueEditing?.id === item.request_id ? <>
-              <input aria-label={uiText('修改排队消息')} value={queueEditing.text} maxLength={16000}
+              <Input aria-label={uiText('修改排队消息')} value={queueEditing.text} maxLength={16000}
                 onChange={event => setQueueEditing({ id: item.request_id, text: event.target.value })} />
               <WorkbenchButton variant="quiet" disabled={!queueEditing.text.trim() || queueBusy || item.state !== 'queued'}
                 onClick={() => { void changeQueue(item.request_id, queueEditing.text) }}>{uiText('保存')}</WorkbenchButton>
@@ -1066,6 +1039,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         {sendError && <Alert type="error" message={sendError === 'tools'
           ? uiText("当前模型无法调用画布工具。切换支持提出画布修改的模型后，发送同一消息即可接续。")
           : sendError === 'text' ? uiText("当前模型无法进行文字对话，请切换助手模型。")
+          : sendError === 'target' ? uiText('没有找到指令中点名的镜头，请核对镜头或引用对应卡片。')
           : sendError === 'context-limit' ? uiText("内容超出当前模型的上下文上限，请缩小分析范围或切换助手模型。")
             : uiText("未收到助手回复，请检查助手模型后重试")} />}
         <CanvasAssistantAttachments projectId={projectId} files={referenceFiles} uploading={uploadingReference}
@@ -1077,11 +1051,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             setSendError(undefined)
           }}>
           {(add, attachments) => <>
-            {!revising && <div className="canvas-assistant-context">
-              <Select<AssistantScope> value={effectiveScope} aria-label={uiText("提问范围")}
-                optionLabelProp="short" popupMatchSelectWidth={false} disabled={sending} options={scopeOptions}
-                onChange={value => { setScope(value); pending.current = undefined; setSendError(undefined) }} />
-            </div>}
             {attachments}
             {(!!referenceIds.length || Object.values(externalReferences).some(ids => ids.length)) && <div className="canvas-assistant-files" aria-label={uiText('引用卡片')}>
               {cardReferences.map(id => {
@@ -1090,7 +1059,20 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                   setCardReferences(current => current.filter(value => value !== id)); pending.current = undefined
                 }}>{card ? ('name' in card && card.name) || uiText(cardTitles[card.type ?? ''] ?? card.type ?? '卡片') : uiText('引用已失效')} · {id.slice(0, 8)} ×</WorkbenchButton>
               })}
-              {Object.entries(externalReferences).flatMap(([source, ids]) => ids.map(id =>
+              {Object.entries(externalGroups).flatMap(([source, groups]) => groups.map(group =>
+                <details key={source + ':' + group.id}><summary>{group.name} · {group.card_ids.length}</summary>
+                  <ul>{group.card_ids.map(id => <li key={id}>{id}</li>)}</ul>
+                  <WorkbenchButton variant="quiet" onClick={() => {
+                    const survivors = groups.filter(item => item.id !== group.id)
+                    const retained = new Set(survivors.flatMap(item => item.card_ids))
+                    setExternalGroups(previous => ({ ...previous, [source]: survivors }))
+                    setExternalReferences(previous => ({ ...previous, [source]: previous[source].filter(id =>
+                      !group.card_ids.includes(id) || retained.has(id)) }))
+                    pending.current = undefined
+                  }}>{uiText('移除引用')}</WorkbenchButton>
+                </details>))}
+              {Object.entries(externalReferences).flatMap(([source, ids]) => ids.filter(id =>
+                !externalGroups[source]?.some(group => group.card_ids.includes(id))).map(id =>
                 <WorkbenchButton key={source + ':' + id} variant="quiet" onClick={() => {
                   setExternalReferences(previous => ({ ...previous, [source]: previous[source].filter(item => item !== id) }))
                   pending.current = undefined
@@ -1141,15 +1123,30 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                 const reference = readCardReference(event.clipboardData.getData('text/plain'))
                 if (!reference) return
                 event.preventDefault()
-                if (reference.canvasId === canvasId) addCardReferences(reference.cardIds)
-                else {
+                if (reference.canvasId === canvasId) {
+                  if (reference.group) {
+                    const { id, name } = reference.group
+                    setReferenceGroups(previous => [...previous.filter(group => group.id !== id),
+                      { id, name, members: reference.cardIds }])
+                    pending.current = undefined
+                  } else addCardReferences(reference.cardIds)
+                } else {
                   if (!(reference.canvasId in externalReferences) && Object.keys(externalReferences).filter(key => externalReferences[key].length).length >= 3) {
                     setConfirmationHint(uiText('每轮最多引用三个其他画布'))
                     return
                   }
-                  setExternalReferences(previous => ({ ...previous,
-                    [reference.canvasId]: [...new Set([...(previous[reference.canvasId] ?? []), ...reference.cardIds])].slice(0, 20),
-                  }))
+                  const ids = [...new Set([...(externalReferences[reference.canvasId] ?? []), ...reference.cardIds])]
+                  if (reference.group && ids.length > 20) {
+                    setConfirmationHint(uiText('其他画布的编组超过单轮可引用范围，请减少引用卡片。'))
+                    return
+                  }
+                  if (reference.group) {
+                    const group = { ...reference.group, card_ids: reference.cardIds }
+                    setExternalGroups(previous => ({ ...previous, [reference.canvasId]: [
+                      ...(previous[reference.canvasId] ?? []).filter(item => item.id !== group.id), group,
+                    ] }))
+                  }
+                  setExternalReferences(previous => ({ ...previous, [reference.canvasId]: ids.slice(0, 20) }))
                   pending.current = undefined
                 }
               }}
@@ -1182,7 +1179,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                   ]} />
                 <WorkbenchIconButton label={uiText("发送消息")} icon={<ArrowUpOutlined />}
                   htmlType="submit" variant="primary" loading={(sending || !!steeringFor) && !draft.trim()}
-                  disabled={draftPromoting || (!confirmationKind(draft.trim()) && !!steeringFor) || !turns || !!pendingQuestion && !confirmationKind(draft.trim()) || !draft.trim() || savingModel || savingApproval || uploadingReference || referenceIsMissing || awaitingSelection && !confirmationKind(draft.trim())} />
+                  disabled={draftPromoting || (!confirmationKind(draft.trim()) && !!steeringFor) || !turns || !!pendingQuestion && !confirmationKind(draft.trim()) || !draft.trim() || savingModel || savingApproval || uploadingReference || referenceIsMissing} />
               </div>
             </div>
           </>}

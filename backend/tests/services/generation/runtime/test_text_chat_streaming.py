@@ -112,5 +112,39 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
             ) for _ in range(2)])
             assert [item.status_code for item in simultaneous] == [200, 200]
             assert received.count('并发请求只运行一次') == 1
+            first_delta = asyncio.Event()
+
+            class InterruptedTextModel:
+                async def astream(self, _messages):
+                    yield '已经送达的前缀'
+                    first_delta.set()
+                    await asyncio.Future()
+
+            monkeypatch.setattr(text_chat_streaming, 'build_text_chat_model', AsyncMock(return_value=InterruptedTextModel()))
+            interrupted = {'Idempotency-Key': 'interrupted-stream'}
+            interrupted_body = {**body, 'content': '恢复未结束的流'}
+            original = asyncio.create_task(client.post(url, json=interrupted_body, headers=interrupted))
+            try:
+                await asyncio.wait_for(first_delta.wait(), timeout=5)
+                monkeypatch.setattr(text_chat_streaming, '_runtime', TextStreamingRuntime())
+                snapshot = (await client.get('/api/v1/studio/experiment-sessions/sse-replay/messages')).json()['data']
+                pending = next(item for item in snapshot if item['content'] == interrupted_body['content'])
+                assert pending['payload']['partial_text'] == '已经送达的前缀'
+                assert '_stream_partial' not in pending['payload']
+                recovered = await client.post(url, json=interrupted_body, headers=interrupted)
+                assert recovered.status_code == 200
+                assert '已经送达的前缀' in recovered.text and 'event: error' in recovered.text
+                assert 'event: completed' not in recovered.text
+                resumed = await client.post(url, json=interrupted_body, headers={**interrupted, 'Last-Event-ID': '2'})
+                assert resumed.status_code == 200 and 'id: 3\nevent: error' in resumed.text
+                assert 'event: delta' not in resumed.text
+                history = (await client.get('/api/v1/studio/experiment-sessions/sse-replay/messages')).json()['data']
+                assert sum(message.get('payload', {}).get('partial_text') == '已经送达的前缀' for message in history) == 1
+                assert not any(message['content'] == '已经送达的前缀' for message in history)
+                assert 'stream_result_unknown' in recovered.text
+            finally:
+                original.cancel()
+                await asyncio.gather(original, return_exceptions=True)
+
     finally:
         await engine.dispose()

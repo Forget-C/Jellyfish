@@ -59,6 +59,7 @@ class _TextStreamInput:
     model_id: str
     content: str
     request_id: str | None = None
+    user_message_id: str | None = None
 
 
 def _as_message_data(message: ExperimentMessage) -> StreamMessageData:
@@ -68,7 +69,7 @@ def _as_message_data(message: ExperimentMessage) -> StreamMessageData:
         session_id=message.session_id,
         role="assistant" if message.role == "assistant" else "user",
         content=message.content,
-        payload=message.payload if message.role == "user" else {},
+        payload={key: value for key, value in message.payload.items() if key != '_stream_partial'} if message.role == "user" else {},
         sequence=message.sequence,
         created_at=message.created_at,
         updated_at=message.updated_at,
@@ -101,7 +102,7 @@ async def create_text_stream_run(
     await db.flush()
     await db.refresh(user_message)
     async with _stream_inputs_lock:
-        _stream_inputs[run_id] = _TextStreamInput(session_id=session_id, model_id=model_id, content=content, request_id=request_id)
+        _stream_inputs[run_id] = _TextStreamInput(session_id=session_id, model_id=model_id, content=content, request_id=request_id, user_message_id=user_message.id)
     accepted = await _runtime.create_run(StreamAcceptedData(task_id=run_id, user_message=_as_message_data(user_message)))
     return run_id, accepted
 
@@ -127,7 +128,10 @@ async def admit_text_interaction(db, session_id, body: TextLabRunRequest, reques
             except TextStreamRunNotFoundError as error:
                 result = await text_stream_result(db, session_id, task_id)
                 if result is None:
-                    raise HTTPException(409, 'TEXT_LAB_STREAM_RESULT_UNKNOWN') from error
+                    deltas = previous.payload.get('_stream_partial', [])
+                    if not deltas:
+                        raise HTTPException(409, 'TEXT_LAB_STREAM_RESULT_UNKNOWN') from error
+                    return TextInteractionAdmission(task_id, False, _recovered_text_events(previous, None, task_id, deltas))
                 return TextInteractionAdmission(task_id, False, _recovered_text_events(previous, result, task_id))
             return TextInteractionAdmission(task_id, False)
     task_id, _ = await create_text_stream_run(
@@ -136,15 +140,21 @@ async def admit_text_interaction(db, session_id, body: TextLabRunRequest, reques
     return TextInteractionAdmission(task_id, True)
 
 
-def _recovered_text_events(user, result, task_id):
+def _recovered_text_events(user, result, task_id, partial=None):
     events = [
         GenerationStreamEvent(event=StreamEventType.accepted, sequence=1, created_at=user.created_at,
                               data=StreamAcceptedData(task_id=task_id, user_message=_as_message_data(user))),
     ]
-    for sequence, text in result.payload.get('stream_deltas', []):
-        events.append(GenerationStreamEvent(event=StreamEventType.delta, sequence=sequence, created_at=result.updated_at,
+    stamp = result.updated_at if result else user.updated_at
+    deltas = partial if result is None else result.payload.get('stream_deltas', [])
+    for sequence, text in deltas:
+        events.append(GenerationStreamEvent(event=StreamEventType.delta, sequence=sequence, created_at=stamp,
                                            data=StreamDeltaData(task_id=task_id, text_delta=text)))
-    if result.status == 'cancelled':
+    if result is None:
+        kind = StreamEventType.error
+        data = StreamErrorData(task_id=task_id, error=StreamErrorDetail(
+            code='stream_result_unknown', message='文本流已恢复部分输出，最终状态仍待核实'))
+    elif result.status == 'cancelled':
         kind = StreamEventType.cancelled
         data = StreamCancelledData(task_id=task_id, reason=result.payload.get('reason'))
     elif result.status == 'failed':
@@ -155,7 +165,7 @@ def _recovered_text_events(user, result, task_id):
         data = StreamCompletedData(task_id=task_id, assistant_message=_as_message_data(result),
                                    result=StreamGenerationResult(text=result.content, model_id=result.payload['model_id']))
     events.append(GenerationStreamEvent(event=kind, sequence=events[-1].sequence + 1,
-                                       created_at=result.updated_at, data=data))
+                                       created_at=stamp, data=data))
     return tuple(events)
 
 
@@ -266,11 +276,15 @@ async def stream_text_run(run_id: str) -> None:
         stream_input = await _get_stream_input(run_id)
         async with async_session_maker() as db:
             model = await build_text_chat_model(db, model_id=stream_input.model_id, thinking=False)
+        deltas = []
         async for chunk in model.astream([HumanMessage(content=stream_input.content)]):
             if await _runtime.is_cancel_requested(run_id):
                 await _cancel(run_id, "cancel_requested")
                 return
             if text := _chunk_text(chunk):
+                if stream_input.request_id:
+                    deltas.append([len(deltas) + 2, text])
+                    await _checkpoint_text(stream_input, deltas)
                 await _runtime.emit_delta(run_id, StreamDeltaData(task_id=run_id, text_delta=text))
         if await _runtime.is_cancel_requested(run_id):
             await _cancel(run_id, "cancel_requested")
@@ -326,6 +340,16 @@ async def _complete_stream(run_id: str, stream_input: _TextStreamInput) -> None:
     await _discard_stream_input(run_id)
 
 
+async def _checkpoint_text(stream_input, deltas):
+    """Save each indexed prefix before exposing it through SSE."""
+    async with async_session_maker() as db:
+        message = await db.get(ExperimentMessage, stream_input.user_message_id)
+        if message is None:
+            raise TextStreamRunNotFoundError('The originating message was removed')
+        message.payload = {**message.payload, '_stream_partial': deltas}
+        await db.commit()
+
+
 async def _persist_stream_message(run_id, stream_input, events, body, state, details=None):
     payload = {'model_id': stream_input.model_id}
     if stream_input.request_id:
@@ -338,6 +362,8 @@ async def _persist_stream_message(run_id, stream_input, events, body, state, det
             await _lock_text_interaction(db, stream_input.session_id)
             if settled := await text_stream_result(db, stream_input.session_id, run_id):
                 return settled
+            if origin := await db.get(ExperimentMessage, stream_input.user_message_id):
+                origin.payload = {key: value for key, value in origin.payload.items() if key != '_stream_partial'}
         message, = await append_experiment_messages(db, session_id=stream_input.session_id, drafts=[
             ExperimentMessageDraft(role='assistant', content=body, status=state, payload=payload),
         ])

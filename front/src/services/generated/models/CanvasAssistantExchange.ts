@@ -9,6 +9,7 @@ import type { CanvasAssistantFieldRevision } from './CanvasAssistantFieldRevisio
 import type { CanvasAssistantGenerationRead } from './CanvasAssistantGenerationRead';
 import type { CanvasAssistantInstruction } from './CanvasAssistantInstruction';
 import type { CanvasAssistantLayout } from './CanvasAssistantLayout';
+import type { CanvasAssistantProgress } from './CanvasAssistantProgress';
 import type { CanvasAssistantProposal } from './CanvasAssistantProposal';
 import type { CanvasAssistantQuestion } from './CanvasAssistantQuestion';
 import type { CanvasAssistantQuestionAnswer } from './CanvasAssistantQuestionAnswer';
@@ -36,6 +37,7 @@ export type CanvasAssistantExchange = {
     approval_audit?: (Array<CanvasAssistantApprovalAudit> | null);
     generation?: (CanvasAssistantGenerationRead | null);
     stopped?: boolean;
+    progress?: (CanvasAssistantProgress | null);
     layout?: (CanvasAssistantLayout | null);
     question?: (CanvasAssistantQuestion | null);
     question_answers?: (Array<CanvasAssistantQuestionAnswer> | null);

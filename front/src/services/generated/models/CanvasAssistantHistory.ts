@@ -5,6 +5,7 @@
 import type { CanvasAssistantExchange } from './CanvasAssistantExchange';
 import type { CanvasAssistantInstruction } from './CanvasAssistantInstruction';
 import type { CanvasAssistantPendingRequest } from './CanvasAssistantPendingRequest';
+import type { CanvasAssistantProgress } from './CanvasAssistantProgress';
 import type { CanvasAssistantQuestion } from './CanvasAssistantQuestion';
 import type { CanvasAssistantQueueItem } from './CanvasAssistantQueueItem';
 /**
@@ -17,6 +18,7 @@ export type CanvasAssistantHistory = {
     turns: Array<CanvasAssistantExchange>;
     pending_request?: (CanvasAssistantPendingRequest | null);
     pending_question?: (CanvasAssistantQuestion | null);
+    pending_progress?: (CanvasAssistantProgress | null);
     pending_instructions?: Array<CanvasAssistantInstruction>;
     queue?: Array<CanvasAssistantQueueItem>;
     model_id?: (string | null);

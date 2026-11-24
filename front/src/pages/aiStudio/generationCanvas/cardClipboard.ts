@@ -2,7 +2,7 @@ import type { GenerationCard } from './graphRules'
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 import type { CanvasResolvedOutput } from '../../../services/generated'
 export type CardClipboard = { schema: 1; projectId: string; cards: GenerationCard[]; positions: CanvasPoint[] }
-export type CardReference = { canvasId: string; cardIds: string[] }
+export type CardReference = { canvasId: string; cardIds: string[]; group?: { id: string; name: string } }
 const referencePrefix = 'jellyfish:cards:1:'
 
 export function writeCardReference(reference: CardReference) {
@@ -14,7 +14,8 @@ export function readCardReference(text: string): CardReference | undefined {
   try {
     const value: CardReference = JSON.parse(text.slice(referencePrefix.length))
     if (typeof value.canvasId === 'string' && Array.isArray(value.cardIds) && value.cardIds.length > 0 &&
-      value.cardIds.length <= 200 && value.cardIds.every(id => typeof id === 'string' && id.length > 0)) return value
+      value.cardIds.length <= 200 && value.cardIds.every(id => typeof id === 'string' && id.length > 0) &&
+      (!value.group || typeof value.group.id === 'string' && !!value.group.id && typeof value.group.name === 'string')) return value
   } catch { /* Paste unrecognized text as supplied. */ }
 }
 

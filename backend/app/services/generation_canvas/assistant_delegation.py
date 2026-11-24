@@ -83,10 +83,13 @@ class CanvasDelegation:
                                       model_id=self._model_id, status='blocked', skills=[], evidence=[],
                                       result='依赖的素材审看或分镜任务尚未成功')
         if all(item.status == 'completed' for item in prerequisites):
+            if self._checkpoint:
+                await self._checkpoint.report_progress(started_task=(task.id, task.task))
             await self._consult(result, prerequisites)
         record = {'digest': digest, 'result': result.model_dump(mode='json')}
         if self._checkpoint:
             await self._checkpoint.save_delegation(task.id, record)
+            await self._checkpoint.report_progress(finished_task=record['result'])
         self._completed[task.id] = record
         self.results[task.id] = result
 

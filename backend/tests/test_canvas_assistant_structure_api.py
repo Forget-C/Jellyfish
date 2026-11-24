@@ -182,16 +182,21 @@ async def test_batch_proposal_edits_creates_and_connects_atomically(canvas_clien
 
     snapshot = (await canvas_client.get(url + '/assistant')).json()['data']
     creation = (await canvas_client.get(url + '/assistant/events')).json()['data']
-    assert [item['type'] for item in creation] == ['turn.completed', 'proposal.created']
+    assert [item['type'] for item in creation if item['type'] != 'turn.progress'] == ['turn.completed', 'proposal.created']
+    assert all(item['occurred_at'] for item in creation)
+    assert any(item['payload']['progress']['revision'] == exchange['context']['revision']
+               for item in creation if item['type'] == 'turn.progress')
     assert creation[-1]['payload']['proposal']['state'] == 'pending'
 
     approved = await approve_structure(canvas_client, url, canvas, proposal)
     assert approved.status_code == 200, approved.text
     events = (await canvas_client.get(url + '/assistant/events', params={'after': snapshot['cursor']})).json()['data']
-    assert [item['type'] for item in events] == [
-        'proposal.decided', 'proposal.blocked' if field_conflict else 'proposal.applied',
+    assert [item['type'] for item in events if item['type'] != 'turn.progress'] == [
+        'approval.decided', 'execution.blocked' if field_conflict else 'execution.succeeded',
     ]
     assert all(event['turn_id'] == exchange['request_id'] for event in events)
+    assert all(item['subject'] == 'edit' and item['target_version'] == exchange['request_id']
+               and item['group_ids'] == [proposal['groups'][0]['id']] for item in events)
     assert events[-1]['payload']['approval_audit'][-1]['outcome'] == ('conflict' if field_conflict else 'applied')
     result = approved.json()['data']
     assert result['graph_resumed'] is True

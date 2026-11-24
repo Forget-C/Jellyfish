@@ -7,10 +7,12 @@ from fastapi import HTTPException
 from langchain_core.tools import ToolException, tool
 from pydantic import Field, StringConstraints
 
-from app.models.canvas_assistant import CanvasAssistantTurn
+from app.models.canvas_assistant import CanvasAssistantSession, CanvasAssistantTurn
 from app.schemas.canvas_assistant_layout import (
     CanvasAssistantGrouping, CanvasAssistantLayout, CanvasAssistantPlacement, CardId, MoveCanvasCards,
 )
+from app.schemas.canvas_assistant import CanvasAssistantExchange
+from app.services.generation_canvas.assistant_events import publish_events
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.store import CanvasStore
 
@@ -80,4 +82,9 @@ async def decide_assistant_layout(db, project_id, canvas_id, source_id, action) 
             raise HTTPException(409, 'Canvas assistant group has not been saved')
     result.state = target
     turn.layout = result.model_dump(mode='json')
+    session = await db.get(CanvasAssistantSession, canvas_id, with_for_update=True, populate_existing=True)
+    if session:
+        kind = {'applied': 'execution.succeeded', 'stale': 'execution.blocked', 'waiting': 'approval.decided',
+                'rejected': 'approval.decided'}.get(target, 'layout.updated')
+        publish_events(db, session, CanvasAssistantExchange.model_validate(turn), kind, subject='layout')
     return result

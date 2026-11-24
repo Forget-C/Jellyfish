@@ -18,13 +18,15 @@ const provider = createHttpServer(async (request, response) => {
   const chunks = []
   for await (const chunk of request) chunks.push(chunk)
   const { model, messages, stream } = JSON.parse(Buffer.concat(chunks))
-  const hasSkill = messages.some(message => message.role === 'tool')
+  const hasSkill = messages.some(message => message.role === 'tool' && message.tool_call_id === 'review')
   if (!hasSkill) observed.push(messages.filter(message => message.role === 'user').at(-1).content)
   if (stream) {
+    const hasContext = messages.some(message => message.role === 'tool' && message.tool_call_id === 'read-context')
     const delta = hasSkill
       ? { role: 'assistant', content: '看过连续画面和音轨。建议保留现有节奏。' }
-      : { role: 'assistant', tool_calls: [{ index: 0, id: 'review', type: 'function',
-        function: { name: 'load_canvas_skill', arguments: '{"skill_id":"footage-review"}' } }] }
+      : { role: 'assistant', tool_calls: [{ index: 0, id: hasContext ? 'review' : 'read-context', type: 'function',
+        function: hasContext ? { name: 'load_canvas_skill', arguments: '{"skill_id":"footage-review"}' }
+          : { name: 'read_canvas_context', arguments: '{}' } }] }
     response.writeHead(200, { 'Content-Type': 'text/event-stream' })
     response.end('data: ' + JSON.stringify({
       id: 'review-reply', object: 'chat.completion.chunk', created: 1, model,
@@ -84,6 +86,7 @@ try {
   await open()
   await panel.getByLabel('上传对话参考素材').setInputFiles({ name: '本地参考.png', mimeType: 'image/png', buffer: png })
   await panel.getByRole('button', { name: '移除 本地参考', exact: true }).waitFor()
+  await panel.locator('.ant-attachment-list').getByText('本地参考', { exact: true }).waitFor()
   await panel.getByRole('button', { name: '添加参考素材' }).click()
   await page.getByRole('menuitem', { name: '选择参考素材' }).click()
   const picker = page.getByRole('dialog', { name: '选择对话参考素材' })

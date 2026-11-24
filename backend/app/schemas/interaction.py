@@ -1,5 +1,6 @@
 """Shared HTTP and event identities for interactive sessions."""
 
+from datetime import datetime
 from typing import Annotated, Generic, TypeVar
 
 from fastapi import Header
@@ -27,3 +28,7 @@ class InteractionEvent(BaseModel, Generic[Payload]):
     cursor: int
     type: str
     payload: Payload
+    occurred_at: datetime | None = None
+    target_version: str | None = None
+    group_ids: list[str] | None = None
+    subject: str | None = None

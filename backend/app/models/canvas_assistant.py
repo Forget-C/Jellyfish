@@ -96,6 +96,7 @@ class CanvasAssistantEvent(Base):
     source_id: Mapped[str] = mapped_column(String(64), nullable=False)
     kind: Mapped[str] = mapped_column(String(40), nullable=False)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class CanvasAssistantGeneration(Base):
@@ -117,6 +118,9 @@ class CanvasAssistantGeneration(Base):
     expected_revision: Mapped[int] = mapped_column(Integer, nullable=False)
     basis_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     input_approval: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    event_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    event_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    events_closed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default='0')
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     review_request: Mapped[str | None] = mapped_column(Text, nullable=True)

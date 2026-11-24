@@ -75,14 +75,22 @@ async def test_worker_resumes_exact_authorized_versions(runtime, monkeypatch):
         initial = (await runtime.client.get(runs)).json()['data']['runs']
         assert len(initial) == 1
         assert initial[0]['nodes'][0]['status'] == 'succeeded'
+        event_path, _, event_query = assistant.partition('?')
+        event_url = event_path + '/events' + ('?' + event_query if event_query else '')
+        receipt_events = (await runtime.client.get(event_url)).json()['data']
+        first_version = next(event for event in receipt_events if event['subject'] == 'generation')
+        assert first_version['occurred_at']
+        assert [version['version'] for version in first_version['payload']['generation']['versions']] == [1]
+        assert first_version['payload']['generation']['requested_count'] == 3
 
         resumed = TaskWorker(runtime.sessions, client=transport)
         running = asyncio.create_task(resumed.run())
         try:
             async with asyncio.timeout(12):
                 while True:
-                    history = (await runtime.client.get(assistant)).json()['data']['turns']
-                    if history[-1]['generation']['state'] == 'completed':
+                    events = (await runtime.client.get(event_url)).json()['data']
+                    if any(event['type'] == 'execution.succeeded' and event['subject'] == 'generation'
+                           for event in events):
                         break
                     await asyncio.sleep(0.1)
         finally:
@@ -96,6 +104,9 @@ async def test_worker_resumes_exact_authorized_versions(runtime, monkeypatch):
     assert len(published) == 3 and published[0]['id'] == initial[0]['id']
     assert [item['run_id'] for item in replay['versions']] == [run['id'] for run in published]
     assert all(item['state'] == 'succeeded' for item in replay['versions'])
+    final_events = (await runtime.client.get(event_url)).json()['data']
+    assert any(event['type'] == 'execution.succeeded' and event['subject'] == 'generation'
+               and len(event['payload']['generation']['versions']) == 3 for event in final_events)
     assert execution_inputs == ['Frozen prompt'] * 3
 
 
@@ -105,12 +116,13 @@ async def test_worker_resumes_exact_authorized_versions(runtime, monkeypatch):
     ('partial_group', 'running', 1), ('automatic', 'running', 1),
     ('layout_after_approval', 'running', 1), ('new_input_after_approval', 'reapproval_required', 0),
     ('named_match', 'running', 1), ('named_mismatch', None, 0), ('wrong_direction', None, 0),
+    ('named_plain', 'running', 1),
 ])
 async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypatch, scenario, expected_state,
                                                                expected_runs):
     async with runtime.sessions.begin() as db:
         model = await db.get(Model, runtime.model_id)
-        model.capability_profile = {'tool_calling': {'declaration': 'supported'}}
+        model.capability_profile = None if scenario == 'named_plain' else {'tool_calling': {'declaration': 'supported'}}
         db.add(ModelSettings(id=1, default_text_model_id=model.id))
         db.add(Model(id='video-model', name='sora-2', category='video', provider_id=runtime.provider_id))
     current = (await runtime.client.get(runtime.url)).json()['data']
@@ -155,6 +167,18 @@ async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypa
                 'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant',
                     'content': '{"decision":"approve","reason":"用户明确指定了原操作"}'}}],
             })
+        if scenario == 'named_plain':
+            assert not body.get('tools')
+            document = json.loads(body['messages'][-1]['content'].split('本轮画布参考数据：\n', 1)[1].split('\n\n用户请求：', 1)[0])
+            assert document['target_card_ids'] == ['v']
+            content = json.dumps({'reply': '等你批准运镜', 'groups': [{'title': '运镜', 'changes': [
+                {'kind': 'edit_field', 'change': {'card_id': 'v', 'text': '缓慢推近',
+                  'target': {'kind': 'video_prompt_segment', 'segment_id': 'p'}}},
+            ]}]})
+            return httpx.Response(200, request=request, json={
+                'id': 'plain-edit', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+                'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': content}}],
+            })
         results = [item for item in body['messages'] if item['role'] == 'tool']
         if len(results) < 2:
             name = 'read_canvas_context' if not results else 'propose_canvas_edit'
@@ -181,8 +205,10 @@ async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypa
         'request_id': 'edit-one',
         'text': {'edit_only': '把推近放慢', 'named_match': '把镜头三的推近放慢并生成一版',
                  'named_mismatch': '把镜头四的推近放慢，生成一版',
+                 'named_plain': '把镜头三的推近放慢并生成一版',
                  'wrong_direction': '把这张卡的推近放慢'}.get(scenario, '把推近放慢，生成一版'),
-        'context': {'draft': current['document'], 'revision': current['revision'], 'scope': 'selection', 'card_ids': ['v']},
+        'context': {'draft': current['document'], 'revision': current['revision'], 'scope': 'auto' if scenario == 'named_plain' else 'selection',
+                    'card_ids': ['other'] if scenario == 'named_plain' else ['v']},
     })
     assert sent.status_code == 200, sent.text
     assert sent.json()['data']['proposal']['state'] == 'pending'
@@ -211,7 +237,7 @@ async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypa
             choice = {'action': action, 'expected_revision': current['revision']}
             if scenario in ('automatic', 'named_match'):
                 choice['approval_mode'] = 'automatic'
-            if scenario == 'partial_group':
+            if scenario in ('partial_group', 'named_plain'):
                 choice['group_ids'] = ['1']
             confirmed = await runtime.client.post(decision, json=choice)
             assert confirmed.status_code == 200, confirmed.text
