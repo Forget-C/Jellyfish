@@ -300,6 +300,8 @@ class TaskWorker:
             await self._fail(task_id, 'directing_output_invalid', str(error),
                 result=({'storyboard_structure': error.storyboard_structure} if error.storyboard_structure else
                         {'design_diagnostics': error.diagnostics.model_dump(mode='json')} if error.diagnostics else None))
+        except ProviderDataError as error:
+            await self._fail(task_id, "submission_failed", self._error_message(error))
         except httpx.HTTPStatusError as error:
             status_code = error.response.status_code
             rejected = 400 <= status_code < 500 and status_code != 408

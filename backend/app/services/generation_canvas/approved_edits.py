@@ -11,7 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.canvas_edit_approval import CanvasEditApprovalExecution, CanvasEditApprovalSnapshot
-from app.schemas.generation_canvas import CanvasDiagnostic
+from app.schemas.generation_canvas import CanvasDiagnostic, CanvasDocument
 from app.services.approval import (
     ApprovalAccess, ApprovalDecisionView, ApprovalError, ApprovalRequestView, ApprovalScope,
     ApprovalService, ApprovalSubmission,
@@ -19,7 +19,9 @@ from app.services.approval import (
 from app.services.generation_canvas.edits import (
     CanvasEditConflict, CanvasEditGroupReceipt, CanvasEditPreview, CanvasEditReceipt, CanvasEditValue, canvas_edits,
 )
-from app.services.generation_canvas.assistant_edit_projection import creation_conflicts, publish_assistant_edit_execution
+from app.services.generation_canvas.assistant_edit_projection import (
+    approval_source, creation_conflicts, movement_basis_changed, publish_assistant_edit_execution,
+)
 from app.services.generation_canvas.errors import CanvasDomainError
 from app.services.generation_canvas.store import CanvasStore
 
@@ -178,7 +180,13 @@ async def _execute(db: AsyncSession, snapshot: CanvasEditApprovalSnapshot, plan:
             code='CANVAS_NOT_FOUND', message='原画布已无法读取，获批改动未写入',
             target={'canvas_id': snapshot.canvas_id, 'group_id': group_id}, blocks=['save'],
         ))
-    conflicts = await creation_conflicts(db, snapshot.canvas_id, snapshot.request_id, group_id, plan.revision,
+    source = await approval_source(db, snapshot.canvas_id, snapshot.request_id)
+    if source and movement_basis_changed(source.proposal, group_id, CanvasDocument.model_validate(canvas.document)):
+        return CanvasEditExecutionReceipt(**identity, state='conflict', diagnostic=CanvasDiagnostic(
+            code='EDIT_SOURCE_CHANGED', message='所采用的运镜或使用该运镜的镜头已变化，请重新预演',
+            target={'canvas_id': snapshot.canvas_id, 'group_id': group_id}, blocks=['save'],
+        ))
+    conflicts = await creation_conflicts(db, snapshot.canvas_id, source, group_id, plan.revision,
                                        {card['id'] for card in canvas.document.get('cards', ())})
     if conflicts:
         changed = next(group for group in plan.groups if group.id == group_id)

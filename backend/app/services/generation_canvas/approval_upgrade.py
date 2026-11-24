@@ -219,7 +219,7 @@ class _ApprovalUpgrade:
         for receipt in sorted(receipts, key=lambda item: ids[item['request_id']]):
             response = receipt['response']
             run_id = response['run_id']
-            node = self.db.execute(select(self.nodes.c.id, self.nodes.c.task_id, self.nodes.c.status,
+            node = self.db.execute(select(self.nodes.c.id, self.nodes.c.run_id, self.nodes.c.task_id, self.nodes.c.status,
                                           self.nodes.c.stage, self.nodes.c.error_message, self.runs.c.revision)
                 .join(self.runs, self.runs.c.id == self.nodes.c.run_id).where(
                     self.nodes.c.canvas_id == canvas_id, self.nodes.c.run_id == run_id)).mappings().one_or_none()
@@ -234,26 +234,26 @@ class _ApprovalUpgrade:
         return versions, changed
 
     def _retain_unknown_submission(self, node) -> bool:
-        if not node['task_id'] or node['stage'] == 'submission_unknown':
+        if not node['task_id']:
             return False
         table = self.tasks
-        task = self.db.execute(select(table.c.status, table.c.kind, table.c.provider_task_id, table.c.error_code)
+        task = self.db.execute(select(table.c.status, table.c.stage, table.c.kind,
+                                     table.c.provider_task_id, table.c.error_code)
                                .where(table.c.id == node['task_id'])).mappings().one_or_none()
         if not task or task['provider_task_id'] or task['kind'] not in ('video_generation', 'image_generation'):
             return False
-        if task['status'] == 'running':
-            self.db.execute(table.update().where(table.c.id == node['task_id']).values(
-                stage='submission_unknown', error_code='submission_unknown', error_message=_UNKNOWN_SUBMISSION,
-                deadline_at=None, next_poll_at=None,
-            ))
-        elif task['status'] != 'failed' or task['error_code'] not in {
-            'submission_interrupted', 'execution_interrupted', 'execution_timeout',
-            'provider_task_id_missing', 'provider_task_id_invalid',
-        }:
+        interrupted = {'submission_interrupted', 'execution_interrupted', 'execution_timeout'}
+        if task['status'] != 'running' and (task['status'] != 'failed' or task['error_code'] not in interrupted):
             return False
-        self.db.execute(self.nodes.update().where(self.nodes.c.id == node['id']).values(
-            stage='submission_unknown', error_code='submission_unknown', error_message=_UNKNOWN_SUBMISSION,
+        if task['stage'] == node['stage'] == 'submission_unknown':
+            return False
+        fields = dict(status='running', stage='submission_unknown', error_code='submission_unknown',
+                      error_message=_UNKNOWN_SUBMISSION)
+        self.db.execute(table.update().where(table.c.id == node['task_id']).values(
+            **fields, finished_at=None, deadline_at=None, next_poll_at=None,
         ))
+        self.db.execute(self.nodes.update().where(self.nodes.c.id == node['id']).values(**fields))
+        self.db.execute(self.runs.update().where(self.runs.c.id == node['run_id']).values(lifecycle='active'))
         return True
 
     def _clear_pending(self, session) -> dict:

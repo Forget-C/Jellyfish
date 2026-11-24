@@ -373,7 +373,7 @@ async def test_canvas_approval_mode_is_persisted_per_canvas(canvas_client):
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures('assistant_edit_model')
-@pytest.mark.parametrize('action', ['edit', 'edit-conflict', 'delete', 'release'])
+@pytest.mark.parametrize('action', ['edit', 'edit-conflict', 'delete', 'release', 'delete-with-extra'])
 async def test_auto_approval_follows_user_words_and_preserves_conflicts(canvas_client, monkeypatch, action):
     canvas = (await canvas_client.post('/canvases', json={'name': '自动审批'})).json()['data']
     url = f"/canvases/{canvas['id']}"
@@ -382,6 +382,10 @@ async def test_auto_approval_follows_user_words_and_preserves_conflicts(canvas_c
         {'kind': 'text', 'id': 'first', 'text': '快速推近'},
     ]}}
     draft = {**canvas['document'], 'cards': [card]}
+    extra_change = action == 'delete-with-extra'
+    if extra_change:
+        action = 'delete'
+        draft['cards'].append({'id': 'extra', 'type': 'content.text', 'text': '保持原文'})
     conflict = action == 'edit-conflict'
     if conflict:
         action = 'edit'
@@ -398,6 +402,8 @@ async def test_auto_approval_follows_user_words_and_preserves_conflicts(canvas_c
     revision = saved.json()['data']['revision']
     assert (await canvas_client.patch(assistant + '/approval', json={'approval_mode': 'automatic'})).status_code == 200
     initial = {'revision': revision, 'draft': draft, 'scope': 'selection', 'card_ids': ['target']}
+    if extra_change:
+        initial = {**initial, 'scope': 'canvas', 'card_ids': []}
     name = 'preview_canvas_changes'
     target = {'edit': {'kind': 'video_prompt_segment', 'segment_id': 'first'},
               'delete': {'kind': 'delete_card'},
@@ -409,6 +415,7 @@ async def test_auto_approval_follows_user_words_and_preserves_conflicts(canvas_c
             return await original_send(client, request, **kwargs)
         body = json.loads(request.content)
         if any('独立的画布审批复核员' in item['content'] for item in body['messages'] if item['role'] == 'system'):
+            assert not extra_change, 'unauthorized effects reached the independent reviewer'
             assert not body.get('tools')
             return httpx.Response(200, request=request, json={
                 'id': 'independent-review', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
@@ -423,7 +430,11 @@ async def test_auto_approval_follows_user_words_and_preserves_conflicts(canvas_c
             if count and action == 'edit':
                 args = _batch_field({**args, 'text': '缓慢推近'})
             elif count:
-                args = {'groups': [{'title': '清理', 'changes': [{'kind': 'remove', **args}]}]}
+                changes = [{'kind': 'remove', **args}]
+                if extra_change:
+                    changes.append({'kind': 'edit_field', 'change': {'card_id': 'extra',
+                                    'target': {'kind': 'card_text'}, 'text': '额外的未授权修改'}})
+                args = {'groups': [{'title': '清理', 'changes': changes}]}
             message = {'role': 'assistant', 'tool_calls': [{'id': f'call-{call}', 'type': 'function',
                 'function': {'name': call, 'arguments': json.dumps(args)}}]}
         return httpx.Response(200, request=request, json={
@@ -446,8 +457,16 @@ async def test_auto_approval_follows_user_words_and_preserves_conflicts(canvas_c
     assert (await canvas_client.get(url)).json()['data']['revision'] == revision
 
     request = {'edit': '把这张卡的推近放慢', 'delete': '删除这张卡', 'release': '解除这条引用'}[action]
+    if extra_change:
+        request = '删除 target'
     explicit = await canvas_client.post(assistant, json={'request_id': 'explicit', 'context': initial, 'text': request})
     assert explicit.status_code == 200, explicit.text
+    if extra_change:
+        assert len(explicit.json()['data']['proposal']['groups'][0]['edits']) == 2, explicit.text
+        denied = await canvas_client.post(assistant + '/proposals/explicit', json=decision)
+        assert denied.status_code == 409, denied.text
+        assert (await canvas_client.get(url)).json()['data']['document']['cards'][1]['text'] == '保持原文'
+        return
     assert explicit.json()['data']['automatic_approval'] is True
     if conflict:
         card['prompt']['segments'][0]['text'] = '手动环绕'

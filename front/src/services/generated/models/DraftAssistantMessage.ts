@@ -18,6 +18,7 @@ export type DraftAssistantMessage = {
     text: string;
     stream_reply?: boolean;
     context?: (CanvasAssistantDraftContext | null);
+    submit_preview_id?: (string | null);
     revises?: (string | null);
     revises_field?: (CanvasAssistantFieldRevision | null);
     repairs?: (string | null);

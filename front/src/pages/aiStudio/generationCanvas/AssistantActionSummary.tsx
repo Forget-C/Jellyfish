@@ -3,6 +3,7 @@ import { Checkbox } from 'antd'
 import type { CanvasAssistantExchange } from '../../../services/generated'
 import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 import { useUiText } from '../../../uiText'
+import { groupIsPending } from './AssistantProposal'
 
 export function AssistantActionSummary({ turn, canApprove, approve, locate }: {
   turn: CanvasAssistantExchange
@@ -19,7 +20,7 @@ export function AssistantActionSummary({ turn, canApprove, approve, locate }: {
   if (count < 2) return null
   const edits = proposal?.groups ?? (proposal ? [{ id: '', state: proposal.state }] : [])
   const written = edits.filter(group => group.state === 'applied').length
-  const pending = edits.filter(group => (group.state ?? 'pending') === 'pending').length
+  const pending = edits.filter(group => groupIsPending(group, turn.approval_audit)).length
   const layoutState = layout?.state === 'applied' ? uiText('布局已执行')
     : layout?.state === 'waiting' || layout?.state === 'executing' ? uiText('等待画布执行布局')
       : layout?.state === 'proposed' ? uiText('待审批') :

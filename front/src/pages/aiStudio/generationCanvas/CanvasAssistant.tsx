@@ -7,7 +7,7 @@ import { WorkbenchConversation } from '../../../components/workbench/WorkbenchCo
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasDocument, CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantFieldRevision, CanvasAssistantGroupReference, CanvasAssistantHistory, CanvasAssistantInstruction, CanvasAssistantLayout, CanvasAssistantMessage, CanvasAssistantProgress, CanvasAssistantQuestion, CanvasAssistantQueueItem, FileRead, ModelRead } from '../../../services/generated'
-import { AssistantEditGroups, AssistantProposal } from './AssistantProposal'
+import { AssistantEditGroups, AssistantProposal, groupIsPending } from './AssistantProposal'
 import { AssistantMarkdownTable } from './AssistantMarkdownTable'
 import { AssistantLayout } from './AssistantLayout'
 import type { AssistantLayoutOutcome } from './assistantLayoutEditor'
@@ -66,7 +66,7 @@ const assistantPhaseLabels = {
   validating_proposal: '正在校验提案',
 } as const
 
-type AssistantSendError = 'text' | 'tools' | 'reply' | 'context-limit' | 'target' | 'proposal' | 'timeout' | 'model'
+type AssistantSendError = 'text' | 'tools' | 'reply' | 'context-limit' | 'target' | 'proposal' | 'timeout' | 'model' | 'stale-preview'
 
 function assistantSendError(detail: unknown): AssistantSendError {
   switch (detail) {
@@ -613,6 +613,13 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
 
   const send = async (resume?: CanvasAssistantMessage, enqueue = false, replan = false) => {
     const text = (resume?.text ?? draft).trim()
+    if (!resume && !enqueue && /^(按此方案继续|写入画布|送审)[。！!]?$/.test(text)) {
+      const latest = turns ? turns[turns.length - 1] : undefined
+      if (latest?.preview && !latest.stopped && !turns?.some(turn => turn.submitted_preview_id === latest.preview?.id)) {
+        resume = { request_id: crypto.randomUUID(), text, submit_preview_id: latest.preview.id,
+          context: { ...readDraft(), scope: 'canvas' } }
+      }
+    }
     if (draftStreamId || draftPromoting || (enqueue && queueBusy) || savingModel || savingApproval || uploadingReference || !turns || !text) return
     const intent = resume || enqueue ? undefined : confirmationKind(text)
     const replyInProgress = sendingNow.current || !!runningId
@@ -625,9 +632,10 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     let fieldRevision = enqueue ? undefined : revisingField
     if (intent) {
       const candidates = turns.filter(turn => !turn.stopped && turn.proposal &&
-        (turn.proposal.state ?? 'pending') === 'pending')
+        (turn.proposal.state ?? 'pending') === 'pending' &&
+        (!turn.proposal.groups || turn.proposal.groups.some(group => groupIsPending(group, turn.approval_audit))))
       const checked = (turn: CanvasAssistantExchange) => turn.proposal?.groups
-        ?.filter(group => (group.state ?? 'pending') === 'pending' && selectedGroups[turn.request_id]?.includes(group.id))
+        ?.filter(group => groupIsPending(group, turn.approval_audit) && selectedGroups[turn.request_id]?.includes(group.id))
         .map(group => group.id) ?? []
       const highlighted = candidates.filter(turn => checked(turn).length)
       const target = candidates.length === 1 ? candidates[0] : highlighted.length === 1 ? highlighted[0] : undefined
@@ -643,7 +651,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         if (target.request_id !== revising?.request_id) fieldRevision = undefined
       }
       else {
-        const available = target.proposal.groups?.filter(group => (group.state ?? 'pending') === 'pending')
+        const available = target.proposal.groups?.filter(group => groupIsPending(group, target.approval_audit))
           .map(group => group.id)
         const groups = intent === 'all' || available?.length === 1 ? available : checked(target)
         if (available && !groups?.length) {
@@ -729,7 +737,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       }
       return
     }
-    const consumeDraft = !resume || (replan && pending.current === resume && draft.trim() === text)
+    const consumeDraft = !resume || (!!resume.submit_preview_id && draft.trim() === text) || (replan && pending.current === resume && draft.trim() === text)
     pending.current = requestBody
     if (consumeDraft) {
       setRepairSource(undefined)
@@ -829,6 +837,17 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         if (localDraft) writeDraftAssistant(canvasId, { references: referenceFiles })
       }
       const detail = error instanceof ApiError ? error.body?.message ?? error.body?.detail : error instanceof Error ? error.message : undefined
+      if (requestBody.submit_preview_id) {
+        if (localDraft) {
+          writeDraftAssistant(canvasId, { live: undefined })
+          setDraftStreamId(undefined)
+        }
+        if (error instanceof ApiError && error.status === 409) {
+          pending.current = undefined
+          setSendError('stale-preview')
+          return
+        }
+      }
       if (!localDraft) setFailedReplyId(requestBody.request_id)
       setSendError(assistantSendError(detail))
     } finally {
@@ -1094,7 +1113,18 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                 onClick={() => onLocate(cardId)}>{uiText('定位 {{value1}}', { value1: name })}</WorkbenchButton>
             })}
           </div>}
-          {turn.proposal?.groups?.length ? <AssistantEditGroups groups={turn.proposal.groups}
+          {turn.preview?.proposal.groups?.length ? <>
+            <AssistantEditGroups groups={turn.preview.proposal.groups} readOnly
+              current={() => readDraft().draft} undone={[]} selected={[]} editDisabled />
+            {turns?.some(other => other.submitted_preview_id === turn.preview?.id) ?
+              <small>{uiText('此预演已送审')}</small> : !turn.stopped && <WorkbenchButton variant="secondary"
+                disabled={approvalDisabled || sending || !!runningId}
+                onClick={() => void send({ request_id: crypto.randomUUID(), text: '送审',
+                  submit_preview_id: turn.preview?.id, context: { ...readDraft(), scope: 'canvas' } })}>
+                {uiText('送审')}
+              </WorkbenchButton>}
+          </> : null}
+          {turn.proposal?.groups?.length ? <AssistantEditGroups groups={turn.proposal.groups} audit={turn.approval_audit}
             undone={turn.proposal.groups.filter(group => assistantUndone.includes(turn.request_id + ':' + group.id)).map(group => group.id)}
             selected={selectedGroups[turn.request_id] ?? []}
             onSelectionChange={ids => setSelectedGroups(current => ({ ...current, [turn.request_id]: ids }))}
@@ -1132,7 +1162,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             <small>{uiText(entry.mode === 'automatic' ? '自动审批明确请求' : '人工审批')} · {
               uiText(entry.outcome === 'manual_required' ? '等待人工审批' :
                 entry.outcome === 'rejected' ? '建议已拒绝' : entry.outcome === 'conflict'
-                  ? '与当前画布冲突' : entry.outcome === 'partial' ? '部分建议已写入' : '已写入画布')
+                  ? '与当前画布冲突' : entry.outcome === 'approved' ? '已批准，等待执行' :
+                    entry.outcome === 'failed' ? '执行失败' : entry.outcome === 'blocked' ? '执行受阻' :
+                      entry.outcome === 'partial' ? '部分建议已写入' : '已写入画布')
             }</small>
             {entry.review && <details><summary>{uiText('独立审批复核')}</summary>
               <p>{entry.review.reason}</p>
@@ -1158,9 +1190,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           </details>}
           {!turn.stopped && <AssistantActionSummary turn={turn}
             canApprove={!approvalDisabled && !sending && (!turn.proposal?.groups ||
-              turn.proposal.groups.some(group => group.state === 'pending' && selectedGroups[turn.request_id]?.includes(group.id)))}
+              turn.proposal.groups.some(group => groupIsPending(group, turn.approval_audit) && selectedGroups[turn.request_id]?.includes(group.id)))}
             approve={async includeLayout => {
-              const groups = turn.proposal?.groups?.filter(group => group.state === 'pending' && selectedGroups[turn.request_id]?.includes(group.id))
+              const groups = turn.proposal?.groups?.filter(group => groupIsPending(group, turn.approval_audit) && selectedGroups[turn.request_id]?.includes(group.id))
                 .map(group => group.id)
               const approved = await approveProposal(turn.request_id, groups, includeLayout)
               if (!approved) throw new Error('proposal remains pending')
@@ -1274,6 +1306,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           : sendError === 'text' ? uiText("当前模型无法进行文字对话，请切换助手模型。")
           : sendError === 'target' ? uiText('没有找到指令中点名的镜头，请核对镜头或引用对应卡片。')
           : sendError === 'context-limit' ? uiText("内容超出当前模型的上下文上限，请缩小分析范围或切换助手模型。")
+          : sendError === 'stale-preview' ? uiText('这份预演无法送审，请核对原审批卡，或基于当前画布重新预演。')
           : sendError === 'proposal' ? uiText('画布提案未通过校验，本轮未修改画布。')
           : sendError === 'timeout' ? uiText('助手处理超时，请继续或缩小本轮任务。')
           : sendError === 'model' ? uiText('模型处理失败，可以继续本轮或切换模型。')

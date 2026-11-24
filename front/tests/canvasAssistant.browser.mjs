@@ -1250,6 +1250,31 @@ try {
   await panel.getByText('added-group-member', { exact: true }).waitFor()
 
 
+  const exactCanvas = (await (await fetch(canvasApi, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '只读预演送审' }),
+  })).json()).data
+  const exactPath = canvasApi + '/' + exactCanvas.id
+  await page.goto(base + '/canvases/' + exactCanvas.id)
+  await open()
+  await ask('新增潮水文本卡，只给方案，先不要写入画布')
+  const readOnly = panel.getByRole('region', { name: '修改预演' })
+  await readOnly.getByText('潮水涌入', { exact: true }).waitFor()
+  assert.equal(await readOnly.getByRole('checkbox').count(), 0)
+  assert.equal(await panel.getByRole('region', { name: '修改建议' }).count(), 0)
+  const original = (await (await fetch(exactPath + '/assistant')).json()).data.turns.at(-1)
+  assert.ok(original.preview?.id)
+  await panel.getByRole('button', { name: '送审', exact: true }).click()
+  await panel.getByText('此预演已送审', { exact: true }).waitFor()
+  const staged = (await (await fetch(exactPath + '/assistant')).json()).data.turns.at(-1)
+  assert.equal(staged.submitted_preview_id, original.preview.id)
+  assert.deepEqual(staged.proposal, original.preview.proposal)
+  assert.equal((await (await fetch(exactPath)).json()).data.revision, exactCanvas.revision)
+  const exactProposal = panel.getByRole('region', { name: '修改建议' })
+  await exactProposal.getByRole('checkbox', { name: '新建文本', exact: false }).check()
+  await exactProposal.getByRole('button', { name: '写入所选 1 组' }).click()
+  await exactProposal.getByText('已写入画布', { exact: true }).waitFor()
+  assert.equal((await (await fetch(exactPath)).json()).data.document.cards.filter(card => card.text === '潮水涌入').length, 1)
+
   console.log('Assistant conversation persisted independently on both real canvas entries.')
   }
 } finally {

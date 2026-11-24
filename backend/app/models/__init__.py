@@ -9,7 +9,7 @@ from app.models.task import Task, TaskInput, TaskOutput
 from app.models.directing import Sequence, DirectingRevision, RevisionDependency, Take, CutTakeReference, DirectingAction
 
 from app.models.llm import Model, ModelSettings, Provider
-from app.models.canvas_assistant import CanvasAssistantSession, CanvasAssistantTurn
+from app.models.canvas_assistant import CanvasAssistantPreview, CanvasAssistantSession, CanvasAssistantTurn
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.types import FileUsageKind
 
@@ -67,6 +67,7 @@ __all__ = [
     "Provider",
     "Model",
     "ModelSettings",
+    "CanvasAssistantPreview",
     "CanvasAssistantSession",
     "CanvasAssistantTurn",
     "ExperimentSession",

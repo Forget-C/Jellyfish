@@ -94,6 +94,7 @@ class CanvasAssistantMessage(BaseModel):
     text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16000)]
     stream_reply: bool = Field(default=False, exclude_if=lambda value: not value)
     context: CanvasAssistantDraftContext | None = None
+    submit_preview_id: str | None = Field(default=None, pattern=r'^[a-f0-9]{32}$', exclude_if=lambda value: value is None)
     revises: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')] | None = None
     revises_field: CanvasAssistantFieldRevision | None = None
     repairs: str | None = Field(default=None, min_length=1, max_length=64, exclude_if=lambda value: value is None)
@@ -104,6 +105,9 @@ class CanvasAssistantMessage(BaseModel):
 
     @model_validator(mode='after')
     def check_attachment_identity(self):
+        other_edit = self.revises or self.repairs or self.canvas_references or self.attachment_file_ids
+        if self.submit_preview_id and (self.context is None or other_edit):
+            raise ValueError('Submitting a preview requires its displayed document and no other edits')
         if self.revises_field is not None and self.revises is None:
             raise ValueError('A field revision must identify a source proposal')
         if len(set(self.attachment_file_ids)) != len(self.attachment_file_ids):
@@ -158,6 +162,14 @@ class CanvasAssistantProgress(BaseModel):
     subtasks: list[CanvasAssistantSubtask] = Field(default_factory=list)
 
 
+class CanvasAssistantReadOnlyPreview(BaseModel):
+    """The exact candidate displayed before the user sends it for approval."""
+
+    id: str
+    revision: int
+    proposal: CanvasAssistantProposal
+
+
 class CanvasAssistantExchange(BaseModel):
     """A completed turn in the order visible to the user."""
 
@@ -172,6 +184,8 @@ class CanvasAssistantExchange(BaseModel):
     model_id: str
     reply: str
     proposal: CanvasAssistantProposal | None = None
+    preview: CanvasAssistantReadOnlyPreview | None = Field(default=None, exclude_if=lambda value: value is None)
+    submitted_preview_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
     proposal_issues: list[CanvasAssistantProposalIssue] | None = None
     revises: str | None = None
     revises_field: CanvasAssistantFieldRevision | None = None

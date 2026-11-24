@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { Alert, Checkbox } from 'antd'
 import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
-import type { CanvasAssistantChange, CanvasAssistantEditGroup, CanvasAssistantProposal, CanvasDocument } from '../../../services/generated'
+import type { CanvasAssistantApprovalAudit, CanvasAssistantChange, CanvasAssistantEditGroup, CanvasAssistantProposal, CanvasDocument } from '../../../services/generated'
 import { useUiText } from '../../../uiText'
 
 type Decision = 'approve' | 'reject'
@@ -60,24 +60,32 @@ export function AssistantProposal({ proposal, undone, current, editDisabled, rev
   </section>
 }
 
+export function groupIsPending(group: Pick<CanvasAssistantEditGroup, 'id' | 'state'>, audit?: CanvasAssistantApprovalAudit[] | null) {
+  return (group.state ?? 'pending') === 'pending' &&
+    !audit?.some(entry => entry.outcome === 'approved' && entry.group_ids?.includes(group.id))
+}
+
 /** Select independent groups while preserving a single save and undo for the chosen set. */
-export function AssistantEditGroups({ groups, undone, selected, onSelectionChange, current, editDisabled, revise, reviseField, decide }: {
+export function AssistantEditGroups({ groups, undone, selected, onSelectionChange, current, editDisabled, revise, reviseField, decide,
+  readOnly = false, audit }: {
   groups: CanvasAssistantEditGroup[]
   undone: string[]
   selected: string[]
-  onSelectionChange: (ids: string[]) => void
+  onSelectionChange?: (ids: string[]) => void
+  audit?: CanvasAssistantApprovalAudit[] | null
+  readOnly?: boolean
   current: () => Record<string, unknown>
   editDisabled: boolean
-  revise: () => void
+  revise?: () => void
   reviseField?: (groupId: string, index: number) => void
-  decide: (action: Decision, groupIds: string[]) => Promise<boolean>
+  decide?: (action: Decision, groupIds: string[]) => Promise<boolean>
 }) {
   const uiText = useUiText()
-  const [firstGroupId] = useState(() => groups.find(group => (group.state ?? 'pending') === 'pending')?.id)
+  const [firstGroupId] = useState(() => groups.find(group => groupIsPending(group, audit))?.id)
   const [busy, setBusy] = useState<Decision>()
   const [error, setError] = useState(false)
   const currentDraft = current()
-  const pending = groups.filter(group => (group.state ?? 'pending') === 'pending')
+  const pending = groups.filter(group => groupIsPending(group, audit))
   const previewEdits = pending.flatMap(group => group.edits)
   const newCards = new Map<string, string>()
   const existingCards = new Set<string>()
@@ -110,7 +118,7 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
     setBusy(action)
     setError(false)
     try {
-      if (await decide(action, ids)) onSelectionChange([])
+      if (await decide?.(action, ids)) onSelectionChange?.([])
       else setError(true)
     } catch {
       setError(true)
@@ -119,12 +127,12 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
     }
   }
 
-  return <section className="canvas-assistant-proposal" aria-label={uiText('修改建议')}>
+  return <section className="canvas-assistant-proposal" aria-label={uiText(readOnly ? '修改预演' : '修改建议')}>
     <header className="canvas-assistant-proposal-heading">
-      <strong>{uiText('修改建议')}</strong>
-      {!!pending.length && <small>{uiText('{{count}} 组待审批', { count: pending.length })}</small>}
+      <strong>{uiText(readOnly ? '修改预演' : '修改建议')}</strong>
+      {!!pending.length && <small>{uiText(readOnly ? '{{count}} 组候选改动' : '{{count}} 组待审批', { count: pending.length })}</small>}
     </header>
-    {!!pending.length && <div aria-label={uiText('待审批差异概览')}>
+    {!!pending.length && <div aria-label={uiText(readOnly ? '候选改动差异概览' : '待审批差异概览')}>
       <small>{uiText('新增 {{added}} 张 · 涉及现有 {{reused}} 张 · 候选连线 {{links}} 条', {
         added: newCards.size, reused: existingCards.size, links: candidateLinks,
       })}</small>
@@ -132,20 +140,24 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
     </div>}
     {groups.map(group => {
       const isPending = pending.includes(group)
+      const outcome = [...(audit ?? [])].reverse().find(entry => entry.group_ids?.includes(group.id))?.outcome
       const conflict = isPending && group.edits.some(edit => {
         const { target } = edit
         return (target.kind === 'card_text' || target.kind === 'reference_name' || target.kind === 'video_duration' || 'movement_card_id' in target || 'field' in target || 'field_name' in target || 'segment_id' in target)
           && !newCards.has(edit.card_id) && currentText(currentDraft, edit) !== edit.before
       })
       return <div key={group.id} className="canvas-assistant-edit-group">
-        {isPending && <Checkbox disabled={!!busy} checked={selectedPending.includes(group.id)}
-          onChange={event => onSelectionChange(event.target.checked
+        {isPending && !readOnly && <Checkbox disabled={!!busy} checked={selectedPending.includes(group.id)}
+          onChange={event => onSelectionChange?.(event.target.checked
             ? [...selectedPending, group.id] : selectedPending.filter(id => id !== group.id))}>
           {uiText(group.title)}
         </Checkbox>}
-        <details open={isPending && (group.id === firstGroupId || conflict)}>
-          <summary>{isPending ? conflict ? uiText('与当前画布冲突') : uiText('查看差异')
+        <details open={outcome === 'conflict' || (isPending && (group.id === firstGroupId || conflict))}>
+          <summary>{isPending ? readOnly ? uiText(group.title) : conflict ? uiText('与当前画布冲突') : uiText('查看差异')
             : <>{uiText(group.title)} · <span>{uiText(group.state === 'applied' ? (undone.includes(group.id) ? '曾写入，后已撤销' : '已写入画布')
+              : outcome === 'approved' ? '已批准，等待执行'
+              : outcome === 'failed' ? '执行失败' : outcome === 'blocked' ? '执行受阻'
+              : outcome === 'conflict' ? '与当前画布冲突'
               : group.state === 'rejected' ? '建议已拒绝' : '建议已被修订替代')}</span></>}</summary>
           {group.edits.map((edit, index) => {
             const { target } = edit
@@ -166,7 +178,7 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
                 <dt>{uiText('保留原运镜的卡片')}</dt><dd>{target.other_consumer_ids.join('、')}</dd>
               </>}
               <dt>{uiText('原值')}</dt><dd>{edit.before || '—'}</dd>
-              {isPending && currentText(currentDraft, edit) !== edit.before &&
+              {(isPending || outcome === 'conflict') && currentText(currentDraft, edit) !== edit.before &&
                 <><dt>{uiText('当前值')}</dt><dd>{currentText(currentDraft, edit) ?? '—'}</dd></>}
               <dt>{uiText('拟议值')}</dt><dd>{edit.after}</dd>
             </dl>
@@ -189,7 +201,7 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
             </dl>
             const currentValue = currentText(currentDraft, edit)
             const removal = ['delete_card', 'release_binding', 'disconnect_cards'].includes(edit.target.kind)
-            const changed = !removal && pending.includes(group) && !newCards.has(edit.card_id) && currentValue !== edit.before
+            const changed = !removal && (isPending || outcome === 'conflict') && !newCards.has(edit.card_id) && currentValue !== edit.before
             return <dl key={edit.card_id + JSON.stringify(edit.target)}>
               <dt>{uiText(edit.card_name)} · {edit.card_id.slice(0, 8)} · {removal ? uiText(edit.after)
                 : fieldLabel(edit.target, uiText)}</dt>
@@ -204,7 +216,7 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
         </details>
       </div>
     })}
-    {!!pending.length && <div className="canvas-assistant-edit-actions">
+    {!readOnly && !!pending.length && <div className="canvas-assistant-edit-actions">
       <WorkbenchButton variant="primary" loading={busy === 'approve'} disabled={editDisabled || !!busy || !selectedPending.length}
         onClick={() => void confirm('approve')}>{uiText('写入所选 {{count}} 组', { count: selectedPending.length })}</WorkbenchButton>
       {pending.length > 1 && <WorkbenchButton variant="secondary" disabled={editDisabled || !!busy}
@@ -215,7 +227,7 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
       <WorkbenchButton variant="quiet" loading={busy === 'reject'} disabled={!!busy || !selectedPending.length}
         onClick={() => void confirm('reject')}>{uiText('拒绝所选')}</WorkbenchButton>
     </div>}
-    {!!pending.length && editDisabled && <small>{uiText('请完成当前编辑并取得画布编辑权后再确认。')}</small>}
+    {!readOnly && !!pending.length && editDisabled && <small>{uiText('请完成当前编辑并取得画布编辑权后再确认。')}</small>}
     {error && <Alert type="warning" message={uiText('未能完成审批，请核对画布状态后重试。')} />}
   </section>
 }

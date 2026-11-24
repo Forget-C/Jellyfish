@@ -10,7 +10,7 @@ from app.models.canvas_assistant import CanvasAssistantSession, CanvasAssistantT
 from app.schemas.canvas_assistant import CanvasAssistantExchange
 from app.schemas.canvas_assistant_edit import (
     CanvasAssistantApprovalAudit, CanvasAssistantIndependentReview, CanvasAssistantProposal, CanvasAssistantProposalDecision,
-    CanvasAssistantProposalResult,
+    CanvasAssistantProposalResult, DeleteCardEdit,
 )
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.approval import ApprovalAccess, ApprovalError, ApprovalScope, ApprovalService
@@ -88,16 +88,17 @@ def _effects(group: CanvasEditGroupPreview) -> tuple[ApprovalEffect, ...]:
     for diff in group.differences:
         path = diff.path
         if path[0] != 'cards':
+            changes.add(ApprovalEffect(kind='edit', target_id='canvas:' + '/'.join(path)))
             continue
         card_id = path[1]
         if len(path) == 2 and not diff.after.exists:
             changes.add(ApprovalEffect(kind='delete_card', target_id=card_id))
         elif len(path) > 2 and path[2] == 'input_bindings':
-            before = {item['id'] for item in diff.before.value or ()}
-            after = {item['id'] for item in diff.after.value or ()}
+            before = {item['id']: item for item in diff.before.value or ()}
+            after = {item['id']: item for item in diff.after.value or ()}
             changes.update(ApprovalEffect(kind='release_binding', target_id=card_id, binding_id=key)
-                           for key in before - after)
-            if after - before:
+                           for key in before.keys() - after.keys())
+            if any(before.get(key) != value for key, value in after.items()):
                 changes.add(ApprovalEffect(kind='edit', target_id=card_id))
         else:
             changes.add(ApprovalEffect(kind='edit', target_id=card_id))
@@ -131,12 +132,24 @@ class _CanvasAutomaticPolicy:
         if not effects or not can_submit_canvas_edit(turn.text):
             return None
         explicit = explicit_canvas_effects(turn.text, turn.context, document, effects)
-        # The command must pass either a scoped field rule or exact sensitive-action rules.
-        if not explicit and not automatic_approval_allowed(turn.text, turn.context, proposal, document, (group_id,)):
-            return None
+        presented = next(item for item in proposal.groups if item.id == group_id)
+        deletion_only = all(isinstance(edit.target, DeleteCardEdit) and
+                            ApprovalEffect(kind='delete_card', target_id=edit.card_id) in explicit
+                            for edit in presented.edits)
+        ordinary = {effect for effect in effects if effect.kind == 'edit'}
+        allowed = set(explicit)
+        if deletion_only:
+            # Canonical removal also cleans up incident graph structure. This exception
+            # applies only when the preview contains nothing besides explicit deletions.
+            allowed.update(effect for effect in ordinary if effect.target_id.startswith('canvas:'))
+        elif ordinary and not explicit:
+            targets = {edit.card_id for edit in presented.edits}
+            if (all(effect.target_id in targets for effect in ordinary)
+                    and automatic_approval_allowed(turn.text, turn.context, proposal, document, (group_id,))):
+                allowed.update(ordinary)
         return AutomaticApprovalBasis(
             authority_revision=f'{session.approval_revision}:{canvas.revision}', actor_id=access.actor_id,
-            user_request=turn.text, effects=effects, allowed_effects=frozenset(effects), explicit_effects=explicit,
+            user_request=turn.text, effects=effects, allowed_effects=frozenset(allowed), explicit_effects=explicit,
             evidence={'diff': group.model_dump(mode='json'), 'targets': turn.context['target_card_ids']},
         )
 

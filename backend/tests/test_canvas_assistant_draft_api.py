@@ -137,6 +137,25 @@ async def test_approved_first_card_and_reference_are_promoted_once(canvas_client
         async with canvas_client.canvas_sessions() as db:
             assert await ApprovalService(db).read_submitted(canvas_operator_access(draft),
                 object_type='canvas-edit', object_id='draft:create-one', idempotency_key='draft:create-one') is None
+        preview = turn['preview']
+        submit = {'request_id': 'submit-draft', 'text': '送审', 'submit_preview_id': preview['id'],
+                  'turns': [turn], 'context': {'draft': document, 'revision': 0, 'scope': 'canvas'}}
+        wrong_canvas = await canvas_client.post(f'/canvases/drafts/{different_draft}/assistant', json=submit)
+        assert wrong_canvas.status_code == 409, wrong_canvas.text
+        changed = {**submit, 'context': {**submit['context'], 'draft': {**document, 'name': '新版本'}}}
+        stale = await canvas_client.post(url + '/assistant', json=changed)
+        assert stale.status_code == 409, stale.text
+        sent_for_approval = await canvas_client.post(url + '/assistant', json=submit)
+        assert sent_for_approval.status_code == 200, sent_for_approval.text
+        approval = sent_for_approval.json()['data']
+        assert approval['proposal'] == preview['proposal'] and approval['submitted_preview_id'] == preview['id']
+        assert (await canvas_client.post(url + '/assistant', json=submit)).json() == sent_for_approval.json()
+        assert (await canvas_client.get(url)).json()['data']['revision'] == -1
+        saved = await canvas_client.put(url, json={'request_id': 'first-exact-save', 'expected_revision': 0,
+            'document': document, 'assistant': {'turns': [turn, approval]},
+            'assistant_approval': {'source_id': 'submit-draft', 'group_ids': ['1']}})
+        assert saved.status_code == 200, saved.text
+        assert [card['text'] for card in saved.json()['data']['document']['cards']] == ['潮水涌入']
         return
     assert turn['proposal']['state'] == 'pending'
     assert turn['attachments'][0]['file_id'] == file_id

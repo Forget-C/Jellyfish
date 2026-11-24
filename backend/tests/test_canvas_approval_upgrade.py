@@ -20,6 +20,7 @@ from app.services.generation_canvas.edits import CanvasEditGroup, canvas_edits
 from app.services.generation_canvas.generation_inputs import canvas_generation_inputs
 from app.services.generation_canvas.lifecycle import free_canvas_lifecycle
 from app.services.generation_canvas.runs import canvas_runs
+from app.models.task import Task
 from app.services.task_service import TaskService, utcnow
 from app.task_worker import TaskWorker
 from tests.test_approved_canvas_generation import generation_sessions, submit_video_approval  # noqa: F401
@@ -154,7 +155,7 @@ async def test_upgrade_keeps_accepted_and_unknown_tasks_and_never_admits_remaini
         ])
         await db.flush()
         db.add_all([
-            CanvasAssistantGeneration(canvas_id=canvas_id, source_id=source_id, card_id='v', requested_count=3,
+            CanvasAssistantGeneration(canvas_id=canvas_id, source_id=source_id, card_id='v', requested_count=5,
                 state='reapproval_required', expected_revision=current.revision, input_approval={'pending': {'revision': 1}},
                 review_state='waiting', review_request='成片审看', created_at=utcnow()),
             CanvasAssistantGeneration(canvas_id=canvas_id, source_id='not-admitted', card_id='v', requested_count=1,
@@ -179,13 +180,21 @@ async def test_upgrade_keeps_accepted_and_unknown_tasks_and_never_admits_remaini
         await tasks.add_output(known_task, ordinal=0, file_id=file_id)
         await tasks.finish(known_task)
 
+        interrupted = await accept(4)
+        interrupted_task = interrupted.task_ids[0]
+        assert await tasks.claim(interrupted_task, worker_id='old-worker')
+        await tasks.finish(interrupted_task, error_code='submission_interrupted', error='回复中断')
+        known_failure = await accept(5)
+        failed_task = known_failure.task_ids[0]
+        assert await tasks.claim(failed_task, worker_id='old-worker')
+        await tasks.finish(failed_task, error_code='provider_task_id_missing', error='供应商完整响应缺少任务 ID')
         unknown = await accept(2)
         unknown_task = unknown.task_ids[0]
         assert await tasks.claim(unknown_task, worker_id='old-worker')
         db.add(CanvasAssistantEvent(canvas_id=canvas_id, cursor=1, source_id=source_id, kind='execution.blocked',
             payload={'request_id': source_id, 'model_id': 'assistant-model', 'sequence': 1, 'text': '生成三版',
                      'reply': '原生成回复', 'generation': {'state': 'reapproval_required', 'card_id': 'v',
-                                                          'requested_count': 3}}))
+                                                          'requested_count': 5}}))
 
     await execute_upgrade(sessions)
     await execute_upgrade(sessions)
@@ -216,9 +225,16 @@ async def test_upgrade_keeps_accepted_and_unknown_tasks_and_never_admits_remaini
         tracking = await runs.read_task_run(canvas_id, unknown_task)
         assert (tracking.nodes[0].status, tracking.nodes[0].stage) == ('running', 'submission_unknown')
         visible = await read_generation(db, canvas_id, source_id)
-        assert visible.requested_count == 3
+        interrupted_run = await runs.read_task_run(canvas_id, interrupted_task)
+        assert (interrupted_run.nodes[0].status, interrupted_run.nodes[0].stage) == ('running', 'submission_unknown')
+        original = await db.get(Task, interrupted_task)
+        assert (original.status, original.stage) == ('running', 'submission_unknown')
+        failed_run = await runs.read_task_run(canvas_id, failed_task)
+        assert failed_run.nodes[0].error_code == 'provider_task_id_missing'
+        assert visible.requested_count == 5
         assert [(item.request_id, item.state) for item in visible.versions] == [
             (accepted.request_id, 'succeeded'), (unknown.request_id, 'unknown'),
+            (interrupted.request_id, 'unknown'), (known_failure.request_id, 'failed'),
         ]
         assert visible.changed_input is None and visible.review.state == 'stopped'
         unsubmitted = await read_generation(db, canvas_id, 'not-admitted')

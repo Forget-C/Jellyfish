@@ -68,6 +68,32 @@ class CanvasAssistantTurn(Base):
     stopped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default='0')
     layout: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
+    @property
+    def preview(self):
+        """Project only the public display of the server-held preview."""
+        return (self.proposal_receipt or {}).get('_preview')
+
+    @property
+    def submitted_preview_id(self):
+        """Preserve the association in history and on exact replay."""
+        return (self.proposal_receipt or {}).get('_submitted_preview_id')
+
+
+class CanvasAssistantPreview(Base):
+    """A validated proposal awaiting explicit submission rather than a decision."""
+
+    __tablename__ = 'canvas_assistant_previews'
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    canvas_id: Mapped[str] = mapped_column(String(64))
+    project_id: Mapped[str | None] = mapped_column(String(64))
+    source_id: Mapped[str] = mapped_column(String(64))
+    model_id: Mapped[str] = mapped_column(String(64))
+    basis: Mapped[str] = mapped_column(String(64))
+    draft: Mapped[bool] = mapped_column(Boolean)
+    snapshot: Mapped[dict] = mapped_column(JSON)
+    submitted_source: Mapped[str | None] = mapped_column(String(64))
+
 
 class CanvasAssistantQueuedMessage(Base):
     """A queued message keeps its own request identity before receiving a turn ID."""

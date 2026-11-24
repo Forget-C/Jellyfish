@@ -13,21 +13,38 @@ from app.schemas.canvas_assistant_edit import (
     CanvasAssistantApprovalAudit, CanvasAssistantEditConflict, CanvasAssistantIndependentReview,
     CanvasAssistantProposal, CanvasAssistantProposalIssue, CanvasAssistantProposalResult,
 )
-from app.schemas.canvas_assistant_structure import AddCanvasCardTarget
-from app.schemas.generation_canvas import CanvasRead, CanvasSaved
+from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, AdjustShotMovementTarget
+from app.schemas.generation_canvas import CanvasDocument, CanvasRead, CanvasSaved
 from app.services.approval import ApprovalDecisionView
 from app.services.generation_canvas.assistant_events import publish_events
+from app.services.generation_canvas.assistant_movement import movement_basis_matches
 
 if TYPE_CHECKING:
     from app.services.generation_canvas.approved_edits import CanvasEditExecutionReceipt
 
 
-async def creation_conflicts(db, canvas_id: str, request_id: str, group_id: str, revision: int,
-                             current_ids: set[str]) -> dict[str, str]:
-    """Two outstanding proposals cannot independently duplicate a card the user did not ask to copy."""
-    executing = (await db.execute(select(CanvasAssistantTurn.request_id, CanvasAssistantTurn.proposal).where(
+async def approval_source(db, canvas_id: str, request_id: str):
+    """Locate the persisted display record for an assistant-owned request."""
+    return (await db.execute(select(CanvasAssistantTurn.request_id, CanvasAssistantTurn.proposal).where(
         CanvasAssistantTurn.canvas_id == canvas_id, CanvasAssistantTurn.approval_requests['edit'].as_string() == request_id,
     ))).one_or_none()
+
+
+def movement_basis_changed(proposal, group_id: str, document: CanvasDocument) -> bool:
+    """Shared-source isolation must use the adopted graph as it exists at execution."""
+    if not proposal:
+        return False
+    for group in CanvasAssistantProposal.model_validate(proposal).groups or ():
+        if group.id == group_id:
+            return any(isinstance(edit.target, AdjustShotMovementTarget)
+                       and not movement_basis_matches(document, edit.card_id, edit.target)
+                       for edit in group.edits)
+    return False
+
+
+async def creation_conflicts(db, canvas_id: str, executing, group_id: str, revision: int,
+                             current_ids: set[str]) -> dict[str, str]:
+    """Two outstanding proposals cannot independently duplicate a card the user did not ask to copy."""
     if not executing:
         return {}
     proposal = CanvasAssistantProposal.model_validate(executing.proposal)
@@ -68,11 +85,11 @@ def _state(proposal):
             else 'superseded' if 'superseded' in states else 'rejected')
 
 
-def _audit(turn, decision, outcome, *, groups=None, review=None):
+def _audit(turn, decision, outcome, *, groups=None, review=None, conflicts=None):
     entry = CanvasAssistantApprovalAudit(
         source_id=turn.request_id, mode='automatic' if decision.source == 'automatic' else 'manual',
         action=decision.action, outcome=outcome, group_ids=list(groups or decision.group_ids),
-        review=review, decision_id=decision.id,
+        review=review, decision_id=decision.id, conflicts=conflicts,
     )
     turn.approval_audit = [*(turn.approval_audit or []), entry.model_dump(mode='json')]
 
@@ -99,6 +116,8 @@ def record_assistant_edit_decision(db: AsyncSession, session: CanvasAssistantSes
         proposal.state = _state(proposal)
         turn.proposal = proposal.model_dump(mode='json')
         _audit(turn, decision, 'rejected', review=review)
+    else:
+        _audit(turn, decision, 'approved', review=review)
     publish_events(db, session, CanvasAssistantExchange.model_validate(turn), 'approval.decided',
                    subject='edit', group_ids=list(decision.group_ids))
 
@@ -113,7 +132,7 @@ def assistant_edit_result(
     revisions = [receipt.canvas_revision for receipt in receipts if receipt.state in ('applied', 'no_change')]
     conflicts = []
     for receipt in receipts:
-        if receipt.state not in ('conflict', 'blocked', 'failed'):
+        if receipt.state != 'conflict':
             continue
         group = groups[receipt.group_id]
         for conflict in receipt.result.conflicts if receipt.result else ():
@@ -163,8 +182,18 @@ async def publish_assistant_edit_execution(
         turn.proposal_issues = [*(turn.proposal_issues or []), issue.model_dump(mode='json')]
     raw_review = (state.get('_signed') or {}).get(decision.id)
     review = CanvasAssistantIndependentReview.model_validate(raw_review) if raw_review else None
-    _audit(turn, decision, 'applied' if success else 'conflict', groups=(outcome.id,), review=review)
+    signed_groups = []
+    for entry in turn.approval_audit or ():
+        if entry.get('decision_id') == decision.id and entry['outcome'] == 'approved':
+            remaining = [group_id for group_id in entry['group_ids'] if group_id != outcome.id]
+            if remaining:
+                signed_groups.append({**entry, 'group_ids': remaining})
+        else:
+            signed_groups.append(entry)
+    turn.approval_audit = signed_groups
     result = assistant_edit_result(turn, decision, (receipt,))
+    _audit(turn, decision, 'applied' if success else receipt.state, groups=(outcome.id,),
+           review=review, conflicts=result.conflicts or None)
     await advance_waiting_assistant_generation(db, project_id, turn.canvas_id, turn.request_id, result, [outcome.id])
     exchange = CanvasAssistantExchange.model_validate(turn)
     exchange.generation = await read_generation(db, turn.canvas_id, turn.request_id)

@@ -9,7 +9,8 @@ import httpx
 import pytest
 
 from app.models.llm import Model, Provider
-from app.services.generation_canvas import assistant_versioned_approval
+from app.services.generation_canvas import approved_edits, assistant_versioned_approval
+from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.runs import canvas_runs
 from app.services.task_service import TaskService
 from app.task_worker import TaskWorker, WorkerLimits
@@ -113,7 +114,7 @@ def _video_bindings(doc):
     return {card['id']: card['input_bindings'] for card in doc['cards'] if card['type'] == 'model.video'}
 
 
-async def _generation_recovery(client, canvas_id, path, params, state):
+async def _generation_recovery(client, canvas_id, path, params, state, *, response_body=None):
     """Submit the real assistant's explicit single generation and lose the provider receipt."""
     command = {'request_id': 'generate-once', 'text': '生成一版', 'context': {
         'scope': 'selection', 'card_ids': ['direct'], 'draft': state['document'], 'revision': state['revision'],
@@ -125,6 +126,8 @@ async def _generation_recovery(client, canvas_id, path, params, state):
     def provider(request):
         assert request.url.host == 'video.test' and request.method == 'POST'
         submitted.append(json.loads(request.content))
+        if response_body is not None:
+            return httpx.Response(200, json=response_body)
         raise httpx.ReadTimeout('provider accepted but reply was lost', request=request)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as transport:
@@ -133,7 +136,7 @@ async def _generation_recovery(client, canvas_id, path, params, state):
             await asyncio.gather(*worker.jobs.values())
         unknown = (_data(await client.get(path + '/assistant', params=params)))['turns'][-1]['generation']
         original, = unknown['versions']
-        assert original['state'] == 'unknown', unknown
+        assert original['state'] == ('failed' if response_body is not None else 'unknown'), unknown
         async with _worker(client.canvas_sessions, client=transport, submit=1) as restarted:
             async with client.canvas_sessions.begin() as db:
                 await TaskService(db).interrupt_previous_workers(worker_id=restarted.worker_id)
@@ -153,7 +156,7 @@ async def _generation_recovery(client, canvas_id, path, params, state):
 @pytest.mark.parametrize(('canvas_client', 'scene', 'loss'), [
     pytest.param(database, scene, loss, id=f"{database or 'sqlite'}-{'scene' if scene else 'free'}-{loss}")
     for database, scene, loss in (
-        (None, False, 'before'), (None, False, 'after'), (None, False, 'stale'),
+        (None, False, 'before'), (None, False, 'after'), (None, False, 'stale'), (None, False, 'execution-failure'),
         (None, True, 'before'), (None, True, 'after'), (None, True, 'stale'),
         ('mysql', False, 'before'), ('mysql', True, 'after'),
     )
@@ -188,18 +191,37 @@ async def test_approval_and_receipt_recover_after_disconnect(canvas_client, monk
 
     intermediate = _data(await client.get(path, params=params))
     assert intermediate['revision'] == before['revision'] + (loss == 'after')
+    if loss != 'after':
+        signed = _data(await client.get(path + '/assistant', params=params))['turns'][-1]
+        approval, = signed['approval_audit']
+        assert approval['outcome'] == 'approved' and approval['group_ids'] == [first['id']]
     if loss == 'stale':
         next(card for card in intermediate['document']['cards'] if card['id'] == 'role')['name'] = '用户修改的角色名'
         _data(await client.put(path, params=params, json={'request_id': 'manual-source-edit',
             'expected_revision': intermediate['revision'], 'document': intermediate['document']}))
 
-    async with _worker(client.canvas_sessions) as recreated:
-        await recreated.tick()
+    with monkeypatch.context() as fault:
+        if loss == 'execution-failure':
+            class UnavailableWriter:
+                @staticmethod
+                async def submit(*args, **kwargs):
+                    raise diagnostic('CANVAS_WRITE_UNAVAILABLE', '保存服务不可用', {}, status=503)
+            fault.setattr(approved_edits, 'canvas_edits', lambda *args: UnavailableWriter())
+        async with _worker(client.canvas_sessions) as recreated:
+            await recreated.tick()
     history = _data(await client.get(path + '/assistant', params=params))
     recovered = history['turns'][-1]
     replay = _data(await client.post(approval_path, params=params, json=choice))
     events = _data(await client.get(path + '/assistant/events', params={**params, 'after': cursor}))
     assert sum(event['type'] == 'approval.decided' and event['group_ids'] == [first['id']] for event in events) == 1
+    if loss == 'execution-failure':
+        assert not replay['conflicts'] and not replay['receipt']
+        assert any(audit['outcome'] == 'failed' and audit['group_ids'] == [first['id']]
+                   for audit in recovered['approval_audit'])
+        assert any('保存服务不可用' in issue['message'] for issue in recovered['proposal_issues'])
+        assert sum(event['type'] == 'execution.failed' for event in events) == 1
+        assert not _video_bindings(replay['canvas']['document'])['direct']
+        return
     if loss == 'stale':
         assert [group['state'] for group in recovered['proposal']['groups']] == ['superseded', 'pending']
         assert not replay['receipt'] and replay['conflicts']
@@ -244,3 +266,84 @@ async def test_approval_and_receipt_recover_after_disconnect(canvas_client, monk
         assert repeated['receipt'] == expected and repeated['canvas']['document'] == doc
     if not scene and loss == 'after':
         await _generation_recovery(client, canvas_id, path, params, stored)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('response_body', [{'status': 'submitted'}, {'task_id': 'x' * 256}])
+async def test_completed_provider_reply_without_usable_id_is_terminal(canvas_client, monkeypatch, response_body):
+    canvas_id, path, params, _ = await _canvas(canvas_client, scene=False, native=True)
+    _control_model(monkeypatch, True)
+    state = _data(await canvas_client.get(path, params=params))
+    await _generation_recovery(canvas_client, canvas_id, path, params, state, response_body=response_body)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('scene', [False, True])
+@pytest.mark.parametrize('canvas_client', [None, 'mysql'], indirect=True)
+async def test_send_the_exact_visible_read_only_preview(canvas_client, monkeypatch, scene):
+    canvas_id, path, params, _ = await _canvas(canvas_client, scene=scene, native=not scene)
+    _control_model(monkeypatch, not scene)
+    original = _data(await canvas_client.get(path, params=params))
+    context = {'scope': 'canvas', 'revision': original['revision'], 'draft': original['document']}
+    plan = _data(await canvas_client.post(path + '/assistant', params=params, json={
+        'request_id': 'preview-only', 'text': '只给方案，先不要写入画布', 'context': context,
+    }))
+    assert plan['proposal'] is None
+    preview = plan['preview']
+    assert len(preview['proposal']['groups']) == 2
+    assert _data(await canvas_client.get(path, params=params)) == original
+    assert (_data(await canvas_client.get(path + '/assistant', params=params)))['turns'][-1]['preview'] == preview
+    assert (await canvas_client.post(path + '/assistant/proposals/preview-only', params=params, json={
+        'action': 'approve', 'expected_revision': original['revision'], 'group_ids': ['1'],
+    })).status_code == 404
+    command = {'request_id': 'submit-preview', 'text': '送审', 'submit_preview_id': preview['id'], 'context': context}
+    submitted = _data(await canvas_client.post(path + '/assistant', params=params, json=command))
+    assert submitted['proposal'] == preview['proposal']
+    assert submitted['submitted_preview_id'] == preview['id']
+    assert _data(await canvas_client.post(path + '/assistant', params=params, json=command)) == submitted
+    assert _data(await canvas_client.get(path, params=params)) == original
+    second = _data(await canvas_client.post(path + '/assistant', params=params, json={
+        'request_id': 'stale-preview', 'text': '只给方案，先不要写入画布', 'context': context,
+    }))['preview']
+    document = {**context['draft'], 'name': '用户新保存的版本'}
+    _data(await canvas_client.put(path, params=params, json={'request_id': 'new-version',
+        'expected_revision': original['revision'], 'document': document}))
+    stale = await canvas_client.post(path + '/assistant', params=params, json={
+        **command, 'request_id': 'submit-stale', 'submit_preview_id': second['id'],
+    })
+    assert stale.status_code == 409 and '重新预演' in stale.json()['detail']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('scene', [False, True])
+async def test_text_model_reads_actual_compiled_input_before_answering(canvas_client, monkeypatch, scene):
+    _, path, params, _ = await _canvas(canvas_client, scene=scene, native=False)
+    original_send = httpx.AsyncClient.send
+    requests = []
+
+    async def respond(self, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original_send(self, request, **kwargs)
+        messages = json.loads(request.content)['messages']
+        requests.append(messages)
+        if len(requests) == 1:
+            reply = '{"input_check":{"card_id":"direct"}}'
+        else:
+            assert _DIRECT in messages[-1]['content'] and 'can_run' in messages[-1]['content']
+            reply = f'实际输入使用「{_DIRECT}」。'
+        return httpx.Response(200, request=request, json={
+            'id': 'controlled-read', 'object': 'chat.completion', 'created': 1, 'model': 'canvas-text',
+            'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': reply}, 'finish_reason': 'stop'}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    state = _data(await canvas_client.get(path, params=params))
+    turn = _data(await canvas_client.post(path + '/assistant', params=params, json={
+        'request_id': 'input-query', 'text': '只检查第一镜实际生成输入，不要写入画布', 'context': {
+            'scope': 'canvas', 'revision': state['revision'], 'draft': state['document'],
+        },
+    }))
+    assert len(requests) == 2, (turn['reply'], turn['proposal_issues'])
+    assert turn['reply'] == f'实际输入使用「{_DIRECT}」。'
+    assert turn['proposal'] is None
+    assert _data(await canvas_client.get(path, params=params)) == state

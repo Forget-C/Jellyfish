@@ -120,9 +120,6 @@ class TaskService:
             raise ValueError("direct task cannot record a remote submission")
         tracked_approval = row.stage in (SUBMISSION_IN_FLIGHT, SUBMISSION_UNKNOWN)
         remote_id = (provider_task_id or "").strip()
-        if tracked_approval and (not remote_id or len(remote_id) > 255):
-            await self.mark_provider_submission_unknown(task_id)
-            return row
         if not remote_id:
             return await self.finish(task_id, error_code="provider_task_id_missing", error="供应商成功响应缺少任务 ID")
         if len(remote_id) > 255:

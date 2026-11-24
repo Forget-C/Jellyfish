@@ -220,6 +220,7 @@ export type { CanvasAssistantQuestionAnswer } from './models/CanvasAssistantQues
 export type { CanvasAssistantQueuedText } from './models/CanvasAssistantQueuedText';
 export type { CanvasAssistantQueueItem } from './models/CanvasAssistantQueueItem';
 export type { CanvasAssistantReadContext } from './models/CanvasAssistantReadContext';
+export type { CanvasAssistantReadOnlyPreview } from './models/CanvasAssistantReadOnlyPreview';
 export type { CanvasAssistantReviewResult } from './models/CanvasAssistantReviewResult';
 export type { CanvasAssistantSkillUse } from './models/CanvasAssistantSkillUse';
 export type { CanvasAssistantSubtask } from './models/CanvasAssistantSubtask';

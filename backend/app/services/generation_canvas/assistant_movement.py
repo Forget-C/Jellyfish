@@ -82,6 +82,12 @@ def preview_shot_movement(draft, change: AdjustShotMovement) -> CanvasAssistantC
     )
 
 
+def movement_basis_matches(document: CanvasDocument, card_id: str, target: AdjustShotMovementTarget) -> bool:
+    """Check the approved source and dependent card identities without applying changes."""
+    impact = _movement_impact(document, card_id, target.movement_field)
+    return bool(impact and impact.basis == target.basis)
+
+
 def apply_shot_movement(canvas, document: CanvasDocument, edit: CanvasAssistantChange,
                         target: AdjustShotMovementTarget) -> bool:
     """Recheck the source and sharing before applying one indivisible change."""

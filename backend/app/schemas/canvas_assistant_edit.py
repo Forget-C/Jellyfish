@@ -127,7 +127,8 @@ class CanvasAssistantApprovalAudit(BaseModel):
     source_id: str
     mode: Literal['manual', 'automatic']
     action: Literal['approve', 'reject']
-    outcome: Literal['applied', 'rejected', 'partial', 'conflict', 'manual_required']
+    outcome: Literal['approved', 'applied', 'rejected', 'partial', 'conflict', 'failed', 'blocked', 'manual_required']
+    conflicts: list['CanvasAssistantEditConflict'] | None = Field(default=None, exclude_if=lambda value: value is None)
     review: CanvasAssistantIndependentReview | None = Field(default=None, exclude_if=lambda value: value is None)
     group_ids: list[str] | None = None
     decision_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
