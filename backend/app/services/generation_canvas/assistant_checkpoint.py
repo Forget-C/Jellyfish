@@ -10,6 +10,7 @@ from langchain_core.messages import BaseMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from sqlalchemy import update
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.models.canvas_assistant import CanvasAssistantSession
 from app.schemas.canvas_assistant import CanvasAssistantExchange, CanvasAssistantProgress
@@ -98,26 +99,38 @@ class CanvasCheckpointer(CanvasGraphSnapshot):
 
     def __init__(self, db, canvas_id, request_id, token, snapshot, content):
         super().__init__(request_id, snapshot, content)
-        self._db, self._canvas_id, self._token = db, canvas_id, token
+        self._sessions = async_sessionmaker(bind=db.bind, expire_on_commit=False)
+        self._canvas_id, self._token = canvas_id, token
         self._lock = asyncio.Lock()
         self.waiting_approval = False
 
+    @staticmethod
+    async def _commit(db):
+        """Let an in-flight database commit settle before cancellation unwinds the request."""
+        commit = asyncio.create_task(db.commit())
+        try:
+            await asyncio.shield(commit)
+        except asyncio.CancelledError:
+            await asyncio.gather(commit, return_exceptions=True)
+            raise
+
     async def _flush(self):
-        snapshot = self.snapshot()
-        result = await self._db.execute(update(CanvasAssistantSession).where(
-            CanvasAssistantSession.canvas_id == self._canvas_id,
-            CanvasAssistantSession.pending_token == self._token,
-        ).values(pending_checkpoint=snapshot).execution_options(synchronize_session=False))
-        await self._db.commit()
-        if not result.rowcount:
-            raise HTTPException(409, 'Canvas assistant reply lease expired')
+        async with self._sessions() as db:
+            snapshot = self.snapshot()
+            result = await db.execute(update(CanvasAssistantSession).where(
+                CanvasAssistantSession.canvas_id == self._canvas_id,
+                CanvasAssistantSession.pending_token == self._token,
+            ).values(pending_checkpoint=snapshot).execution_options(synchronize_session=False))
+            await self._commit(db)
+            if not result.rowcount:
+                raise HTTPException(409, 'Canvas assistant reply lease expired')
 
     async def report_progress(self, **changes):
         """Commit observed facts only while this execution owns the turn lease."""
-        async with self._lock:
-            session = await self._db.get(CanvasAssistantSession, self._canvas_id, with_for_update=True, populate_existing=True)
+        async with self._lock, self._sessions() as db:
+            session = await db.get(CanvasAssistantSession, self._canvas_id, with_for_update=True, populate_existing=True)
             if session is None or session.pending_token != self._token:
-                await self._db.rollback()
+                await db.rollback()
                 raise HTTPException(409, 'Canvas assistant reply lease expired')
             pending = session.pending_request
             previous = pending.get('progress') or {}
@@ -138,22 +151,22 @@ class CanvasCheckpointer(CanvasGraphSnapshot):
             value = progress.model_dump(mode='json')
             if previous != value:
                 session.pending_request = {**pending, 'progress': value}
-                publish_events(self._db, session, CanvasAssistantExchange(
+                publish_events(db, session, CanvasAssistantExchange(
                     request_id=progress.request_id, text=pending['command']['text'], sequence=session.sequence + 1,
                     model_id=progress.model_id, reply='', progress=progress,
                 ), 'turn.progress')
-            await self._db.commit()
+            await self._commit(db)
 
     async def save_delegation(self, identity, receipt):
         """Commit one completed specialist result while this turn still owns its lease."""
-        async with self._lock:
-            session = await self._db.get(CanvasAssistantSession, self._canvas_id, with_for_update=True, populate_existing=True)
+        async with self._lock, self._sessions() as db:
+            session = await db.get(CanvasAssistantSession, self._canvas_id, with_for_update=True, populate_existing=True)
             if session is None or session.pending_token != self._token:
-                await self._db.rollback()
+                await db.rollback()
                 raise HTTPException(409, 'Canvas assistant reply lease expired')
             pending = session.pending_request
             session.pending_request = {**pending, 'delegations': {**pending.get('delegations', {}), identity: receipt}}
-            await self._db.commit()
+            await self._commit(db)
 
     async def aput(self, config, checkpoint, metadata, new_versions):
         async with self._lock:
