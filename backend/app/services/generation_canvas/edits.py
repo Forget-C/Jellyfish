@@ -30,6 +30,7 @@ class CanvasEditGroup(BaseModel):
 
     id: Identity
     depends_on: tuple[Identity, ...] = ()
+    source_card_ids: tuple[Identity, ...] = ()
     cards: list[CanvasCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)
@@ -74,6 +75,7 @@ class CanvasEditGroupPreview(BaseModel):
     id: Identity
     depends_on: tuple[Identity, ...]
     differences: tuple[CanvasEditDifference, ...]
+    source_guards: tuple[CanvasEditDifference, ...] = ()
 
 
 class CanvasEditPreview(BaseModel):
@@ -326,8 +328,24 @@ class _CanvasEdits(CanvasStore):
             self._change(candidate, group)
             prepared = await self.prepare_ordinary_document(canvas, candidate.model_dump(mode='json'))
             changes = tuple(_differences(baseline, _indexed(prepared.document)))
-            previews[group.id] = CanvasEditGroupPreview(id=group.id, depends_on=group.depends_on, differences=changes)
+            guards = self._source_guards(group, baseline, candidate)
+            previews[group.id] = CanvasEditGroupPreview(
+                id=group.id, depends_on=group.depends_on, differences=changes, source_guards=guards,
+            )
         return CanvasEditPreview(canvas_id=canvas_id, revision=canvas.revision, groups=tuple(previews.values()))
+
+    @staticmethod
+    def _source_guards(group: CanvasEditGroup, baseline: dict,
+                       candidate: CanvasDocument) -> tuple[CanvasEditDifference, ...]:
+        sources = []
+        candidates = {card.id for card in candidate.cards}
+        for card_id in dict.fromkeys(group.source_card_ids):
+            before = _value(baseline['cards'], card_id)
+            if before.exists:
+                sources.append(CanvasEditDifference(path=('cards', card_id), before=before, after=before))
+            elif card_id not in candidates:
+                raise diagnostic('INVALID_EDIT_SOURCE', '预演引用的来源卡不存在', {'card_id': card_id})
+        return tuple(sources)
 
     @staticmethod
     def _dependencies(original: dict, required_ids: tuple[str, ...], previews: dict) -> dict:
@@ -408,6 +426,11 @@ class _CanvasEdits(CanvasStore):
             return None, CanvasEditGroupReceipt(group_id=group.id, state='conflict', conflicts=tuple(conflicts))
         if candidate == document:
             return document, CanvasEditGroupReceipt(group_id=group.id, state='no_change')
+        source_conflicts = tuple(CanvasEditConflict(difference=guard, current=current)
+                                 for guard in group.source_guards
+                                 if (current := _against(document, guard)[1]) != guard.before)
+        if source_conflicts:
+            return None, CanvasEditGroupReceipt(group_id=group.id, state='conflict', conflicts=source_conflicts)
         try:
             prepared = await self.prepare_ordinary_document(canvas, _document_data(candidate))
             if _indexed(prepared.document) != candidate:
