@@ -5,7 +5,7 @@ import logging
 from typing import Literal
 
 from fastapi import HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -44,6 +44,15 @@ class CanvasGenerationExecutionReceipt(BaseModel):
     diagnostic: CanvasDiagnostic | None = None
 
 
+class CanvasGenerationApprovalPreview(BaseModel):
+    """服务端暂存实际检查结果和有效配置摘要，供原样送审。"""
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+
+    canvas_id: str
+    basis_hash: str
+    precheck: CanvasPrecheck
+
 def _scope(canvas_id: str) -> ApprovalScope:
     return ApprovalScope(kind='canvas', id=canvas_id)
 
@@ -56,11 +65,23 @@ def _snapshot_ref(basis_hash: str, preview: dict) -> str:
     return 'canvas-generation:' + CanvasStore.command_digest({'basis_hash': basis_hash, 'preview': preview})
 
 
+def _displayed_inputs(preview: CanvasPrecheck) -> dict:
+    data = preview.model_dump(mode='json', exclude={'revision', 'preview_token'})
+    data['input'].pop('revision', None)
+    return data
+
+
 async def _precheck(db: AsyncSession, project_id: str | None, canvas_id: str,
                     card_id: str) -> tuple[CanvasPrecheck, CanvasPreview | None]:
     preview = await canvas_generation_inputs(db, project_id).precheck(canvas_id, CanvasPrecheckRequest(card_id=card_id))
     token = await db.get(CanvasPreview, preview.preview_token) if preview.preview_token else None
     return preview, token
+
+
+def _invalid_preview(card_id: str, preview: CanvasPrecheck) -> HTTPException:
+    return diagnostic('GENERATION_PRECHECK_FAILED', '当前生成输入未通过预检',
+                      {'card_id': card_id, 'diagnostics': [issue.model_dump() for issue in preview.diagnostics]},
+                      blocks=['run'])
 
 
 class CanvasGenerationApprovals:
@@ -70,12 +91,29 @@ class CanvasGenerationApprovals:
         self.db = db
         self.approvals = ApprovalService(db)
 
+    async def capture(self, access: ApprovalAccess, project_id: str | None, canvas_id: str,
+                      card_id: str) -> CanvasGenerationApprovalPreview:
+        """记录供人核对的生成依据，暂存阶段不产生审批或生成受理。"""
+        if access.scope != _scope(canvas_id) or not {'read', 'submit'} & access.permissions:
+            raise ApprovalError('forbidden', '当前角色不可为此画布读取生成依据')
+        preview, token = await _precheck(self.db, project_id, canvas_id, card_id)
+        if token is None:
+            raise _invalid_preview(card_id, preview)
+        result = CanvasGenerationApprovalPreview(canvas_id=canvas_id, basis_hash=token.basis_hash,
+            precheck=preview.model_copy(update={'preview_token': None}))
+        await self.db.delete(token)
+        await self.db.flush()
+        return result
+
     async def submit(self, access: ApprovalAccess, project_id: str | None, canvas_id: str, card_id: str, *,
                      object_id: str, version: str, idempotency_key: str, group_id: str = 'generate',
-                     supersedes_request_id: str | None = None) -> ApprovalRequestView:
+                     supersedes_request_id: str | None = None,
+                     staged_preview: CanvasGenerationApprovalPreview | None = None) -> ApprovalRequestView:
         """预检可执行单卡，把展示输入与有效配置摘要固定在提案版本里。"""
         if access.scope != _scope(canvas_id) or 'submit' not in access.permissions:
             raise ApprovalError('forbidden', '当前角色不可为此画布发起生成审批')
+        if staged_preview and (staged_preview.canvas_id != canvas_id or staged_preview.precheck.card_id != card_id):
+            raise ApprovalError('preview_mismatch', '暂存生成预演不属于当前卡片')
         await CanvasStore(self.db, project_id).get(canvas_id, lock=True)
         previous = await self.approvals.read_submitted(access, object_type=OBJECT_TYPE, object_id=object_id,
                                                        idempotency_key=idempotency_key)
@@ -84,13 +122,22 @@ class CanvasGenerationApprovals:
             if ((previous.version, previous.group_ids, previous.supersedes_request_id, entry.card_id)
                     != (version, (group_id,), supersedes_request_id, card_id)):
                 raise ApprovalError('idempotency_conflict', '该幂等键已用于另一份生成申请')
+            if staged_preview and previous.snapshot_ref != _snapshot_ref(
+                staged_preview.basis_hash, staged_preview.precheck.model_dump(mode='json'),
+            ):
+                raise ApprovalError('idempotency_conflict', '该幂等键已用于另一份生成预演')
             return previous
         preview, token = await _precheck(self.db, project_id, canvas_id, card_id)
+        if staged_preview and (token is None or staged_preview.basis_hash != token.basis_hash
+                               or staged_preview.precheck.preview_token is not None
+                               or _displayed_inputs(staged_preview.precheck) != _displayed_inputs(preview)):
+            if token is not None:
+                await self.db.delete(token)
+            raise ApprovalError('preview_stale', '暂存生成依据已变化，请重新预演')
         if token is None:
-            raise diagnostic('GENERATION_PRECHECK_FAILED', '当前生成输入未通过预检',
-                             {'card_id': card_id, 'diagnostics': [issue.model_dump() for issue in preview.diagnostics]},
-                             blocks=['run'])
-        body = preview.model_copy(update={'preview_token': None}).model_dump(mode='json')
+            raise _invalid_preview(card_id, preview)
+        shown = staged_preview.precheck if staged_preview else preview.model_copy(update={'preview_token': None})
+        body = shown.model_dump(mode='json')
         request = await self.approvals.submit(access, ApprovalSubmission(
             object_type=OBJECT_TYPE, object_id=object_id, version=version, group_ids=(group_id,),
             snapshot_ref=_snapshot_ref(token.basis_hash, body), supersedes_request_id=supersedes_request_id,
