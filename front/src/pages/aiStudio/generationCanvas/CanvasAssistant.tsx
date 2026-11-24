@@ -21,6 +21,7 @@ import './canvasAssistant.css'
 function confirmationKind(text: string) {
   if (/^全部确认[。！!]?$/.test(text)) return 'all'
   if (/^确认[。！!]?$/.test(text)) return 'selected'
+  if (/^写入画布[。！!]?$/.test(text)) return 'write'
   if (/^确认[，,]\s*(不过|但是|但)\s*.+/.test(text)) return 'revise'
   return undefined
 }
@@ -157,9 +158,10 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     model.id === (modelId ?? defaultModelId) && model.effective_capabilities?.tool_calling)
   const selectionInDraft = selectedCards.length > 0 || (Boolean(draft.trim()) && draftUsesSelection)
   const planning = /(?:^|\s)\/plan(?![\w-])|先给方案/.test(draft)
-  const effectiveScope = scope ?? (
+  const chosenScope = scope ?? (
     selectionInDraft ? 'selection' : starterScope ?? (canUseDraftTools || planning ? 'canvas' : 'text')
   )
+  const effectiveScope = chosenScope === 'text' && confirmationKind(draft.trim()) === 'write' ? 'canvas' : chosenScope
   const awaitingSelection = !revising && !pending.current && effectiveScope === 'selection' && !selectedCards.length && !referenceIds.length && !Object.values(externalReferences).some(ids => ids.length)
   useLayoutEffect(() => {
     if (!draft.trim()) setStarterScope(undefined)
@@ -531,12 +533,13 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       const highlighted = candidates.filter(turn => checked(turn).length)
       const target = candidates.length === 1 ? candidates[0] : highlighted.length === 1 ? highlighted[0] : undefined
       if (!target?.proposal) {
-        setConfirmationHint(candidates.length
-          ? uiText('有多份待审批建议，请先勾选要确认的建议，或使用该建议的确认按钮。')
-          : uiText('当前没有可以确认的修改建议，请核对最新对话。'))
-        return
-      }
-      if (intent === 'revise') {
+        if (intent !== 'write' || candidates.length || replyInProgress) {
+          setConfirmationHint(candidates.length
+            ? uiText('有多份待审批建议，请先勾选要确认的建议，或使用该建议的确认按钮。')
+            : uiText('当前没有可以确认的修改建议，请核对最新对话。'))
+          return
+        }
+      } else if (intent === 'revise') {
         revision = target
         if (target.request_id !== revising?.request_id) fieldRevision = undefined
       }

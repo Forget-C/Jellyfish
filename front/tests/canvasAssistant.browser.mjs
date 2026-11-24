@@ -233,6 +233,18 @@ const provider = createHttpServer(async (request, response) => {
     }))
     return
   }
+  const writeRequest = turns.at(-1)
+  if (typeof writeRequest === 'string' && writeRequest.endsWith('用户请求：\n写入画布')) {
+    const content = JSON.stringify({ reply: '请审批镜头卡', groups: [{ title: '镜头方案', changes: [{
+      kind: 'add_card', reference: 'shot-01', card: { kind: 'add_text_card', text: '镜头 01 用慢速推近。' },
+    }] }] })
+    response.writeHead(200, { 'Content-Type': 'application/json' })
+    response.end(JSON.stringify({
+      id: 'write-plan', object: 'chat.completion', created: 1, model,
+      choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
+    }))
+    return
+  }
   if (!turns.some(value => typeof value === 'string' && value.startsWith('分镜准备中'))) prompts.push(turns)
   if (turns.at(-1) === '分镜准备中') {
     noteSceneSource()
@@ -963,6 +975,27 @@ try {
   const storedDraft = (await (await fetch(canvasApi + '/' + cardDraft)).json()).data
   assert.equal(storedDraft.document.cards.filter(card => card.text === '潮水涌入').length, 1)
   assert.equal(await totalCanvases(), beforeDrafts + 2)
+  const writeCanvas = (await (await fetch(canvasApi, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '从对话写入' }),
+  })).json()).data
+  const writePath = canvasApi + '/' + writeCanvas.id
+  await page.goto(base + '/canvases/' + writeCanvas.id)
+  await open()
+  await ask('先讨论镜头方案')
+  const writeComposer = panel.getByRole('textbox', { name: '给画布助手发消息' })
+  const sendWrite = async () => {
+    await writeComposer.fill('写入画布')
+    await writeComposer.press('Enter')
+  }
+  await sendWrite()
+  const writeProposal = panel.getByRole('region', { name: '修改建议' })
+  await writeProposal.getByText('镜头 01 用慢速推近。', { exact: true }).last().waitFor()
+  assert.equal((await (await fetch(writePath)).json()).data.revision, writeCanvas.revision)
+  await sendWrite()
+  await writeProposal.getByText('已写入画布', { exact: true }).waitFor()
+  const savedPlan = (await (await fetch(writePath)).json()).data
+  assert.equal(savedPlan.document.cards.filter(card => card.text === '镜头 01 用慢速推近。').length, 1)
+
   console.log('Assistant conversation persisted independently on both real canvas entries.')
 } finally {
   acceptSlowReply()

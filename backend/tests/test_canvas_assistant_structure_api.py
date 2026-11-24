@@ -62,6 +62,62 @@ async def approve_structure(client, url, canvas, proposal):
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures('assistant_edit_model')
+@pytest.mark.parametrize('structured', [False, True])
+async def test_write_canvas_from_chat_prepares_a_real_preview(canvas_client, monkeypatch, structured):
+    async with canvas_client.canvas_sessions.begin() as db:
+        model = await db.get(Model, 'canvas-text')
+        model.capability_profile = None
+    canvas = (await canvas_client.post('/canvases', json={'name': '旧方案画布'})).json()['data']
+    url = f"/canvases/{canvas['id']}"
+    assistant = url + '/assistant'
+    provider_input = []
+    original_send = httpx.AsyncClient.send
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original_send(client, request, **kwargs)
+        body = json.loads(request.content)
+        provider_input.append(body['messages'])
+        if len(provider_input) == 1:
+            content = '方案：镜头 01 用慢速推近。'
+        elif structured:
+            content = json.dumps({'reply': '已发起写入请求', 'groups': [{'title': '镜头方案', 'changes': [
+                {'kind': 'add_card', 'reference': 'shot-01',
+                 'card': {'kind': 'add_text_card', 'text': '镜头 01 用慢速推近。'}},
+            ]}]})
+        else:
+            content = '已发起写入请求，请等待。'
+        return httpx.Response(200, request=request, json={
+            'id': 'answer', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
+            'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': content}}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    for request_id, message in [('plan', '先给一个镜头方案'), ('write', '写入画布')]:
+        command = {'request_id': request_id, 'text': message}
+        if request_id == 'write':
+            command['context'] = {'draft': canvas['document'], 'revision': canvas['revision'], 'scope': 'canvas'}
+        response = await canvas_client.post(assistant, json=command)
+        assert response.status_code == 200, response.text
+    turn = response.json()['data']
+    assert ('groups' in str(provider_input[-1])) and ('方案：镜头 01 用慢速推近。' in str(provider_input[-1]))
+    assert turn['context']['scope'] == 'canvas'
+    assert '已发起写入请求' not in turn['reply']
+    assert bool(turn['proposal']) is structured
+    if structured:
+        assert turn['reply'] == '已准备提案，请核对待审批的改动。'
+        assert turn['proposal']['state'] == 'pending'
+    else:
+        assert '没有生成可审批的修改提案' in turn['reply']
+    assert (await canvas_client.get(url)).json()['data']['revision'] == canvas['revision']
+    missing_scope = await canvas_client.post(assistant, json={'request_id': 'without-scope', 'text': '写入画布'})
+    assert missing_scope.status_code == 200, missing_scope.text
+    assert '没有收到画布范围' in missing_scope.json()['data']['reply']
+    assert len(provider_input) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures('assistant_edit_model')
 @pytest.mark.parametrize('native_tools,field_conflict', [(True, False), (False, False), (True, True)])
 async def test_batch_proposal_edits_creates_and_connects_atomically(canvas_client, monkeypatch, native_tools, field_conflict):
     if not native_tools:
