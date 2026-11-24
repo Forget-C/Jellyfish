@@ -146,6 +146,19 @@
   gap: 4px;
 }
 
+.canvas-assistant-footer .canvas-assistant-approval .ant-select-content {
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.canvas-assistant-footer .canvas-assistant-approval:not(.ant-select-disabled) .ant-select-content {
+  color: var(--wb-muted);
+}
+
+.canvas-assistant-footer .canvas-assistant-approval:not(.ant-select-disabled):is(:hover, :focus-within) .ant-select-content {
+  color: var(--wb-text);
+}
+
 .canvas-assistant-send-actions .canvas-assistant-model { min-inline-size: 0; max-inline-size: 210px; }
 .canvas-assistant-footer .canvas-assistant-primary.ant-btn { border-radius: 50%; }
 .canvas-assistant-queue-action { justify-self: end; }

@@ -133,8 +133,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const [confirmationHint, setConfirmationHint] = useState<string>()
   const composer = useRef<HTMLFormElement>(null)
   const [sendError, setSendError] = useState<AssistantSendError>()
-  const [failedReplyId, setFailedReplyId] = useState<string>()
   const [thinkingExpanded, setThinkingExpanded] = useState(false)
+  const [failedReplyId, setFailedReplyId] = useState<string>()
   const [sending, setSending] = useState(false)
   const [stopping, setStopping] = useState<string>()
   const [stopError, setStopError] = useState(false)
@@ -187,9 +187,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const liveTurn: CanvasAssistantExchange | undefined = progress?.reply && liveRequest?.request_id === progress.request_id
     && !turns?.some(turn => turn.request_id === progress.request_id)
     ? { ...liveRequest, sequence: 0, model_id: progress.model_id, reply: progress.reply } : undefined
+  const replyRecovered = !localDraft && !!failedReplyId && turns?.some(turn => turn.request_id === failedReplyId)
   const phaseSteps = Object.entries(progress?.phase_started_at ?? {})
     .sort(([, first], [, second]) => Date.parse(first) - Date.parse(second))
-  const replyRecovered = !localDraft && !!failedReplyId && turns?.some(turn => turn.request_id === failedReplyId)
   const displayedTurns = liveTurn ? [...(turns ?? []), liveTurn] : turns
   const runningId = activeRequestId || steeringFor || draftStreamId ||
     (progress?.streaming && !pendingQuestion ? progress.request_id : undefined)
@@ -759,8 +759,35 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         : Canvases.canvasAssistantSend({ canvasId, projectId, requestBody })
       setActiveRequestId(requestBody.request_id)
       activeRequest.current = request
-      const { data: turn } = await request
-      if (!turn) throw new Error('missing assistant reply')
+      const turn = await request.then(({ data }) => {
+        if (!data) throw new Error('missing assistant reply')
+        return data
+      }).catch(async error => {
+        const { request_id: sourceId } = requestBody
+        if (stoppedRequest.current === sourceId) return undefined
+        if (localDraft) {
+          const receipt = await Canvases.canvasDraftAssistantReply({ canvasId, sourceId }).catch(() => undefined)
+          if (receipt?.data?.state === 'completed') return receipt.data.turn
+          if (receipt?.data?.state === 'running' || receipt?.data?.state === 'stopped') return undefined
+        } else {
+          const epoch = mutationEpoch.current
+          const receipt = await Canvases.canvasAssistantHistory({ canvasId, projectId }).catch(() => undefined)
+          const snapshot = receipt?.data
+          if (snapshot) {
+            applySnapshot(snapshot, epoch)
+            const completed = snapshot.turns.find(item => item.request_id === sourceId)
+            if (completed) return completed.stopped ? undefined : completed
+            const failure = snapshot.pending_progress
+            if (failure?.request_id === sourceId && failure.error_code && !failure.streaming) {
+              throw new Error(failure.error_code)
+            }
+            if (snapshot.pending_request?.request_id === sourceId &&
+              (snapshot.pending_question || snapshot.pending_progress?.streaming || snapshot.pending_instructions?.length)) return undefined
+          }
+        }
+        throw error
+      })
+      if (!turn || stoppedRequest.current === requestBody.request_id) return
       if (turn.question) {
         setPendingQuestion(turn.question)
         setPendingServerRequest(requestBody)
@@ -791,11 +818,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       }
     } catch (error) {
       if (stoppedRequest.current === requestBody.request_id) return
-      if (!localDraft) {
-        const epoch = mutationEpoch.current
-        const history = await Canvases.canvasAssistantHistory({ canvasId, projectId }).catch(() => undefined)
-        if (history?.data && applySnapshot(history.data, epoch) && history.data.pending_instructions?.length) return
-      }
       if (consumeDraft && pending.current === requestBody) {
         setDraft(text)
         setRepairSource(requestBody.repairs ?? undefined)
@@ -806,7 +828,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         setExternalGroups(externalGroups)
         if (localDraft) writeDraftAssistant(canvasId, { references: referenceFiles })
       }
-      const detail = error instanceof ApiError ? error.body?.message ?? error.body?.detail : undefined
+      const detail = error instanceof ApiError ? error.body?.message ?? error.body?.detail : error instanceof Error ? error.message : undefined
+      if (!localDraft) setFailedReplyId(requestBody.request_id)
       setSendError(assistantSendError(detail))
     } finally {
       if (!readDraftAssistant(canvasId).live) draftingAssistantReply.delete(canvasId)
@@ -823,6 +846,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     sendingNow.current = true
     setSending(true)
     setSendError(undefined)
+    setFailedReplyId(sourceId)
     setActiveRequestId(sourceId)
     try {
       const request = Canvases.canvasAssistantAnswer({
@@ -892,6 +916,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   }
 
   const chooseApproval = async (enabled: boolean) => {
+    if (localDraft) return
     setSavingApproval(true)
     setApprovalError(false)
     try {
@@ -1167,9 +1192,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
               })}
             </ol>}
           </Think>}
-          {progress && <ThoughtChain items={[
+          {progress && (!!Object.keys(progress.active_tasks ?? {}).length || !!progress.subtasks?.length) && <ThoughtChain items={[
           { key: progress.request_id,
-            title: uiText('已接收本轮上下文'),
+            title: uiText('本轮执行进度'),
             status: progress.active_tasks && Object.keys(progress.active_tasks).length ? 'loading' : 'success',
             collapsible: true,
             content: <div className="canvas-assistant-live-evidence">
@@ -1398,15 +1423,16 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                 onClick={() => { void send(undefined, true) }}>{uiText('排到下一轮')}</WorkbenchButton>}
             <div className="canvas-assistant-footer">
               {add}
-              {!localDraft && <Select className="canvas-assistant-approval" variant="borderless"
-                aria-label={uiText('审批模式')} value={automaticApproval ? 'automatic' : 'manual'}
+              <Select className="canvas-assistant-approval" variant="borderless"
+                aria-label={uiText('审批模式')} value={!localDraft && automaticApproval ? 'automatic' : 'manual'}
                 disabled={!!runningId || sending || savingApproval || !turns} popupMatchSelectWidth={false}
                 onChange={value => { void chooseApproval(value === 'automatic') }}
                 labelRender={({ value }) => uiText(value === 'automatic' ? '自动审批' : '手动审批')}
                 options={[
                   { value: 'manual', label: uiText('手动审批') },
-                  { value: 'automatic', label: uiText('自动审批明确请求') },
-                ]} />}
+                  { value: 'automatic', disabled: localDraft,
+                    label: uiText(localDraft ? '自动审批明确请求（保存画布后可用）' : '自动审批明确请求') },
+                ]} />
               <div className="canvas-assistant-send-actions">
                 <Select className="canvas-assistant-model" variant="borderless" value={modelId ?? ''} aria-label={uiText("助手模型")} popupMatchSelectWidth={false} optionLabelProp="short"
                   disabled={draftPromoting || sending || savingModel || !turns || !!pendingQuestion} onChange={selected => { void chooseModel(selected) }}
