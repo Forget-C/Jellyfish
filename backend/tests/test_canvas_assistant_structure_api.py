@@ -62,7 +62,7 @@ async def approve_structure(client, url, canvas, proposal):
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures('assistant_edit_model')
-@pytest.mark.parametrize('structured', [False, True])
+@pytest.mark.parametrize('structured', [None, 'flat', 'nested'])
 async def test_write_canvas_from_chat_prepares_a_real_preview(canvas_client, monkeypatch, structured):
     async with canvas_client.canvas_sessions.begin() as db:
         model = await db.get(Model, 'canvas-text')
@@ -81,9 +81,10 @@ async def test_write_canvas_from_chat_prepares_a_real_preview(canvas_client, mon
         if len(provider_input) == 1:
             content = '方案：镜头 01 用慢速推近。'
         elif structured:
+            card = {'reference': 'shot-01', 'card': {'kind': 'add_text_card', 'text': '镜头 01 用慢速推近。'}}
+            payload = {'change': card} if structured == 'nested' else card
             content = json.dumps({'reply': '已发起写入请求', 'groups': [{'title': '镜头方案', 'changes': [
-                {'kind': 'add_card', 'reference': 'shot-01',
-                 'card': {'kind': 'add_text_card', 'text': '镜头 01 用慢速推近。'}},
+                {'kind': 'add_card', **payload},
             ]}]})
         else:
             content = '已发起写入请求，请等待。'
@@ -103,7 +104,7 @@ async def test_write_canvas_from_chat_prepares_a_real_preview(canvas_client, mon
     assert ('groups' in str(provider_input[-1])) and ('方案：镜头 01 用慢速推近。' in str(provider_input[-1]))
     assert turn['context']['scope'] == 'canvas'
     assert '已发起写入请求' not in turn['reply']
-    assert bool(turn['proposal']) is structured
+    assert bool(turn['proposal']) is bool(structured)
     if structured:
         assert turn['reply'] == '已准备提案，请核对待审批的改动。'
         assert turn['proposal']['state'] == 'pending'
@@ -114,6 +115,15 @@ async def test_write_canvas_from_chat_prepares_a_real_preview(canvas_client, mon
     assert missing_scope.status_code == 200, missing_scope.text
     assert '没有收到画布范围' in missing_scope.json()['data']['reply']
     assert len(provider_input) == 2
+    if structured == 'nested':
+        approved = await canvas_client.post(assistant + '/proposals/write', json={
+            'action': 'approve', 'expected_revision': canvas['revision'], 'group_ids': ['1'],
+        })
+        assert approved.status_code == 200, approved.text
+        saved = (await canvas_client.get(url)).json()['data']
+        assert saved['revision'] == canvas['revision'] + 1
+        assert [card['text'] for card in saved['document']['cards']] == ['镜头 01 用慢速推近。']
+
 
 
 @pytest.mark.asyncio

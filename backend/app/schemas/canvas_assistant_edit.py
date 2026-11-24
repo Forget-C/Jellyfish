@@ -2,7 +2,7 @@
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationRead
 from app.schemas.canvas_assistant_structure import (
@@ -205,6 +205,16 @@ class ProposedBatchCard(AddCanvasCardTarget):
     """Name a new card within an approval group so subsequent changes can connect it."""
     kind: Literal['add_card']
     reference: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[A-Za-z0-9_-]+$')]
+
+    @model_validator(mode='before')
+    @classmethod
+    def unwrap_model_change(cls, value):
+        """Accept the model's edit-style envelope while retaining strict card validation."""
+        if isinstance(value, dict) and value.keys() == {'kind', 'change'}:
+            fields = value['change']
+            if isinstance(fields, dict) and fields.keys() == {'reference', 'card'}:
+                return {'kind': value['kind'], **fields}
+        return value
 
 
 class ProposedBatchRemoval(BaseModel):
