@@ -14,6 +14,7 @@ from app.schemas.common import PaginatedData, paginated_response, ApiResponse, c
 from app.schemas.generation_canvas import CanvasRename, CanvasSummary, CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError, CanvasModelCapability, CanvasCompiledInput
 from app.services.generation_canvas.store import CanvasStore
 from app.services.generation_canvas.lifecycle import canvas_lifecycle, free_canvas_lifecycle
+from app.services.generation_canvas.generation_inputs import canvas_generation_inputs
 from app.schemas.canvas_assistant import (
     CanvasAssistantEventPayload, CanvasAssistantInstruction, CanvasAssistantQuestionAnswer, CanvasAssistantQueuedText, CanvasAssistantQueueItem,
 )
@@ -236,7 +237,7 @@ async def get_model_capability(canvas_id: str, model_id: str, project_id: str = 
             operation_id='canvas_compile')
 async def compile_canvas_card(canvas_id: str, card_id: str, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """读取已保存文档的单次编译预览，不提交执行也不虚构模型输出。"""
-    return success_response(await CanvasStore(db, project_id).compile_input(canvas_id, card_id))
+    return success_response(await canvas_generation_inputs(db, project_id).compile_input(canvas_id, card_id))
 
 
 from app.schemas.generation_canvas import (CanvasPrecheckRequest, CanvasPrecheck, CanvasRunSubmit,
@@ -247,7 +248,7 @@ from app.services.generation_canvas.runtime import CanvasRuntime
 @router.post('/{canvas_id}/precheck', response_model=ApiResponse[CanvasPrecheck], operation_id='canvas_precheck')
 async def precheck_canvas(canvas_id: str, body: CanvasPrecheckRequest, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """核实已保存单卡的实际输入、模型及配置，返回短期预检凭据。"""
-    return success_response(await CanvasRuntime(db, project_id).precheck(canvas_id, body))
+    return success_response(await canvas_generation_inputs(db, project_id).precheck(canvas_id, body))
 
 
 @router.post('/{canvas_id}/runs', response_model=ApiResponse[CanvasRunAccepted], operation_id='canvas_run_submit')
@@ -311,8 +312,7 @@ async def canvas_output_content(canvas_id: str, run_id: str, node_id: str, posit
 async def prepare_video_frame(canvas_id: str, body: CanvasVideoFrameRequest,
                               project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """准备视频选帧素材，调用方可和采用关系一起保存。"""
-    from app.services.generation_canvas.video_frames import CanvasVideoFrames
-    return success_response(await CanvasVideoFrames(db, project_id).prepare(canvas_id, body))
+    return success_response(await canvas_generation_inputs(db, project_id).prepare_video_frame(canvas_id, body))
 
 
 from app.schemas.generation_canvas import CanvasCardOutputs
@@ -351,7 +351,7 @@ from app.services.generation_canvas.checks import CanvasChecks
 async def preview_canvas_check(canvas_id: str, card_id: str,
                                project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """查看该检查卡连接的已保存模型及可用项目。"""
-    return success_response(await CanvasChecks(db, project_id).preview(canvas_id, card_id))
+    return success_response(await canvas_generation_inputs(db, project_id).preview_check(canvas_id, card_id))
 
 
 @router.post('/{canvas_id}/checks/{card_id}/runs', response_model=ApiResponse[CanvasCheckReportRead],
@@ -379,7 +379,7 @@ from app.services.generation_canvas.post_checks import CanvasPostChecks
 async def canvas_check_products(canvas_id: str, card_id: str,
                                 project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """List retained text outputs for the saved observation target."""
-    return success_response(await CanvasPostChecks(db, project_id).products(canvas_id, card_id))
+    return success_response(await canvas_generation_inputs(db, project_id).check_products(canvas_id, card_id))
 
 
 @router.get('/{canvas_id}/checks/{card_id}/products/{run_id}/{node_id}/{position}',
@@ -387,7 +387,7 @@ async def canvas_check_products(canvas_id: str, card_id: str,
 async def canvas_post_check_preview(canvas_id: str, card_id: str, run_id: str, node_id: str, position: int,
                                     project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """Show one pinned product, original basis and estimated model calls."""
-    return success_response(await CanvasPostChecks(db, project_id).preview(canvas_id, card_id, run_id, node_id, position))
+    return success_response(await canvas_generation_inputs(db, project_id).preview_post_check(canvas_id, card_id, run_id, node_id, position))
 
 
 @router.post('/{canvas_id}/checks/{card_id}/products/{run_id}/{node_id}/{position}/runs',

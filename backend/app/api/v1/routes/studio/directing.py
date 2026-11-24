@@ -20,6 +20,7 @@ from app.core.contracts.directing.scene_storyboard import (StoryboardApplication
     StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardRetry, StoryboardRetryBasis,
     StoryboardTaskRead, StoryboardTaskSummary)
 from app.services.directing.scene_storyboard import SceneStoryboardService
+from app.services.generation_canvas.generation_inputs import storyboard_generation_inputs
 from app.services.generation_canvas.lifecycle import scene_canvas_lifecycle
 from app.core.contracts.directing.scene_objects import (
     ObjectExtractionRequest, SceneObjectCandidateApplication, SceneObjectCandidateReceipt, SceneObjectCandidateReview,
@@ -190,7 +191,7 @@ async def submit_storyboard(project_id: str, chapter_id: str, sequence_id: str, 
 async def storyboard_basis(project_id: str, chapter_id: str, sequence_id: str,
                            db: AsyncSession = Depends(get_db, scope="function")):
     """读取创建分镜画布前用户可核对的实际依据。"""
-    return success_response(await _call(SceneStoryboardService(db, project_id).read_storyboard_basis(chapter_id, sequence_id)))
+    return success_response(await _call(storyboard_generation_inputs(db, project_id).read_storyboard_basis(chapter_id, sequence_id)))
 
 
 @router.get("/chapters/{chapter_id}/sequences/{sequence_id}/canvases/{canvas_id}/storyboards/candidate",
@@ -248,7 +249,7 @@ async def submit_saved_storyboard_check(project_id: str, chapter_id: str, sequen
 async def storyboard_retry_basis(project_id: str, chapter_id: str, sequence_id: str, task_id: str,
                                  db: AsyncSession = Depends(get_db, scope="function")):
     """读取重试原画布时实际采用的原文、对象参考和模型。"""
-    return success_response(await _call(SceneStoryboardService(db, project_id).read_storyboard_retry_basis(
+    return success_response(await _call(storyboard_generation_inputs(db, project_id).read_storyboard_retry_basis(
         chapter_id, sequence_id, task_id)))
 
 
