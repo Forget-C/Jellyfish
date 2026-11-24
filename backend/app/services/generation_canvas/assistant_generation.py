@@ -18,58 +18,10 @@ from app.services.generation_canvas.assistant_events import publish_events
 from app.services.generation_canvas.assistant_auto_review import conduct_review
 from app.services.generation_canvas.assistant_edits import automatic_targets_current, resolve_assistant_proposal
 from app.services.generation_canvas.assistant_layout import decide_assistant_layout
-from app.services.generation_canvas.assistant_targets import shot_request_matches
+from app.services.generation_canvas.assistant_targets import explicit_generation_quantity, shot_request_matches
 from app.services.generation_canvas.runtime import CanvasRuntime
 from app.services.generation_canvas.store import CanvasStore
 from app.services.task_service import utcnow
-
-
-_DIGITS = dict(zip('一二三四五六七八九', range(1, 10))) | {'两': 2}
-_CHINESE_REQUEST = re.compile(
-    r'(?:请|帮我|给我)?(?:再)?生成\s*(?P<count>[1-9][0-9]?|[一二两三四五六七八九]?十[一二三四五六七八九]?'
-    r'|[一二两三四五六七八九])\s*(?:个)?(?:版|版本|次)'
-    r'(?:[，,。；;]\s*(?:再|完成后|生成后)(?:帮我)?(?P<review>(?:看看|看|复看|审看|点评|检查)[^？?]*))?[。！!]?'
-)
-_ENGLISH_REQUEST = re.compile(
-    r'(?:please )?(?:re)?generate (?P<count>[1-9][0-9]?|one|two|three) versions?[.!]?', re.IGNORECASE,
-)
-_EDIT_PREFIX = re.compile(r'^(?:请|帮我)?(?:先)?(?:把|将|改|修改|改写|调整|更新|优化|改好后|修改后|调整后|更新后)')
-_AFTER_EDIT = ('改好后', '修改后', '调整后', '更新后')
-
-
-def _explicit_quantity(text: str) -> tuple[int, bool, str | None] | None:
-    """Match a bounded imperative and optional edit prerequisite in the user turn."""
-    if any(mark in text for mark in ('「', '『', '“', '”', '"', '`', '？', '?')):
-        return None
-    request = text.strip()
-    waits_for_edit = request.startswith(_AFTER_EDIT)
-    if waits_for_edit:
-        ending = next(prefix for prefix in _AFTER_EDIT if request.startswith(prefix))
-        request = request.removeprefix(ending).lstrip('，, ')
-    else:
-        split = re.search(r'(?:[，,、；;。]\s*|(?:改好|修改|调整|更新)后\s*|并\s*)(?:然后|并)?\s*'
-                          r'(?=(?:请|帮我|给我|再)?生成)', request)
-        if split and _EDIT_PREFIX.match(request):
-            prefix = request[:split.start()]
-            if any(word in prefix for word in ('生成', '不要', '别', '是否', '能否', '例如', '比如', '如果')):
-                return None
-            waits_for_edit = True
-            request = request[split.end():]
-    match = _CHINESE_REQUEST.fullmatch(request) or _ENGLISH_REQUEST.fullmatch(request)
-    if match is None:
-        return None
-    count = match['count'].lower()
-    review = match.groupdict().get('review')
-    if count.isascii() and count.isdecimal():
-        quantity = int(count)
-    elif count in ('one', 'two', 'three'):
-        quantity = ('one', 'two', 'three').index(count) + 1
-    elif '十' in count:
-        tens, units = count.split('十')
-        quantity = 10 * _DIGITS.get(tens, 1) + _DIGITS.get(units, 0)
-    else:
-        quantity = _DIGITS[count]
-    return quantity, waits_for_edit, review
 
 
 def _presentation_guidance(text: str) -> bool:
@@ -80,7 +32,7 @@ def _presentation_guidance(text: str) -> bool:
 def generation_authorization(turn: CanvasAssistantTurn, document: CanvasDocument,
                              revision: int) -> CanvasAssistantGeneration | None:
     """Freeze the selected model card and quantity without interpreting model output as permission."""
-    authority = _explicit_quantity(turn.text)
+    authority = explicit_generation_quantity(turn.text)
     context = turn.context
     if authority is None or turn.revises or not context or context['scope'] != 'selection':
         return None

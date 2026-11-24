@@ -3,7 +3,9 @@
 import re
 
 from app.schemas.canvas_assistant_edit import DeleteCardEdit, MovementFieldEdit, ReleaseBindingEdit, VideoPromptSegmentEdit
-from app.services.generation_canvas.assistant_targets import shot_request_matches
+from app.schemas.generation_canvas import CanvasDocument
+from app.services.automatic_approval import ApprovalEffect
+from app.services.generation_canvas.assistant_targets import explicit_generation_quantity, shot_request_matches
 
 _AMBIGUOUS = re.compile(r'[?？「」『』“”"`]|不要|别|是否|可以吗|怎么样|如何|如果|能否|例如|比如|建议|'
                         r'\b(?:do not|don.t|should|could|might|if|example|suggest)\b', re.I)
@@ -45,14 +47,49 @@ def automatic_approval_allowed(text: str, context: dict | None, proposal, docume
     command = text.strip().rstrip('。.!！')
     target = change.target
     if isinstance(target, DeleteCardEdit):
-        match = _DELETE.fullmatch(command)
-        return bool(match and _names_card(match[1], context, change.card_id))
+        return _explicit_delete(command, context, change.card_id)
     if context.get('scope') != 'selection' or context.get('target_card_ids') != [change.card_id]:
         return False
     if isinstance(target, ReleaseBindingEdit):
-        match = _RELEASE.fullmatch(command)
-        return bool(match and _names_binding(match[1], context, change.card_id, target.binding_id))
+        return _explicit_release(command, context, change.card_id, target.binding_id)
     return _matches_edit_request(change, command, document, context)
+
+
+def explicit_canvas_effects(text: str, context: dict, document: CanvasDocument,
+                            effects: tuple[ApprovalEffect, ...]) -> frozenset[ApprovalEffect]:
+    """从可信用户原话及固定指代提取对象、绑定和生成数量均匹配的明确指令。"""
+    if _AMBIGUOUS.search(text):
+        return frozenset()
+    command = text.strip().rstrip('。.!！')
+    resolved_ids = context.get('target_card_ids', [])
+    generation = explicit_generation_quantity(text)
+    approved = set()
+    for effect in effects:
+        card_id = effect.target_id
+        if card_id not in resolved_ids:
+            continue
+        if effect.kind == 'delete_card' and _explicit_delete(command, context, card_id):
+            approved.add(effect)
+        if (effect.kind == 'release_binding' and context.get('scope') == 'selection'
+                and resolved_ids == [card_id] and _explicit_release(command, context, card_id, effect.binding_id)):
+            approved.add(effect)
+        if (effect.kind == 'generate' and generation and generation[0] == effect.count
+                and context.get('scope') == 'selection'):
+            matches = [card.id for card in document.cards if card.id in resolved_ids and card.type.startswith('model.')
+                       and shot_request_matches(text, document, card.id)]
+            if matches == [card_id]:
+                approved.add(effect)
+    return frozenset(approved)
+
+
+def _explicit_delete(command: str, context: dict, card_id: str) -> bool:
+    match = _DELETE.fullmatch(command)
+    return bool(match and _names_card(match[1], context, card_id))
+
+
+def _explicit_release(command: str, context: dict, card_id: str, binding_id: str) -> bool:
+    match = _RELEASE.fullmatch(command)
+    return bool(match and _names_binding(match[1], context, card_id, binding_id))
 
 
 def _matches_edit_request(change, command, document, context):
