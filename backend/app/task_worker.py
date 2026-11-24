@@ -40,6 +40,7 @@ from app.services.directing.existing_storyboard_check import (
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.directing.store import DirectingStore, ContinuityNotReady, RevisionConflict
 from app.services.generation.media_execution import build_media_input, deliver_media, load_media_inputs, restore_media_config, store_media_output
+from app.services.generation_canvas.approved_edits import advance_approved_canvas_edits
 from app.services.generation_canvas.assistant_generation import advance_assistant_generations
 from app.services.generation_canvas.assistant_review import advance_assistant_reviews
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
@@ -168,6 +169,10 @@ class TaskWorker:
 
     async def tick(self) -> None:
         """只在资源有空位时领取任务；远端任务只读取状态，不重新入队。"""
+        try:
+            await advance_approved_canvas_edits(self.sessions)
+        except Exception as error:
+            logger.warning("canvas edit approval processing failed: %s", type(error).__name__)
         try:
             await advance_assistant_generations(self.sessions)
         except Exception as error:
