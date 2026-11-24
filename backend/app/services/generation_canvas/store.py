@@ -314,10 +314,28 @@ class CanvasStore:
 
     async def compile_input(self, canvas_id: str, card_id: str) -> CanvasCompiledInput:
         """编译已保存内容；不受理任务，不发布尚未存在的模型输出。"""
+        canvas = await self.get(canvas_id)
+        return await self._compile_document(canvas, CanvasDocument.model_validate(canvas.document), card_id)
+
+    async def compile_document(self, document: CanvasDocument, card_id: str, *,
+                               draft: bool = False, expected_revision: int | None = None) -> CanvasCompiledInput:
+        """编译调用方已核对的工作文档，检查所属画布与目标修订。"""
+        if document.project_id != self.project_id:
+            raise HTTPException(404, 'Canvas not found')
+        if draft:
+            if self.project_id or (await self.read_free_draft(document.id)).revision >= 0:
+                raise diagnostic('REVISION_CONFLICT', '草稿已变化，请重新读取', {'canvas_id': document.id}, status=409)
+            canvas = GenerationCanvas(id=document.id, kind='free', revision=0)
+        else:
+            canvas = await self.get(document.id)
+            if expected_revision is not None and canvas.revision != expected_revision:
+                raise diagnostic('REVISION_CONFLICT', '画布已变化，请重新读取', {'canvas_id': document.id}, status=409)
+        return await self._compile_document(canvas, document, card_id)
+
+    async def _compile_document(self, canvas: GenerationCanvas, document: CanvasDocument,
+                                card_id: str) -> CanvasCompiledInput:
         from app.services.generation_canvas.compiler import compile_card
         from app.services.generation_canvas.output_resolution import CanvasOutputContext
-        canvas = await self.get(canvas_id)
-        document = CanvasDocument.model_validate(canvas.document)
         card = next((card for card in document.cards if card.id == card_id), None)
         if not isinstance(card, ModelCard):
             raise HTTPException(404, 'Model card not found')

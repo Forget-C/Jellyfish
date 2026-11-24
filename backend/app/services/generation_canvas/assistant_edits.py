@@ -117,6 +117,7 @@ class CanvasAssistantEditDraft:
 
     def __init__(self, context: CanvasAssistantReadContext, saved_document: CanvasDocument, visible_document=None):
         target_ids = set(context.target_card_ids)
+        self.readable_card_ids = {card['id'] for card in context.cards}
         self.cards = {card['id']: card for card in context.cards if card['id'] in target_ids}
         self.saved_cards = {card.id: card for card in saved_document.cards if card.id in self.cards}
         self.visible_document = visible_document or saved_document
@@ -263,7 +264,7 @@ class CanvasAssistantEditDraft:
         propose_canvas_edit_groups.handle_validation_error = True
         return propose_canvas_edit_groups
 
-    def preview_batch(self, groups: list) -> CanvasAssistantProposal | None:
+    def preview_batch(self, groups: list, *, on_group=None) -> CanvasAssistantProposal | None:
         """Preview independent groups atomically and report failures against original positions."""
         if self.proposal:
             raise ToolException('A preview has already been prepared for this turn')
@@ -368,7 +369,10 @@ class CanvasAssistantEditDraft:
                 title = ' / '.join(parsed[member].title for member in sorted(members))
                 if local.reused_cards:
                     title = f'沿用 {len(local.reused_cards)} 张已有卡 · {title}'
-                preview.append(CanvasAssistantEditGroup(id=str(first), title=title[:100], edits=edits))
+                group = CanvasAssistantEditGroup(id=str(first), title=title[:100], edits=edits)
+                preview.append(group)
+                if on_group is not None:
+                    on_group(group, local.visible_document)
         if preview:
             self.proposal = CanvasAssistantProposal(**preview[0].edits[0].model_dump(), groups=preview)
         return self.proposal
@@ -396,7 +400,8 @@ class CanvasAssistantEditDraft:
         if isinstance(operation, (VideoTextUse, VideoCharacterUse)):
             use = operation.model_copy(update={k: references.get(v, v) for k, v in (
                 ('source_card', operation.source_card), ('target_card', operation.target_card))})
-            if use.source_card not in local.cards or use.target_card not in local.cards:
+            if (use.source_card not in local.cards and use.source_card not in self.readable_card_ids
+                    or use.target_card not in local.cards):
                 raise ToolException('请选择当前范围内的来源卡和视频卡。')
             change = adopt_video_input(local.visible_document, use, *self.video_inputs)
             if change:
@@ -409,6 +414,11 @@ class CanvasAssistantEditDraft:
         if isinstance(operation, ProposedBatchField):
             edit = operation.change
             card_id = references.get(edit.card_id, edit.card_id)
+            if card_id in local.saved_cards:
+                current = _editable_text(type(local.saved_cards[card_id]).model_validate(local.cards[card_id]), edit.target)
+                if current is not None and current.text == edit.text:
+                    local.reused_cards.add(card_id)
+                    return None
             change = local._preview(card_id, edit.target, edit.text)
             card = next(item for item in local.visible_document.cards if item.id == card_id)
             local.saved_cards[card_id] = card

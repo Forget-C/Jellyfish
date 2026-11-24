@@ -88,6 +88,14 @@ class CanvasEditPreview(BaseModel):
     groups: tuple[CanvasEditGroupPreview, ...]
 
 
+def project_canvas_edit_group(document: CanvasDocument, group: CanvasEditGroupPreview) -> CanvasDocument:
+    """从预演的计算基线投影规范化差异，仅用于读取实际结果。"""
+    projected = _indexed(document)
+    if _apply(projected, group.differences):
+        raise diagnostic('REVISION_CONFLICT', '画布已变化，请重新预演', {'group_id': group.id}, status=409)
+    return CanvasDocument.model_validate(_document_data(projected))
+
+
 class CanvasEditConflict(BaseModel):
     """并列展示预演原值、当前值和建议。"""
 
@@ -146,7 +154,8 @@ class CanvasEdits(Protocol):
         """保存编辑器提交的整份文档。"""
         ...
 
-    async def preview(self, canvas_id: str, groups: list[CanvasEditGroup]) -> CanvasEditPreview:
+    async def preview(self, canvas_id: str, groups: list[CanvasEditGroup], *,
+                      expected_revision: int | None = None) -> CanvasEditPreview:
         """预演候选并返回经过业务校验的实际差异。"""
         ...
 
@@ -175,6 +184,10 @@ class FreeCanvasEdits(CanvasEdits, Protocol):
 
     async def save_free_draft(self, canvas_id: str, command: 'CanvasDraftSave') -> dict:
         """从尚未保存的草稿创建画布，重放可查询原结果。"""
+        ...
+
+    async def preview_draft(self, document: CanvasDocument, groups: list[CanvasEditGroup]) -> CanvasEditPreview:
+        """从浏览器草稿预演；由调用方保存原草稿，预演不创建画布。"""
         ...
 
 
@@ -316,8 +329,22 @@ class _CanvasEdits(CanvasStore):
         projected = positions | plan.after
         return CanvasLayoutProjection(state='no_change' if projected == positions else 'projected', positions=projected)
 
-    async def preview(self, canvas_id: str, groups: list[CanvasEditGroup]) -> CanvasEditPreview:
+    async def preview(self, canvas_id: str, groups: list[CanvasEditGroup], *,
+                      expected_revision: int | None = None) -> CanvasEditPreview:
         canvas = await self.get(canvas_id)
+        if expected_revision is not None and canvas.revision != expected_revision:
+            raise diagnostic('REVISION_CONFLICT', '画布已变化，请重新读取后预演', {'canvas_id': canvas_id}, status=409)
+        return await self._preview_document(canvas, groups)
+
+    async def preview_draft(self, document: CanvasDocument, groups: list[CanvasEditGroup]) -> CanvasEditPreview:
+        if document.project_id or (await self.read_free_draft(document.id)).revision >= 0:
+            raise diagnostic('REVISION_CONFLICT', '草稿已变化，请重新读取后预演', {'canvas_id': document.id}, status=409)
+        canvas = GenerationCanvas(id=document.id, kind='free', revision=0, document=document.model_dump(mode='json'),
+                                  card_types={card.id: card.type for card in document.cards}, detached_proofs={})
+        return await self._preview_document(canvas, groups)
+
+    async def _preview_document(self, canvas: GenerationCanvas, groups: list[CanvasEditGroup]) -> CanvasEditPreview:
+        canvas_id = canvas.id
         current = _indexed(CanvasDocument.model_validate(canvas.document))
         previews = {}
         for group in groups:

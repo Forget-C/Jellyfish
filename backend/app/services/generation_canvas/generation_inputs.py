@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.contracts.directing.scene_storyboard import StoryboardBasis, StoryboardRetryBasis
 from app.schemas.canvas_checks import CanvasCheckPreview, CanvasCheckProduct, CanvasPostCheckPreview
 from app.schemas.generation_canvas import (
-    CanvasCompiledInput, CanvasPrecheck, CanvasPrecheckRequest, CanvasVideoFrameRequest, ImageContentCard,
+    CanvasCompiledInput, CanvasDocument, CanvasPrecheck, CanvasPrecheckRequest, CanvasVideoFrameRequest, ImageContentCard,
 )
 from app.services.generation_canvas.checks import CanvasChecks
 from app.services.generation_canvas.post_checks import CanvasPostChecks
@@ -21,6 +21,11 @@ class CanvasGenerationInputs(Protocol):
 
     async def compile_input(self, canvas_id: str, card_id: str) -> CanvasCompiledInput:
         """返回实际正文、媒体和诊断，不创建生成任务。"""
+        ...
+
+    async def compile_document(self, document: CanvasDocument, card_id: str, *,
+                               draft: bool = False, expected_revision: int | None = None) -> CanvasCompiledInput:
+        """仅编译调用方核对过的已保存或预演工作文档。"""
         ...
 
     async def precheck(self, canvas_id: str, command: CanvasPrecheckRequest) -> CanvasPrecheck:
@@ -64,6 +69,12 @@ class _ScopedGenerationInputs:
 
     async def compile_input(self, canvas_id: str, card_id: str) -> CanvasCompiledInput:
         return await CanvasStore(self.db, self.project_id).compile_input(canvas_id, card_id)
+
+    async def compile_document(self, document: CanvasDocument, card_id: str, *,
+                               draft: bool = False, expected_revision: int | None = None) -> CanvasCompiledInput:
+        return await CanvasStore(self.db, self.project_id).compile_document(
+            document, card_id, draft=draft, expected_revision=expected_revision,
+        )
 
     async def precheck(self, canvas_id: str, command: CanvasPrecheckRequest) -> CanvasPrecheck:
         return await CanvasRuntime(self.db, self.project_id).precheck(canvas_id, command)
