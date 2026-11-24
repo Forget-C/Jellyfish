@@ -10,13 +10,14 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.chapters.explanations import explanation_basis
+from app.core.contracts.canvas_catalog import CanvasCatalog
 from app.core.contracts.task import TERMINAL_TASK_STATUSES
 from app.models.directing import Sequence
 from app.models.generation_canvas import CanvasCheckReport, CanvasSaveReceipt, GenerationCanvas
 from app.models.studio import Chapter, FileUsage, Project
 from app.models.task import Task
 from app.schemas.generation_canvas import (
-    CanvasCompiledInput, CanvasDiagnostic, CanvasDocument, CanvasFixedSource, CanvasRead,
+    CanvasCompiledInput, CanvasCreate, CanvasDiagnostic, CanvasDocument, CanvasFixedSource, CanvasModelCapability, CanvasRead,
     CanvasSave, CanvasSummary, CanvasSceneAssociation, CreativeBasisCard, ModelCard,
 )
 from app.services.common import get_or_404
@@ -117,6 +118,23 @@ class CanvasStore:
                               or source.source_explanations != explanation_basis(chapter)['items'])
         return CanvasRead(id=canvas.id, project_id=canvas.project_id, revision=canvas.revision,
                           document=document, source_changed=source_changed, scene=await self._scene_association(canvas))
+
+    async def catalog(self, canvas_id: str) -> CanvasCatalog:
+        """根据已核实的画布种类读取卡片及连接策略。"""
+        from app.services.generation_canvas.catalog import canvas_catalog
+
+        canvas = await self.get(canvas_id)
+        return canvas_catalog(kind=canvas.kind)
+
+    async def model_capability(self, canvas_id: str, model_id: str) -> CanvasModelCapability:
+        """先核实画布范围，再读取模型能力。"""
+        await self.get(canvas_id)
+        return await model_capability(self.db, model_id)
+
+    async def create_free(self, command: CanvasCreate) -> CanvasRead:
+        """从自由画布入口创建并返回可编辑文档。"""
+        canvas = await self.create(command.name)
+        return CanvasRead(id=canvas.id, revision=canvas.revision, document=CanvasDocument.model_validate(canvas.document))
 
     async def _scene_association(self, canvas: GenerationCanvas) -> CanvasSceneAssociation | None:
         """只有画布、场次和章节确实同属当前项目时才返回关联。"""

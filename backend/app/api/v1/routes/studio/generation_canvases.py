@@ -13,7 +13,7 @@ from app.services.generation_canvas.assistant_draft import DraftCanvasAssistant,
 from app.schemas.common import PaginatedData, paginated_response, ApiResponse, created_response, empty_response, success_response
 from app.schemas.generation_canvas import CanvasRename, CanvasSummary, CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError, CanvasModelCapability, CanvasCompiledInput
 from app.services.generation_canvas.store import CanvasStore
-from app.services.generation_canvas.capabilities import model_capability
+from app.services.generation_canvas.lifecycle import canvas_lifecycle, free_canvas_lifecycle
 from app.schemas.canvas_assistant import (
     CanvasAssistantEventPayload, CanvasAssistantInstruction, CanvasAssistantQuestionAnswer, CanvasAssistantQueuedText, CanvasAssistantQueueItem,
 )
@@ -31,20 +31,20 @@ router = APIRouter()
 async def list_canvases(q: str = '', page: int = Query(1, ge=1), page_size: int = Query(24, ge=1, le=100),
                         db: AsyncSession = Depends(get_db, scope='function')):
     """分页读取独立画布摘要。"""
-    items, total = await CanvasStore(db, None).summaries(q=q, page=page, page_size=page_size)
+    items, total = await free_canvas_lifecycle(db).summaries(q=q, page=page, page_size=page_size)
     return paginated_response(items, page=page, page_size=page_size, total=total)
 
 
 @router.post('', response_model=ApiResponse[CanvasRead], operation_id='canvas_create')
 async def create_canvas(body: CanvasCreate, db: AsyncSession = Depends(get_db, scope='function')):
     """创建不依赖项目的自由画布。"""
-    return created_response(await CanvasStore(db, None).create(body.name))
+    return created_response(await free_canvas_lifecycle(db).create_free(body))
 
 
 @router.get('/drafts/{canvas_id}', response_model=ApiResponse[CanvasRead], operation_id='canvas_draft_read')
 async def read_free_draft(canvas_id: UUID, db: AsyncSession = Depends(get_db, scope='function')):
     """读取独立草稿，修订 -1 表示尚未创建。"""
-    return success_response(await CanvasStore(db, None).read_free_draft(str(canvas_id)))
+    return success_response(await free_canvas_lifecycle(db).read_free_draft(str(canvas_id)))
 
 
 @router.put('/drafts/{canvas_id}', response_model=ApiResponse[CanvasDraftSaved], operation_id='canvas_draft_save',
@@ -79,13 +79,13 @@ async def stop_draft_reply(canvas_id: UUID, source_id: str):
 @router.patch('/{canvas_id}/name', response_model=ApiResponse[CanvasRead], operation_id='canvas_rename')
 async def rename_canvas(canvas_id: str, body: CanvasRename, db: AsyncSession = Depends(get_db, scope='function')):
     """按修订重命名独立画布，复用完整保存校验。"""
-    return success_response(await CanvasStore(db, None).rename(canvas_id, body.name, body.expected_revision))
+    return success_response(await free_canvas_lifecycle(db).rename(canvas_id, body.name, body.expected_revision))
 
 
 @router.get('/{canvas_id}', response_model=ApiResponse[CanvasRead], operation_id='canvas_get')
 async def get_canvas(canvas_id: str, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """读取当前文档。"""
-    return success_response(await CanvasStore(db, project_id).read(canvas_id))
+    return success_response(await canvas_lifecycle(db, project_id).read(canvas_id))
 
 
 @router.get('/{canvas_id}/assistant', response_model=ApiResponse[CanvasAssistantHistory],
@@ -221,7 +221,7 @@ async def save_canvas(canvas_id: str, body: CanvasSave, project_id: str = '', db
 async def delete_canvas(canvas_id: str, expected_revision: Annotated[int, Query(ge=0)],
                         project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """仅删除已核对修订且没有活动任务的画布。"""
-    await CanvasStore(db, project_id).delete(canvas_id, expected_revision=expected_revision)
+    await canvas_lifecycle(db, project_id).delete(canvas_id, expected_revision=expected_revision)
     return empty_response()
 
 
@@ -229,8 +229,7 @@ async def delete_canvas(canvas_id: str, expected_revision: Annotated[int, Query(
             operation_id='canvas_model_capability')
 async def get_model_capability(canvas_id: str, model_id: str, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """核实画布归属后返回所选模型的真实输入与参数能力。"""
-    await CanvasStore(db, project_id).get(canvas_id)
-    return success_response(await model_capability(db, model_id))
+    return success_response(await canvas_lifecycle(db, project_id).model_capability(canvas_id, model_id))
 
 
 @router.get('/{canvas_id}/cards/{card_id}/compile', response_model=ApiResponse[CanvasCompiledInput],
@@ -340,8 +339,7 @@ async def get_free_canvas_catalog():
 @router.get('/{canvas_id}/catalog', response_model=ApiResponse[CanvasCatalog], operation_id='canvas_catalog')
 async def get_canvas_catalog(canvas_id: str, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """核实画布归属后提供卡片、兼容用途、采用策略及单值输入约束。"""
-    canvas = await CanvasStore(db, project_id).get(canvas_id)
-    return success_response(canvas_catalog(kind=canvas.kind))
+    return success_response(await canvas_lifecycle(db, project_id).catalog(canvas_id))
 
 
 from app.schemas.canvas_checks import CanvasCheckPreview, CanvasCheckReportRead, CanvasCheckRequest

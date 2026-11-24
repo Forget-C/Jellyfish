@@ -20,7 +20,7 @@ from app.core.contracts.directing.scene_storyboard import (StoryboardApplication
     StoryboardReextractRequest, StoryboardRequest, StoryboardRestore, StoryboardRetry, StoryboardRetryBasis,
     StoryboardTaskRead, StoryboardTaskSummary)
 from app.services.directing.scene_storyboard import SceneStoryboardService
-from app.services.directing.scene_canvas import SceneCanvasService
+from app.services.generation_canvas.lifecycle import scene_canvas_lifecycle
 from app.core.contracts.directing.scene_objects import (
     ObjectExtractionRequest, SceneObjectCandidateApplication, SceneObjectCandidateReceipt, SceneObjectCandidateReview,
     SceneObjectChoice, SceneObjectsRead, SceneObjectTaskRead,
@@ -118,7 +118,7 @@ async def save_shooting_explanations(project_id: str, chapter_id: str,
 async def scene_canvases(project_id: str, chapter_id: str, sequence_id: str,
                          db: AsyncSession = Depends(get_db, scope="function")):
     """读取场次准备页的原文摘要与独立画布。"""
-    return success_response(await SceneCanvasService(db, project_id).read_canvases(chapter_id, sequence_id))
+    return success_response(await scene_canvas_lifecycle(db, project_id).read_canvases(chapter_id, sequence_id))
 
 
 @router.post("/chapters/{chapter_id}/sequences/{sequence_id}/canvases",
@@ -126,7 +126,7 @@ async def scene_canvases(project_id: str, chapter_id: str, sequence_id: str,
 async def create_scene_canvas(project_id: str, chapter_id: str, sequence_id: str, body: SceneCanvasCreate,
                               db: AsyncSession = Depends(get_db, scope="function")):
     """建立本场空白画布及固定原文依据。"""
-    return created_response(await _call(SceneCanvasService(db, project_id).create_canvas(chapter_id, sequence_id, body)))
+    return created_response(await _call(scene_canvas_lifecycle(db, project_id).create_canvas(chapter_id, sequence_id, body)))
 
 
 @router.get("/chapters/{chapter_id}/sequences/{sequence_id}/objects",
