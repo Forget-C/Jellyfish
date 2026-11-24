@@ -41,13 +41,16 @@ from app.schemas.generation_canvas import CanvasDocument
 from app.services.directing.store import DirectingStore, ContinuityNotReady, RevisionConflict
 from app.services.generation.media_execution import build_media_input, deliver_media, load_media_inputs, restore_media_config, store_media_output
 from app.services.generation_canvas.approved_edits import advance_approved_canvas_edits
+from app.services.generation_canvas.approved_generation import (
+    advance_approved_canvas_generations, begin_approved_provider_submission, preserve_approved_provider_submission,
+)
 from app.services.generation_canvas.assistant_generation import advance_assistant_generations
 from app.services.generation_canvas.assistant_review import advance_assistant_reviews
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.script_processing_worker import generate_script_result
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
 from app.services.task_service import (
-    AUTO_CHECK_DISPATCH, MEDIA_KINDS, TASK_KINDS, TaskService, utcnow,
+    AUTO_CHECK_DISPATCH, MEDIA_KINDS, SUBMISSION_UNKNOWN, TASK_KINDS, TaskService, utcnow,
 )
 
 logger = logging.getLogger(__name__)
@@ -174,13 +177,17 @@ class TaskWorker:
         except Exception as error:
             logger.warning("canvas edit approval processing failed: %s", type(error).__name__)
         try:
+            await advance_approved_canvas_generations(self.sessions)
+        except Exception as error:
+            logger.warning("canvas generation approval processing failed: %s", type(error).__name__)
+        try:
             await advance_assistant_generations(self.sessions)
         except Exception as error:
             logger.warning("canvas assistant admission failed: %s", type(error).__name__)
         async with self.sessions() as db:
             await TaskService(db).expire_tasks()
             remote_count = await db.scalar(select(func.count()).select_from(Task).where(
-                Task.status == "running", Task.execution_mode == "remote",
+                Task.status == "running", Task.execution_mode == "remote", Task.stage != SUBMISSION_UNKNOWN,
             )) or 0
             for phase, kinds, capacity in (("text", TASK_KINDS - MEDIA_KINDS, self.limits.text),
                                            ("submit", MEDIA_KINDS, self.limits.submit)):
@@ -263,6 +270,10 @@ class TaskWorker:
                 if task.target_type == "directing_unit":
                     async with self.sessions() as db:
                         await DirectingStore(db, task.project_id).validate_task_continuity(task)
+                if task.target_type == 'canvas_node':
+                    async with self.sessions.begin() as db:
+                        if not await begin_approved_provider_submission(db, task_id, worker_id=self.worker_id):
+                            return
                 result = await MediaProvider(self.client).submit(cfg, inp)
                 if isinstance(result, str):
                     async with self.sessions() as db:
@@ -276,12 +287,13 @@ class TaskWorker:
                 if current is not None and not (current.execution_mode == "remote" and current.provider_task_id):
                     service = TaskService(db)
                     requeued = current.kind == AUTO_CHECK_DISPATCH and await service.requeue_automatic_dispatch(task_id)
-                    if not requeued:
+                    if not requeued and not await service.mark_provider_submission_unknown(task_id):
                         await service.finish(task_id, error_code="execution_interrupted", error="执行进程已停止，请重新提交")
                     await db.commit()
             raise
         except TimeoutError:
-            await self._fail(task_id, "execution_timeout", "任务执行超时")
+            if not await self._preserve_unknown_submission(task_id):
+                await self._fail(task_id, "execution_timeout", "任务执行超时")
         except ContinuityNotReady as error:
             await self._fail(task_id, "continuity_changed", str(error))
         except DirectingOutputError as error:
@@ -289,7 +301,17 @@ class TaskWorker:
                 result=({'storyboard_structure': error.storyboard_structure} if error.storyboard_structure else
                         {'design_diagnostics': error.diagnostics.model_dump(mode='json')} if error.diagnostics else None))
         except Exception as error:
-            await self._fail(task_id, "submission_failed", self._error_message(error))
+            rejected = (
+                isinstance(error, httpx.HTTPStatusError)
+                and 400 <= error.response.status_code < 500
+                and error.response.status_code != 408
+            )
+            if rejected or not await self._preserve_unknown_submission(task_id):
+                await self._fail(task_id, "submission_failed", self._error_message(error))
+
+    async def _preserve_unknown_submission(self, task_id: str) -> bool:
+        async with self.sessions.begin() as db:
+            return await preserve_approved_provider_submission(db, task_id)
 
     async def _poll(self, task_id: str) -> None:
         """单次查询失败可延后再查；跟踪截止后最终查询仍未完成则结束本地任务。"""

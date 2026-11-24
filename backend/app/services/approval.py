@@ -180,6 +180,25 @@ class ApprovalService:
             group_states=request.group_states,
         )
 
+    async def read_submitted(self, access: ApprovalAccess, *, object_type: str, object_id: str,
+                             idempotency_key: str) -> ApprovalRequestView | None:
+        """仅原申请方可在生成新快照前重放自己的申请收据。"""
+        _require(access, 'submit')
+        subject_id = _hash(_scope_key(access), object_type, object_id)
+        statement = (
+            select(ApprovalSubject, ApprovalRequest)
+            .join(ApprovalRequest, ApprovalRequest.subject_id == ApprovalSubject.id)
+            .where(ApprovalSubject.id == subject_id,
+                   ApprovalRequest.submission_key == _hash(subject_id, idempotency_key))
+        )
+        row = (await self.db.execute(statement)).one_or_none()
+        if row is None:
+            return None
+        subject, request = row
+        if request.applicant_id != access.actor_id:
+            raise ApprovalError('idempotency_conflict', '该幂等键已用于另一份申请')
+        return _request_view(subject, request)
+
     async def decide(self, access: ApprovalAccess, request_id: str, *, version: str, group_ids: tuple[str, ...],
                      action: DecisionAction, idempotency_key: str) -> ApprovalDecisionView:
         """按所见版本和组签发决定；原重放优先于过期及已决定检查。"""

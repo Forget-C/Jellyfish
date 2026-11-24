@@ -17,6 +17,8 @@ from app.models.studio import FileItem
 from app.models.task import Task, TaskInput, TaskOutput
 
 AUTO_CHECK_DISPATCH = 'canvas_auto_check'
+SUBMISSION_IN_FLIGHT = 'submission_in_flight'
+SUBMISSION_UNKNOWN = 'submission_unknown'
 TASK_KINDS = frozenset({
     "text_chat", "canvas_check", AUTO_CHECK_DISPATCH, "image_generation", "video_generation",
     "script_consistency",
@@ -116,7 +118,11 @@ class TaskService:
             return row
         if row.execution_mode != TaskExecutionMode.remote:
             raise ValueError("direct task cannot record a remote submission")
+        tracked_approval = row.stage in (SUBMISSION_IN_FLIGHT, SUBMISSION_UNKNOWN)
         remote_id = (provider_task_id or "").strip()
+        if tracked_approval and (not remote_id or len(remote_id) > 255):
+            await self.mark_provider_submission_unknown(task_id)
+            return row
         if not remote_id:
             return await self.finish(task_id, error_code="provider_task_id_missing", error="供应商成功响应缺少任务 ID")
         if len(remote_id) > 255:
@@ -130,8 +136,43 @@ class TaskService:
         row.stage = "polling"
         row.next_poll_at = utcnow()
         row.deadline_at = utcnow() + timedelta(seconds=tracking_seconds)
+        if tracked_approval:
+            row.error_code = row.error_message = None
         await self.db.flush()
+        if tracked_approval:
+            await self._sync_canvas(row)
         return row
+
+    async def begin_provider_submission(self, task_id: str, *, worker_id: str) -> bool:
+        """对已获批媒体调用，在网络 I/O 之前记录不可自动重提的边界。"""
+        row = await self._lock(task_id)
+        if (row is None or row.status != TaskStatus.running or row.stage != 'submitting'
+                or row.worker_instance_id != worker_id):
+            return False
+        if row.cancel_requested_at:
+            await self.finish(task_id, cancelled=True)
+            return False
+        row.stage = SUBMISSION_IN_FLIGHT
+        await self.db.flush()
+        await self._sync_canvas(row)
+        return True
+
+    async def mark_provider_submission_unknown(self, task_id: str) -> bool:
+        """保留原提交身份，等待可信对账事实。"""
+        row = await self._lock(task_id)
+        if (row is None or row.status != TaskStatus.running or row.provider_task_id
+                or row.stage not in (SUBMISSION_IN_FLIGHT, SUBMISSION_UNKNOWN)):
+            return False
+        if row.cancel_requested_at:
+            await self.finish(task_id, cancelled=True)
+        elif row.stage != SUBMISSION_UNKNOWN:
+            row.stage = SUBMISSION_UNKNOWN
+            row.deadline_at = row.next_poll_at = None
+            row.error_code = SUBMISSION_UNKNOWN
+            row.error_message = '供应商受理结果未确定，系统会保留原任务等待核对'
+            await self.db.flush()
+            await self._sync_canvas(row)
+        return True
 
     async def record_poll_result(
         self, task_id: str, *, remote_status: str | None = None, error: str | None = None,
@@ -187,7 +228,7 @@ class TaskService:
         if row.cancel_requested_at is None:
             row.cancel_requested_at = utcnow()
             row.cancel_reason = (reason or "")[:255] or None
-        if row.status == TaskStatus.queued:
+        if row.status == TaskStatus.queued or row.stage == SUBMISSION_UNKNOWN:
             return await self.finish(task_id, cancelled=True)
         await self.db.flush()
         await self._sync_canvas(row)
@@ -266,6 +307,8 @@ class TaskService:
         for row in rows:
             if row.kind == AUTO_CHECK_DISPATCH and await self.requeue_automatic_dispatch(row.id):
                 continue
+            if row.stage in (SUBMISSION_IN_FLIGHT, SUBMISSION_UNKNOWN) and await self.mark_provider_submission_unknown(row.id):
+                continue
             await self.finish(row.id, error_code="submission_interrupted" if row.execution_mode == "remote" else "execution_interrupted",
                               error="服务重启，任务已中断，请重新提交")
         return len(rows)
@@ -289,6 +332,8 @@ class TaskService:
                 Task.provider_task_id.is_(None)),
         )))
         for row in rows:
+            if row.stage == SUBMISSION_IN_FLIGHT and await self.mark_provider_submission_unknown(row.id):
+                continue
             await self.finish(row.id, error_code="queue_expired" if row.status == TaskStatus.queued else "execution_timeout",
                               error="任务等待或执行超时")
         return len(rows)
