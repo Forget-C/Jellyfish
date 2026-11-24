@@ -59,6 +59,8 @@
 - [拍摄解释按章节原文版本维护](adr/0013-chapter-shooting-explanations.md)
 - [退役旧场次版本 HTTP 接口](adr/0014-retire-scene-version-api.md)
 - [自由画布与分镜画布共用 Deep Agents 助手](adr/0015-canvas-assistant-harness.md)
+- [双画布助手的专业技能与批量修改提案](adr/0016-canvas-assistant-skills-and-change-proposals.md)
+- [实验室与画布助手共用交互会话协议](adr/0017-interaction-session-protocol.md)
 
 ## 开发与维护指南
 
