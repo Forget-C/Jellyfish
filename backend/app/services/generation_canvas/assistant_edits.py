@@ -4,12 +4,14 @@ from copy import copy
 from dataclasses import dataclass
 import hashlib
 import json
+import re
 from uuid import uuid4
 from typing import Annotated
 
 from fastapi import HTTPException
 from langchain_core.tools import ToolException, tool
 from pydantic import Field, ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.generation_canvas import DesignField
@@ -38,7 +40,7 @@ from app.services.generation_canvas.assistant_auto_review import AutomaticReview
 from app.services.generation_canvas.assistant_hitl import resume_canvas_approval
 from app.services.generation_canvas.assistant_removals import apply_removal, removal_impact
 from app.services.generation_canvas.assistant_structure import (
-    append_candidate_edge, apply_structural_change, assistant_card_configuration, preview_assistant_connection,
+    append_candidate_edge, apply_structural_change, assistant_card_configuration, assistant_card_copy, preview_assistant_connection,
 )
 from app.services.generation_canvas.errors import CanvasDomainError
 from app.services.generation_canvas.graph import validate_graph
@@ -101,6 +103,14 @@ def _editable_text(card, target: CanvasAssistantEditTarget):
     return None
 
 
+class ExistingCardChoice(ToolException):
+    """Surface potential duplicate creations as choices in the assistant composer."""
+
+    def __init__(self, card_ids):
+        self.card_ids = card_ids
+        super().__init__('请选择沿用的卡片，或明确要求另建副本：' + '、'.join(card_ids))
+
+
 class CanvasAssistantEditDraft:
     """Build one in-memory preview from the chosen saved cards."""
 
@@ -111,7 +121,78 @@ class CanvasAssistantEditDraft:
         self.visible_document = visible_document or saved_document
         self.proposal: CanvasAssistantProposal | None = None
         self.proposal_issues: list[CanvasAssistantProposalIssue] = []
+        self.user_request = ''
+        self.visible_edges = {edge.id for edge in self.visible_document.edges}
+        self.unavailable_origins: dict[tuple[str | None, str], bool] = {}
+        self.visible_ids = {card.id for card in self.visible_document.cards}
+        self.applied_cards: dict[str, CanvasAssistantChange] = {}
+        self.reused_cards: set[str] = set()
         self.repair_exclusions: set[tuple[str, str, str]] = set()
+
+    def applied_context(self, raw_proposal):
+        """Index committed creations that are still visible and writable in this turn."""
+        if not raw_proposal:
+            return []
+        proposal = CanvasAssistantProposal.model_validate(raw_proposal)
+        applied = ([e for g in proposal.groups if g.state == 'applied' for e in g.edits]
+                   if proposal.groups else [proposal] if proposal.state == 'applied' else [])
+        summary = []
+        for edit in applied:
+            if edit.card_id not in self.saved_cards:
+                if isinstance(edit.target, AddCanvasCardTarget):
+                    key = edit.origin_reference, edit.target.card.model_dump_json()
+                    self.unavailable_origins[key] = edit.card_id in self.visible_ids
+                continue
+            if isinstance(edit.target, AddCanvasCardTarget):
+                self.applied_cards[edit.card_id] = edit
+                summary.append((edit.card_id, edit.origin_reference, edit.card_name))
+            elif isinstance(edit.target, ConnectCardsTarget) and edit.target.source_card in self.cards:
+                summary.append((edit.target.source_card, edit.target.target_card, '曾连接'))
+        return summary
+
+    def existing_creation(self, card, reference=None):
+        """Resolve durable origin plus creation payload; ambiguous identities need a user decision."""
+        matches = [edit for edit in self.applied_cards.values() if edit.target.card == card]
+        exact = [edit for edit in matches if reference and edit.origin_reference == reference]
+        if len(exact) == 1 and not any(line.startswith('使用已有卡 ') for line in self.user_request.splitlines()):
+            return exact[0].card_id
+        related = matches or [edit for edit in self.applied_cards.values()
+                              if reference and edit.origin_reference == reference and type(edit.target.card) is type(card)]
+        if related:
+            selected = [edit.card_id for edit in related if f'使用已有卡 {edit.card_id}' in self.user_request
+                        or self.copy_requested(edit.card_id)]
+            if len(selected) == 1:
+                return selected[0]
+            raise ExistingCardChoice([edit.card_id for edit in related])
+        unavailable = self.unavailable_origins.get((reference, card.model_dump_json()))
+        if unavailable:
+            raise ToolException('原卡在当前选区之外，请引用原卡或切换到整张画布后继续。')
+        if unavailable is False and not re.search(r'重新创建|重建|重新新建', self.user_request):
+            raise ToolException('此前创建的卡片已经移除；如需恢复，请明确要求重建。')
+        return None
+
+    def copy_requested(self, source_id):
+        """Require the user's copy instruction to cover this source rather than a different clause."""
+        choice = self.user_request.splitlines()[-1].strip() if self.user_request else ''
+        if choice.startswith('另建副本 '):
+            return choice == f'另建副本 {source_id}'
+        for clause in re.split(r'[，。；,;\n]|并给|然后', self.user_request):
+            if not re.search(r'复制|另建副本|\b(copy|duplicate|clone)\b', clause, re.I):
+                continue
+            if re.search(r'不要|不用|别|无需|不复制|如果|是否|怎么|[?？]|\b(not|never|if)\b', clause, re.I):
+                continue
+            named = {key for key, edit in self.applied_cards.items() if key in clause or
+                     (edit.origin_reference and re.search(r'(?<![A-Za-z0-9_-])' + re.escape(edit.origin_reference)
+                                                          + r'(?![A-Za-z0-9_-])', clause))}
+            if named:
+                return source_id in named
+            if source_id in clause or set(self.cards) == {source_id}:
+                return True
+            source = self.saved_cards.get(source_id)
+            if source and source.type == 'model.video' and '视频卡' in clause:
+                count = sum(card.type == source.type for card in self.saved_cards.values())
+                return '所有' in clause or '全部' in clause or bool(count == 2 and re.search(r'(两|2)张', clause))
+        return False
 
     @property
     def available(self) -> bool:
@@ -252,6 +333,7 @@ class CanvasAssistantEditDraft:
             if len(members) > 1:
                 operations.sort(key=lambda item: not isinstance(item[2], ProposedBatchCard))
             local = copy(self)
+            local.reused_cards = set()
             local.cards = dict(self.cards)
             local.saved_cards = dict(self.saved_cards)
             local.visible_document = self.visible_document.model_copy(deep=True)
@@ -261,6 +343,8 @@ class CanvasAssistantEditDraft:
             try:
                 for member, position, operation in operations:
                     change = self._batch_operation(local, operation, references)
+                    if change is None:
+                        continue
                     key = change.card_id, change.target.model_dump_json(exclude={'connection_id'})
                     if self._repair_identity(change) in self.repair_exclusions:
                         raise ToolException('此操作已在原提案通过预演，修正请求只处理未完成项。')
@@ -271,12 +355,17 @@ class CanvasAssistantEditDraft:
                 if any(isinstance(edit.target, ConnectCardsTarget) for edit in edits):
                     validate_graph(local.visible_document, self.visible_document)
             except ToolException as error:
-                self.proposal_issues.append(self._batch_issue(member, position, operation, str(error)))
+                self.proposal_issues.append(self._batch_issue(member, position, operation, str(error), getattr(error, 'card_ids', None)))
             except CanvasDomainError as error:
                 self.proposal_issues.append(CanvasAssistantProposalIssue(group=first, message=error.detail['message']))
             else:
+                self.reused_cards.update(local.reused_cards)
+                if not edits:
+                    continue
                 targets.update(group_targets)
                 title = ' / '.join(parsed[member].title for member in sorted(members))
+                if local.reused_cards:
+                    title = f'沿用 {len(local.reused_cards)} 张已有卡 · {title}'
                 preview.append(CanvasAssistantEditGroup(id=str(first), title=title[:100], edits=edits))
         if preview:
             self.proposal = CanvasAssistantProposal(**preview[0].edits[0].model_dump(), groups=preview)
@@ -294,9 +383,9 @@ class CanvasAssistantEditDraft:
             self.repair_exclusions = {self._repair_identity(change) for change in changes}
 
     @staticmethod
-    def _batch_issue(group, position, operation, message):
+    def _batch_issue(group, position, operation, message, candidates=None):
         return CanvasAssistantProposalIssue(
-            group=group, operation=position, message=message,
+            group=group, operation=position, message=message, candidate_ids=candidates,
             source_card=operation.source_card if isinstance(operation, ProposedBatchConnection) else None,
             target_card=operation.target_card if isinstance(operation, ProposedBatchConnection) else None,
         )
@@ -308,7 +397,8 @@ class CanvasAssistantEditDraft:
             if card_id is None:
                 return self._preview(edit.card_id, edit.target, edit.text)
             change = local._preview(card_id, edit.target, edit.text)
-            card = local.saved_cards[card_id]
+            card = next(item for item in local.visible_document.cards if item.id == card_id)
+            local.saved_cards[card_id] = card
             _apply_text(card, _editable_text(card, edit.target), change)
             local.cards[card_id] = card.model_dump(mode='json')
             return change
@@ -321,22 +411,54 @@ class CanvasAssistantEditDraft:
         if isinstance(operation, ProposedBatchCard):
             if operation.reference in references or operation.reference in self.cards:
                 raise ToolException('Each new card reference must be unique within its group')
+            basis = None
             try:
                 card, text = assistant_card_configuration(operation.card, uuid4().hex)
             except ValueError as exc:
                 raise ToolException('Choose a card available in the catalog') from exc
+            copy_of = operation.copy_of
+            if not copy_of:
+                existing = self.existing_creation(operation.card, operation.reference)
+                if existing:
+                    if self.copy_requested(existing):
+                        copy_of = existing
+                    else:
+                        if self._repair_identity(self.applied_cards[existing]) in self.repair_exclusions:
+                            raise ToolException('此操作已在原提案通过预演，修正请求只处理未完成项。')
+                        references[operation.reference] = existing
+                        local.reused_cards.add(existing)
+                        return None
+            if copy_of:
+                if not self.copy_requested(copy_of):
+                    if copy_of in self.saved_cards:
+                        raise ExistingCardChoice([copy_of])
+                    raise ToolException('请选择当前范围内的原卡。')
+                source = self.saved_cards.get(copy_of)
+                if source is None or source.type != card.type:
+                    raise ToolException('请选择当前范围内同类型的原卡来新建副本。')
             if not local.visible_document.project_id and card.type not in FREE_CARD_TYPES:
                 raise ToolException(f'当前画布不允许创建 {CARD_TITLES[card.type]}')
+            if copy_of:
+                source = type(source).model_validate(self.cards[source.id])
+                card, basis = assistant_card_copy(source, card.id)
+                text = getattr(source, 'text', '') or ('\n'.join(part.text for part in source.prompt.segments
+                                                              if isinstance(part, PromptText)) if isinstance(source, ModelCard) else '')
             references[operation.reference] = card.id
             local.cards[card.id] = card.model_dump(mode='json')
             local.saved_cards[card.id] = card
             local.visible_document.cards.append(card)
-            return CanvasAssistantChange(card_id=card.id, card_name=CARD_TITLES[card.type], before='', after=text,
+            return CanvasAssistantChange(card_id=card.id, origin_reference=operation.reference, copy_of=copy_of,
+                                         impact_fingerprint=basis,
+                                         card_name=CARD_TITLES[card.type], before='', after=text,
                                          target=AddCanvasCardTarget(kind='add_canvas_card', card=operation.card))
         connection = operation.model_copy(update={
             'source_card': references.get(operation.source_card, operation.source_card),
             'target_card': references.get(operation.target_card, operation.target_card),
         })
+        if any(all(getattr(edge, key) == value for key, value in connection.model_dump(exclude={'kind'}).items())
+               for edge in local.visible_document.edges if edge.id in self.visible_edges):
+            local.reused_cards.update((connection.source_card, connection.target_card))
+            return None
         change = preview_assistant_connection(local, connection)
         append_candidate_edge(local.visible_document, GenerationCanvasEdge(
             id=change.target.connection_id, **connection.model_dump(exclude={'kind'}),
@@ -349,11 +471,12 @@ class CanvasAssistantEditDraft:
         def propose_canvas_changes(groups: list[ProposedCanvasBatchGroup | dict]) -> str:
             """Preview changes. Keep dependent changes together; connect new cards by their group reference."""
             proposal = self.preview_batch(groups)
-            if not self.proposal_issues:
+            if not self.proposal_issues and proposal:
                 return proposal.model_dump_json()
             return json.dumps({
                 'proposal': proposal.model_dump(mode='json') if proposal else None,
                 'proposal_issues': [issue.model_dump(mode='json') for issue in self.proposal_issues],
+                'reused_cards': sorted(self.reused_cards),
             }, ensure_ascii=False)
 
         propose_canvas_changes.handle_tool_error = True
@@ -601,7 +724,12 @@ async def _resolve_groups(store, canvas, turn, proposal, decision, decision_key)
             groups[group_id].state = 'rejected'
         receipt, conflicts = None, []
     else:
-        receipt, conflicts = await _apply_groups(store, canvas, [groups[group_id] for group_id in selected], digest)
+        receipt, conflicts = await _apply_groups(store, canvas, [groups[group_id] for group_id in selected], digest, turn.context or {}, turn.request_id)
+    if receipt:
+        applied_at = dict(receipts.get('_applied_at', {}))
+        applied_at.update({key: receipt['revision'] for key in selected if groups[key].state == 'applied'})
+        receipts = {**receipts, '_applied_at': applied_at}
+        turn.proposal_receipt = receipts
     states = {group.state for group in groups.values()}
     proposal.state = 'pending' if 'pending' in states else 'applied' if 'applied' in states else 'rejected'
     turn.proposal = proposal.model_dump(mode='json')
@@ -640,11 +768,32 @@ def _record_decision(turn, decision, outcome, review=None):
         turn.approval_audit = [*previous, entry]
 
 
-async def _apply_groups(store, canvas, groups, digest):
+async def _apply_groups(store, canvas, groups, digest, context, source_id):
     document = CanvasDocument.model_validate(canvas.document)
     conflicts = []
     edited = False
+    # A second outstanding proposal can have been previewed before the first creation was approved.
+    intervening = {}
+    if canvas.revision != context.get('revision') and any(
+        isinstance(e.target, AddCanvasCardTarget) and not e.copy_of for group in groups for e in group.edits
+    ):
+        current_ids = {card.id for card in document.cards}
+        rows = await store.db.execute(select(CanvasAssistantTurn.proposal, CanvasAssistantTurn.proposal_receipt).where(
+            CanvasAssistantTurn.canvas_id == canvas.id, CanvasAssistantTurn.request_id != source_id))
+        for raw, receipts in rows:
+            for previous in (raw or {}).get('groups') or ():
+                revision = (receipts or {}).get('_applied_at', {}).get(previous['id'], 0)
+                if revision > context.get('revision', 0) and previous['state'] == 'applied':
+                    for edit in previous['edits']:
+                        if edit['card_id'] in current_ids and edit['target']['kind'] == 'add_canvas_card':
+                            intervening.setdefault(json.dumps(edit['target']['card'], sort_keys=True), edit['card_id'])
     for group in groups:
+        collisions = [CanvasAssistantEditConflict(group_id=group.id, card_id=e.card_id, target=e.target, current=prior)
+                      for e in group.edits if isinstance(e.target, AddCanvasCardTarget) and not e.copy_of
+                      and (prior := intervening.get(json.dumps(e.target.card.model_dump(), sort_keys=True)))]
+        if collisions:
+            conflicts.extend(collisions)
+            continue
         candidate = document.model_copy(deep=True)
         stale = await _apply_group(store, canvas, candidate, group)
         if stale:

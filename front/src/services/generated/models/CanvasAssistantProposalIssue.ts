@@ -7,6 +7,7 @@
  */
 export type CanvasAssistantProposalIssue = {
     message: string;
+    candidate_ids?: (Array<string> | null);
     group?: (number | null);
     operation?: (number | null);
     field?: (string | null);

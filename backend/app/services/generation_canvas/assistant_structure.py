@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from langchain_core.tools import ToolException, tool
 
 from app.core.contracts.generation_canvas import InputBinding, MovementDesignFields, OutputIdentity, ReferenceDesignField
-from app.schemas.canvas_assistant_edit import CanvasAssistantChange, CanvasAssistantEditGroup, CanvasAssistantProposal
+from app.schemas.canvas_assistant_edit import CanvasAssistantChange, CanvasAssistantEditGroup, CanvasAssistantProposal, CanvasAssistantProposalIssue
 from app.schemas.canvas_assistant_structure import (
     AddCanvasCardTarget, AddCatalogCard, AddModelCard, AddMovementCard, AddTextCard, AdoptFirstFrame, AdoptFirstFrameTarget,
     AdjustShotMovement, AdjustShotMovementTarget,
@@ -44,6 +44,28 @@ def assistant_card_configuration(operation, card_id):
         segments = [PromptText(id=card_id, kind='text', text=operation.prompt)] if operation.prompt else []
         return card_class(id=card_id, prompt=PromptDocument(segments=segments)), operation.prompt
     raise ValueError('Unsupported assistant card operation')
+
+
+def assistant_card_copy(source, card_id):
+    """Clone a standalone card's saved configuration, excluding output history and provenance."""
+    def bound(value):
+        if isinstance(value, list):
+            return any(bound(item) for item in value)
+        return isinstance(value, dict) and (
+            ('canvas_id' in value and 'card_id' in value) or value.get('kind') == 'reference'
+            or any(bound(item) for key, item in value.items() if key != 'origin')
+        )
+
+    data = source.model_dump(mode='json', exclude={'origin', 'frame_origin', 'detached_results'})
+    if bound(data):
+        raise ToolException('请先解除原卡已采用的输入，再复制卡片。')
+    basis = hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+    data['id'] = card_id
+    for field in ('object_id', 'beat_id', 'event_id', 'shot_id', 'anchor_id', 'blocking_id',
+                  'dialogue_id', 'criterion_id'):
+        if data.get(field):
+            data[field] = card_id
+    return type(source).model_validate(data), basis
 
 
 def _has_first_frame(card: VideoModelCard) -> bool:
@@ -119,6 +141,27 @@ def structural_preview_tool(draft, kind: str, sources):
             title = '建卡、连线并更换首帧' if replaced else '建卡、连线并采用首帧'
         else:
             try:
+                existing_id = draft.existing_creation(change)
+            except ToolException as error:
+                candidates = getattr(error, 'card_ids', None)
+                if not candidates:
+                    raise
+                issue = CanvasAssistantProposalIssue(message=str(error), candidate_ids=candidates)
+                draft.proposal_issues = [issue]
+                return json.dumps({'proposal': None, 'proposal_issues': [issue.model_dump()]}, ensure_ascii=False)
+            if existing_id and draft.copy_requested(existing_id):
+                copied = draft.preview_batch([{'title': '另建副本', 'changes': [{
+                    'kind': 'add_card', 'reference': 'copy', 'copy_of': existing_id,
+                    'card': change.model_dump(mode='json'),
+                }]}])
+                if copied:
+                    return copied.model_dump_json()
+                return json.dumps({'proposal': None, 'proposal_issues': [
+                    issue.model_dump() for issue in draft.proposal_issues]}, ensure_ascii=False)
+            if existing_id:
+                draft.reused_cards.add(existing_id)
+                return json.dumps({'proposal': None, 'proposal_issues': [], 'reused_cards': [existing_id]})
+            try:
                 card, text = assistant_card_configuration(change, uuid4().hex)
             except ValueError as exc:
                 raise ToolException('Choose a catalog card that can be created with its default values') from exc
@@ -159,8 +202,17 @@ async def apply_structural_change(store, canvas, document: CanvasDocument, edit:
         return True
     if isinstance(change, AddCanvasCardTarget):
         card, _ = assistant_card_configuration(change.card, edit.card_id)
+        if edit.copy_of and (edit.copy_of not in existing or existing[edit.copy_of].type != card.type):
+            return False
         if card.id in existing or card.id in canvas.card_types:
             return False
+        if edit.copy_of:
+            try:
+                card, basis = assistant_card_copy(existing[edit.copy_of], edit.card_id)
+            except ToolException:
+                return False
+            if basis != edit.impact_fingerprint:
+                return False
         document.cards.append(card)
         return True
     return await _apply_frame_change(store, canvas, document, existing, edit)

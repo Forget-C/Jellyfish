@@ -106,6 +106,8 @@ class CanvasAssistantChange(BaseModel):
     target: CanvasAssistantEditTarget
     before: str
     after: str
+    origin_reference: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    copy_of: str | None = Field(default=None, exclude_if=lambda value: value is None)
     impact_fingerprint: str | None = Field(default=None, exclude_if=lambda value: value is None)
 ProposalState = Literal['pending', 'rejected', 'applied', 'superseded']
 
@@ -211,6 +213,7 @@ class ProposedBatchField(BaseModel):
 class ProposedBatchCard(AddCanvasCardTarget):
     """Name a new card within an approval group so subsequent changes can connect it."""
     kind: Literal['add_card']
+    copy_of: str | None = Field(default=None, description='Existing source card ID. Use only for an explicitly requested additional copy.')
     reference: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[A-Za-z0-9_-]+$')]
 
     @model_validator(mode='before')
@@ -249,6 +252,7 @@ class CanvasAssistantProposalIssue(BaseModel):
     """A preview failure scoped to an original, one-based group and operation."""
 
     message: str
+    candidate_ids: list[str] | None = Field(default=None, exclude_if=lambda value: value is None)
     group: int | None = None
     operation: int | None = None
     field: str | None = None

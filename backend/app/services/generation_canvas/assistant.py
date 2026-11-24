@@ -450,6 +450,7 @@ class CanvasAssistant:
             context = scoped.model_dump(mode='json')
             edit_draft = CanvasAssistantEditDraft(scoped, CanvasDocument.model_validate(canvas.document),
                                                       CanvasDocument.model_validate(command.context.draft))
+            edit_draft.user_request = command.text
             if scoped.layout_positions:
                 layout_draft = CanvasAssistantLayoutDraft(scoped, edit_draft.visible_document)
         field_reference = command.revises_field.model_dump() if command.revises_field else None
@@ -504,7 +505,11 @@ class CanvasAssistant:
         client = await self._model_client(model, provider, capability)
         messages = []
         for turn in await self._turns(canvas_id):
-            messages.extend([HumanMessage(content=turn.text), AIMessage(content=turn.reply)])
+            results = edit_draft.applied_context(turn.proposal) if edit_draft else []
+            reply = turn.reply
+            if results:
+                reply += '\n已审批的画布操作回执（ID、引用、类型）：' + json.dumps(results, ensure_ascii=False)
+            messages.extend([HumanMessage(content=turn.text), AIMessage(content=reply)])
         if revised_proposal:
             revision = revised_proposal.proposal
             if command.revises_field:
@@ -800,6 +805,9 @@ class CanvasAssistant:
         for skill in assigned:
             used_skills[skill.id] = skill.receipt()
         professional = ''.join(f'\n[专业技能 {skill.id}]\n{skill.instructions()}\n' for skill in assigned)
+        if edit_draft and edit_draft.applied_cards:
+            professional += ('按历史审批回执定位原卡，补充字段或连线用真实 ID。只有用户明确要求另建副本时，'
+                             '使用批量 add_card 并指定 copy_of 原卡 ID，在审批摘要显式说明复制。')
         if planning:
             professional += ('\n当前轮仅给出只读方案。说明镜头取舍、各段时长和合计、实施步骤与涉及的卡片。'
                              '基于实际读取的资料，明确缺失依据。等待用户要求按此方案继续。')
@@ -995,6 +1003,8 @@ class CanvasAssistant:
                     reply = '已准备可审批的画布修改。'
             else:
                 reply = '本轮没有生成可审批的修改提案，也未写入画布。请补充要写入的内容，或指定需要修改的卡片。'
+        if edit_draft and edit_draft.reused_cards and not edit_draft.proposal and not edit_draft.proposal_issues:
+            reply = '相关卡片已存在，本轮没有新增改动。'
         if not reply:
             reply = '本轮已结束，尚未写入画布。'
         observed = None
@@ -1142,6 +1152,7 @@ def _restore_tool_receipts(messages, skills, edits, layout):
                 receipt = json.loads(message.content)
                 if isinstance(receipt, dict) and 'proposal_issues' in receipt:
                     edits.proposal_issues = [CanvasAssistantProposalIssue.model_validate(issue) for issue in receipt['proposal_issues']]
+                    edits.reused_cards.update(receipt.get('reused_cards', ()))
                     if receipt['proposal']:
                         edits.proposal = CanvasAssistantProposal.model_validate(receipt['proposal'])
                 else:

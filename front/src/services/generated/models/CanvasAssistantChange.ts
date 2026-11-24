@@ -25,5 +25,7 @@ export type CanvasAssistantChange = {
     target: (VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | ReferenceNameEdit | DesignTextFieldEdit | MovementFieldEdit | VideoDurationEdit | DeleteCardEdit | ReleaseBindingEdit | DisconnectCardsEdit | AddCanvasCardTarget | AdoptFirstFrameTarget | AdjustShotMovementTarget | ConnectCardsTarget);
     before: string;
     after: string;
+    origin_reference?: (string | null);
+    copy_of?: (string | null);
     impact_fingerprint?: (string | null);
 };

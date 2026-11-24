@@ -1006,6 +1006,13 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                 {issue.operation != null && <>{uiText('第 {{operation}} 项', { operation: issue.operation })} · </>}
                 {issue.field && <code>{issue.field} · </code>}
                 {issue.message}
+                {issue.candidate_ids?.map(id => <span key={id}>
+                  {(['使用已有卡', '另建副本'] as const).map(action => <WorkbenchButton key={action} variant="quiet"
+                    disabled={!!runningId || sending || !!draftText} onClick={() => {
+                      updateDraft(`${turn.text}\n${action} ${id}`)
+                      composer.current?.querySelector('textarea')?.focus()
+                    }}>{uiText(action)} · {id.slice(0, 8)}</WorkbenchButton>)}
+                </span>)}
                 {issue.source_card && issue.target_card && <span> · {issue.source_card} → {issue.target_card}</span>}
               </li>)}</ul>
               <WorkbenchButton variant="quiet" disabled={!!runningId || sending || !!draftText || !!revising ||

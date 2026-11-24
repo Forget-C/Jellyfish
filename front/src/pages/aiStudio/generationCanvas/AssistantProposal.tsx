@@ -91,6 +91,7 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
       if (target.copy_card_id) newCards.set(target.copy_card_id, '运镜卡')
     }
     if ('source_card' in target) {
+      existingCards.add(target.target_card)
       candidateLinks++
       existingCards.add(target.source_card)
     }
@@ -170,6 +171,7 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
             </dl>
             if ('card' in target) return <dl key={edit.card_id}>
               <dt>{uiText('新建卡片')}</dt><dd>{uiText(edit.card_name)} · {edit.card_id.slice(0, 8)}</dd>
+              {edit.copy_of && <><dt>{uiText('副本来源')}</dt><dd>{edit.copy_of}</dd></>}
               {edit.after && <><dt>{uiText('拟议值')}</dt><dd>{edit.after}</dd></>}
             </dl>
             const currentValue = currentText(currentDraft, edit)

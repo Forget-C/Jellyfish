@@ -667,3 +667,123 @@ async def test_batch_merges_references_and_preserves_independent_groups(canvas_c
         assert repaired['proposal']['groups'][0]['edits'][0]['after'] == '修正后的新镜头'
         assert repaired['proposal_issues'][0]['group'] == 1
         assert calls == (6 if native else 2)
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures('assistant_edit_model')
+@pytest.mark.parametrize('surface', ['free', 'scene', 'draft', 'free-native'])
+async def test_followup_reuses_applied_video_cards(canvas_client, monkeypatch, surface):
+    from uuid import uuid4
+
+    async with canvas_client.canvas_sessions.begin() as db:
+        (await db.get(Model, 'canvas-text')).capability_profile = (
+            {'tool_calling': {'declaration': 'supported'}} if surface == 'free-native' else None
+        )
+    suffix = '?project_id=p' if surface == 'scene' else ''
+    if surface == 'draft':
+        path = f'/canvases/drafts/{uuid4()}'
+        canvas = (await canvas_client.get(path)).json()['data']
+    else:
+        created = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '分镜'})
+                   if suffix else await canvas_client.post('/canvases', json={'name': '自由'}))
+        canvas = created.json()['data']
+        path = f"/canvases/{canvas['id']}"
+    videos = [{'kind': 'add_card', 'reference': ref, 'card': {
+        'kind': 'add_model_card', 'modality': 'video', 'prompt': ref,
+    }} for ref in ('A', 'B')]
+    changes = videos.copy()
+    original = httpx.AsyncClient.send
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original(client, request, **kwargs)
+        groups = [{'title': '分镜', 'changes': changes}]
+        answer = {'role': 'assistant', 'content': json.dumps({'reply': '请查看提案', 'groups': groups})}
+        if surface == 'free-native':
+            history = json.loads(request.content)['messages']
+            seen = {m.get('tool_call_id') for m in history if m['role'] == 'tool'}
+            if 'preview' in seen:
+                answer = {'role': 'assistant', 'content': '请查看提案'}
+            else:
+                name, identity, args = ('propose_canvas_changes', 'preview', {'groups': groups}) if 'read' in seen else (
+                    'read_canvas_context', 'read', {})
+                answer = {'role': 'assistant', 'tool_calls': [{
+                    'id': identity, 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(args)},
+                }]}
+        return httpx.Response(200, request=request, json={
+            'id': 'response', 'model': 'canvas-text', 'object': 'chat.completion', 'created': 1,
+            'choices': [{'index': 0, 'finish_reason': 'tool_calls' if 'tool_calls' in answer else 'stop', 'message': answer}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    for key, message in [('first', '新建两张视频卡'), ('notes', '补说明并连线'), ('copies', '把两张视频卡各复制一份')]:
+        response = await canvas_client.post(path + '/assistant' + suffix, json={
+            'request_id': key, 'text': message, 'context': {
+                'draft': canvas['document'], 'revision': max(0, canvas['revision']), 'scope': 'auto', 'card_ids': []},
+        })
+        assert response.status_code == 200, response.text
+        turn = response.json()['data']
+        proposal = turn['proposal']
+        if key == 'first' and surface == 'free':
+            competing = await canvas_client.post(path + '/assistant', json={
+                'request_id': 'competing', 'text': '新建两张视频卡', 'context': {
+                    'draft': canvas['document'], 'revision': canvas['revision'], 'scope': 'auto', 'card_ids': []},
+            })
+            assert competing.json()['data']['proposal']
+        if key == 'notes':
+            edits = proposal['groups'][0]['edits']
+            assert [e['target']['kind'] for e in edits] == ['add_canvas_card', 'connect_cards', 'connect_cards']
+            assert {e['target']['target_card'] for e in edits[1:]} == original_ids
+        if surface == 'draft' and key == 'first':
+            saved = await canvas_client.put(path, json={
+                'request_id': 'save', 'expected_revision': 0, 'document': canvas['document'], 'assistant': {'turns': [turn]},
+                'assistant_approval': {'source_id': key, 'group_ids': ['1']},
+            })
+            assert saved.status_code == 200, saved.text
+            path = f"/canvases/{canvas['id']}"
+        else:
+            saved = await canvas_client.post(path + '/assistant/proposals/' + key + suffix, json={
+                'decision_id': key, 'action': 'approve', 'group_ids': ['1'], 'expected_revision': canvas['revision'],
+            })
+            assert saved.status_code == 200, saved.text
+        canvas = (await canvas_client.get(path + suffix)).json()['data']
+        ids = {c['id'] for c in canvas['document']['cards'] if c['type'] == 'model.video'}
+        if key == 'first':
+            original_edits = proposal['groups'][0]['edits']
+            original_ids = ids
+            if surface == 'free':
+                stale = await canvas_client.post(path + '/assistant/proposals/competing', json={
+                    'action': 'approve', 'group_ids': ['1'], 'expected_revision': canvas['revision']})
+                result = stale.json()['data']
+                assert result['receipt'] is None
+                assert {conflict['current'] for conflict in result['conflicts']} == ids
+            assert len(ids) == 2
+            changes.extend([{'kind': 'add_card', 'reference': 'notes', 'card': {'kind': 'add_text_card', 'text': '说明'}},
+                            *[{'kind': 'connect_cards', 'source_card': 'notes', 'source_port': 'text',
+                               'target_card': ref, 'target_port': 'text'} for ref in ('A', 'B')]])
+        elif key == 'notes':
+            assert ids == original_ids
+            assert {(e['source_card'], e['target_card']) for e in canvas['document']['edges']} == {
+                (edits[0]['card_id'], card_id) for card_id in original_ids}
+            sources = {e['target']['card']['prompt']: e['card_id'] for e in original_edits}
+            for card in canvas['document']['cards']:
+                if card['id'] == sources['A']:
+                    card['config']['seconds'] = 9
+            updated = await canvas_client.put(path + suffix, json={
+                'request_id': 'manual-duration', 'expected_revision': canvas['revision'], 'document': canvas['document']})
+            assert updated.status_code == 200, updated.text
+            canvas = (await canvas_client.get(path + suffix)).json()['data']
+            changes[:] = [dict(v, copy_of=sources[v['reference']]) for v in videos]
+            denied = await canvas_client.post(path + '/assistant' + suffix, json={
+                'request_id': 'no-copies', 'text': '只补说明，不要复制视频卡', 'context': {
+                    'draft': canvas['document'], 'revision': canvas['revision'], 'scope': 'auto', 'card_ids': []},
+            })
+            assert denied.status_code == 200, denied.text
+            assert denied.json()['data']['proposal'] is None
+            assert denied.json()['data']['proposal_issues'][0]['candidate_ids'] == [sources['A']]
+            if surface == 'free-native':
+                changes[:] = videos
+        else:
+            assert original_ids < ids and len(ids) == 4
+            assert [card['config'].get('seconds') for card in canvas['document']['cards']
+                    if card['id'] in ids - original_ids].count(9) == 1
