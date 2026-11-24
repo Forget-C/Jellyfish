@@ -32,7 +32,12 @@ async def run_reply_stream(canvas_id, request_id, reply):
 # A structured response can begin after an introductory paragraph. Hold it back
 # as soon as the line starts, before any keys or arguments arrive.
 _STRUCTURED_BOUNDARY = re.compile(r'\{|(?m:^[ \t]*(?:[`]{1,3}|~{1,3}))')
-_PRIVATE_KEYS = re.compile(r'["\'](?:groups|delegations|tool_calls)["\']\s*:')
+_PRIVATE_KEYS = re.compile(
+    r'["\'](?:groups|delegations|tool_calls|proposal|proposal_issues|approval|approval_query|'
+    r'submit_for_approval|preview_id|snapshot_ref|cards|target_card_ids|diagnostics|reused_cards|request_id|'
+    r'canvas_read|input_check)["\']\s*:',
+)
+_PREVIEW_TOOLS = PROPOSAL_TOOLS | {'preview_canvas_changes', 'submit_canvas_approval'}
 
 
 def public_proposal_prefix(reply):
@@ -47,10 +52,14 @@ def reply_envelope(reply):
     if not boundary:
         return reply
     prefix, body = reply[:boundary.start()].strip(), reply[boundary.start():].strip()
-    fenced = re.match(r'^```(?:json)?[ \t]*\n(.+?)\n?[ \t]*```$', body, re.IGNORECASE | re.DOTALL)
-    payload = fenced[1].strip() if fenced else body
+    fenced = re.match(r'^(?P<fence>```|~~~)(?P<language>json)?[ \t]*\n(?P<value>.+?)\n?[ \t]*(?P=fence)$',
+                      body, re.IGNORECASE | re.DOTALL)
+    payload = fenced['value'].strip() if fenced else body
     if payload.startswith('{') and (not prefix or _PRIVATE_KEYS.search(payload)):
         return payload
+    line_prefix = reply[:boundary.start()].rsplit('\n', 1)[-1]
+    if (fenced and fenced['language']) or (payload.startswith('{') and not line_prefix.strip()):
+        return payload if payload.startswith('{') else '{}'
     if _PRIVATE_KEYS.search(payload) and payload.startswith(('`', '~', '[')):
         return payload if payload.startswith('{') else '{}'
     return reply
@@ -76,7 +85,7 @@ async def invoke_with_reply(agent, inputs, config, on_reply, *, on_phase=None, *
             continue
         if chunk.tool_call_chunks:
             if on_phase and phase != 'generating_proposal' and any(
-                call.get('name') in PROPOSAL_TOOLS for call in chunk.tool_call_chunks
+                call.get('name') in _PREVIEW_TOOLS for call in chunk.tool_call_chunks
             ):
                 phase = 'generating_proposal'
                 await on_phase(phase)
