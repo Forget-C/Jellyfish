@@ -16,7 +16,10 @@ from app.services.approval import (
     ApprovalAccess, ApprovalDecisionView, ApprovalError, ApprovalRequestView, ApprovalScope,
     ApprovalService, ApprovalSubmission,
 )
-from app.services.generation_canvas.edits import CanvasEditGroupReceipt, CanvasEditPreview, CanvasEditReceipt, canvas_edits
+from app.services.generation_canvas.edits import (
+    CanvasEditConflict, CanvasEditGroupReceipt, CanvasEditPreview, CanvasEditReceipt, CanvasEditValue, canvas_edits,
+)
+from app.services.generation_canvas.assistant_edit_projection import creation_conflicts, publish_assistant_edit_execution
 from app.services.generation_canvas.errors import CanvasDomainError
 from app.services.generation_canvas.store import CanvasStore
 
@@ -119,18 +122,27 @@ async def advance_approved_canvas_edits(sessions: async_sessionmaker[AsyncSessio
             logger.warning('canvas edit approval %s will retry: %s', request_id, type(exc).__name__)
 
 
-async def _advance(db: AsyncSession, request_id: str, canvas_id: str, project_id: str | None, now: datetime) -> None:
+async def execute_assistant_edit_request(sessions: async_sessionmaker[AsyncSession], request_id: str, canvas_id: str,
+                                         project_id: str | None, group_count: int) -> None:
+    """Return immediate receipts when available, using the same recoverable path as the Worker."""
+    for _ in range(group_count):
+        async with sessions.begin() as db:
+            if not await _advance(db, request_id, canvas_id, project_id, _utcnow(), force=True):
+                return
+
+
+async def _advance(db: AsyncSession, request_id: str, canvas_id: str, project_id: str | None,
+                   now: datetime, *, force: bool = False) -> bool:
     # Keep the same lock order as document saves that also update workflow state.
     try:
-        await CanvasStore(db, project_id).get(canvas_id, lock=True)
-        canvas_exists = True
+        canvas = await CanvasStore(db, project_id).get(canvas_id, lock=True)
     except HTTPException as exc:
         if exc.status_code != 404:
             raise
-        canvas_exists = False
+        canvas = None
     snapshot = await db.get(CanvasEditApprovalSnapshot, request_id, with_for_update=True, populate_existing=True)
-    if not snapshot or snapshot.next_scan_at is None or snapshot.next_scan_at > now:
-        return
+    if not snapshot or snapshot.next_scan_at is None or (not force and snapshot.next_scan_at > now):
+        return False
     access = ApprovalAccess(scope=_scope(canvas_id), actor_id='canvas-edit-worker', permissions={'read'}, source='service')
     approvals = ApprovalService(db)
     request = await approvals.read(access, request_id)
@@ -143,26 +155,38 @@ async def _advance(db: AsyncSession, request_id: str, canvas_id: str, project_id
     waiting = [(approved[group.id], group.id) for group in plan.groups if group.id in approved]
     if waiting:
         decision, group_id = waiting[0]
-        result = await _execute(db, snapshot, plan, decision, group_id, canvas_exists=canvas_exists)
+        result = await _execute(db, snapshot, plan, decision, group_id, canvas=canvas)
         db.add(CanvasEditApprovalExecution(request_id=request_id, decision_id=decision.id, group_id=group_id,
                                            group_key=CanvasStore.command_digest({'group': group_id}),
                                            receipt=result.model_dump(mode='json')))
+        await db.flush()
+        await publish_assistant_edit_execution(db, project_id, canvas_id, decision, result)
     if len(waiting) > 1:
         snapshot.next_scan_at = now
     elif request.active and 'pending' in request.group_states.values():
         snapshot.next_scan_at = now + WAIT_FOR_DECISION
     else:
         snapshot.next_scan_at = None
+    return bool(waiting)
 
 
 async def _execute(db: AsyncSession, snapshot: CanvasEditApprovalSnapshot, plan: CanvasEditPreview,
-                   decision: ApprovalDecisionView, group_id: str, *, canvas_exists: bool) -> CanvasEditExecutionReceipt:
+                   decision: ApprovalDecisionView, group_id: str, *, canvas) -> CanvasEditExecutionReceipt:
     identity = dict(request_id=snapshot.request_id, decision_id=decision.id, group_id=group_id)
-    if not canvas_exists:
+    if canvas is None:
         return CanvasEditExecutionReceipt(**identity, state='failed', diagnostic=CanvasDiagnostic(
             code='CANVAS_NOT_FOUND', message='原画布已无法读取，获批改动未写入',
             target={'canvas_id': snapshot.canvas_id, 'group_id': group_id}, blocks=['save'],
         ))
+    conflicts = await creation_conflicts(db, snapshot.canvas_id, snapshot.request_id, group_id, plan.revision,
+                                       {card['id'] for card in canvas.document.get('cards', ())})
+    if conflicts:
+        changed = next(group for group in plan.groups if group.id == group_id)
+        results = tuple(CanvasEditConflict(difference=diff, current=CanvasEditValue(exists=True, value=conflicts[diff.path[1]]))
+                        for diff in changed.differences if len(diff.path) == 2 and diff.path[0] == 'cards'
+                        and diff.path[1] in conflicts)
+        return CanvasEditExecutionReceipt(**identity, state='conflict',
+            result=CanvasEditGroupReceipt(group_id=group_id, state='conflict', conflicts=results))
     try:
         async with db.begin_nested():
             request_key = 'approved:' + CanvasStore.command_digest({'decision': decision.id, 'group': group_id})

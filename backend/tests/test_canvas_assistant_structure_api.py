@@ -23,8 +23,8 @@ def mock_structure_reply(monkeypatch, change):
             return await original_send(client, request, **kwargs)
         body = json.loads(request.content)
         tools = [m['tool_call_id'] for m in body['messages'] if m['role'] == 'tool']
-        call = ('read_canvas_context', {}) if not tools else (
-            ('propose_canvas_structure', {'change': change}) if 'structure' not in tools else None
+        call = ('read_canvas', {}) if not tools else (
+            ('preview_canvas_structure', {'change': change}) if 'structure' not in tools else None
         )
         outcome = next((m['content'] for m in body['messages'] if m.get('tool_call_id') == 'structure'), '')
         message = {'role': 'assistant', 'content': outcome if '当前画布不允许' in outcome else '事项请确认'}
@@ -171,7 +171,7 @@ async def test_batch_proposal_edits_creates_and_connects_atomically(canvas_clien
             assert not body.get('tools')
             answer['content'] = json.dumps({'reply': '事项请确认', 'groups': groups}, ensure_ascii=False)
         elif 'batch' not in completed:
-            tool = ('batch', 'propose_canvas_changes', {'groups': groups}) if completed else ('read', 'read_canvas_context', {})
+            tool = ('batch', 'preview_canvas_changes', {'groups': groups}) if completed else ('read', 'read_canvas', {})
             answer = {'role': 'assistant', 'tool_calls': [{
                 'id': tool[0], 'type': 'function', 'function': {'name': tool[1], 'arguments': json.dumps(tool[2])},
             }]}
@@ -220,7 +220,7 @@ async def test_batch_proposal_edits_creates_and_connects_atomically(canvas_clien
                and item['group_ids'] == [proposal['groups'][0]['id']] for item in events)
     assert events[-1]['payload']['approval_audit'][-1]['outcome'] == ('conflict' if field_conflict else 'applied')
     result = approved.json()['data']
-    assert result['graph_resumed'] is True
+    assert result['graph_resumed'] is False
     actual = (await canvas_client.get(url)).json()['data']
     if field_conflict:
         assert result['receipt'] is None
@@ -412,8 +412,8 @@ async def test_revise_one_duration_keeps_dependent_changes_and_independent_decis
             }]}]
         answer = {'role': 'assistant', 'content': '请核对差异'}
         if 'batch-duration' not in completed:
-            call = ('batch-duration', 'propose_canvas_changes', {'groups': groups}) if completed else (
-                'read-duration', 'read_canvas_context', {},
+            call = ('batch-duration', 'preview_canvas_changes', {'groups': groups}) if completed else (
+                'read-duration', 'read_canvas', {},
             )
             answer = {'role': 'assistant', 'tool_calls': [{
                 'id': call[0], 'type': 'function',
@@ -604,8 +604,8 @@ async def test_batch_merges_references_and_preserves_independent_groups(canvas_c
             if 'preview' in completed:
                 answer = {'role': 'assistant', 'content': '建议按镜头推进。'}
             else:
-                name, identity, args = ('propose_canvas_changes', 'preview', {'groups': groups}) if 'read' in completed else (
-                    'read_canvas_context', 'read', {},
+                name, identity, args = ('preview_canvas_changes', 'preview', {'groups': groups}) if 'read' in completed else (
+                    'read_canvas', 'read', {},
                 )
                 answer = {'role': 'assistant', 'tool_calls': [{
                     'id': identity, 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(args)},
@@ -705,8 +705,8 @@ async def test_followup_reuses_applied_video_cards(canvas_client, monkeypatch, s
             if 'preview' in seen:
                 answer = {'role': 'assistant', 'content': '请查看提案'}
             else:
-                name, identity, args = ('propose_canvas_changes', 'preview', {'groups': groups}) if 'read' in seen else (
-                    'read_canvas_context', 'read', {})
+                name, identity, args = ('preview_canvas_changes', 'preview', {'groups': groups}) if 'read' in seen else (
+                    'read_canvas', 'read', {})
                 answer = {'role': 'assistant', 'tool_calls': [{
                     'id': identity, 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(args)},
                 }]}
@@ -842,8 +842,8 @@ async def test_approved_video_inputs_compile_once(canvas_client, monkeypatch, su
             if 'preview' in seen:
                 answer = {'role': 'assistant', 'content': '已核对生成输入。'}
             else:
-                name, identity, args = ('propose_canvas_changes', 'preview', {'groups': groups}) if 'read' in seen else (
-                    'read_canvas_context', 'read', {})
+                name, identity, args = ('preview_canvas_changes', 'preview', {'groups': groups}) if 'read' in seen else (
+                    'read_canvas', 'read', {})
                 answer = {'role': 'assistant', 'tool_calls': [{
                     'id': identity, 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(args)},
                 }]}

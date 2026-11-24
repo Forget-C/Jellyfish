@@ -134,7 +134,7 @@ def read_context_coverage(messages):
     """Count actual, distinct cards returned by the read tool for this request."""
     observed = set()
     for message in messages:
-        if message.type == 'tool' and message.name == 'read_canvas_context' and message.status == 'success':
+        if message.type == 'tool' and message.name == 'read_canvas' and message.status == 'success':
             payload = json.loads(message.content)
             observed.update(card['id'] for card in payload['cards'])
     return observed

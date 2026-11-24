@@ -122,7 +122,7 @@ async def test_video_preview_checks_actual_adopted_description_and_image(canvas_
     assert preview.plan, preview.issues
     assert len(preview.plan.groups) == 2
     assert {guard.path[1] for guard in preview.plan.groups[0].source_guards} == {
-        'description', 'character', 'character-picture',
+        'description', 'character', 'character-picture', 'video',
     }
     for card_id, group_id, text in [('video', '1', '雨夜推镜'), ('direct', '2', '日出拉远')]:
         result = await tools.inspect_inputs(card_id, group_id=group_id, preview_id=preview.preview_id)

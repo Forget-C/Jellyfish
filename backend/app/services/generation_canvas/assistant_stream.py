@@ -6,8 +6,6 @@ import time
 
 from langchain_core.messages import AIMessageChunk
 
-from app.services.generation_canvas.assistant_hitl import PROPOSAL_TOOLS
-
 _active_streams = {}
 
 
@@ -37,7 +35,7 @@ _PRIVATE_KEYS = re.compile(
     r'submit_for_approval|preview_id|snapshot_ref|cards|target_card_ids|diagnostics|reused_cards|request_id|'
     r'canvas_read|input_check)["\']\s*:',
 )
-_PREVIEW_TOOLS = PROPOSAL_TOOLS | {'preview_canvas_changes', 'submit_canvas_approval'}
+_PREVIEW_TOOLS = {'preview_canvas_changes', 'preview_canvas_structure', 'submit_canvas_approval'}
 
 
 def public_proposal_prefix(reply):

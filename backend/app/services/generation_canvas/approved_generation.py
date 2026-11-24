@@ -158,9 +158,10 @@ class CanvasGenerationApprovals:
         entry = await self._entry(request)
         return CanvasPrecheck.model_validate(entry.preview)
 
-    async def _entry(self, request: ApprovalRequestView) -> CanvasGenerationApproval:
-        entry = await self.db.get(CanvasGenerationApproval, request.id, populate_existing=True)
+    async def _entry(self, request: ApprovalRequestView, *, lock: bool = False) -> CanvasGenerationApproval:
+        entry = await self.db.get(CanvasGenerationApproval, request.id, with_for_update=lock, populate_existing=True)
         if (entry is None or request.object_type != OBJECT_TYPE
+                or request.scope != _scope(entry.canvas_id)
                 or request.snapshot_ref != _snapshot_ref(entry.basis_hash, entry.preview)):
             raise ApprovalError('snapshot_not_found', '画布生成快照不存在')
         return entry
@@ -208,6 +209,33 @@ class CanvasGenerationApprovals:
                 or row.stage not in (SUBMISSION_IN_FLIGHT, SUBMISSION_UNKNOWN)):
             raise ApprovalError('provider_id_conflict', '原任务无法关联此远端身份')
         await TaskService(self.db).record_submission(task_id, provider_task_id=provider_task_id)
+
+    async def stop_pending(self, access: ApprovalAccess, request_id: str) -> bool:
+        """Withdraw unadmitted execution, or report that the requested run already exists."""
+        if 'decide' not in access.permissions or access.source != 'human':
+            raise ApprovalError('forbidden', '当前角色不可停止这次生成')
+        request = await self.approvals.read(access, request_id)
+        entry = await self._entry(request)
+        await CanvasStore(self.db, entry.project_id).get(entry.canvas_id, lock=True)
+        entry = await self._entry(request, lock=True)
+        if entry.admission:
+            return True
+        if entry.state != 'pending':
+            return False
+        for decision in await self.approvals.list_decisions(access, request.id):
+            if decision.action != 'approve':
+                continue
+            admission = await canvas_runs(self.db, entry.project_id).read_receipt(
+                entry.canvas_id, _generation_request_id(decision, entry.group_id),
+            )
+            if admission:
+                entry.state, entry.decision_id = 'admitted', decision.id
+                entry.admission = admission.model_dump(mode='json')
+                entry.task_id, = admission.task_ids
+                entry.next_scan_at = None
+                return True
+        entry.state, entry.next_scan_at = 'cancelled', None
+        return False
 
 
 async def advance_approved_canvas_generations(sessions: async_sessionmaker[AsyncSession], *, limit: int = 16) -> None:

@@ -136,7 +136,7 @@ const provider = createHttpServer(async (request, response) => {
   }
   if (model === 'browser-tool-model' || combined) {
     const names = tools.map(tool => tool.function.name)
-    assert.ok(names.includes('read_canvas_context'))
+    assert.ok(names.includes('read_canvas'))
     assert.ok(names.includes('load_canvas_skill'))
     assert.ok(!names.includes('write_file'))
     const result = messages.find(message => message.role === 'tool' && message.tool_call_id === 'context')
@@ -151,10 +151,12 @@ const provider = createHttpServer(async (request, response) => {
     const loaded = messages.some(message => message.role === 'tool' && message.tool_call_id === 'load_canvas_skill')
     const proposed = messages.some(message => message.role === 'tool' && message.tool_call_id === 'proposal')
     const proposedLayout = messages.some(message => message.role === 'tool' && message.tool_call_id === 'layout')
+    const editChange = change => ({ kind: 'edit_field', change })
+    const preview = groups => ({ name: 'preview_canvas_changes', arguments: JSON.stringify({ groups }) })
     let answer = { role: 'assistant', content: requestEdit ? '已给出修改建议' : useSkill ? '建议保持景别，再选择机位。' : '找到原先的草稿' }
     if (!result) {
       answer = { role: 'assistant', tool_calls: [{
-        id: 'context', type: 'function', function: { name: 'read_canvas_context', arguments: '{}' },
+        id: 'context', type: 'function', function: { name: 'read_canvas', arguments: '{}' },
       }] }
     } else if (turns.at(-1) === '/plan 先确认这一段的情绪') {
       const choice = messages.find(message => message.role === 'tool' && message.tool_call_id === 'creative-choice')
@@ -169,13 +171,13 @@ const provider = createHttpServer(async (request, response) => {
           arguments: JSON.stringify({ skill_id: 'shot-staging' }) },
       }] }
     } else if (layoutRequest && !proposedLayout) {
-      assert.ok(names.includes('propose_canvas_layout'))
+      assert.ok(names.includes('preview_canvas_layout'))
       const card_ids = ['layout-left', 'layout-right']
       const positions = Object.fromEntries(card_ids.map(id => [id, {
         x: draft.layout_positions[id].x + 70, y: draft.layout_positions[id].y,
       }]))
       answer = { role: 'assistant', tool_calls: [{
-        id: 'layout', type: 'function', function: { name: 'propose_canvas_layout',
+        id: 'layout', type: 'function', function: { name: 'preview_canvas_layout',
           arguments: JSON.stringify({ card_ids, group_name: turns.at(-1).includes('分组') ? '片头' : undefined,
             placement: turns.at(-1).includes('整理') ? { kind: 'arrange' } : { kind: 'move', positions } }) },
       }] }
@@ -183,29 +185,27 @@ const provider = createHttpServer(async (request, response) => {
       const card_id = draft.target_card_ids[0]
       const adopted = draft.cards.some(card => card.type === 'direction.movement')
       answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: adopted ? {
-        name: 'propose_canvas_structure', arguments: JSON.stringify({
+        name: 'preview_canvas_structure', arguments: JSON.stringify({
           change: { kind: 'adjust_shot_movement', card_id, field: 'movement_speed', text: '缓慢推近' },
         }),
-      } : {
-        name: 'propose_canvas_edit', arguments: JSON.stringify({
-          card_id, target: { kind: 'video_prompt_segment', segment_id: 'text' }, text: '缓慢推近',
-        }),
-      } }] }
+      } : preview([{ title: '推近速度', changes: [editChange({
+        card_id, target: { kind: 'video_prompt_segment', segment_id: 'text' }, text: '缓慢推近',
+      })] }]) }] }
     } else if (combined && !proposedLayout && draft.layout_positions?.target) {
       const basis = draft.layout_positions.target
       answer = { role: 'assistant', tool_calls: [{
-        id: 'layout', type: 'function', function: { name: 'propose_canvas_layout',
+        id: 'layout', type: 'function', function: { name: 'preview_canvas_layout',
           arguments: JSON.stringify({ card_ids: ['target'], placement: {
             kind: 'move', positions: { target: { x: basis.x + 70, y: basis.y } },
           } }) },
       }] }
     } else if (turns.at(-1) === '改为弧线，其他修改保留' && !proposed) {
       answer = { role: 'assistant', tool_calls: [{
-        id: 'proposal', type: 'function', function: { name: 'propose_canvas_changes', arguments: JSON.stringify({
-          groups: [{ title: '只修订路径', changes: [{ kind: 'edit_field', change: {
+        id: 'proposal', type: 'function', function: preview([
+          { title: '只修订路径', changes: [editChange({
             card_id: draft.target_card_ids[0], target: { kind: 'movement_field', field: 'movement_path' }, text: '弧线',
-          } }] }],
-        }) },
+          })] },
+        ]),
       }] }
     } else if (requestEdit && !proposed) {
       const card = draft.cards.find(item => item.id === draft.target_card_ids[0])
@@ -213,29 +213,27 @@ const provider = createHttpServer(async (request, response) => {
         ? { kind: 'movement_field', field: 'movement_speed' }
         : { kind: 'video_prompt_segment', segment_id: 'text' }
       const edit = { card_id: card.id, target, text: '缓慢推近' }
-      const operation = card.type === 'direction.movement' ? {
-        name: 'propose_canvas_edit_groups', arguments: JSON.stringify({ groups: [
-          { title: '推进轨迹', edits: [edit, { card_id: card.id,
-            target: { kind: 'movement_field', field: 'movement_path' }, text: '直线' }] },
-          { title: '起点', edits: [{ card_id: card.id,
-            target: { kind: 'movement_field', field: 'movement_start' }, text: '走廊入口' }] },
-        ] }),
-      } : { name: 'propose_canvas_edit', arguments: JSON.stringify(edit) }
+      const operation = preview(card.type === 'direction.movement' ? [
+        { title: '推进轨迹', changes: [editChange(edit), editChange({ card_id: card.id,
+          target: { kind: 'movement_field', field: 'movement_path' }, text: '直线' })] },
+        { title: '起点', changes: [editChange({ card_id: card.id,
+          target: { kind: 'movement_field', field: 'movement_start' }, text: '走廊入口' })] },
+      ] : [{ title: '推近速度', changes: [editChange(edit)] }])
       answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: operation }] }
     } else if (requestDraftCard && !proposed) {
-      answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: {
-        name: 'propose_canvas_structure', arguments: JSON.stringify({ change: { kind: 'add_text_card', text: '潮水涌入' } }),
-      } }] }
+      answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: preview([
+        { title: '新建文本', changes: [{ kind: 'add_card', reference: 'tide', card: { kind: 'add_text_card', text: '潮水涌入' } }] },
+      ]) }] }
     } else if (requestLocalMovement && !proposed) {
       answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: {
-        name: 'propose_canvas_structure', arguments: JSON.stringify({
+        name: 'preview_canvas_structure', arguments: JSON.stringify({
           change: { kind: 'adjust_shot_movement', card_id: draft.target_card_ids[0], field: 'movement_speed', text: '缓慢推近' },
         }),
       } }] }
     } else if (reference && !proposed) {
       const file = JSON.parse(reference.text.slice('参考素材 1 '.length))
       answer = { role: 'assistant', tool_calls: [{ id: 'proposal', type: 'function', function: {
-        name: 'propose_canvas_structure', arguments: JSON.stringify({
+        name: 'preview_canvas_structure', arguments: JSON.stringify({
           change: { kind: 'adopt_first_frame', card_id: draft.target_card_ids[0], file_id: file.file_id },
         }),
       } }] }
@@ -1105,6 +1103,7 @@ try {
       await proposal.getByRole('checkbox', { name: '只修改所选镜头的运镜' }).check()
     } else {
       await proposal.getByText(target.prompt.segments[0].text, { exact: true }).waitFor()
+      await proposal.getByRole('checkbox', { name: '推近速度' }).check()
     }
     const actions = panel.getByRole('region', { name: '本轮执行摘要' }).last()
     await actions.getByRole('checkbox', { name: '一并批准布局' }).check()

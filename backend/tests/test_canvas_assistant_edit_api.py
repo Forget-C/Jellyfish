@@ -17,6 +17,16 @@ from tests.canvas_urls import append_canvas_path, canvas_url, seed_scene_canvas
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # pylint: disable=unused-import
 
 
+def _batch_field(arguments):
+    return {'groups': [{'title': '字段', 'changes': [{'kind': 'edit_field', 'change': arguments}]}]}
+
+
+def _batch_fields(arguments):
+    return {'groups': [{'title': group['title'], 'changes': [
+        {'kind': 'edit_field', 'change': edit} for edit in group['edits']
+    ]} for group in arguments['groups']]}
+
+
 @pytest_asyncio.fixture
 async def assistant_edit_model(canvas_client):
     async with canvas_client.canvas_sessions.begin() as db:
@@ -74,8 +84,8 @@ async def test_assistant_edits_catalog_text_fields(canvas_client, monkeypatch, c
         tool_call = result_count < 2
         message = {'role': 'assistant', 'content': '已给出修改建议'}
         if tool_call:
-            name = 'propose_canvas_edit' if result_count else 'read_canvas_context'
-            arguments = {'card_id': 'target', 'target': target, 'text': '新正文'} if result_count else {}
+            name = 'preview_canvas_changes' if result_count else 'read_canvas'
+            arguments = _batch_field({'card_id': 'target', 'target': target, 'text': '新正文'}) if result_count else {}
             message['tool_calls'] = [{
                 'id': name, 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(arguments)},
             }]
@@ -140,20 +150,20 @@ async def test_assistant_edit_requires_approval_and_replays_original_save(canvas
         question = next(item['content'] for item in reversed(body['messages']) if item['role'] == 'user')
         results = [m['tool_call_id'] for m in body['messages'] if m['role'] == 'tool']
         if not results:
-            name, args = 'read_canvas_context', {}
-        elif grouped and 'call-propose_canvas_edit_groups' not in results:
-            name, args = 'propose_canvas_edit_groups', {'groups': [
+            name, args = 'read_canvas', {}
+        elif grouped and 'call-preview_canvas_changes' not in results:
+            name, args = 'preview_canvas_changes', _batch_fields({'groups': [
                 {'title': '运镜', 'edits': [
                     {'card_id': 'target', 'target': target, 'text': '慢推'},
                     {'card_id': 'target', 'target': {'kind': 'video_prompt_segment', 'segment_id': 'third'}, 'text': '近景'},
                 ]},
                 {'title': '灯光', 'edits': [{'card_id': 'target', 'target': {
                     'kind': 'video_prompt_segment', 'segment_id': 'second'}, 'text': '暖光'}]},
-            ]}
-        elif not grouped and 'call-propose_canvas_edit' not in results:
+            ]})
+        elif not grouped and 'call-preview_canvas_changes' not in results:
             name, args = (None, None) if question == '这种镜头怎么拍？' else (
-                'propose_canvas_edit', {'card_id': 'target', 'target': target,
-                                        'text': '缓慢推近' if question == '速度再慢一些' else '稍慢推近'},
+                'preview_canvas_changes', _batch_field({'card_id': 'target', 'target': target,
+                                        'text': '缓慢推近' if question == '速度再慢一些' else '稍慢推近'}),
             )
         else:
             name, args = None, None
@@ -207,9 +217,17 @@ async def test_assistant_edit_requires_approval_and_replays_original_save(canvas
             retry = await canvas_client.post(decision_url, json={
                 **decision, 'decision_id': 'new-approval', 'expected_revision': restored.json()['data']['revision'],
             })
-            assert retry.status_code == 200, retry.text
-            assert retry.json()['data']['receipt']['revision'] == restored.json()['data']['revision'] + 1
-            assert retry.json()['data']['canvas']['document']['cards'][0]['prompt']['segments'][0]['text'] == '慢推'
+            assert retry.status_code == 409, retry.text
+            current = (await canvas_client.get(url)).json()['data']
+            fresh = await canvas_client.post(assistant, json={**source, 'request_id': 'refreshed-edit',
+                'context': {**source['context'], 'revision': current['revision'], 'draft': current['document']}})
+            assert fresh.status_code == 200, fresh.text
+            refreshed = await canvas_client.post(assistant + '/proposals/refreshed-edit', json={
+                **decision, 'decision_id': 'new-preview-approval', 'expected_revision': current['revision'],
+            })
+            assert refreshed.status_code == 200, refreshed.text
+            assert refreshed.json()['data']['receipt']['revision'] == current['revision'] + 1
+            assert refreshed.json()['data']['canvas']['document']['cards'][0]['prompt']['segments'][0]['text'] == '慢推'
             replay = await canvas_client.post(decision_url, json=decision)
             assert replay.json()['data']['conflicts'] == prior['conflicts']
             assert replay.json()['data']['receipt'] is None
@@ -226,7 +244,7 @@ async def test_assistant_edit_requires_approval_and_replays_original_save(canvas
             result = await canvas_client.post(decision_url, json=decision)
         assert result.status_code == 200, result.text
         data = result.json()['data']
-        assert [item['state'] for item in data['proposal']['groups']] == ['pending', 'applied']
+        assert [item['state'] for item in data['proposal']['groups']] == ['superseded', 'applied']
         assert data['conflicts'][0]['current'] == '手动环绕'
         assert data['canvas']['document']['name'] == '手动改名'
         actual = data['canvas']['document']['cards'][0]['prompt']['segments']
@@ -380,7 +398,7 @@ async def test_auto_approval_follows_user_words_and_preserves_conflicts(canvas_c
     revision = saved.json()['data']['revision']
     assert (await canvas_client.patch(assistant + '/approval', json={'approval_mode': 'automatic'})).status_code == 200
     initial = {'revision': revision, 'draft': draft, 'scope': 'selection', 'card_ids': ['target']}
-    name = 'propose_canvas_edit' if action == 'edit' else 'propose_canvas_removal'
+    name = 'preview_canvas_changes'
     target = {'edit': {'kind': 'video_prompt_segment', 'segment_id': 'first'},
               'delete': {'kind': 'delete_card'},
               'release': {'kind': 'release_binding', 'binding_id': 'selected-text'}}[action]
@@ -398,12 +416,14 @@ async def test_auto_approval_follows_user_words_and_preserves_conflicts(canvas_c
                     'content': '{"decision":"approve","reason":"用户明确指定了原操作"}'}}],
             })
         count = sum(message['role'] == 'tool' for message in body['messages'])
-        call = 'read_canvas_context' if count == 0 else name if count == 1 else None
+        call = 'read_canvas' if count == 0 else name if count == 1 else None
         message = {'role': 'assistant', 'content': '准备了修改建议'}
         if call:
             args = {} if count == 0 else {'card_id': 'target', 'target': target}
             if count and action == 'edit':
-                args['text'] = '缓慢推近'
+                args = _batch_field({**args, 'text': '缓慢推近'})
+            elif count:
+                args = {'groups': [{'title': '清理', 'changes': [{'kind': 'remove', **args}]}]}
             message = {'role': 'assistant', 'tool_calls': [{'id': f'call-{call}', 'type': 'function',
                 'function': {'name': call, 'arguments': json.dumps(args)}}]}
         return httpx.Response(200, request=request, json={
@@ -419,9 +439,10 @@ async def test_auto_approval_follows_user_words_and_preserves_conflicts(canvas_c
     group = {'group_ids': ['1']} if action != 'edit' else {}
     decision = {'action': 'approve', 'approval_mode': 'automatic', 'expected_revision': revision, **group}
     inferred_decision = assistant + '/proposals/inferred'
-    assert (await canvas_client.post(inferred_decision, json=decision)).status_code == 409
-    rejected = await canvas_client.post(inferred_decision, json={**decision, 'action': 'reject', 'approval_mode': 'manual'})
-    assert rejected.status_code == 200, rejected.text
+    assert (await canvas_client.post(inferred_decision, json=decision)).status_code == (404 if action == 'edit' else 409)
+    if action != 'edit':
+        rejected = await canvas_client.post(inferred_decision, json={**decision, 'action': 'reject', 'approval_mode': 'manual'})
+        assert rejected.status_code == 200, rejected.text
     assert (await canvas_client.get(url)).json()['data']['revision'] == revision
 
     request = {'edit': '把这张卡的推近放慢', 'delete': '删除这张卡', 'release': '解除这条引用'}[action]
@@ -433,11 +454,13 @@ async def test_auto_approval_follows_user_words_and_preserves_conflicts(canvas_c
         saved = await canvas_client.put(url, json={'request_id': 'manual', 'expected_revision': revision, 'document': draft})
         assert saved.status_code == 200, saved.text
     approval = await canvas_client.post(assistant + '/proposals/explicit', json=decision)
-    assert approval.status_code == 200, approval.text
-    entry = (await canvas_client.get(assistant)).json()['data']['turns'][1]['approval_audit'][0]
-    assert (entry['source_id'], entry['mode'], entry['outcome']) == (
-        'explicit', 'automatic', 'conflict' if conflict else 'applied',
-    )
+    assert approval.status_code == (409 if conflict else 200), approval.text
+    turn = (await canvas_client.get(assistant)).json()['data']['turns'][1]
+    if conflict:
+        assert turn['approval_audit'] is None and turn['proposal']['state'] == 'pending'
+    else:
+        entry = turn['approval_audit'][0]
+        assert (entry['source_id'], entry['mode'], entry['outcome']) == ('explicit', 'automatic', 'applied')
     output = (await canvas_client.get(url)).json()['data']['document']
     if action == 'edit':
         assert output['cards'][0]['prompt']['segments'][0]['text'] == ('手动环绕' if conflict else '缓慢推近')
@@ -451,7 +474,7 @@ async def test_auto_approval_follows_user_words_and_preserves_conflicts(canvas_c
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures('assistant_edit_model')
-@pytest.mark.parametrize('case', ['unavailable', 'reject', 'withdraw', 'new-revision'])
+@pytest.mark.parametrize('case', ['unavailable', 'reject', 'withdraw', 'regrant', 'new-revision'])
 async def test_independent_review_does_not_override_user_or_canvas_changes(canvas_client, monkeypatch, case):
     from asyncio import Event, create_task, wait_for
 
@@ -485,9 +508,9 @@ async def test_independent_review_does_not_override_user_or_canvas_changes(canva
             await release_reviewer.wait()
             answer['content'] = '无效复核结果' if case == 'unavailable' else '{"decision":"approve","reason":"命中指定字段"}'
         elif 'edit' not in tools:
-            name = 'propose_canvas_edit' if tools else 'read_canvas_context'
-            args = {'card_id': 'target', 'target': {'kind': 'video_prompt_segment', 'segment_id': 'first'},
-                    'text': '缓慢推近'} if tools else {}
+            name = 'preview_canvas_changes' if tools else 'read_canvas'
+            args = _batch_field({'card_id': 'target', 'target': {'kind': 'video_prompt_segment', 'segment_id': 'first'},
+                    'text': '缓慢推近'}) if tools else {}
             answer = {'role': 'assistant', 'tool_calls': [{
                 'id': 'edit' if tools else 'context', 'type': 'function',
                 'function': {'name': name, 'arguments': json.dumps(args)},
@@ -513,8 +536,10 @@ async def test_independent_review_does_not_override_user_or_canvas_changes(canva
             assert (await canvas_client.post(proposal_url, json={
                 **choice, 'action': 'reject', 'approval_mode': 'manual', 'decision_id': 'manual-rejection',
             })).status_code == 200
-        elif case == 'withdraw':
+        elif case in ('withdraw', 'regrant'):
             assert (await canvas_client.patch(assistant + '/approval', json={'approval_mode': 'manual'})).status_code == 200
+            if case == 'regrant':
+                assert (await canvas_client.patch(assistant + '/approval', json={'approval_mode': 'automatic'})).status_code == 200
         elif case == 'new-revision':
             assert (await canvas_client.put(url, json={
                 'request_id': 'edit-during-review', 'expected_revision': revision,

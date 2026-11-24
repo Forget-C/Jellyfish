@@ -105,7 +105,7 @@ def _replaceable_first_frame(card: VideoModelCard):
 def structural_preview_tool(draft, kind: str, sources):
     """Expose one read-only preview over the catalog and attached reference files."""
     @tool
-    def propose_canvas_structure(change: ProposedStructure) -> str:
+    def preview_canvas_structure(change: ProposedStructure) -> str:
         """Preview card creation, a candidate connection or first-frame use explicitly requested by the user."""
         if draft.proposal:
             raise ToolException('A preview has already been prepared for this turn')
@@ -178,9 +178,9 @@ def structural_preview_tool(draft, kind: str, sources):
         )
         return draft.proposal.model_dump_json()
 
-    propose_canvas_structure.handle_tool_error = True
-    propose_canvas_structure.handle_validation_error = True
-    return propose_canvas_structure
+    preview_canvas_structure.handle_tool_error = True
+    preview_canvas_structure.handle_validation_error = True
+    return preview_canvas_structure
 
 
 def append_candidate_edge(document: CanvasDocument, edge: GenerationCanvasEdge) -> None:

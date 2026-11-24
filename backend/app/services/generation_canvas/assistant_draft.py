@@ -7,26 +7,29 @@ from hashlib import sha256
 from fastapi import HTTPException
 from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.models.canvas_assistant import CanvasAssistantSession, CanvasAssistantTurn
 from app.models.generation_canvas import GenerationCanvas
 from app.schemas.canvas_assistant import CanvasAssistantExchange, CanvasAssistantProgress
-from app.schemas.canvas_assistant_edit import CanvasAssistantProposal
 from app.schemas.canvas_assistant_draft import CanvasDraftSave, DraftAssistantMessage, DraftAssistantReply
-from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, ConnectCardsTarget, VideoInputTarget
 from app.schemas.generation_canvas import CanvasDocument
-from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
 from app.services.generation_canvas.assistant import CanvasAssistant, MODEL_FAILED, MODEL_FAILURE_REPLIES, MODEL_TIMEOUT, PROPOSAL_INVALID, PROPOSAL_RETRY_GUIDANCE, prepare_proposal_repair
 from app.services.generation_canvas.assistant_context import resolve_assistant_context, resolve_external_canvas_cards
-from app.services.generation_canvas.assistant_video_inputs import check_video_input, video_input_context
 from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
+from app.services.generation_canvas.assistant_edit_projection import publish_assistant_edit_execution
 from app.services.generation_canvas.assistant_events import publish_events
 from app.services.generation_canvas.assistant_media import (
     describe_assistant_media, resolve_assistant_media, retain_assistant_media,
 )
-from app.services.generation_canvas.assistant_structure import (
-    apply_structural_change, assistant_card_configuration, structural_preview_tool,
+from app.services.generation_canvas.assistant_structure import structural_preview_tool
+from app.services.generation_canvas.approval_upgrade import expired_approval
+from app.services.generation_canvas.draft_canvas_approvals import (
+    confirm_draft_approval, draft_approval_is_active, draft_approval_origin, find_draft_approval,
+    promote_draft_approval, stage_draft_approval,
 )
+from app.services.generation_canvas.model_adapter import CanvasModelAdapter
+from app.services.generation_canvas.planning_tools import CanvasPlanningTools
 
 
 # Unsaved conversations stay browser-owned. Keep an in-flight response and a short
@@ -56,18 +59,20 @@ class DraftCanvasAssistant(CanvasAssistant):
         turns = command.validated_turns()
         if len(turns) == 100 or any(turn.request_id == command.request_id for turn in turns):
             raise HTTPException(422, 'The draft assistant transcript is full or contains this request')
-        empty = CanvasDocument(id=canvas_id, name='未命名画布')
-        context, edit_draft = None, None
+        context, edit_draft, adapter = None, None, None
         if command.context:
             canvas = GenerationCanvas(id=canvas_id, kind='free', revision=0)
             context = resolve_assistant_context(canvas, command.context, command.text)
-            edit_draft = CanvasAssistantEditDraft(context, empty, CanvasDocument.model_validate(command.context.draft))
-            edit_draft.video_inputs = await video_input_context(self.db, canvas, edit_draft.visible_document, edit_draft.cards)
+            visible = CanvasDocument.model_validate(command.context.draft)
+            edit_draft = CanvasAssistantEditDraft(context, visible)
+            edit_draft.user_request = command.text
+            sessions = async_sessionmaker(bind=self.db.bind, expire_on_commit=False)
+            adapter = CanvasModelAdapter(CanvasPlanningTools(sessions, None, canvas_id, context, edit_draft, draft=True))
         model, provider, capability = await self._resolve_model(command.model_id)
         client = await self._model_client(model, provider, capability)
         model_id = model.id
         sources = await resolve_assistant_media(self.db, None, command.attachment_file_ids)
-        structure_tool = structural_preview_tool(edit_draft, 'free', sources) if edit_draft else None
+        structure = structural_preview_tool(edit_draft, 'free', sources) if edit_draft else None
         await self.db.rollback()
         messages = []
         for turn in turns:
@@ -87,7 +92,8 @@ class DraftCanvasAssistant(CanvasAssistant):
         async def complete(on_reply=None, on_phase=None, partial_reply=lambda: ''):
             try:
                 reply, skills, observed = await self._reply(
-                    client, messages, context, edit_draft, supports_tools=capability.tool_calling, structure_tool=structure_tool,
+                    client, messages, context, edit_draft, supports_tools=capability.tool_calling, model_adapter=adapter,
+                    structure_tool=structure,
                     max_input_tokens=capability.max_input_tokens, on_reply=on_reply, on_phase=on_phase,
                 )
             except HTTPException as error:
@@ -97,10 +103,23 @@ class DraftCanvasAssistant(CanvasAssistant):
                 skills, observed = [], None
             if context is not None:
                 context.observed_card_ids = observed
+            proposal = None
+            if adapter and adapter.latest_preview.plan:
+                from app.services.generation_canvas.assistant_versioned_approval import can_submit_canvas_edit
+                if can_submit_canvas_edit(command.text):
+                    staged = adapter.planning.get_preview(adapter.latest_preview.preview_id)
+                    if staged and staged.proposal:
+                        origin = (draft_approval_origin(turns, command.revises)
+                                  if command.revises else command.request_id)
+                        async with adapter.planning.sessions.begin() as db:
+                            await stage_draft_approval(db, edit_draft.visible_document, command.request_id,
+                                                       staged.proposal, staged.plan, origin_id=origin,
+                                                       revises=command.revises)
+                        proposal = staged.proposal
             return CanvasAssistantExchange(request_id=command.request_id, text=command.text, context=context,
                 sequence=len(command.turns) + 1, model_id=model_id, reply=reply, attachments=attachments,
                 canvas_references=command.canvas_references or None,
-                skills=skills or None, proposal=edit_draft.proposal if edit_draft else None, revises=command.revises,
+                skills=skills or None, proposal=proposal, revises=command.revises,
                 proposal_issues=(edit_draft.proposal_issues or None) if edit_draft else None, repairs=command.repairs)
         if not command.stream_reply:
             return await complete()
@@ -157,74 +176,36 @@ class DraftCanvasAssistant(CanvasAssistant):
         return snapshot.turn
 
 
-def _valid_free_card(target: AddCanvasCardTarget, card_id: str) -> bool:
+
+def _first_save_document(command: CanvasDraftSave) -> CanvasDocument:
     try:
-        card, _ = assistant_card_configuration(target.card, card_id)
-    except ValueError:
-        return False
-    return card.type in FREE_CARD_TYPES
-
-
-def _valid_proposal(proposal: CanvasAssistantProposal | None) -> bool:
-    """Check that a browser-owned first-save proposal only adds independent free-canvas groups."""
-    groups = proposal.groups if proposal else None
-    if not groups or len({group.id for group in groups}) != len(groups):
-        return False
-    added = set()
-    for group in groups:
-        local = set()
-        for edit in group.edits:
-            target = edit.target
-            if isinstance(target, AddCanvasCardTarget):
-                if edit.card_id in added or not _valid_free_card(target, edit.card_id):
-                    return False
-                local.add(edit.card_id)
-                added.add(edit.card_id)
-            elif isinstance(target, VideoInputTarget):
-                if edit.card_id != target.use.target_card:
-                    return False
-            elif (not isinstance(target, ConnectCardsTarget) or edit.card_id != target.target_card
-                  or {target.source_card, target.target_card} - local):
-                return False
-        if not local and not any(isinstance(e.target, VideoInputTarget) for e in group.edits):
-            return False
-    return True
+        return CanvasDocument.model_validate(command.document)
+    except ValidationError as error:
+        raise HTTPException(422, 'Invalid draft canvas document') from error
 
 
 async def prepare_draft_approval(store, canvas, command: CanvasDraftSave):
-    """Apply selected independent groups in the same transaction as the new canvas."""
+    """Verify the original server version and project selected groups before the first write."""
     approval = command.assistant_approval
     if approval is None:
         return None
     turns = command.assistant.validated_turns() if command.assistant else ()
     selected = next((turn for turn in turns if turn.request_id == approval.source_id), None)
-    proposal = selected.proposal if selected else None
-    if not _valid_proposal(proposal):
-        raise HTTPException(422, 'Select a draft card creation proposal')
-    pending = {group.id for group in proposal.groups if group.state == 'pending'}
-    selected_ids = set(approval.group_ids)
-    if (proposal.state != 'pending' or len(selected_ids) != len(approval.group_ids)
-            or not selected_ids <= pending):
-        raise HTTPException(409, 'The draft assistant proposal cannot be approved')
-    try:
-        document = CanvasDocument.model_validate(command.document)
-    except ValidationError as error:
-        raise HTTPException(422, 'Invalid draft canvas document') from error
-    for group in proposal.groups:
-        if group.id in selected_ids:
-            for edit in group.edits:
-                if isinstance(edit.target, VideoInputTarget):
-                    conflict = await check_video_input(store, canvas, document, edit)
-                    if conflict:
-                        raise HTTPException(409, conflict)
-                    continue
-                if not await apply_structural_change(store, canvas, document, edit):
-                    raise HTTPException(409, 'The proposed card or connection is no longer valid')
-    return document.model_dump(mode='json')
+    document = _first_save_document(command)
+    if selected is None or document.id != canvas.id or document.project_id is not None:
+        raise expired_approval()
+    request = await find_draft_approval(store.db, document, selected.request_id, selected.proposal,
+                                        origin_id=draft_approval_origin(turns, selected.request_id))
+    if request is None:
+        raise expired_approval()
+    projected = await confirm_draft_approval(
+        store.db, document, request, tuple(approval.group_ids), request_id=command.request_id,
+    )
+    return projected.model_dump(mode='json')
 
 
 async def attach_draft_conversation(store, command: CanvasDraftSave, receipt: dict):
-    """Publish the transcript and asset usages in the first-save transaction."""
+    """Publish browser-owned prose and verified approval/project receipts with the saved draft."""
     conversation = command.assistant
     if not conversation or not conversation.turns:
         return
@@ -233,36 +214,47 @@ async def attach_draft_conversation(store, command: CanvasDraftSave, receipt: di
     store.db.add(session)
     await store.db.flush()
     turns = conversation.validated_turns()
+    document = _first_save_document(command)
     files = {item.file_id for turn in turns for item in (turn.attachments or [])}
     sources = await resolve_assistant_media(store.db, None, sorted(files))
     await retain_assistant_media(store.db, None, canvas_id, sources)
     approval = command.assistant_approval
     for turn in turns:
-        proposal = turn.proposal if _valid_proposal(turn.proposal) else None
-        approved = bool(approval and turn.request_id == approval.source_id)
-        if proposal and (approved or proposal.state == 'applied' or any(
-            group.state == 'applied' for group in proposal.groups
-        )):
+        request = None
+        if turn.proposal is not None:
+            try:
+                origin = draft_approval_origin(turns, turn.request_id)
+            except HTTPException:
+                # Old browser dialogue may refer to a proposal the current service never issued.
+                origin = None
+            if origin is not None:
+                request = await find_draft_approval(store.db, document, turn.request_id, turn.proposal,
+                                                    origin_id=origin)
+        proposal = turn.proposal if request else None
+        active = bool(request and await draft_approval_is_active(store.db, request))
+        if proposal and not active:
+            proposal.state = 'superseded'
             for group in proposal.groups:
-                if approved and group.id in approval.group_ids:
-                    group.state = 'applied'
-                elif group.state == 'applied':
-                    group.state = 'pending'
-            states = {group.state for group in proposal.groups}
-            proposal.state = 'pending' if 'pending' in states else 'applied' if 'applied' in states else 'rejected'
-        audit = [{'source_id': turn.request_id, 'mode': 'manual', 'action': 'approve',
-                  'outcome': 'applied', 'group_ids': approval.group_ids}] if approved else None
+                if group.state == 'pending':
+                    group.state = 'superseded'
+        selected = tuple(approval.group_ids) if approval and turn.request_id == approval.source_id else ()
+        attachments = [item.model_dump(mode='json') for item in (turn.attachments or []) if item.file_id in sources]
         store.db.add(CanvasAssistantTurn(canvas_id=canvas_id, request_id=turn.request_id, sequence=turn.sequence,
             model_id=turn.model_id, text=turn.text, reply=turn.reply, revises=turn.revises, repairs=turn.repairs,
             context=turn.context.model_dump(mode='json') if turn.context else None,
             skills=[skill.model_dump(mode='json') for skill in (turn.skills or [])],
             canvas_references=[item.model_dump(mode='json') for item in turn.canvas_references] if turn.canvas_references else None,
-            attachments=[item.model_dump(mode='json') for item in (turn.attachments or [])
-                         if item.file_id in sources],
-            proposal=proposal.model_dump(mode='json') if proposal else None, approval_audit=audit,
+            attachments=attachments, proposal=proposal.model_dump(mode='json') if proposal else None,
+            approval_requests={'edit': request.id} if request else None,
             proposal_issues=[issue.model_dump(mode='json') for issue in (turn.proposal_issues or [])] or None))
         exchange = CanvasAssistantExchange.model_validate({
-            **turn.model_dump(mode='json'), 'proposal': proposal, 'approval_audit': audit,
+            **turn.model_dump(mode='json'), 'proposal': proposal, 'approval_audit': None, 'attachments': attachments,
         })
         publish_events(store.db, session, exchange, 'turn.completed')
+        if active:
+            decision, group_receipts = await promote_draft_approval(
+                store.db, request, canvas_revision=receipt['revision'], approved_group_ids=selected,
+            )
+            for item in group_receipts:
+                await publish_assistant_edit_execution(store.db, None, canvas_id, decision, item)
     await store.db.flush()

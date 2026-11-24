@@ -16,7 +16,6 @@ from app.schemas.generation_canvas import CanvasCreate, CanvasPrecheckRequest, C
 from app.services.approval import ApprovalAccess, ApprovalScope
 from app.services.generation_canvas.approved_edits import CanvasEditApprovals
 from app.services.generation_canvas.approval_upgrade import expire_legacy_canvas_approvals, legacy_generation_request_id
-from app.services.generation_canvas.assistant_generation import advance_assistant_generations
 from app.services.generation_canvas.edits import CanvasEditGroup, canvas_edits
 from app.services.generation_canvas.generation_inputs import canvas_generation_inputs
 from app.services.generation_canvas.lifecycle import free_canvas_lifecycle
@@ -190,7 +189,6 @@ async def test_upgrade_keeps_accepted_and_unknown_tasks_and_never_admits_remaini
 
     await execute_upgrade(sessions)
     await execute_upgrade(sessions)
-    await advance_assistant_generations(sessions)
     calls = []
 
     def provider(req):

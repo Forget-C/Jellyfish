@@ -31,7 +31,7 @@ async def test_layout_approval_survives_reload_and_records_one_editor_receipt(ca
             return await original_send(client, request, **kwargs)
         body = json.loads(request.content)
         results = [item['tool_call_id'] for item in body['messages'] if item['role'] == 'tool']
-        actions = [('read_canvas_context', {}), ('propose_canvas_layout', {
+        actions = [('read_canvas', {}), ('preview_canvas_layout', {
             'card_ids': ['left', 'right'], 'group_name': '片头',
             'placement': {'kind': 'move', 'positions': {'left': {'x': 310, 'y': 100}, 'right': {'x': 520, 'y': 100}}},
         })]

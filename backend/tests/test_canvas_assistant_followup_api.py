@@ -40,7 +40,7 @@ async def test_stop_keeps_accepted_run_across_worker_restart(runtime, monkeypatc
         message = {'role': 'assistant', 'content': '已收到指令'}
         if not any(item['role'] == 'tool' for item in body['messages']):
             message = {'role': 'assistant', 'tool_calls': [{'id': 'scope', 'type': 'function',
-                'function': {'name': 'read_canvas_context', 'arguments': '{}'}}]}
+                'function': {'name': 'read_canvas', 'arguments': '{}'}}]}
         return httpx.Response(200, request=request, json={
             'id': 'answer', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
             'choices': [{'index': 0, 'finish_reason': 'tool_calls' if 'tool_calls' in message else 'stop',
@@ -164,7 +164,7 @@ async def test_worker_reviews_only_the_authorized_immutable_generation(runtime, 
             reviews.append(body)
             name, args = 'load_canvas_skill', '{"skill_id":"footage-review"}'
         elif not is_review and not used_tools:
-            name, args = 'read_canvas_context', '{}'
+            name, args = 'read_canvas', '{}'
         else:
             name = None
         message = {'role': 'assistant', 'content': '成片中的主色是红色。' if is_review else '已收到指令'}

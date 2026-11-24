@@ -102,7 +102,6 @@ class CanvasCheckpointer(CanvasGraphSnapshot):
         self._sessions = async_sessionmaker(bind=db.bind, expire_on_commit=False)
         self._canvas_id, self._token = canvas_id, token
         self._lock = asyncio.Lock()
-        self.waiting_approval = False
 
     @staticmethod
     async def _commit(db):
@@ -155,6 +154,15 @@ class CanvasCheckpointer(CanvasGraphSnapshot):
                     request_id=progress.request_id, text=pending['command']['text'], sequence=session.sequence + 1,
                     model_id=progress.model_id, reply='', progress=progress,
                 ), 'turn.progress')
+            await self._commit(db)
+
+    async def save_canvas_preview(self, preview):
+        """Retain server-validated plans separately from model ToolMessage data."""
+        async with self._lock, self._sessions() as db:
+            session = await db.get(CanvasAssistantSession, self._canvas_id, with_for_update=True, populate_existing=True)
+            if session is None or session.pending_token != self._token:
+                raise HTTPException(409, 'Canvas assistant reply lease expired')
+            session.pending_request = {**session.pending_request, 'validated_preview': preview.model_dump(mode='json')}
             await self._commit(db)
 
     async def save_delegation(self, identity, receipt):

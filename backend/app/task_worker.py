@@ -44,7 +44,7 @@ from app.services.generation_canvas.approved_edits import advance_approved_canva
 from app.services.generation_canvas.approved_generation import (
     advance_approved_canvas_generations, begin_approved_provider_submission, preserve_approved_provider_submission,
 )
-from app.services.generation_canvas.assistant_generation import advance_assistant_generations
+from app.services.generation_canvas.assistant_generation import publish_generation_changes
 from app.services.generation_canvas.assistant_review import advance_assistant_reviews
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.script_processing_worker import generate_script_result
@@ -181,9 +181,9 @@ class TaskWorker:
         except Exception as error:
             logger.warning("canvas generation approval processing failed: %s", type(error).__name__)
         try:
-            await advance_assistant_generations(self.sessions)
+            await publish_generation_changes(self.sessions)
         except Exception as error:
-            logger.warning("canvas assistant admission failed: %s", type(error).__name__)
+            logger.warning("canvas assistant generation projection failed: %s", type(error).__name__)
         async with self.sessions() as db:
             await TaskService(db).expire_tasks()
             remote_count = await db.scalar(select(func.count()).select_from(Task).where(

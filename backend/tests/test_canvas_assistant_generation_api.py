@@ -7,6 +7,8 @@ import httpx
 import pytest
 
 from app.models.llm import Model, ModelSettings
+from app.services.approval import ApprovalAccess, ApprovalScope, ApprovalService
+from app.services.generation_canvas.approved_generation import CanvasGenerationApprovals
 from app.task_worker import TaskWorker, WorkerLimits
 from tests.test_generation_canvas_runs import runtime  # pylint: disable=unused-import
 
@@ -41,7 +43,7 @@ async def test_worker_resumes_exact_authorized_versions(runtime, monkeypatch):
             reason = 'stop'
         else:
             message = {'role': 'assistant', 'tool_calls': [{'id': 'read-context', 'type': 'function',
-                'function': {'name': 'read_canvas_context', 'arguments': '{}'}}]}
+                'function': {'name': 'read_canvas', 'arguments': '{}'}}]}
             reason = 'tool_calls'
         return httpx.Response(200, request=request, json={
             'id': 'answer', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
@@ -61,9 +63,44 @@ async def test_worker_resumes_exact_authorized_versions(runtime, monkeypatch):
     })
     assert discussion.status_code == 200, discussion.text
     assert discussion.json()['data']['generation'] is None
+    stopped_command = {**command, 'request_id': 'stopped-before-admission', 'text': '生成一版'}
+    requested = await runtime.client.post(assistant, json=stopped_command)
+    assert requested.status_code == 200, requested.text
+    stop_url = endpoint + '/assistant/turns/stopped-before-admission/stop' + ('?' + query if query else '')
+    stopped = await runtime.client.post(stop_url)
+    assert stopped.status_code == 200, stopped.text
+    assert stopped.json()['data']['generation']['state'] == 'stopped'
+    async with httpx.AsyncClient() as transport:
+        worker = TaskWorker(runtime.sessions, client=transport)
+        try:
+            await worker.tick()
+            await asyncio.gather(*worker.jobs.values())
+        finally:
+            worker.text_pool.shutdown(wait=False)
+    assert (await runtime.client.get(runs)).json()['data']['runs'] == []
     response = await runtime.client.post(assistant, json=command)
     assert response.status_code == 200, response.text
     assert response.json()['data']['generation']['requested_count'] == 3
+    assert (await runtime.client.get(runs)).json()['data']['runs'] == []
+    async with runtime.sessions() as db:
+        access = ApprovalAccess(scope=ApprovalScope(kind='canvas', id=current['document']['id']),
+                                actor_id='canvas-assistant', permissions={'read', 'submit'})
+        approvals = ApprovalService(db)
+        stopped_request = await approvals.read_submitted(
+            access, object_type='canvas-generation', object_id='stopped-before-admission:1',
+            idempotency_key='preview:original',
+        )
+        assert stopped_request is not None
+        stopped_decision, = await approvals.list_decisions(access, stopped_request.id)
+        assert stopped_decision.action == 'approve'
+        withdrawn = await CanvasGenerationApprovals(db).read_receipt(access, stopped_decision.id)
+        assert withdrawn.state == 'cancelled'
+        assert withdrawn.admission is None
+        request = await approvals.read_submitted(
+            access, object_type='canvas-generation', object_id='explicit-three:1', idempotency_key='preview:original',
+        )
+        assert request is not None
+        assert [item.action for item in await approvals.list_decisions(access, request.id)] == ['approve']
 
     async with httpx.AsyncClient() as transport:
         first = TaskWorker(runtime.sessions, client=transport)
@@ -78,7 +115,8 @@ async def test_worker_resumes_exact_authorized_versions(runtime, monkeypatch):
         event_path, _, event_query = assistant.partition('?')
         event_url = event_path + '/events' + ('?' + event_query if event_query else '')
         receipt_events = (await runtime.client.get(event_url)).json()['data']
-        first_version = next(event for event in receipt_events if event['subject'] == 'generation')
+        first_version = next(event for event in receipt_events if event['subject'] == 'generation'
+                             and event['turn_id'] == 'explicit-three')
         assert first_version['occurred_at']
         assert [version['version'] for version in first_version['payload']['generation']['versions']] == [1]
         assert first_version['payload']['generation']['requested_count'] == 3
@@ -104,6 +142,18 @@ async def test_worker_resumes_exact_authorized_versions(runtime, monkeypatch):
     assert len(published) == 3 and published[0]['id'] == initial[0]['id']
     assert [item['run_id'] for item in replay['versions']] == [run['id'] for run in published]
     assert all(item['state'] == 'succeeded' for item in replay['versions'])
+    async with runtime.sessions() as db:
+        approvals = ApprovalService(db)
+        for item in replay['versions']:
+            request = await approvals.read_submitted(
+                access, object_type='canvas-generation', object_id=f"explicit-three:{item['version']}",
+                idempotency_key='preview:original',
+            )
+            assert request is not None
+            decision, = await approvals.list_decisions(access, request.id)
+            receipt = await CanvasGenerationApprovals(db).read_receipt(access, decision.id)
+            assert receipt.admission is not None
+            assert (receipt.admission.run_id, receipt.generation_request_id) == (item['run_id'], item['request_id'])
     final_events = (await runtime.client.get(event_url)).json()['data']
     assert any(event['type'] == 'execution.succeeded' and event['subject'] == 'generation'
                and len(event['payload']['generation']['versions']) == 3 for event in final_events)
@@ -181,16 +231,18 @@ async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypa
             })
         results = [item for item in body['messages'] if item['role'] == 'tool']
         if len(results) < 2:
-            name = 'read_canvas_context' if not results else 'propose_canvas_edit'
+            name = 'read_canvas' if not results else 'preview_canvas_changes'
             args = {} if not results else {'card_id': 'v', 'text': '缓慢推近',
                 'target': {'kind': 'video_prompt_segment', 'segment_id': 'p'}}
             if results and scenario == 'wrong_direction':
                 args['text'] = '后拉'
-            if results and scenario == 'partial_group':
-                name = 'propose_canvas_edit_groups'
-                alternate = {**args, 'text': '换成大特写',
-                             'target': {'kind': 'video_prompt_segment', 'segment_id': 'q'}}
-                args = {'groups': [{'title': '运镜', 'edits': [args]}, {'title': '构图', 'edits': [alternate]}]}
+            if results:
+                groups = [{'title': '运镜', 'changes': [{'kind': 'edit_field', 'change': args}]}]
+                if scenario == 'partial_group':
+                    alternate = {**args, 'text': '换成大特写',
+                                 'target': {'kind': 'video_prompt_segment', 'segment_id': 'q'}}
+                    groups.append({'title': '构图', 'changes': [{'kind': 'edit_field', 'change': alternate}]})
+                args = {'groups': groups}
             message = {'role': 'assistant', 'tool_calls': [{'id': name, 'type': 'function',
                 'function': {'name': name, 'arguments': json.dumps(args)}}]}
         else:

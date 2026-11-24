@@ -91,7 +91,8 @@ class CanvasEditPreview(BaseModel):
 def project_canvas_edit_group(document: CanvasDocument, group: CanvasEditGroupPreview) -> CanvasDocument:
     """从预演的计算基线投影规范化差异，仅用于读取实际结果。"""
     projected = _indexed(document)
-    if _apply(projected, group.differences):
+    changed_source = any(_against(projected, guard)[1] != guard.before for guard in group.source_guards)
+    if changed_source or _apply(projected, group.differences):
         raise diagnostic('REVISION_CONFLICT', '画布已变化，请重新预演', {'group_id': group.id}, status=409)
     return CanvasDocument.model_validate(_document_data(projected))
 
@@ -229,11 +230,27 @@ def _indexed(document: CanvasDocument) -> dict:
     data = document.model_dump(mode='json')
     for field in _ENTITY_FIELDS:
         data[field] = {row['id']: row for row in data[field]}
+    # A field edit is tied to a stable prompt segment, so separate groups can
+    # change different segments without replacing each other's entire prompt.
+    for card in data['cards'].values():
+        if prompt := card.get('prompt'):
+            segments = prompt['segments']
+            prompt['segment_order'] = [segment['id'] for segment in segments]
+            prompt['segments'] = {segment['id']: segment for segment in segments}
     return data
 
 
 def _document_data(indexed: dict) -> dict:
-    return {field: list(value.values()) if field in _ENTITY_FIELDS else value for field, value in indexed.items()}
+    data = {field: list(value.values()) if field in _ENTITY_FIELDS else value for field, value in indexed.items()}
+    cards = []
+    for card in data['cards']:
+        if prompt := card.get('prompt'):
+            if isinstance(prompt['segments'], dict):
+                normalized = {**prompt, 'segments': [prompt['segments'][identity] for identity in prompt['segment_order']]}
+                del normalized['segment_order']
+                card = {**card, 'prompt': normalized}
+        cards.append(card)
+    return {**data, 'cards': cards}
 
 
 def _value(mapping: dict, key: str) -> CanvasEditValue:

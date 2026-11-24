@@ -60,7 +60,34 @@ async def test_draft_chat_does_not_create_canvas_and_first_save_replays(canvas_c
 
 
 @pytest.mark.asyncio
-async def test_approved_first_card_and_reference_are_promoted_once(canvas_client, monkeypatch):
+async def test_old_browser_proposal_cannot_write_but_plain_history_promotes(canvas_client):
+    draft = str(uuid4())
+    url = f'/canvases/drafts/{draft}'
+    document = (await canvas_client.get(url)).json()['data']['document']
+    change = {'card_id': 'forged', 'card_name': '镜头说明', 'before': '', 'after': '过去的方案',
+              'target': {'kind': 'add_canvas_card',
+                         'card': {'kind': 'add_text_card', 'text': '过去的方案'}}}
+    turn = {'request_id': 'old-browser', 'text': '讨论镜头', 'reply': '原普通正文', 'model_id': 'canvas-text',
+            'sequence': 1, 'proposal': {**change, 'state': 'pending',
+              'groups': [{'id': '1', 'title': '旧待审', 'edits': [change], 'state': 'pending'}]}}
+    command = {'request_id': 'old-approval', 'expected_revision': 0, 'document': document,
+               'assistant': {'turns': [turn]}, 'assistant_approval': {'source_id': 'old-browser', 'group_ids': ['1']}}
+    refused = await canvas_client.put(url, json=command)
+    assert refused.status_code == 409 and '已失效' in refused.json()['detail'], refused.text
+    assert (await canvas_client.get(url)).json()['data']['revision'] == -1
+
+    saved = await canvas_client.put(url, json={**command, 'request_id': 'ordinary-save', 'assistant_approval': None})
+    assert saved.status_code == 200, saved.text
+    current = (await canvas_client.get(url)).json()['data']['document']
+    assert current['cards'] == []
+    history = (await canvas_client.get(f'/canvases/{draft}/assistant')).json()['data']['turns']
+    assert history[0]['reply'] == '原普通正文'
+    assert history[0]['proposal'] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('plan_only,revise', [(False, False), (True, False), (False, True)])
+async def test_approved_first_card_and_reference_are_promoted_once(canvas_client, monkeypatch, plan_only, revise):
     from app.models.llm import Model
 
     original = httpx.AsyncClient.send
@@ -70,12 +97,12 @@ async def test_approved_first_card_and_reference_are_promoted_once(canvas_client
             return await original(client, request, **kwargs)
         messages = json.loads(request.content)['messages']
         completed = [item['tool_call_id'] for item in messages if item['role'] == 'tool']
-        helper = 'read_canvas_context' if not completed else 'propose_canvas_structure'
+        helper = 'read_canvas' if not completed else 'preview_canvas_changes'
         answer = {'role': 'assistant', 'content': '建议新增一张镜头文本卡'}
-        if 'propose_canvas_structure' not in completed:
+        if 'preview_canvas_changes' not in completed:
             answer = {'role': 'assistant', 'tool_calls': [{'id': helper, 'type': 'function',
                 'function': {'name': helper, 'arguments': json.dumps({
-                    'change': {'kind': 'add_text_card', 'text': '潮水涌入'}},
+                    'groups': [{'title': '镜头说明', 'changes': [{'kind': 'add_card', 'reference': 'tide', 'card': {'kind': 'add_text_card', 'text': '潮水涌入'}}]}]},
                 ) if completed else '{}'}}]}
         return httpx.Response(200, request=request, json={
             'id': 'draft-structure', 'object': 'chat.completion', 'created': 1, 'model': 'canvas-text',
@@ -97,10 +124,20 @@ async def test_approved_first_card_and_reference_are_promoted_once(canvas_client
     draft, different_draft = str(uuid4()), str(uuid4())
     url = f'/canvases/drafts/{draft}'
     document = (await canvas_client.get(url)).json()['data']['document']
-    sent = await canvas_client.post(url + '/assistant', json={'request_id': 'create-one', 'text': '新增文本卡',
+    sent = await canvas_client.post(url + '/assistant', json={'request_id': 'create-one',
+        'text': '只给方案，先不要写入画布' if plan_only else '新增文本卡',
         'attachment_file_ids': [file_id], 'context': {'draft': document, 'revision': 0, 'scope': 'canvas'}})
     assert sent.status_code == 200, sent.text
     turn = sent.json()['data']
+    if plan_only:
+        from app.services.approval import ApprovalService
+        from app.services.generation_canvas.assistant_versioned_approval import canvas_operator_access
+        assert turn['proposal'] is None
+        assert (await canvas_client.get(url)).json()['data']['revision'] == -1
+        async with canvas_client.canvas_sessions() as db:
+            assert await ApprovalService(db).read_submitted(canvas_operator_access(draft),
+                object_type='canvas-edit', object_id='draft:create-one', idempotency_key='draft:create-one') is None
+        return
     assert turn['proposal']['state'] == 'pending'
     assert turn['attachments'][0]['file_id'] == file_id
     assert (await canvas_client.get(f'/files/{file_id}')).json()['data']['usages'] == []
@@ -109,13 +146,23 @@ async def test_approved_first_card_and_reference_are_promoted_once(canvas_client
 
     command = {'request_id': 'approved-first-save', 'expected_revision': 0, 'document': document,
         'assistant': {'turns': [turn]}, 'assistant_approval': {'source_id': 'create-one', 'group_ids': ['1']}}
+    if revise:
+        revised = await canvas_client.post(url + '/assistant', json={'request_id': 'revise-one', 'text': '修改建议',
+            'revises': 'create-one', 'turns': [turn], 'context': {'draft': document, 'revision': 0, 'scope': 'canvas'}})
+        assert revised.status_code == 200, revised.text
+        command['assistant']['turns'].append(revised.json()['data'])
+        expired = await canvas_client.put(url, json=command)
+        assert expired.status_code == 409 and '已失效' in expired.json()['detail'], expired.text
+        command['assistant_approval']['source_id'] = 'revise-one'
     response = await canvas_client.put(url, json=command)
     assert response.status_code == 200, response.text
     assert (await canvas_client.put(url, json=command)).json() == response.json()
     assert [card['text'] for card in response.json()['data']['document']['cards']] == ['潮水涌入']
     history = (await canvas_client.get(f'/canvases/{draft}/assistant')).json()['data']['turns']
-    assert len(history) == 1
-    assert history[0]['proposal']['state'] == 'applied'
+    assert len(history) == (2 if revise else 1)
+    assert history[-1]['proposal']['state'] == 'applied'
+    if revise:
+        assert history[0]['proposal']['state'] == 'superseded'
     assert history[0]['attachments'][0]['file_id'] == file_id
     assert len((await canvas_client.get(f'/files/{file_id}')).json()['data']['usages']) == 1
     assert (await canvas_client.get('/canvases')).json()['data']['pagination']['total'] == 1
@@ -147,8 +194,8 @@ async def test_first_save_applies_only_selected_batch_and_replays(canvas_client,
         completed = {message['tool_call_id'] for message in body['messages'] if message['role'] == 'tool'}
         answer = {'role': 'assistant', 'content': '请确认分镜和备用方案'}
         if 'batch' not in completed:
-            call = ('batch', 'propose_canvas_changes', {'groups': groups}) if completed else (
-                'read', 'read_canvas_context', {},
+            call = ('batch', 'preview_canvas_changes', {'groups': groups}) if completed else (
+                'read', 'read_canvas', {},
             )
             answer = {'role': 'assistant', 'tool_calls': [{
                 'id': call[0], 'type': 'function',

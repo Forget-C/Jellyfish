@@ -27,6 +27,7 @@ class CanvasAssistantSession(Base):
     )
     model_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     approval_mode: Mapped[str] = mapped_column(String(12), nullable=False, server_default='manual')
+    approval_revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default='0')
 
 
 class CanvasAssistantTurn(Base):

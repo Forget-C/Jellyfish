@@ -109,7 +109,7 @@ async def test_assistant_switches_model_without_losing_visible_card_scope(canvas
         elif messages[-1].get('content') == '检查第二页':
             answer = {'role': 'assistant', 'tool_calls': [{
                 'id': 'read-second-page', 'type': 'function',
-                'function': {'name': 'read_canvas_context', 'arguments': '{"offset":1,"limit":2}'},
+                'function': {'name': 'read_canvas', 'arguments': '{"offset":1,"limit":2}'},
             }]}
             reason = 'tool_calls'
         elif tool_result and tool_result.get('tool_call_id') == 'read-second-page':
@@ -118,12 +118,13 @@ async def test_assistant_switches_model_without_losing_visible_card_scope(canvas
             assert page['next_offset'] == 3
         elif tool_result is None:
             assert {tool['function']['name'] for tool in body['tools']} == {
-                'read_canvas_context', 'load_canvas_skill', 'read_canvas_skill_example', 'propose_canvas_structure',
-                'propose_canvas_changes', 'ask_canvas_question', 'delegate_canvas_tasks',
+                'read_canvas', 'load_canvas_skill', 'read_canvas_skill_example', 'preview_canvas_structure',
+                'preview_canvas_changes', 'inspect_canvas_inputs', 'read_canvas_approval',
+                'ask_canvas_question', 'delegate_canvas_tasks',
             }
             answer = {'role': 'assistant', 'tool_calls': [{
                 'id': 'call-context', 'type': 'function',
-                'function': {'name': 'read_canvas_context', 'arguments': '{}'},
+                'function': {'name': 'read_canvas', 'arguments': '{}'},
             }]}
             reason = 'tool_calls'
         else:
@@ -274,7 +275,7 @@ async def test_resending_interrupted_assistant_turn_continues_completed_tool_ste
         if not called_tool:
             answer = {'role': 'assistant', 'tool_calls': [{
                 'id': 'read-context', 'type': 'function',
-                'function': {'name': 'read_canvas_context', 'arguments': '{}'},
+                'function': {'name': 'read_canvas', 'arguments': '{}'},
             }]}
         elif len(calls) == 2:
             raise RuntimeError('disconnected after completed tool step')
@@ -384,7 +385,7 @@ async def test_explicit_plan_uses_named_skills_without_available_writes(canvas_c
         answer = {'role': 'assistant', 'content': '保留 4 秒全景、7 秒动作、4 秒反应，合计 15 秒。'}
         if native_tools and not any(message['role'] == 'tool' for message in body['messages']):
             answer = {'role': 'assistant', 'tool_calls': [{
-                'id': 'context', 'type': 'function', 'function': {'name': 'read_canvas_context', 'arguments': '{}'},
+                'id': 'context', 'type': 'function', 'function': {'name': 'read_canvas', 'arguments': '{}'},
             }]}
         return httpx.Response(200, request=request, json={
             'id': 'plan', 'object': 'chat.completion', 'created': 1, 'model': body['model'],
@@ -636,7 +637,7 @@ async def test_registered_specialists_keep_independent_work_when_review_fails(ca
                 answer['content'] = json.dumps({'delegations': tasks}, ensure_ascii=False)
         elif 'delegate' not in observed:
             name, key, args = ('delegate_canvas_tasks', 'delegate', {'tasks': tasks}) if observed else (
-                'read_canvas_context', 'read', {},
+                'read_canvas', 'read', {},
             )
             answer = {'role': 'assistant', 'tool_calls': [{
                 'id': key, 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(args)},

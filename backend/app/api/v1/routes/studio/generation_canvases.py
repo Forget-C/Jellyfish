@@ -24,7 +24,8 @@ from app.services.generation_canvas.assistant import CanvasAssistant
 from app.schemas.canvas_assistant_layout import CanvasAssistantLayout, CanvasAssistantLayoutDecision
 from app.services.generation_canvas.assistant_layout import decide_assistant_layout
 from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationApproval, CanvasAssistantGenerationRead
-from app.services.generation_canvas.assistant_generation import decide_assistant_generation_edit, reapprove_generation
+from app.services.generation_canvas.assistant_generation import reapprove_generation
+from app.services.generation_canvas.assistant_versioned_approval import decide_canvas_assistant_proposal
 
 router = APIRouter()
 
@@ -192,7 +193,7 @@ async def stop_assistant_turn(canvas_id: str, source_id: str, project_id: str = 
 async def decide_assistant_proposal(canvas_id: str, source_id: str, body: CanvasAssistantProposalDecision,
                                     project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """Approve a saved preview through the existing canvas save transaction, or reject it."""
-    return success_response(await decide_assistant_generation_edit(db, project_id, canvas_id, source_id, body))
+    return success_response(await decide_canvas_assistant_proposal(db, project_id, canvas_id, source_id, body))
 
 
 @router.post('/{canvas_id}/assistant/generations/{source_id}/approval',

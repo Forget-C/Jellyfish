@@ -13,10 +13,10 @@ from app.schemas.canvas_assistant import CanvasAssistantReadContext
 from app.schemas.canvas_assistant_edit import (
     CanvasAssistantEditGroup, CanvasAssistantProposal, CanvasAssistantProposalIssue, ProposedCanvasBatchGroup,
 )
-from app.schemas.canvas_assistant_structure import ConnectCardsTarget, VideoInputTarget
+from app.schemas.canvas_assistant_structure import AdoptFirstFrameTarget, ConnectCardsTarget, VideoInputTarget
 from app.schemas.generation_canvas import CanvasCompiledInput, CanvasDocument, CanvasRead
 from app.services.generation_canvas.assistant_context import context_page, prioritize_context_cards
-from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
+from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft, project_assistant_group
 from app.services.generation_canvas.assistant_video_inputs import video_input_context
 from app.services.generation_canvas.catalog import canvas_catalog
 from app.services.generation_canvas.edits import (
@@ -25,6 +25,7 @@ from app.services.generation_canvas.edits import (
 from app.services.generation_canvas.errors import CanvasDomainError, diagnostic
 from app.services.generation_canvas.generation_inputs import canvas_generation_inputs
 from app.services.generation_canvas.lifecycle import canvas_lifecycle, free_canvas_lifecycle
+from app.services.generation_canvas.store import CanvasStore
 
 
 class CanvasPlanningPreview(BaseModel):
@@ -151,6 +152,46 @@ class CanvasPlanningTools:
         selected = self._previews.get(preview_id)
         return selected.result.model_copy(deep=True) if selected else None
 
+    async def project_trusted_proposal(self, db: AsyncSession,
+                                       proposal: CanvasAssistantProposal) -> CanvasPlanningPreview:
+        """Lower an already scoped special preview or field revision to the same domain plan."""
+        current = await self._current(db)
+        store = CanvasStore(db, self.project_id)
+        visible = self.planner.visible_document
+        canvas = (GenerationCanvas(id=visible.id, kind='free', revision=0,
+                                   card_types={card.id: card.type for card in visible.cards})
+                  if self.draft else await store.get(self.canvas_id))
+        groups = []
+        summaries = []
+        candidates = {}
+        issues = []
+        for group in proposal.groups or ():
+            candidate = visible.model_copy(deep=True)
+            try:
+                conflicts = await project_assistant_group(store, canvas, candidate, group)
+                if conflicts:
+                    raise diagnostic('EDIT_SOURCE_CHANGED', '改动目标或来源已变化，请重新预演', {'group_id': group.id})
+                checked = await self._check_group(db, current, group, candidate)
+                if checked.differences:
+                    candidates[group.id] = project_canvas_edit_group(current.document, checked)
+                    groups.append(checked)
+                    summaries.append(group)
+            except CanvasDomainError as exc:
+                issues.append(CanvasAssistantProposalIssue(group=int(group.id) if group.id.isdecimal() else None,
+                                                           message=exc.detail['message']))
+        if groups:
+            preview_id = uuid4().hex
+            resolved = CanvasAssistantProposal(**summaries[0].edits[0].model_dump(), groups=summaries)
+            result = CanvasPlanningPreview(
+                preview_id=preview_id, proposal=resolved, issues=tuple(issues),
+                plan=CanvasEditPreview(canvas_id=self.canvas_id, revision=current.revision, groups=tuple(groups)),
+            )
+            self._previews[preview_id] = _PlanningSnapshot(result.model_copy(deep=True), candidates)
+        else:
+            result = CanvasPlanningPreview(issues=tuple(issues))
+        self.latest = result
+        return result
+
     async def inspect_inputs(self, card_id: str, *, group_id: str | None = None,
                              preview_id: str | None = None) -> CanvasCompiledInput:
         """核对所见或指定预演组的实际正文和素材，不创建运行或生成凭据。"""
@@ -181,7 +222,9 @@ def _domain_group(before: CanvasDocument, after: CanvasDocument, summary: Canvas
     sources = set()
     for edit in summary.edits:
         if isinstance(edit.target, VideoInputTarget):
-            sources.add(edit.target.use.source_card)
+            sources.update((edit.target.use.source_card, edit.card_id))
+        if isinstance(edit.target, AdoptFirstFrameTarget):
+            sources.add(edit.card_id)
         if isinstance(edit.target, ConnectCardsTarget):
             sources.update((edit.target.source_card, edit.target.target_card))
         if edit.copy_of:
