@@ -245,6 +245,17 @@ class ProposedBatchConnection(ConnectCards):
         return value
 
 
+class CanvasAssistantProposalIssue(BaseModel):
+    """A preview failure scoped to an original, one-based group and operation."""
+
+    message: str
+    group: int | None = None
+    operation: int | None = None
+    field: str | None = None
+    source_card: str | None = None
+    target_card: str | None = None
+
+
 class ProposedCanvasBatchGroup(BaseModel):
     """One independently executable set of dependent changes."""
     model_config = ConfigDict(extra='forbid')

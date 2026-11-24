@@ -1,11 +1,14 @@
 """Pause the original Deep Agents graph while canvas decisions remain pending."""
 
+import json
+
+from pydantic import ValidationError
+
 from deepagents import create_deep_agent
 from langchain.agents.middleware import after_agent
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command, interrupt
-from pydantic import ValidationError
 
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposal, TextCanvasBatchResponse
 from app.services.generation_canvas.assistant_checkpoint import CanvasGraphSnapshot
@@ -21,16 +24,19 @@ def _proposal_pending(messages):
     for message in reversed(messages):
         if isinstance(message, ToolMessage) and message.name in PROPOSAL_TOOLS and message.status == 'success':
             try:
-                CanvasAssistantProposal.model_validate_json(message.text)
-            except ValidationError:
+                payload = json.loads(message.text)
+                if isinstance(payload, dict) and 'proposal_issues' in payload:
+                    payload = payload.get('proposal')
+                CanvasAssistantProposal.model_validate(payload)
+            except ValueError:
                 continue
             return True
     if messages and messages[-1].text.startswith('{'):
         try:
             TextCanvasBatchResponse.model_validate_json(messages[-1].text)
+            return True
         except ValidationError:
-            return False
-        return True
+            pass
     return False
 
 

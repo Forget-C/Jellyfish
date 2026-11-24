@@ -113,6 +113,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const [historyError, setHistoryError] = useState(false)
   const [retryLoad, setRetryLoad] = useState(0)
   const [draft, setDraft] = useState('')
+  const [repairSource, setRepairSource] = useState<string>()
   const [cardReferences, setCardReferences] = useState<string[]>([])
   const [externalReferences, setExternalReferences] = useState<Record<string, string[]>>({})
   const [externalGroups, setExternalGroups] = useState<Record<string, CanvasAssistantGroupReference[]>>({})
@@ -226,6 +227,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const updateDraft = (value: string) => {
     setConfirmationHint(undefined)
     setDraft(value)
+    if (!value.trim()) setRepairSource(undefined)
     pending.current = undefined
     setSendError(undefined)
   }
@@ -323,7 +325,12 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
               setFailedReplyId(turn_id)
               setSendError(assistantSendError(payload.error_code))
             }
-            setProgress(current => current?.request_id !== turn_id ? current : current.reply ? { ...current, streaming: false } : undefined)
+            if (!recovered && 'progress' in payload && payload.progress?.reply) {
+              setLiveRequest(payload)
+              setProgress(payload.progress)
+            } else {
+              setProgress(current => current?.request_id !== turn_id ? current : current.reply ? { ...current, streaming: false } : undefined)
+            }
           }
           if (type === 'turn.steered' || type === 'question.asked' || type === 'turn.completed' || type === 'turn.stopped') {
             setProgress(current => current?.request_id === turn_id ? undefined : current)
@@ -681,11 +688,12 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         .flatMap(group => group.edits.filter(edit => edit.target.kind !== 'add_canvas_card').map(edit => edit.card_id)))]
       : revision?.proposal ? [revision.proposal.card_id] : []
     const requestBody: CanvasAssistantMessage = resume ?? (enqueue && queuedRequest.current?.text === text
-      ? queuedRequest.current : !enqueue && pending.current?.text === text && pending.current.revises === revision?.request_id
+      ? queuedRequest.current : !enqueue && pending.current?.text === text && pending.current.revises === revision?.request_id && pending.current.repairs === repairSource
       ? pending.current : {
           text,
           request_id: crypto.randomUUID(),
           stream_reply: true,
+          repairs: repairSource,
           attachment_file_ids: referenceFiles.length ? referenceFiles.map(file => file.id) :
             revision?.attachments?.map(file => file.file_id) ?? [],
           revises: revision?.request_id,
@@ -724,6 +732,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     const consumeDraft = !resume || (replan && pending.current === resume && draft.trim() === text)
     pending.current = requestBody
     if (consumeDraft) {
+      setRepairSource(undefined)
       setDraft('')
       setReferenceFiles([])
       setCardReferences([])
@@ -789,6 +798,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       }
       if (consumeDraft && pending.current === requestBody) {
         setDraft(text)
+        setRepairSource(requestBody.repairs ?? undefined)
         setReferenceFiles(referenceFiles)
         setCardReferences(cardReferences)
         setReferenceGroups(referenceGroups)
@@ -989,6 +999,22 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             },
           ]} />
             {!!turn.attachments?.length && <CanvasAssistantEvidence attachments={turn.attachments} />}
+            {!!turn.proposal_issues?.length && <details open className="canvas-assistant-evidence">
+              <summary>{uiText('待修正的画布操作')}</summary>
+              <ul>{turn.proposal_issues.map((issue, index) => <li key={index}>
+                {issue.group != null && <>{uiText('第 {{group}} 组', { group: issue.group })} · </>}
+                {issue.operation != null && <>{uiText('第 {{operation}} 项', { operation: issue.operation })} · </>}
+                {issue.field && <code>{issue.field} · </code>}
+                {issue.message}
+                {issue.source_card && issue.target_card && <span> · {issue.source_card} → {issue.target_card}</span>}
+              </li>)}</ul>
+              <WorkbenchButton variant="quiet" disabled={!!runningId || sending || !!draftText || !!revising ||
+                !!referenceFiles.length || !!cardReferences.length || !!Object.keys(externalReferences).length} onClick={() => {
+                updateDraft(uiText('请修正未完成的画布操作。'))
+                setRepairSource(turn.request_id)
+                composer.current?.querySelector('textarea')?.focus()
+              }}>{uiText('修正未完成项')}</WorkbenchButton>
+            </details>}
           {!!turn.canvas_references?.length && <details className="canvas-assistant-evidence">
             <summary>{uiText('其他画布的只读引用')}</summary>
             <ul>{turn.canvas_references.map(ref => <li key={ref.canvas_id}>{ref.canvas_id} · {ref.groups?.map(group => group.name).join('、') || ref.card_ids.join('、')}</li>)}</ul>

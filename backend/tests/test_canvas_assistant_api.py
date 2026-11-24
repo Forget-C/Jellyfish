@@ -260,7 +260,8 @@ async def test_can_stop_request_before_first_assistant_reply(canvas_client, monk
 
 
 @pytest.mark.asyncio
-async def test_resending_interrupted_assistant_turn_continues_completed_tool_step(canvas_client, monkeypatch):
+@pytest.mark.parametrize('resume', [True, False])
+async def test_resending_interrupted_assistant_turn_continues_completed_tool_step(canvas_client, monkeypatch, resume):
     calls = []
     real_send = httpx.AsyncClient.send
 
@@ -302,10 +303,18 @@ async def test_resending_interrupted_assistant_turn_continues_completed_tool_ste
     history = (await canvas_client.get(assistant)).json()['data']
     assert history['turns'] == []
     assert history['pending_request']['request_id'] == command['request_id']
+    assert '模型未能完成回复' in history['pending_progress']['reply']
     assert history['pending_request']['context']['draft'] == command['context']['draft']
-    assert (await canvas_client.post(assistant, json=history['pending_request'])).json()['data']['reply'] == '已从中断处继续'
-    assert (await canvas_client.get(assistant)).json()['data']['pending_request'] is None
-    assert calls == [False, True, True]
+    follow_up = history['pending_request'] if resume else {**command, 'request_id': 'new-turn'}
+    assert (await canvas_client.post(assistant, json=follow_up)).json()['data']['reply'] == '已从中断处继续'
+    refreshed = (await canvas_client.get(assistant)).json()['data']
+    assert refreshed['pending_request'] is None
+    if resume:
+        assert calls == [False, True, True]
+    else:
+        assert [(turn['request_id']) for turn in refreshed['turns']] == ['resume-turn', 'new-turn']
+        assert '模型未能完成回复' in refreshed['turns'][0]['reply']
+        assert calls == [False, True, False, True]
 
 
 @pytest.mark.asyncio

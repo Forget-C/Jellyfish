@@ -15,6 +15,7 @@ export type CanvasAssistantPendingRequest = {
     context?: (CanvasAssistantDraftContext | null);
     revises?: (string | null);
     revises_field?: (CanvasAssistantFieldRevision | null);
+    repairs?: (string | null);
     canvas_references?: Array<CanvasAssistantCardReference>;
     attachment_file_ids?: Array<string>;
 };

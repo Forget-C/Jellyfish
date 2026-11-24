@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-from app.schemas.canvas_assistant_edit import CanvasAssistantApprovalAudit, CanvasAssistantProposal
+from app.schemas.canvas_assistant_edit import CanvasAssistantApprovalAudit, CanvasAssistantProposal, CanvasAssistantProposalIssue
 from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationRead, CanvasAssistantSkillUse
 from app.schemas.canvas_assistant_media import CanvasAssistantAttachment
 from app.schemas.canvas_assistant_subtasks import CanvasAssistantSubtask
@@ -96,6 +96,7 @@ class CanvasAssistantMessage(BaseModel):
     context: CanvasAssistantDraftContext | None = None
     revises: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')] | None = None
     revises_field: CanvasAssistantFieldRevision | None = None
+    repairs: str | None = Field(default=None, min_length=1, max_length=64, exclude_if=lambda value: value is None)
     canvas_references: list[CanvasAssistantCardReference] = Field(default_factory=list, max_length=3)
     attachment_file_ids: list[Annotated[str, StringConstraints(min_length=1, max_length=64)]] = Field(
         default_factory=list, max_length=4,
@@ -171,8 +172,10 @@ class CanvasAssistantExchange(BaseModel):
     model_id: str
     reply: str
     proposal: CanvasAssistantProposal | None = None
+    proposal_issues: list[CanvasAssistantProposalIssue] | None = None
     revises: str | None = None
     revises_field: CanvasAssistantFieldRevision | None = None
+    repairs: str | None = Field(default=None, min_length=1, max_length=64, exclude_if=lambda value: value is None)
     skills: list[CanvasAssistantSkillUse] | None = None
     subtasks: list[CanvasAssistantSubtask] | None = None
     automatic_approval: bool = False

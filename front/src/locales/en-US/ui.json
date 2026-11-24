@@ -1,4 +1,9 @@
 {
+  "请修正未完成的画布操作。": "Please fix the unfinished canvas operations.",
+  "待修正的画布操作": "Canvas operations to fix",
+  "第 {{group}} 组": "Group {{group}}",
+  "第 {{operation}} 项": "Operation {{operation}}",
+  "修正未完成项": "Fix unfinished operations",
   "模型及参数": "Model and parameters",
   "生成使用的素材": "Generation references",
   "核对新的生成输入": "Review changed generation input",

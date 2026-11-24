@@ -35,6 +35,12 @@ _STRUCTURED_BOUNDARY = re.compile(r'\{|(?m:^[ \t]*(?:[`]{1,3}|~{1,3}))')
 _PRIVATE_KEYS = re.compile(r'["\'](?:groups|delegations|tool_calls)["\']\s*:')
 
 
+def public_proposal_prefix(reply):
+    """Preserve prose the stream already exposed before the private envelope."""
+    boundary = _STRUCTURED_BOUNDARY.search(reply)
+    return reply[:boundary.start()].strip() if boundary else ''
+
+
 def reply_envelope(reply):
     """Extract protocol JSON for validation or raise on mixed private data."""
     boundary = _STRUCTURED_BOUNDARY.search(reply)

@@ -3,12 +3,13 @@
 from copy import copy
 from dataclasses import dataclass
 import hashlib
+import json
 from uuid import uuid4
 from typing import Annotated
 
 from fastapi import HTTPException
 from langchain_core.tools import ToolException, tool
-from pydantic import Field
+from pydantic import Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.generation_canvas import DesignField
@@ -17,9 +18,10 @@ from app.schemas.canvas_assistant import CanvasAssistantFieldRevision, CanvasAss
 from app.schemas.canvas_assistant_edit import (
     CanvasAssistantChange, CanvasAssistantEditConflict, CanvasAssistantEditGroup,
     CanvasAssistantApprovalAudit, CanvasAssistantEditTarget, CanvasAssistantEditText, CanvasAssistantFieldTarget,
-    CanvasAssistantProposal, CanvasAssistantProposalDecision, CanvasAssistantProposalResult,
+    CanvasAssistantProposal, CanvasAssistantProposalDecision, CanvasAssistantProposalIssue, CanvasAssistantProposalResult,
     CanvasAssistantRemovalTarget, CardTextEdit, DeleteCardEdit, DesignTextFieldEdit, DisconnectCardsEdit, ModelPromptSegmentEdit,
-    MovementFieldEdit, ProposedBatchCard, ProposedBatchField, ProposedBatchRemoval, ProposedCanvasBatch, ProposedEditGroup, ReferenceNameEdit, ReleaseBindingEdit,
+    MovementFieldEdit, ProposedBatchCard, ProposedBatchConnection, ProposedBatchField, ProposedBatchRemoval,
+    ProposedCanvasBatchGroup, ProposedEditGroup, ReferenceNameEdit, ReleaseBindingEdit,
     VideoDurationEdit, VideoPromptSegmentEdit,
 )
 from app.schemas.canvas_assistant_structure import (
@@ -108,6 +110,8 @@ class CanvasAssistantEditDraft:
         self.saved_cards = {card.id: card for card in saved_document.cards if card.id in self.cards}
         self.visible_document = visible_document or saved_document
         self.proposal: CanvasAssistantProposal | None = None
+        self.proposal_issues: list[CanvasAssistantProposalIssue] = []
+        self.repair_exclusions: set[tuple[str, str, str]] = set()
 
     @property
     def available(self) -> bool:
@@ -176,34 +180,126 @@ class CanvasAssistantEditDraft:
         propose_canvas_edit_groups.handle_validation_error = True
         return propose_canvas_edit_groups
 
-    def preview_batch(self, groups: ProposedCanvasBatch) -> CanvasAssistantProposal:
-        """Validate a mixed preview through the same catalog and scope used by approval."""
+    def preview_batch(self, groups: list) -> CanvasAssistantProposal | None:
+        """Preview independent groups atomically and report failures against original positions."""
         if self.proposal:
             raise ToolException('A preview has already been prepared for this turn')
+        self.proposal_issues = []
+        if not 1 <= len(groups) <= 8:
+            self.proposal_issues.append(CanvasAssistantProposalIssue(message='提案须包含 1 至 8 个审批组。'))
+            return None
+        parsed = {}
+        known_operations = {}
+        owners: dict[str, set[int]] = {}
+        components = {index: {index} for index in range(1, len(groups) + 1)}
+        for index, raw in enumerate(groups, start=1):
+            group_data = raw.model_dump() if isinstance(raw, ProposedCanvasBatchGroup) else raw
+            changes = group_data.get('changes') if isinstance(group_data, dict) else None
+            for position, change in enumerate(changes if isinstance(changes, list) else [], start=1):
+                if isinstance(change, dict) and change.get('kind') == 'add_card':
+                    data = change.get('change', change)
+                    reference = data.get('reference') if isinstance(data, dict) else None
+                    if isinstance(reference, str):
+                        owners.setdefault(reference, set()).add(index)
+                try:
+                    operation = ProposedCanvasBatchGroup.model_validate({'title': 'Operation', 'changes': [change]}).changes[0]
+                    known_operations.setdefault(index, []).append((position, operation))
+                except ValidationError:
+                    pass
+            try:
+                parsed[index] = ProposedCanvasBatchGroup.model_validate(group_data)
+            except ValidationError as error:
+                for issue in error.errors(include_input=False, include_context=False)[:8]:
+                    path = issue['loc']
+                    operation = path[1] + 1 if len(path) > 1 and path[0] == 'changes' and isinstance(path[1], int) else None
+                    field = '.'.join(str(part) for part in (path[2:] if operation else path))
+                    self.proposal_issues.append(CanvasAssistantProposalIssue(
+                        group=index, operation=operation, field=field, message=issue['msg'],
+                    ))
+        for index, operations in known_operations.items():
+            for position, op in operations:
+                if isinstance(op, ProposedBatchConnection):
+                    references = (op.source_card, op.target_card)
+                elif isinstance(op, ProposedBatchField):
+                    references = (op.change.card_id,)
+                else:
+                    continue
+                for reference in references:
+                    origins = owners.get(reference, set())
+                    if reference in self.cards or index in origins or not origins:
+                        continue
+                    if len(origins) != 1:
+                        self.proposal_issues.append(self._batch_issue(
+                            index, position, op, f'新卡引用 {reference} 对应多个审批组。',
+                        ))
+                        continue
+                    merged = components[index] | components[next(iter(origins))]
+                    for member in merged:
+                        components[member] = merged
         preview = []
         targets: set[tuple[str, str]] = set()
-        for number, group in enumerate(groups, start=1):
+        for first, members in components.items():
+            if first != min(members):
+                continue
+            if any(issue.group in members for issue in self.proposal_issues):
+                for member in sorted(members - {issue.group for issue in self.proposal_issues}):
+                    self.proposal_issues.append(CanvasAssistantProposalIssue(
+                        group=member, message='此组依赖同一审批单元中需要修正的操作。',
+                    ))
+                continue
+            operations = [(member, position, operation) for member in sorted(members)
+                          for position, operation in enumerate(parsed[member].changes, start=1)]
+            if len(members) > 1:
+                operations.sort(key=lambda item: not isinstance(item[2], ProposedBatchCard))
             local = copy(self)
             local.cards = dict(self.cards)
             local.saved_cards = dict(self.saved_cards)
             local.visible_document = self.visible_document.model_copy(deep=True)
             references: dict[str, str] = {}
             edits = []
-            for operation in group.changes:
-                change = self._batch_operation(local, operation, references)
-                key = change.card_id, change.target.model_dump_json(exclude={'connection_id'})
-                if key in targets:
-                    raise ToolException('Each proposed change must appear once')
-                targets.add(key)
-                edits.append(change)
-            if any(isinstance(edit.target, ConnectCardsTarget) for edit in edits):
-                try:
+            group_targets = set()
+            try:
+                for member, position, operation in operations:
+                    change = self._batch_operation(local, operation, references)
+                    key = change.card_id, change.target.model_dump_json(exclude={'connection_id'})
+                    if self._repair_identity(change) in self.repair_exclusions:
+                        raise ToolException('此操作已在原提案通过预演，修正请求只处理未完成项。')
+                    if key in targets or key in group_targets:
+                        raise ToolException('Each proposed change must appear once')
+                    group_targets.add(key)
+                    edits.append(change)
+                if any(isinstance(edit.target, ConnectCardsTarget) for edit in edits):
                     validate_graph(local.visible_document, self.visible_document)
-                except CanvasDomainError as error:
-                    raise ToolException(error.detail['message']) from error
-            preview.append(CanvasAssistantEditGroup(id=str(number), title=group.title, edits=edits))
-        self.proposal = CanvasAssistantProposal(**preview[0].edits[0].model_dump(), groups=preview)
+            except ToolException as error:
+                self.proposal_issues.append(self._batch_issue(member, position, operation, str(error)))
+            except CanvasDomainError as error:
+                self.proposal_issues.append(CanvasAssistantProposalIssue(group=first, message=error.detail['message']))
+            else:
+                targets.update(group_targets)
+                title = ' / '.join(parsed[member].title for member in sorted(members))
+                preview.append(CanvasAssistantEditGroup(id=str(first), title=title[:100], edits=edits))
+        if preview:
+            self.proposal = CanvasAssistantProposal(**preview[0].edits[0].model_dump(), groups=preview)
         return self.proposal
+
+    @staticmethod
+    def _repair_identity(change):
+        card_id = '' if isinstance(change.target, AddCanvasCardTarget) else change.card_id
+        return card_id, change.target.model_dump_json(exclude={'connection_id'}), change.after
+
+    def restrict_repair(self, proposal: CanvasAssistantProposal | None):
+        """Reject exact repeats of operations that already passed the original preview."""
+        if proposal:
+            changes = [change for group in proposal.groups for change in group.edits] if proposal.groups else [proposal]
+            self.repair_exclusions = {self._repair_identity(change) for change in changes}
+
+    @staticmethod
+    def _batch_issue(group, position, operation, message):
+        return CanvasAssistantProposalIssue(
+            group=group, operation=position, message=message,
+            source_card=operation.source_card if isinstance(operation, ProposedBatchConnection) else None,
+            target_card=operation.target_card if isinstance(operation, ProposedBatchConnection) else None,
+        )
 
     def _batch_operation(self, local, operation, references):
         if isinstance(operation, ProposedBatchField):
@@ -250,9 +346,15 @@ class CanvasAssistantEditDraft:
     def batch_tool(self):
         """Expose the unified operation as a typed read-only preview tool."""
         @tool
-        def propose_canvas_changes(groups: ProposedCanvasBatch) -> str:
+        def propose_canvas_changes(groups: list[ProposedCanvasBatchGroup | dict]) -> str:
             """Preview changes. Keep dependent changes together; connect new cards by their group reference."""
-            return self.preview_batch(groups).model_dump_json()
+            proposal = self.preview_batch(groups)
+            if not self.proposal_issues:
+                return proposal.model_dump_json()
+            return json.dumps({
+                'proposal': proposal.model_dump(mode='json') if proposal else None,
+                'proposal_issues': [issue.model_dump(mode='json') for issue in self.proposal_issues],
+            }, ensure_ascii=False)
 
         propose_canvas_changes.handle_tool_error = True
         propose_canvas_changes.handle_validation_error = True

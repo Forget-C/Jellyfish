@@ -11,6 +11,7 @@ import type { CanvasAssistantInstruction } from './CanvasAssistantInstruction';
 import type { CanvasAssistantLayout } from './CanvasAssistantLayout';
 import type { CanvasAssistantProgress } from './CanvasAssistantProgress';
 import type { CanvasAssistantProposal } from './CanvasAssistantProposal';
+import type { CanvasAssistantProposalIssue } from './CanvasAssistantProposalIssue';
 import type { CanvasAssistantQuestion } from './CanvasAssistantQuestion';
 import type { CanvasAssistantQuestionAnswer } from './CanvasAssistantQuestionAnswer';
 import type { CanvasAssistantReadContext } from './CanvasAssistantReadContext';
@@ -29,8 +30,10 @@ export type CanvasAssistantExchange = {
     model_id: string;
     reply: string;
     proposal?: (CanvasAssistantProposal | null);
+    proposal_issues?: (Array<CanvasAssistantProposalIssue> | null);
     revises?: (string | null);
     revises_field?: (CanvasAssistantFieldRevision | null);
+    repairs?: (string | null);
     skills?: (Array<CanvasAssistantSkillUse> | null);
     subtasks?: (Array<CanvasAssistantSubtask> | null);
     automatic_approval?: boolean;

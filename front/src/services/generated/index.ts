@@ -213,6 +213,7 @@ export type { CanvasAssistantPoint } from './models/CanvasAssistantPoint';
 export type { CanvasAssistantProgress } from './models/CanvasAssistantProgress';
 export type { CanvasAssistantProposal } from './models/CanvasAssistantProposal';
 export type { CanvasAssistantProposalDecision } from './models/CanvasAssistantProposalDecision';
+export type { CanvasAssistantProposalIssue } from './models/CanvasAssistantProposalIssue';
 export type { CanvasAssistantProposalResult } from './models/CanvasAssistantProposalResult';
 export type { CanvasAssistantQuestion } from './models/CanvasAssistantQuestion';
 export type { CanvasAssistantQuestionAnswer } from './models/CanvasAssistantQuestionAnswer';

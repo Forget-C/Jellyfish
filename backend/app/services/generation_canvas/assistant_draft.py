@@ -16,7 +16,7 @@ from app.schemas.canvas_assistant_draft import CanvasDraftSave, DraftAssistantMe
 from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, ConnectCardsTarget
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
-from app.services.generation_canvas.assistant import CanvasAssistant, MODEL_FAILED, MODEL_TIMEOUT, PROPOSAL_INVALID, PROPOSAL_RETRY_GUIDANCE
+from app.services.generation_canvas.assistant import CanvasAssistant, MODEL_FAILED, MODEL_FAILURE_REPLIES, MODEL_TIMEOUT, PROPOSAL_INVALID, PROPOSAL_RETRY_GUIDANCE, prepare_proposal_repair
 from app.services.generation_canvas.assistant_context import resolve_assistant_context, resolve_external_canvas_cards
 from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
 from app.services.generation_canvas.assistant_events import publish_events
@@ -73,21 +73,33 @@ class DraftCanvasAssistant(CanvasAssistant):
         referenced = await resolve_external_canvas_cards(self.store, canvas_id, command.canvas_references)
         text = (command.text + '\n\n以下是其他画布的只读参考，不得修改来源卡片。\n' + referenced
                 if referenced else command.text)
+        if command.repairs:
+            source = next((turn for turn in turns if turn.request_id == command.repairs), None)
+            if not source or not source.proposal_issues or not edit_draft or command.revises:
+                raise HTTPException(422, "Choose a failed proposal on this canvas to repair")
+            text += prepare_proposal_repair(edit_draft, source)
         content, attachments = await describe_assistant_media(
             text, command.attachment_file_ids, sources, capability=capability,
         )
         messages.append(HumanMessage(content=content))
-        async def complete(on_reply=None, on_phase=None):
-            reply, skills, observed = await self._reply(
-                client, messages, context, edit_draft, supports_tools=capability.tool_calling, structure_tool=structure_tool,
-                max_input_tokens=capability.max_input_tokens, on_reply=on_reply, on_phase=on_phase,
-            )
+        async def complete(on_reply=None, on_phase=None, partial_reply=lambda: ''):
+            try:
+                reply, skills, observed = await self._reply(
+                    client, messages, context, edit_draft, supports_tools=capability.tool_calling, structure_tool=structure_tool,
+                    max_input_tokens=capability.max_input_tokens, on_reply=on_reply, on_phase=on_phase,
+                )
+            except HTTPException as error:
+                if not isinstance(error.detail, str) or error.detail not in MODEL_FAILURE_REPLIES:
+                    raise
+                reply = '\n\n'.join(filter(None, [partial_reply(), MODEL_FAILURE_REPLIES[error.detail]]))
+                skills, observed = [], None
             if context is not None:
                 context.observed_card_ids = observed
             return CanvasAssistantExchange(request_id=command.request_id, text=command.text, context=context,
                 sequence=len(command.turns) + 1, model_id=model_id, reply=reply, attachments=attachments,
                 canvas_references=command.canvas_references or None,
-                skills=skills or None, proposal=edit_draft.proposal if edit_draft else None, revises=command.revises)
+                skills=skills or None, proposal=edit_draft.proposal if edit_draft else None, revises=command.revises,
+                proposal_issues=(edit_draft.proposal_issues or None) if edit_draft else None, repairs=command.repairs)
         if not command.stream_reply:
             return await complete()
         key = canvas_id, command.request_id
@@ -116,7 +128,7 @@ class DraftCanvasAssistant(CanvasAssistant):
             progress.phase = phase
             progress.phase_started_at[phase] = datetime.now(UTC)
 
-        task = asyncio.create_task(complete(publish, publish_phase))
+        task = asyncio.create_task(complete(publish, publish_phase, lambda: snapshot.turn.reply))
         record = snapshot, task, digest
         _draft_replies[key] = record
 
@@ -231,13 +243,14 @@ async def attach_draft_conversation(store, command: CanvasDraftSave, receipt: di
         audit = [{'source_id': turn.request_id, 'mode': 'manual', 'action': 'approve',
                   'outcome': 'applied', 'group_ids': approval.group_ids}] if approved else None
         store.db.add(CanvasAssistantTurn(canvas_id=canvas_id, request_id=turn.request_id, sequence=turn.sequence,
-            model_id=turn.model_id, text=turn.text, reply=turn.reply, revises=turn.revises,
+            model_id=turn.model_id, text=turn.text, reply=turn.reply, revises=turn.revises, repairs=turn.repairs,
             context=turn.context.model_dump(mode='json') if turn.context else None,
             skills=[skill.model_dump(mode='json') for skill in (turn.skills or [])],
             canvas_references=[item.model_dump(mode='json') for item in turn.canvas_references] if turn.canvas_references else None,
             attachments=[item.model_dump(mode='json') for item in (turn.attachments or [])
                          if item.file_id in sources],
-            proposal=proposal.model_dump(mode='json') if proposal else None, approval_audit=audit))
+            proposal=proposal.model_dump(mode='json') if proposal else None, approval_audit=audit,
+            proposal_issues=[issue.model_dump(mode='json') for issue in (turn.proposal_issues or [])] or None))
         exchange = CanvasAssistantExchange.model_validate({
             **turn.model_dump(mode='json'), 'proposal': proposal, 'approval_audit': audit,
         })

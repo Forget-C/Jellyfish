@@ -49,10 +49,12 @@ class CanvasAssistantTurn(Base):
     canvas_references: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     proposal: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     proposal_receipt: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    proposal_issues: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     approval_checkpoint: Mapped[bytes | None] = mapped_column(
         LargeBinary().with_variant(MEDIUMBLOB(), 'mysql'), nullable=True,
     )
     revises: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    repairs: Mapped[str | None] = mapped_column(String(64), nullable=True)
     revises_field: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     skills: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     subtasks: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)

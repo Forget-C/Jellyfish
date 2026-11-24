@@ -532,13 +532,10 @@ async def test_large_canvas_proposal_recovers_from_invalid_output(canvas_client,
     finally:
         released.set()
         failed = await sending
-    assert failed.status_code == 422
-    problem = failed.json()
-    assert (problem.get('message') or problem.get('detail')) == 'ASSISTANT_PROPOSAL_INVALID'
-    retried = await canvas_client.post(url, json=command)
-    assert retried.status_code == 200, retried.text
-    assert len(calls) == 2 and '上一份提案未通过校验' in calls[-1]['messages'][-1]['content']
-    turn = retried.json()['data']
+    assert failed.status_code == 200, failed.text
+    assert len(calls) == 2 and '上一份提案未通过校验' in str(calls[-1]['messages'][-1]['content'])
+    turn = failed.json()['data']
+    assert (await canvas_client.post(url, json=command)).json()['data'] == turn
     assert turn['reply'] == '请审批逐镜方案'
     assert turn['proposal']['state'] == 'pending'
     assert len(turn['proposal']['groups'][0]['edits']) == 59
@@ -555,3 +552,118 @@ async def test_large_canvas_proposal_recovers_from_invalid_output(canvas_client,
         assert approved.status_code == 200, approved.text
         saved = (await canvas_client.get(path + suffix)).json()['data']
         assert len(saved['document']['cards']) == len(before['document']['cards']) + 59
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures('assistant_edit_model')
+@pytest.mark.parametrize('surface', ['free', 'scene', 'draft', 'free-native'])
+@pytest.mark.parametrize('invalid', [False, True])
+async def test_batch_merges_references_and_preserves_independent_groups(canvas_client, monkeypatch, surface, invalid):
+    from uuid import uuid4
+    from tests.test_generation_canvas_api import seed_scene_canvas
+
+    native = surface == 'free-native'
+    async with canvas_client.canvas_sessions.begin() as db:
+        (await db.get(Model, 'canvas-text')).capability_profile = (
+            {'tool_calling': {'declaration': 'supported'}} if native else None
+        )
+    suffix = '?project_id=p' if surface == 'scene' else ''
+    if surface == 'draft':
+        path = f'/canvases/drafts/{uuid4()}'
+        canvas = (await canvas_client.get(path)).json()['data']
+    else:
+        created = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '依赖'})
+                   if surface == 'scene' else await canvas_client.post('/canvases', json={'name': '依赖'}))
+        canvas = created.json()['data']
+        path = f"/canvases/{canvas['id']}"
+    groups = []
+    for index, count in enumerate((7, 5, 7, 7, 7, 4), 1):
+        changes = [{'kind': 'add_card', 'reference': f'card-{index}-{n}',
+                    'card': {'kind': 'add_text_card', 'text': f'镜头 {index}-{n}'}}
+                   for n in range(count)]
+        groups.append({'title': f'镜头组 {index}', 'changes': changes})
+    groups[1]['changes'][0]['card'] = {'kind': 'add_model_card', 'modality': 'text', 'prompt': '预览'}
+    groups[1]['changes'].append({'kind': 'connect_cards', 'source_card': 'card-1-0', 'source_port': 'text',
+                                 'target_card': 'card-2-0', 'target_port': 'text'})
+    groups[5]['changes'][0]['card'] = {'kind': 'add_model_card', 'modality': 'text', 'prompt': '预览'}
+    groups[5]['changes'].append({'kind': 'connect_cards', 'source_card': 'card-6-1',
+                                 'source_port': 'image' if invalid else 'text',
+                                 'target_card': 'card-6-0', 'target_port': 'text'})
+    calls = 0
+    original = httpx.AsyncClient.send
+
+    async def respond(client, request, **kwargs):
+        nonlocal calls
+        if request.url.host != 'example.test':
+            return await original(client, request, **kwargs)
+        calls += 1
+        answer = {'role': 'assistant', 'content': json.dumps({'reply': '建议按镜头推进。', 'groups': groups})}
+        if native:
+            history = json.loads(request.content)['messages']
+            recent = history[max(i for i, message in enumerate(history) if message['role'] == 'user'):]
+            completed = {message['tool_call_id'] for message in recent if message['role'] == 'tool'}
+            if 'preview' in completed:
+                answer = {'role': 'assistant', 'content': '建议按镜头推进。'}
+            else:
+                name, identity, args = ('propose_canvas_changes', 'preview', {'groups': groups}) if 'read' in completed else (
+                    'read_canvas_context', 'read', {},
+                )
+                answer = {'role': 'assistant', 'tool_calls': [{
+                    'id': identity, 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(args)},
+                }]}
+        return httpx.Response(200, request=request, json={
+            'id': 'batch', 'object': 'chat.completion', 'created': 1, 'model': 'canvas-text',
+            'choices': [{'index': 0, 'finish_reason': 'tool_calls' if 'tool_calls' in answer else 'stop', 'message': answer}],
+        })
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    command = {'text': '请按镜头形成修改提案', 'request_id': 'partial',
+               'context': {'draft': canvas['document'], 'revision': max(canvas['revision'], 0), 'scope': 'canvas'}}
+    url = path + '/assistant' + suffix
+    sent = await canvas_client.post(url, json=command)
+    assert sent.status_code == 200, sent.text
+    turn = sent.json()['data']
+    assert '建议按镜头推进' in turn['reply']
+    assert [len(group['edits']) for group in turn['proposal']['groups']] == ([13, 7, 7, 7] if invalid else [13, 7, 7, 7, 5])
+    issues = turn.get('proposal_issues')
+    if invalid:
+        assert [(item['group'], item['operation'], item['source_card'], item['target_card']) for item in issues] == [
+            (6, 5, 'card-6-1', 'card-6-0'),
+        ]
+    else:
+        assert not issues
+    assert calls == (3 if native else 1)
+    if surface == 'draft':
+        return
+    history = (await canvas_client.get(url)).json()['data']
+    assert history['turns'][0]['proposal_issues'] == issues
+    assert (await canvas_client.post(url, json=command)).json()['data'] == turn
+    decision = {'decision_id': 'same-decision', 'action': 'approve', 'expected_revision': canvas['revision'],
+                'group_ids': ['1']}
+    approval_url = path + '/assistant/proposals/partial' + suffix
+    approved = await canvas_client.post(approval_url, json=decision)
+    assert approved.status_code == 200, approved.text
+    replay = await canvas_client.post(approval_url, json=decision)
+    assert replay.json()['data'] == approved.json()['data']
+    saved = (await canvas_client.get(path + suffix)).json()['data']['document']
+    assert len(saved['cards']) == len(canvas['document']['cards']) + 12
+    assert len(saved['edges']) == len(canvas['document']['edges']) + 1
+    assert calls == (3 if native else 1)
+    if invalid:
+        groups[:] = [
+            {'title': '重复操作', 'changes': [groups[0]['changes'][0]]},
+            {'title': '修正后的操作', 'changes': [
+                {'kind': 'add_card', 'reference': 'fixed', 'card': {'kind': 'add_text_card', 'text': '修正后的新镜头'}},
+            ]},
+        ]
+        state = (await canvas_client.get(path + suffix)).json()['data']
+        repair = await canvas_client.post(url, json={
+            **command, 'request_id': 'repair', 'text': '修正未完成项', 'repairs': 'partial',
+            'context': {'draft': state['document'], 'revision': state['revision'], 'scope': 'canvas'},
+        })
+        assert repair.status_code == 200, repair.text
+        repaired = repair.json()['data']
+        assert repaired['repairs'] == 'partial'
+        assert len(repaired['proposal']['groups']) == 1
+        assert repaired['proposal']['groups'][0]['edits'][0]['after'] == '修正后的新镜头'
+        assert repaired['proposal_issues'][0]['group'] == 1
+        assert calls == (6 if native else 2)

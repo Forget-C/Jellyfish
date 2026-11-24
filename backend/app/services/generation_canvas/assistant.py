@@ -28,7 +28,7 @@ from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, Canvas
                                           CanvasAssistantModelSelection, CanvasAssistantQuestion, CanvasAssistantQuestionAnswer,
                                           CanvasAssistantReadContext, CanvasAssistantSkillUse, CanvasAssistantEventPayload,
                                           CanvasAssistantQueueItem)
-from app.schemas.canvas_assistant_edit import CanvasAssistantProposal, TextCanvasBatchResponse
+from app.schemas.canvas_assistant_edit import CanvasAssistantProposal, CanvasAssistantProposalIssue
 from app.schemas.canvas_assistant_layout import CanvasAssistantLayout
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.assistant_budget import CONTEXT_LIMIT_ERROR, messages_within_budget, revision_subject
@@ -52,7 +52,7 @@ from app.services.generation_canvas.assistant_layout import CanvasAssistantLayou
 from app.services.generation_canvas.assistant_generation import (
     freeze_generation_basis, generation_authorization, read_generation, update_generation_for_decision,
 )
-from app.services.generation_canvas.assistant_stream import invoke_with_reply, reply_envelope, run_reply_stream, stop_reply_stream
+from app.services.generation_canvas.assistant_stream import invoke_with_reply, public_proposal_prefix, reply_envelope, run_reply_stream, stop_reply_stream
 from app.services.generation_canvas.assistant_structure import structural_preview_tool
 from app.services.generation_canvas.assistant_media import (
     describe_assistant_media, resolve_assistant_media, retain_assistant_media,
@@ -72,6 +72,10 @@ TURN_LEASE_SECONDS = 120
 PROPOSAL_INVALID = 'ASSISTANT_PROPOSAL_INVALID'
 MODEL_TIMEOUT = 'ASSISTANT_MODEL_TIMEOUT'
 MODEL_FAILED = 'ASSISTANT_MODEL_FAILED'
+MODEL_FAILURE_REPLIES = {
+    MODEL_TIMEOUT: '助手处理超时，可以发送新消息继续本轮未完成的工作。',
+    MODEL_FAILED: '模型未能完成回复，可以发送新消息继续。',
+}
 PROPOSAL_RETRY_GUIDANCE = (
     '上一份提案未通过校验。请重新生成，逐项检查操作类型、必填字段、画布和端口规则，'
     '以及同组引用是否先创建再使用。最多 8 组，按依赖划分并保持各组能独立审批。'
@@ -141,6 +145,7 @@ class CanvasAssistant:
             pending_question=session.pending_request.get('question') if pending and session else None,
             pending_progress={
                 **progress, 'error_code': session.pending_request.get('error_code'),
+                'reply': session.pending_request.get('failure_reply') or progress.get('reply'),
                 'streaming': bool(session.pending_until and session.pending_until > datetime.now(UTC).replace(tzinfo=None)),
             } if pending and session and (progress := session.pending_request.get('progress')) else None,
             pending_instructions=session.pending_request.get('instructions', []) if pending and session else [],
@@ -233,7 +238,8 @@ class CanvasAssistant:
         session.sequence += 1
         turn = CanvasAssistantTurn(
             canvas_id=session.canvas_id, request_id=source_id, sequence=session.sequence, text=command['text'],
-            model_id=pending['model_id'], reply=(pending.get('progress') or {}).get('reply') or '', stopped=True, context=pending['context'], revises=command['revises'],
+            model_id=pending['model_id'], reply=pending.get('failure_reply') or (pending.get('progress') or {}).get('reply') or '',
+            stopped=True, context=pending['context'], revises=command['revises'], repairs=command.get('repairs'),
             instructions=pending.get('instructions'), revises_field=command.get('revises_field'),
             attachments=[{'file_id': file_id, 'observation': 'unavailable'} for file_id in command['attachment_file_ids']],
         )
@@ -452,12 +458,19 @@ class CanvasAssistant:
             attached_ids = [attachment['file_id'] for attachment in (previous.attachments or [])]
             same_revision = (previous.revises, previous.revises_field) == (command.revises, field_reference)
             if (previous.text != command.text or without_observed_cards(previous.context) != context
-                    or not same_revision or attached_ids != command.attachment_file_ids
+                    or not same_revision or previous.repairs != command.repairs or attached_ids != command.attachment_file_ids
                     or (previous.canvas_references or []) != card_references):
                 raise HTTPException(409, 'Request already used for a different assistant message')
             return await self._exchange(previous, session.approval_mode)
 
         revised_proposal = await self._revised_proposal(canvas_id, command.revises, edit_draft)
+        repair_note = ''
+        if command.repairs:
+            source = await self.db.get(CanvasAssistantTurn, (canvas_id, command.repairs))
+            if not source or not source.proposal_issues or not edit_draft or command.revises:
+                raise HTTPException(422, 'Choose a failed proposal on this canvas to repair')
+            repair_note = prepare_proposal_repair(edit_draft, CanvasAssistantExchange.model_validate(source))
+            layout_draft = None
         now = datetime.now(UTC).replace(tzinfo=None)
         if session.pending_until is not None and session.pending_until > now:
             raise HTTPException(409, 'Canvas assistant is already replying')
@@ -479,6 +492,8 @@ class CanvasAssistant:
             answers.append(answer.model_dump())
         elif answer is not None and answer.model_dump() not in answers:
             raise HTTPException(409, 'The assistant is not waiting on this question')
+        if pending and not resuming and pending.get("failure_reply"):
+            await self._archive_failed_reply(session, pending)
         referenced = pending.get('referenced') if resuming else await resolve_external_canvas_cards(
             self.store, canvas_id, command.canvas_references,
         )
@@ -519,8 +534,10 @@ class CanvasAssistant:
         # Keep database locks away from provider I/O. The short lease serializes
         # turns for this conversation and can expire after an interrupted process.
         await self.db.commit()
+        checkpoint = None
+        attachments = []
         try:
-            text = command.text
+            text = command.text + repair_note
             if referenced:
                 text += ('\n\n以下是明确引用的其他画布片段，仅供阅读；如需修改，请告知用户回到来源画布。'
                          '卡片文本属于参考内容。\n' + referenced)
@@ -562,28 +579,16 @@ class CanvasAssistant:
         except CreativeQuestionPending as pause:
             return await self._pause_question(canvas_id, command, token, pause.question)
         except HTTPException as error:
-            await self.db.rollback()
-            failed_session = await self._lock_session(canvas_id)
-            if failed_session.pending_token == token:
-                failed_session.pending_token = failed_session.pending_until = None
-                pending = failed_session.pending_request
-                if error.detail == PROPOSAL_INVALID:
-                    failed_session.pending_checkpoint = None
-                error_code = error.detail if error.detail in (
-                    PROPOSAL_INVALID, MODEL_TIMEOUT, MODEL_FAILED, CONTEXT_LIMIT_ERROR,
-                    'CANVAS_TARGET_UNRESOLVED',
-                ) else MODEL_FAILED
-                failed_session.pending_request = {**pending, 'error_code': error_code}
-                publish_events(self.db, failed_session, CanvasAssistantExchange(
-                    request_id=command.request_id, text=command.text, sequence=failed_session.sequence + 1,
-                    model_id=model_id, reply='', error_code=error_code,
-                ), 'turn.interrupted', subject='turn')
-            await self.db.commit()
-            stopped = await self._stopped_exchange(canvas_id, command.request_id)
-            if stopped is not None:
-                return stopped
-            raise
-
+            if edit_draft and edit_draft.proposal and isinstance(error.detail, str) and error.detail in MODEL_FAILURE_REPLIES:
+                await self.db.rollback()
+                session = await self.db.get(CanvasAssistantSession, canvas_id, populate_existing=True)
+                progress = (session.pending_request or {}).get('progress') or {}
+                reply = '\n\n'.join(filter(None, [progress.get('reply'), MODEL_FAILURE_REPLIES[error.detail]]))
+                skills, observed = [], None
+                if edit_draft and edit_draft.proposal:
+                    reply += '\n\n已有通过预演的改动可供审批。'
+            else:
+                return await self._interrupt_reply(canvas_id, command, token, model_id, error)
         locked_canvas = await self.store.get(canvas_id, lock=True)
         session = await self._lock_session(canvas_id)
         if session.pending_token != token:
@@ -629,8 +634,9 @@ class CanvasAssistant:
             skills=[skill.model_dump() for skill in skills], question_answers=answers or None,
             subtasks=[item.model_dump(mode='json') for item in delegation.results.values()] if delegation else None,
             instructions=instructions or None, revises_field=field_reference, canvas_references=card_references or None,
-            proposal=proposal.model_dump(mode='json') if proposal else None, revises=command.revises,
-            approval_checkpoint=checkpoint.snapshot() if proposal and checkpoint.waiting_approval else None,
+            proposal=proposal.model_dump(mode='json') if proposal else None, revises=command.revises, repairs=command.repairs,
+            proposal_issues=[issue.model_dump(mode='json') for issue in edit_draft.proposal_issues] or None if edit_draft else None,
+            approval_checkpoint=checkpoint.snapshot() if proposal and checkpoint and checkpoint.waiting_approval else None,
             layout=layout_draft.proposal.model_dump(mode='json') if layout_draft and layout_draft.proposal else None,
         )
         self.db.add(turn)
@@ -649,6 +655,54 @@ class CanvasAssistant:
             publish_events(self.db, session, exchange, 'proposal.created')
         await complete_queued_turn(self.db, session, turn.request_id)
         return exchange
+
+    async def _archive_failed_reply(self, session, pending):
+        """Keep the failed round in history when the user starts a different request."""
+        command = CanvasAssistantMessage.model_validate(pending['command'])
+        session.sequence += 1
+        turn = CanvasAssistantTurn(
+            canvas_id=session.canvas_id, request_id=command.request_id, sequence=session.sequence,
+            text=command.text, model_id=pending['model_id'], reply=pending['failure_reply'],
+            context=pending.get('context'), revises=command.revises, repairs=command.repairs,
+            revises_field=command.revises_field.model_dump() if command.revises_field else None,
+            canvas_references=[item.model_dump(mode='json') for item in command.canvas_references] or None,
+            attachments=[{'file_id': file_id, 'observation': 'unavailable'} for file_id in command.attachment_file_ids],
+            instructions=pending.get('instructions'),
+        )
+        self.db.add(turn)
+        await self.db.flush()
+        publish_events(self.db, session, await self._exchange(turn), 'turn.completed')
+        await complete_queued_turn(self.db, session, turn.request_id)
+
+    async def _interrupt_reply(self, canvas_id, command, token, model_id, error):
+        """Release a failed execution while retaining data needed for resumption."""
+        await self.db.rollback()
+        failed_session = await self._lock_session(canvas_id)
+        if failed_session.pending_token == token:
+            failed_session.pending_token = failed_session.pending_until = None
+            pending = failed_session.pending_request
+            if error.detail == PROPOSAL_INVALID:
+                failed_session.pending_checkpoint = None
+            error_code = error.detail if error.detail in (
+                PROPOSAL_INVALID, MODEL_TIMEOUT, MODEL_FAILED, CONTEXT_LIMIT_ERROR,
+                'CANVAS_TARGET_UNRESOLVED',
+            ) else MODEL_FAILED
+            progress = pending.get('progress') or {'request_id': command.request_id, 'model_id': model_id}
+            failure_reply = '\n\n'.join(filter(None, [
+                progress.get('reply'), MODEL_FAILURE_REPLIES.get(error_code),
+            ]))
+            failed_session.pending_request = {**pending, 'error_code': error_code, 'progress': progress,
+                                              'failure_reply': failure_reply}
+            publish_events(self.db, failed_session, CanvasAssistantExchange(
+                request_id=command.request_id, text=command.text, sequence=failed_session.sequence + 1,
+                model_id=model_id, reply=failure_reply, error_code=error_code,
+                progress={**progress, 'reply': failure_reply, 'streaming': False, 'error_code': error_code},
+            ), 'turn.interrupted', subject='turn')
+        await self.db.commit()
+        stopped = await self._stopped_exchange(canvas_id, command.request_id)
+        if stopped is not None:
+            return stopped
+        raise error
 
     async def _pause_question(self, canvas_id, command, token, question):
         session = await self._lock_session(canvas_id)
@@ -817,6 +871,8 @@ class CanvasAssistant:
                          '等待用户确认和编辑器回执，禁止提议期间声称已完成。')
         if checkpoint and (context or used_skills):
             await checkpoint.report_progress(skills=list(used_skills.values()))
+        if supports_tools and edit_draft and edit_draft.repair_exclusions:
+            tools = [entry for entry in tools if entry.name not in PROPOSAL_TOOLS or entry.name == 'propose_canvas_changes']
         middleware = [canvas_tools_only({entry.name for entry in tools}, max_input_tokens)]
         if on_phase and supports_tools:
             @wrap_tool_call
@@ -828,13 +884,12 @@ class CanvasAssistant:
             middleware.append(report_proposal_validation)
         if checkpoint is not None and edit_draft is not None and not planning:
             middleware.append(wait_for_canvas_approval)
-        agent = create_deep_agent(
-            model=client, middleware=middleware, tools=tools,
-            checkpointer=checkpoint,
-            system_prompt=CANVAS_ASSISTANT_PROMPT + guidance + professional,
-        )
+        system_prompt = CANVAS_ASSISTANT_PROMPT + guidance + professional
+        agent = create_deep_agent(model=client, middleware=middleware, tools=tools,
+                                  checkpointer=checkpoint, system_prompt=system_prompt)
         if on_phase:
             await on_phase('waiting_model')
+        deadline = asyncio.get_running_loop().time() + MODEL_DEADLINE_SECONDS
         try:
             async with asyncio.timeout(MODEL_DEADLINE_SECONDS):
                 if checkpoint is None:
@@ -851,10 +906,20 @@ class CanvasAssistant:
                 raise HTTPException(504, MODEL_TIMEOUT) from exc
             raise HTTPException(502, MODEL_FAILED) from exc
         history = state['messages']
-        if supports_tools and context is not None and not any(isinstance(message, ToolMessage) and message.name == 'read_canvas_context'
-                                           for message in history):
-            raise HTTPException(502, MODEL_FAILED)
-        reply = reply_envelope(history[-1].text.strip())
+        if checkpoint is None:
+            _restore_tool_receipts(history, used_skills, edit_draft, layout_draft)
+        if supports_tools and context is not None and not any(
+            isinstance(message, ToolMessage) and message.name == 'read_canvas_context' and message.status == 'success'
+            for message in history
+        ):
+            if edit_draft:
+                edit_draft.proposal = None
+            if layout_draft:
+                layout_draft.proposal = None
+            return '助手未能读取本轮画布上下文，尚未生成可审批的修改。', list(used_skills.values()), None
+        raw_reply = history[-1].text.strip()
+        reply = reply_envelope(raw_reply)
+        prefix = public_proposal_prefix(raw_reply) if reply.startswith('{') else ''
         if not reply:
             raise HTTPException(502, MODEL_FAILED)
         if delegation and not supports_tools and reply.startswith('{'):
@@ -890,24 +955,48 @@ class CanvasAssistant:
                 reply = reply_envelope(synthesis['messages'][-1].text.strip())
                 if not reply:
                     raise HTTPException(502, MODEL_FAILED)
-        if reply.startswith('{'):
+        structured_reply = reply.startswith('{')
+        if structured_reply:
             if on_phase:
                 await on_phase('validating_proposal')
             if supports_tools or edit_draft is None or planning:
-                raise HTTPException(422, PROPOSAL_INVALID)
-            try:
-                structured = TextCanvasBatchResponse.model_validate_json(reply)
-                edit_draft.preview_batch(structured.groups)
-                reply = structured.reply
-            except (ValidationError, ToolException) as exc:
-                logger.info('Canvas assistant proposal rejected: %s', type(exc).__name__)
-                raise HTTPException(422, PROPOSAL_INVALID) from exc
-        if write_plan or continue_plan:
+                return "\n\n".join(filter(None, [prefix, '本轮收到无法用于画布预演的输出，尚未写入画布。'])), list(used_skills.values()), None
+            reply = _preview_text_reply(edit_draft, reply)
+            remaining = deadline - asyncio.get_running_loop().time()
+            if not edit_draft.proposal and edit_draft.proposal_issues and remaining > 0:
+                feedback = json.dumps([issue.model_dump(mode='json') for issue in edit_draft.proposal_issues], ensure_ascii=False)
+                correction = HumanMessage(content=PROPOSAL_RETRY_GUIDANCE + '\n工具回执：' + feedback)
+                try:
+                    if on_phase:
+                        await on_phase('waiting_model')
+                    async with asyncio.timeout(min(remaining, 15)):
+                        repair = create_deep_agent(model=client, middleware=[middleware[0]], system_prompt=system_prompt)
+                        fixed = await invoke_with_reply(repair, {'messages': [*messages, correction]},
+                                                        None, on_reply, on_phase=on_phase)
+                    candidate = reply_envelope(fixed['messages'][-1].text.strip())
+                    if candidate.startswith('{'):
+                        if on_phase:
+                            await on_phase('validating_proposal')
+                        reply = _preview_text_reply(edit_draft, candidate) or reply
+                    elif candidate:
+                        reply = candidate
+                except Exception as error:
+                    logger.info('Canvas assistant repair ended: %s', type(error).__name__)
+        if prefix and prefix != reply:
+            reply = '\n\n'.join(filter(None, [prefix, reply]))
+        if edit_draft and edit_draft.proposal_issues:
+            if not reply:
+                reply = '本轮提案未通过预演，尚未写入画布。'
+        elif write_plan or continue_plan:
             if (edit_draft and edit_draft.proposal) or (layout_draft and layout_draft.proposal):
-                if write_plan:
+                if write_plan and not prefix:
                     reply = '已准备提案，请核对待审批的改动。'
+                elif not reply:
+                    reply = '已准备可审批的画布修改。'
             else:
                 reply = '本轮没有生成可审批的修改提案，也未写入画布。请补充要写入的内容，或指定需要修改的卡片。'
+        if not reply:
+            reply = '本轮已结束，尚未写入画布。'
         observed = None
         if context is not None:
             coverage = read_context_coverage(history) if supports_tools else read_text_context_coverage(history)
@@ -1009,18 +1098,56 @@ def text_context_for_budget(messages, context, cards, page_size, available, syst
     raise HTTPException(422, CONTEXT_LIMIT_ERROR)
 
 
+def prepare_proposal_repair(draft, source):
+    """Bind a new, independently approved repair to the original diagnostics and preview."""
+    draft.restrict_repair(source.proposal)
+    blocked = [issue.model_dump(mode='json') for issue in source.proposal_issues]
+    return ('\n\n只修正原轮次中以下未通过预演的操作。已通过预演的组保留在原轮次。'
+            '如果需要引用尚未写入的卡片，请请求用户先审批对应组。原请求：' + source.text
+            + '\n故障回执：' + json.dumps(blocked, ensure_ascii=False))
+
+
+def _preview_text_reply(draft, raw):
+    """Run text-model output through the same operation validator as tool calls."""
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        payload = None
+    if not isinstance(payload, dict) or not isinstance(payload.get('groups'), list):
+        draft.proposal_issues = [CanvasAssistantProposalIssue(message='提案格式无法解析，未生成可审批的修改。')]
+    else:
+        draft.preview_batch(payload['groups'])
+    reply = payload.get('reply') if isinstance(payload, dict) else None
+    if isinstance(reply, str) and not reply_envelope(reply.strip()).startswith('{'):
+        return reply.strip()
+    return ''
+
+
 def _restore_tool_receipts(messages, skills, edits, layout):
     """Recreate in-memory tool receipts when resuming a completed read-only step."""
     for message in messages:
-        if not isinstance(message, ToolMessage) or message.status != 'success' or not isinstance(message.content, str):
+        if not isinstance(message, ToolMessage) or not isinstance(message.content, str):
             continue
         try:
+            if message.status != 'success':
+                if edits and message.name in PROPOSAL_TOOLS:
+                    issue = CanvasAssistantProposalIssue(message=message.content[:500])
+                    if issue not in edits.proposal_issues:
+                        edits.proposal_issues.append(issue)
+                continue
             if message.name == 'load_canvas_skill':
                 skill = CanvasAssistantSkillUse.model_validate_json(message.content)
                 skills[skill.id] = skill
             elif edits and message.name in PROPOSAL_TOOLS:
-                edits.proposal = CanvasAssistantProposal.model_validate_json(message.content)
+                receipt = json.loads(message.content)
+                if isinstance(receipt, dict) and 'proposal_issues' in receipt:
+                    edits.proposal_issues = [CanvasAssistantProposalIssue.model_validate(issue) for issue in receipt['proposal_issues']]
+                    if receipt['proposal']:
+                        edits.proposal = CanvasAssistantProposal.model_validate(receipt['proposal'])
+                else:
+                    edits.proposal = CanvasAssistantProposal.model_validate(receipt)
+                    edits.proposal_issues = []
             elif layout and message.name == 'propose_canvas_layout':
                 layout.proposal = CanvasAssistantLayout.model_validate_json(message.content)
-        except ValidationError:
+        except ValueError:
             continue
