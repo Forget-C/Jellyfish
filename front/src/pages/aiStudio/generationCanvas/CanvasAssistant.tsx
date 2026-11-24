@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SetStateAction } from 'react'
-import { ArrowUpOutlined, CommentOutlined, CloseOutlined } from '@ant-design/icons'
-import { Alert, Input, Select, Spin } from 'antd'
+import { ArrowUpOutlined, CommentOutlined, CloseOutlined, StopOutlined } from '@ant-design/icons'
+import { Alert, Input, Select, Spin, Typography } from 'antd'
 import { XMarkdown } from '@ant-design/x-markdown'
-import { Sender, ThoughtChain } from '@ant-design/x'
+import { Sender, Suggestion, Think, ThoughtChain } from '@ant-design/x'
 import { WorkbenchConversation } from '../../../components/workbench/WorkbenchConversation'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasDocument, CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantFieldRevision, CanvasAssistantGroupReference, CanvasAssistantHistory, CanvasAssistantInstruction, CanvasAssistantLayout, CanvasAssistantMessage, CanvasAssistantProgress, CanvasAssistantQuestion, CanvasAssistantQueueItem, FileRead, ModelRead } from '../../../services/generated'
 import { AssistantEditGroups, AssistantProposal } from './AssistantProposal'
+import { AssistantMarkdownTable } from './AssistantMarkdownTable'
 import { AssistantLayout } from './AssistantLayout'
 import type { AssistantLayoutOutcome } from './assistantLayoutEditor'
 import { AssistantGeneration } from './AssistantGeneration'
@@ -163,7 +164,16 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     ? { ...liveRequest, sequence: 0, model_id: progress.model_id, reply: progress.reply } : undefined
   const displayedTurns = liveTurn ? [...(turns ?? []), liveTurn] : turns
   const runningId = activeRequestId || steeringFor || draftStreamId ||
-    (progress?.streaming && !pendingServerRequest ? progress.request_id : undefined)
+    (progress?.streaming && !pendingQuestion ? progress.request_id : undefined)
+  const draftText = draft.trim()
+  const approvalIntent = confirmationKind(draftText)
+  const supplementing = !!runningId && !localDraft && !pendingQuestion && !steeringFor && stopping !== runningId && !approvalIntent
+  const showStop = !!runningId && !draftText
+  const sendLabel = uiText(supplementing ? '发送补充' : '发送消息')
+  const canSend = !!draftText && !!turns && !draftPromoting && !draftStreamId &&
+    !stopping && !savingModel && !savingApproval && !uploadingReference && !referenceIsMissing &&
+    (!pendingQuestion || !!approvalIntent) &&
+    (runningId ? supplementing || (!!approvalIntent && approvalIntent !== 'revise') : !sending)
   const panelId = 'canvas-assistant-' + canvasId
   const applySnapshot = useCallback((data: CanvasAssistantHistory, epoch: number) => {
     if (mutationEpoch.current !== epoch) return false
@@ -452,7 +462,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         draftingAssistantReply.delete(canvasId)
         stoppedRequest.current = sourceId
         activeRequest.current?.cancel()
-        setDraft('')
         setProgress(undefined)
         return
       }
@@ -461,6 +470,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       setTurns(current => current?.some(turn => turn.request_id === sourceId)
         ? current.map(turn => turn.request_id === sourceId ? data : turn) : [...(current || []), data])
       setPendingServerRequest(request => request?.request_id === sourceId ? undefined : request)
+      setProgress(current => current?.request_id === sourceId ? undefined : current)
       if (pendingServerRequest?.request_id === sourceId) setPendingQuestion(undefined)
       if (pendingServerRequest?.request_id === sourceId || activeRequestId === sourceId || steeringFor === sourceId) {
         setPendingInstructions([])
@@ -469,14 +479,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         stoppedRequest.current = sourceId
         activeRequest.current?.cancel()
         pending.current = undefined
-        setDraft('')
-        setReferenceFiles([])
         setRevising(undefined)
         setRevisingField(undefined)
-        setCardReferences([])
-        setReferenceGroups([])
-        setExternalReferences({})
-        setExternalGroups({})
       }
       if (revising?.request_id === sourceId) {
         setRevising(undefined)
@@ -565,9 +569,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     const text = (resume?.text ?? draft).trim()
     if (draftStreamId || draftPromoting || (enqueue && queueBusy) || savingModel || savingApproval || uploadingReference || !turns || !text) return
     const intent = resume || enqueue ? undefined : confirmationKind(text)
-    const replyInProgress = sendingNow.current || !!steeringFor
+    const replyInProgress = sendingNow.current || !!runningId
     if (!enqueue && replyInProgress && !intent) {
-      if (!localDraft && !resume && activeRequestId && !pendingQuestion && !steeringFor) await steer(activeRequestId, text)
+      if (!localDraft && !resume && runningId && supplementing) await steer(runningId, text)
       return
     }
     if (replyInProgress && intent === 'revise') return
@@ -679,6 +683,14 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       return
     }
     pending.current = requestBody
+    if (!resume) {
+      setDraft('')
+      setReferenceFiles([])
+      setCardReferences([])
+      setReferenceGroups([])
+      setExternalReferences({})
+      setExternalGroups({})
+    }
     historyPosition.current.follow = true
     sendingNow.current = true
     setSending(true)
@@ -686,7 +698,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     setLiveRequest(requestBody)
     if (localDraft) {
       draftingAssistantReply.add(canvasId)
-      writeDraftAssistant(canvasId, { live: { id: requestBody.request_id } })
+      writeDraftAssistant(canvasId, { live: { id: requestBody.request_id }, references: [] })
       setDraftStreamId(requestBody.request_id)
     }
     try {
@@ -711,12 +723,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       } else setTurns(current => appendExchange(current || [], turn))
       setRevising(undefined)
       setRevisingField(undefined)
-      setDraft(current => current.trim() === text ? '' : current)
-      setReferenceFiles([])
-      setCardReferences([])
-      setReferenceGroups([])
-      setExternalReferences({})
-      setExternalGroups({})
       pending.current = undefined
       if (!turn.question) {
         setPendingQuestion(undefined)
@@ -739,6 +745,15 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         const epoch = mutationEpoch.current
         const history = await Canvases.canvasAssistantHistory({ canvasId, projectId }).catch(() => undefined)
         if (history?.data && applySnapshot(history.data, epoch) && history.data.pending_instructions?.length) return
+      }
+      if (!resume && pending.current === requestBody) {
+        setDraft(text)
+        setReferenceFiles(referenceFiles)
+        setCardReferences(cardReferences)
+        setReferenceGroups(referenceGroups)
+        setExternalReferences(externalReferences)
+        setExternalGroups(externalGroups)
+        if (localDraft) writeDraftAssistant(canvasId, { references: referenceFiles })
       }
       const detail = error instanceof ApiError ? error.body?.message ?? error.body?.detail : undefined
       setSendError(detail === 'ASSISTANT_TOOL_CALLING_REQUIRED' ? 'tools'
@@ -861,10 +876,27 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     : selectedCards.length ? ['帮我优化这张卡的提示词', '帮我看看选中的素材适合怎么用']
       : cards.length ? ['帮我梳理画布上的素材和生成方向', '帮我检查当前画布的提示词']
         : ['帮我构思一张起始画面', '帮我拟一版图片生成提示词']
+  const openDrawer = () => {
+    setHistoryError(false)
+    setOpen(true)
+    const cardId = selectedCards[0]
+    if (!cardId || !window.matchMedia('(min-width: 801px)').matches) return
+    requestAnimationFrame(() => {
+      const graph = panel.current?.closest('.generation-stage')?.querySelector('.generation-graph')
+      const card = graph?.querySelector('[data-card-id="' + CSS.escape(cardId) + '"]')
+      if (graph && card && card.getBoundingClientRect().right > graph.getBoundingClientRect().right) onLocate(cardId)
+    })
+  }
+  const fillSuggestion = (text: string) => {
+    updateDraft(text)
+    composer.current?.querySelector('textarea')?.focus()
+  }
+  const copyMessage = (text: string) => <Typography.Text className="canvas-assistant-copy"
+    copyable={{ text, tooltips: [uiText('复制正文'), uiText('正文已复制')] }} />
   return <div className="canvas-assistant-dock" data-open={open}>
     <WorkbenchIconButton ref={trigger} label={uiText(open ? "收起画布助手" : "打开画布助手")} icon={<CommentOutlined />}
       aria-expanded={open} aria-controls={open ? panelId : undefined}
-      onClick={() => { if (open) close(); else { setHistoryError(false); setOpen(true) } }} />
+      onClick={open ? close : openDrawer} />
     {open && <aside ref={panel} id={panelId} className="canvas-assistant-panel" tabIndex={-1} aria-label={uiText("画布助手")}
       onKeyDown={event => {
         if (event.key === 'Escape' && !event.nativeEvent.isComposing && !(event.target instanceof HTMLElement && event.target.getAttribute('aria-expanded') === 'true')) {
@@ -873,14 +905,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         }
       }}>
       <header className="canvas-assistant-header">
-        <div><strong>{uiText("画布助手")}</strong><small>{uiText(storyboard ? "分镜画布" : "自由画布")}</small></div>
-        {!localDraft && <Select aria-label={uiText("审批模式")} value={automaticApproval ? 'automatic' : 'manual'}
-          disabled={sending || savingApproval || !turns} popupMatchSelectWidth={false}
-          onChange={value => { void chooseApproval(value === 'automatic') }}
-          options={[
-            { value: 'manual', label: uiText("手动审批") },
-            { value: 'automatic', label: uiText("自动审批明确请求") },
-          ]} />}
+        <strong>{uiText(storyboard ? '分镜画布助手' : '自由画布助手')}</strong>
         <WorkbenchIconButton label={uiText("关闭画布助手")} icon={<CloseOutlined />} variant="quiet" onClick={close} />
       </header>
       <div ref={history} className="canvas-assistant-history" role="log" aria-live="polite" onScroll={event => {
@@ -892,10 +917,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         {approvalError && <p role="alert">{uiText("无法完成自动审批，请核对当前设置和修改建议")}</p>}
         {turns?.length === 0 && !pendingServerRequest && !sending && !draft.trim() &&
           <div className="canvas-assistant-starters">
-            {starters.map(starter => <WorkbenchButton key={starter} onClick={() => {
-              updateDraft(uiText(starter))
-              composer.current?.querySelector('textarea')?.focus()
-            }}>{uiText(starter)}</WorkbenchButton>)}
+            {starters.map(starter => <WorkbenchButton key={starter} onClick={() => fillSuggestion(uiText(starter))}>{uiText(starter)}</WorkbenchButton>)}
           </div>}
         {historyError && <Alert type="error" message={uiText("暂时无法读取助手对话")}
           action={<WorkbenchButton onClick={() => { setHistoryError(false); setRetryLoad(value => value + 1) }}>{uiText("重试")}</WorkbenchButton>} />}
@@ -906,7 +928,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             {
               key: 'user', role: 'user', placement: 'end', variant: 'borderless',
               classNames: { content: 'canvas-assistant-question' },
-              styles: { content: { background: 'var(--wb-raised)', color: 'var(--wb-text)' } },
+              styles: { root: { paddingBlock: 4 }, content: { padding: '8px 12px', background: 'var(--wb-raised)', color: 'var(--wb-text)' } },
+              footer: copyMessage([turn.text, ...(turn.instructions ?? []).map(item => item.text)].join('\n\n')),
+              footerPlacement: 'outer-end',
               content: <>{turn.text}{!!turn.instructions?.length && <section aria-label={uiText('本轮补充指令')}>
                 <ul>{turn.instructions.map(instruction => <li key={instruction.request_id}>{instruction.text}</li>)}</ul>
               </section>}{!!turn.attachments?.length && <div className="canvas-assistant-files">
@@ -915,9 +939,11 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             },
             {
               key: 'assistant', role: 'ai', variant: 'borderless', streaming: turn === liveTurn && !!progress?.streaming && !pendingQuestion,
-              content: <XMarkdown escapeRawHtml className="canvas-assistant-markdown" content={turn.reply}
+              footer: turn.reply && copyMessage(turn.reply),
+              styles: { root: { paddingInlineEnd: 0, paddingBlock: 4 }, body: { width: '100%' }, content: { padding: 0, color: 'var(--wb-text)' } },
+              content: <XMarkdown escapeRawHtml disableDefaultStyles={['table', 'th', 'td']}
+                components={{ table: AssistantMarkdownTable }} className="canvas-assistant-markdown" content={turn.reply}
                 streaming={{ hasNextChunk: turn === liveTurn && !!progress?.streaming && !pendingQuestion }} />,
-              styles: { content: { padding: 0, color: 'var(--wb-text)' } },
             },
           ]} />
             {!!turn.attachments?.length && <CanvasAssistantEvidence attachments={turn.attachments} />}
@@ -1048,12 +1074,14 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           <strong>{uiText('本轮已接收补充指令')}</strong>
           <ul>{pendingInstructions.map(instruction => <li key={instruction.request_id}>{instruction.text}</li>)}</ul>
         </div>}
-        {!pendingQuestion && (sending || steeringFor || progress?.streaming) && <div role="status"><ThoughtChain items={[
-          { key: progress?.request_id ?? 'reply',
-            title: progress ? uiText('已接收本轮上下文') : uiText('助手正在回复'),
-            status: 'loading',
-            collapsible: Boolean(progress),
-            content: progress && <div className="canvas-assistant-live-evidence">
+        {!pendingQuestion && (sending || steeringFor || progress?.streaming) && <div role="status">
+          {!liveTurn && <Think className="canvas-assistant-wait" loading blink expanded={false} title={uiText('助手正在回复')} />}
+          {progress && <ThoughtChain items={[
+          { key: progress.request_id,
+            title: uiText('已接收本轮上下文'),
+            status: progress.active_tasks && Object.keys(progress.active_tasks).length ? 'loading' : 'success',
+            collapsible: true,
+            content: <div className="canvas-assistant-live-evidence">
               <p>{uiText('助手模型')} · {models.find(model => model.id === progress.model_id)?.name ?? progress.model_id}</p>
               {typeof progress.revision === 'number' && <p>{uiText('画布修订')} {progress.revision}</p>}
               {!!progress.observed_card_ids?.length && <p>{uiText('已读取卡片')} · {progress.observed_card_ids.join('、')}</p>}
@@ -1065,8 +1093,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                 {!!task.evidence.length && <CanvasAssistantEvidence attachments={task.evidence} />}
               </section>)}
             </div> },
-        ]} /></div>}
-        {runningId && <WorkbenchButton variant="quiet" loading={stopping === runningId}
+        ]} />}</div>}
+        {runningId && !showStop && <WorkbenchButton variant="quiet" loading={stopping === runningId}
           onClick={() => { void stopTurn(runningId) }}>{uiText("停止助手")}</WorkbenchButton>}
         {!activeRequestId && !steeringFor && pendingServerRequest && <div>
           {pendingQuestion ? <form aria-label={uiText('创作问题')} onSubmit={event => {
@@ -1082,17 +1110,17 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
               onChange={event => setQuestionAnswer(event.target.value)} disabled={sending} />
             <WorkbenchButton htmlType="submit" disabled={sending || !questionAnswer.trim()}>{uiText('提交回答')}</WorkbenchButton>
           </form> : !progress?.streaming && <WorkbenchButton variant="quiet" onClick={() => { void send(pendingServerRequest) }}>{uiText("继续回复")}</WorkbenchButton>}
-          <WorkbenchButton variant="quiet" loading={stopping === pendingServerRequest.request_id}
-            onClick={() => { void stopTurn(pendingServerRequest.request_id) }}>{uiText("停止助手")}</WorkbenchButton>
+          {!runningId && <WorkbenchButton variant="quiet" loading={stopping === pendingServerRequest.request_id}
+            onClick={() => { void stopTurn(pendingServerRequest.request_id) }}>{uiText("停止助手")}</WorkbenchButton>}
         </div>}
       </div>
-      <form className="canvas-assistant-composer" ref={composer} onSubmit={event => { event.preventDefault(); void send() }}>
-        {readingEarlier && <WorkbenchButton variant="quiet" onClick={() => {
+        {readingEarlier && <WorkbenchButton className="canvas-assistant-jump" variant="quiet" onClick={() => {
           const log = history.current
           historyPosition.current.follow = true
           if (log) log.scrollTop = log.scrollHeight
           setReadingEarlier(false)
         }}>{uiText('返回最新进展')}</WorkbenchButton>}
+      <form className="canvas-assistant-composer" ref={composer} onSubmit={event => { event.preventDefault(); if (canSend) void send() }}>
         {revising?.proposal && <div className="canvas-assistant-edit-actions">
           <span>{uiText(revisingField ? '正在修订所选字段' : '正在修订修改建议')} · {uiText(revising.proposal.card_name)}</span>
           <WorkbenchButton variant="quiet" disabled={sending} onClick={() => {
@@ -1132,7 +1160,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           : sendError === 'context-limit' ? uiText("内容超出当前模型的上下文上限，请缩小分析范围或切换助手模型。")
             : uiText("未收到助手回复，请检查助手模型后重试")} />}
         <CanvasAssistantAttachments projectId={projectId} files={referenceFiles} uploading={uploadingReference}
-          setUploading={setUploadingReference} disabled={draftPromoting || sending || !turns}
+          onReference={() => setBrowseReferences(value => !value)} setUploading={setUploadingReference} disabled={draftPromoting || sending || !turns}
           onChange={files => {
             if (localDraft) writeDraftAssistant(canvasId, { references: files })
             setReferenceFiles(files)
@@ -1200,63 +1228,89 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                 ...cards.map(card => ({ value: 'card:' + card.id,
                   label: ('name' in card && card.name) || uiText(cardTitles[card.type ?? ''] ?? card.type ?? '卡片') + ' · ' + card.id.slice(0, 8) })),
               ]} />}
-            <Sender aria-label={uiText("给画布助手发消息")} value={draft}
-              placeholder={uiText("输入想讨论的镜头、画面或提示词…")}
-              className="canvas-assistant-sender" suffix={false}
-              autoSize={{ minRows: 2, maxRows: 4 }} disabled={draftPromoting}
-              onChange={value => {
-                updateDraft(value.slice(0, 16000))
-                if (value.endsWith('@')) setBrowseReferences(true)
-              }}
-              onPaste={event => {
-                const reference = readCardReference(event.clipboardData.getData('text/plain'))
-                if (!reference) return
-                event.preventDefault()
-                if (reference.canvasId === canvasId) {
-                  if (reference.group) {
-                    const { id, name } = reference.group
-                    setReferenceGroups(previous => [...previous.filter(group => group.id !== id),
-                      { id, name, members: reference.cardIds }])
-                    pending.current = undefined
-                  } else addCardReferences(reference.cardIds)
-                } else {
-                  if (!(reference.canvasId in externalReferences) && Object.keys(externalReferences).filter(key => externalReferences[key].length).length >= 3) {
-                    setConfirmationHint(uiText('每轮最多引用三个其他画布'))
-                    return
-                  }
-                  const ids = [...new Set([...(externalReferences[reference.canvasId] ?? []), ...reference.cardIds])]
-                  if (reference.group && ids.length > 20) {
-                    setConfirmationHint(uiText('其他画布的编组超过单轮可引用范围，请减少引用卡片。'))
-                    return
-                  }
-                  if (reference.group) {
-                    const group = { ...reference.group, card_ids: reference.cardIds }
-                    setExternalGroups(previous => ({ ...previous, [reference.canvasId]: [
-                      ...(previous[reference.canvasId] ?? []).filter(item => item.id !== group.id), group,
-                    ] }))
-                  }
-                  setExternalReferences(previous => ({ ...previous, [reference.canvasId]: ids.slice(0, 20) }))
-                  pending.current = undefined
-                }
-              }}
-              onKeyDown={event => {
-                if (event.nativeEvent.isComposing || event.keyCode === 229) return false
-                if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
-                  event.preventDefault()
-                  void send()
-                }
-                return false
-              }} />
+            <Suggestion block items={() => starters.map(value => ({ label: uiText(value), value: uiText(value) }))}
+              onSelect={fillSuggestion}>
+              {({ onTrigger, onKeyDown, open: suggestionsOpen }) => (
+                <Sender aria-label={uiText("给画布助手发消息")} value={draft}
+                  placeholder={uiText("输入问题，或输入 / 查看提问建议")}
+                  className="canvas-assistant-sender" suffix={false}
+                  autoSize={{ minRows: 2, maxRows: 4 }} disabled={draftPromoting}
+                  onChange={value => {
+                    updateDraft(value.slice(0, 16000))
+                    if (value === '/' || suggestionsOpen) onTrigger(value === '/' ? undefined : false)
+                    if (value.endsWith('@')) setBrowseReferences(true)
+                  }}
+                  onPaste={event => {
+                    const reference = readCardReference(event.clipboardData.getData('text/plain'))
+                    if (!reference) return
+                    event.preventDefault()
+                    if (reference.canvasId === canvasId) {
+                      if (reference.group) {
+                        const { id, name } = reference.group
+                        setReferenceGroups(previous => [...previous.filter(group => group.id !== id),
+                          { id, name, members: reference.cardIds }])
+                        pending.current = undefined
+                      } else addCardReferences(reference.cardIds)
+                    } else {
+                      if (!(reference.canvasId in externalReferences) && Object.keys(externalReferences).filter(key => externalReferences[key].length).length >= 3) {
+                        setConfirmationHint(uiText('每轮最多引用三个其他画布'))
+                        return
+                      }
+                      const ids = [...new Set([...(externalReferences[reference.canvasId] ?? []), ...reference.cardIds])]
+                      if (reference.group && ids.length > 20) {
+                        setConfirmationHint(uiText('其他画布的编组超过单轮可引用范围，请减少引用卡片。'))
+                        return
+                      }
+                      if (reference.group) {
+                        const group = { ...reference.group, card_ids: reference.cardIds }
+                        setExternalGroups(previous => ({ ...previous, [reference.canvasId]: [
+                          ...(previous[reference.canvasId] ?? []).filter(item => item.id !== group.id), group,
+                        ] }))
+                      }
+                      setExternalReferences(previous => ({ ...previous, [reference.canvasId]: ids.slice(0, 20) }))
+                      pending.current = undefined
+                    }
+                  }}
+                  onKeyDown={event => {
+                    if (event.nativeEvent.isComposing || event.keyCode === 229) {
+                      event.stopPropagation()
+                      return false
+                    }
+                    const submitKey = event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey
+                    if (suggestionsOpen && (submitKey || ['ArrowDown', 'ArrowUp', 'Escape'].includes(event.key))) {
+                      onKeyDown(event)
+                      // Cascader tracks the active option. Escape closes only its popup.
+                      if (event.key === 'Escape') event.stopPropagation()
+                      return false
+                    }
+                    // Keep the Cascader trigger from consuming spaces or native newlines in the textarea.
+                    if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
+                    if (submitKey) {
+                      event.preventDefault()
+                      if (canSend) void send()
+                    }
+                    return false
+                  }} />
+              )}
+            </Suggestion>
             {modelError && <span role="alert">{uiText("无法读取或切换助手模型")}</span>}
+            {!localDraft && (runningId || pendingServerRequest || queue.length > 0) && !!draftText &&
+              <WorkbenchButton className="canvas-assistant-queue-action" variant="quiet"
+                disabled={queueBusy || draftPromoting || !turns || referenceIsMissing}
+                onClick={() => { void send(undefined, true) }}>{uiText('排到下一轮')}</WorkbenchButton>}
             <div className="canvas-assistant-footer">
               {add}
-              <WorkbenchButton variant="quiet" aria-label={uiText('引用卡片')} aria-expanded={browseReferences}
-                disabled={sending} onClick={() => setBrowseReferences(value => !value)}>@</WorkbenchButton>
+              {!localDraft && <Select className="canvas-assistant-approval" variant="borderless"
+                aria-label={uiText('审批模式')} value={automaticApproval ? 'automatic' : 'manual'}
+                disabled={!!runningId || sending || savingApproval || !turns} popupMatchSelectWidth={false}
+                onChange={value => { void chooseApproval(value === 'automatic') }}
+                labelRender={({ value }) => uiText(value === 'automatic' ? '自动审批' : '手动审批')}
+                options={[
+                  { value: 'manual', label: uiText('手动审批') },
+                  { value: 'automatic', label: uiText('自动审批明确请求') },
+                ]} />}
               <div className="canvas-assistant-send-actions">
-                {!localDraft && (sending || !!steeringFor || !!pendingServerRequest || !!queue.length) && <WorkbenchButton variant="quiet"
-                  disabled={!draft.trim() || queueBusy || draftPromoting || !turns || referenceIsMissing}
-                  onClick={() => { void send(undefined, true) }}>{uiText('排到下一轮')}</WorkbenchButton>}
-                <Select value={modelId ?? ''} aria-label={uiText("助手模型")} popupMatchSelectWidth={false} optionLabelProp="short"
+                <Select className="canvas-assistant-model" variant="borderless" value={modelId ?? ''} aria-label={uiText("助手模型")} popupMatchSelectWidth={false} optionLabelProp="short"
                   disabled={draftPromoting || sending || savingModel || !turns || !!pendingQuestion} onChange={selected => { void chooseModel(selected) }}
                   options={[
                     { label: defaultModel ? uiText("默认模型") + ' · ' + modelLabel(defaultModel) : uiText("默认模型"),
@@ -1266,9 +1320,13 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                       disabled: !model.effective_capabilities?.text_inputs || !model.effective_capabilities?.text_outputs,
                     })),
                   ]} />
-                <WorkbenchIconButton label={uiText("发送消息")} icon={<ArrowUpOutlined />}
-                  htmlType="submit" variant="primary" loading={(sending || !!steeringFor) && !draft.trim()}
-                  disabled={draftPromoting || (!confirmationKind(draft.trim()) && !!steeringFor) || !turns || !!pendingQuestion && !confirmationKind(draft.trim()) || !draft.trim() || savingModel || savingApproval || uploadingReference || referenceIsMissing} />
+                {showStop && runningId ? <WorkbenchIconButton className="canvas-assistant-primary"
+                  label={uiText('停止回复')} title={uiText('停止回复')} tooltipOpen={false} icon={<StopOutlined />} variant="primary" loading={stopping === runningId}
+                  onClick={() => { void stopTurn(runningId) }} />
+                  : <WorkbenchIconButton className="canvas-assistant-primary"
+                    label={sendLabel} title={sendLabel} tooltipOpen={false} icon={<ArrowUpOutlined />}
+                    htmlType="submit" variant="primary"
+                    disabled={!canSend} />}
               </div>
             </div>
           </>}

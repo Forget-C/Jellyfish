@@ -14,13 +14,14 @@ const attachmentLimit = 4
 const pageSize = 12
 
 /** Add existing file identities to the pending message. */
-export function CanvasAssistantAttachments({ projectId, files, onChange, disabled, uploading, setUploading, children }: {
+export function CanvasAssistantAttachments({ projectId, files, onChange, disabled, uploading, setUploading, onReference, children }: {
   projectId: string
   files: FileRead[]
   onChange: (files: FileRead[]) => void
   disabled: boolean
   uploading: boolean
   setUploading: (uploading: boolean) => void
+  onReference: () => void
   children: (add: ReactNode, attachments: ReactNode) => ReactNode
 }) {
   const uiText = useUiText()
@@ -81,18 +82,20 @@ export function CanvasAssistantAttachments({ projectId, files, onChange, disable
         if (file) void upload(file)
       }} />
     {children(
-      <Dropdown trigger={['click']} disabled={unavailable} menu={{
+      <Dropdown trigger={['click']} disabled={disabled} menu={{
         items: [
-          { key: 'upload', icon: <PaperClipOutlined />, label: uiText("上传素材") },
-          { key: 'library', icon: <FolderOpenOutlined />, label: uiText("选择参考素材") },
+          { key: 'reference', label: uiText('引用卡片') },
+          { key: 'upload', disabled: unavailable, icon: <PaperClipOutlined />, label: uiText("上传素材") },
+          { key: 'library', disabled: unavailable, icon: <FolderOpenOutlined />, label: uiText("选择参考素材") },
         ],
         onClick: ({ key }) => {
-          if (key === 'upload') input.current?.click()
+          if (key === 'reference') onReference()
+          else if (key === 'upload') input.current?.click()
           else { setPage(1); setLibraryOpen(true) }
         },
       }}>
-        <WorkbenchIconButton label={uiText("添加参考素材")} icon={<PlusOutlined />} variant="quiet"
-          loading={uploading} disabled={unavailable} />
+        <WorkbenchIconButton label={uiText("添加素材或引用")} icon={<PlusOutlined />} variant="quiet"
+          disabled={disabled} />
       </Dropdown>,
       <>
         {!!files.length && <Attachments className="canvas-assistant-x-attachments" disabled items={files.map(file => ({

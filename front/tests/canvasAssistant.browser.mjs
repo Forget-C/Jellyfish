@@ -28,6 +28,17 @@ const reviewInputs = []
 const prompts = []
 const observed = []
 const replyGates = new Map()
+const longToken = 'abcdefghijklmnop'.repeat(14)
+const layoutMarkdown = [
+  '| 镜头 | 景别 | 动作 | 参考 |',
+  '| --- | --- | --- | --- |',
+  '| 01 | 中景 | 推镜 | ' + longToken + ' |',
+  '', '[https://example.com/' + longToken + '](https://example.com/' + longToken + ')',
+  '', '```text', longToken, '```', '',
+  '| 镜头 | 景别 | 调度 | 灯光 | 收音 | 转场 |',
+  '| --- | --- | --- | --- | --- | --- |',
+  '| 02 | 全景 | 入场 | 自然光 | 同期 | 淡出 |',
+].join('\n')
 let acceptSlowReply
 let slowReplyArrived
 const slowReplyStarted = new Promise(resolve => { slowReplyArrived = resolve })
@@ -100,7 +111,7 @@ const provider = createHttpServer(async (request, response) => {
     response.end('data: ' + JSON.stringify({ ...content, choices: [{ ...choice, delta: message }] }) + '\n\ndata: [DONE]\n\n')
   }
   const combined = turns.at(-1) === journey
-  const reading = typeof turns.at(-1) === 'string' && turns.at(-1).split('\n\n用户请求：\n').at(-1)
+  const reading = typeof turns.at(-1) === 'string' ? turns.at(-1).split('\n\n用户请求：\n').at(-1) : undefined
   if (reading?.startsWith('流式回归')) {
     assert.ok(stream)
     response.writeHead(200, { 'Content-Type': 'text/event-stream' })
@@ -111,7 +122,7 @@ const provider = createHttpServer(async (request, response) => {
     chunk(proposal ? '预览正在整理\n\n  ```json\n{"reply":"校验完成","groups":[' : '## 已到达的首段\n\n')
     await new Promise(resolve => replyGates.set(reading, resolve))
     chunk(proposal ? '{"title":"镜头","changes":[{"kind":"add_card","reference":"shot","card":{"kind":"add_text_card","text":"定稿镜头"}}]}]}\n  ```'
-      : '| 镜头 | 景别 |\n| --- | --- |\n| 01 | 中景 |')
+      : layoutMarkdown)
     response.end('data: [DONE]\n\n')
     return
   }
@@ -354,9 +365,29 @@ try {
     for (const [path, name] of [[base + '/canvases/' + free.id, '自由'], [base + storyboardCanvasPath(scene), '分镜']]) {
       await page.goto(path)
       await open()
+      await panel.getByText(name + '画布助手', { exact: true }).waitFor()
+      await panel.getByRole('button', { name: '添加素材或引用' }).click()
+      await page.getByRole('menuitem', { name: '引用卡片' }).click()
+      await panel.getByRole('combobox', { name: '选择引用' }).waitFor()
       const text = '流式回归' + name
+      const waiting = panel.getByText('助手正在回复', { exact: true })
+      const requestUrl = /\/generation-canvases\/[^/]+\/assistant(?:\?|$)/
+      let observedWaiting = false
+      const holdFirstReply = async route => {
+        if (route.request().method() === 'POST') {
+          await waiting.waitFor()
+          observedWaiting = true
+          await page.emulateMedia({ reducedMotion: 'reduce' })
+          assert.equal(await panel.evaluate(el => getComputedStyle(el).animationDuration), '0s')
+        }
+        await route.continue()
+      }
+      await page.route(requestUrl, holdFirstReply)
       await sendLive(text)
       await first.waitFor()
+      await waiting.waitFor({ state: 'hidden' })
+      await page.unroute(requestUrl, holdFirstReply)
+      assert.ok(observedWaiting, 'Think is visible while waiting for the first chunk')
       assert.equal(await panel.getByRole('table').count(), 0)
       await page.reload()
       await open()
@@ -370,6 +401,54 @@ try {
       await page.reload()
       await open()
       await panel.getByRole('cell', { name: '中景' }).waitFor()
+      await panel.getByRole('definition').filter({ hasText: '淡出' }).waitFor()
+      for (const [theme, background] of [['经典深色', 'rgb(27, 27, 27)'], ['雾蓝微渐变', 'rgb(255, 255, 255)'], ['雾蓝纯色', 'rgb(255, 255, 255)']]) {
+        await page.getByRole('button', { name: '画布配色', exact: true }).click()
+        await page.getByRole('menuitemradio', { name: theme, exact: true }).click()
+        assert.equal(await panel.evaluate(el => getComputedStyle(el).backgroundColor), background)
+      }
+      const copies = panel.getByRole('button', { name: '复制正文', exact: true })
+      await copies.last().click()
+      assert.equal(await page.evaluate(() => navigator.clipboard.readText()), '## 已到达的首段\n\n' + layoutMarkdown)
+      await copies.first().click()
+      assert.equal(await page.evaluate(() => navigator.clipboard.readText()), text)
+      const input = panel.getByRole('textbox', { name: '给画布助手发消息' })
+      await input.fill('/')
+      await page.getByRole('menuitemcheckbox').first().waitFor()
+      await input.press('Escape')
+      assert.ok(await panel.isVisible())
+      await input.fill('')
+      await input.fill('/')
+      await page.getByRole('menuitemcheckbox').first().waitFor()
+      const secondSuggestion = await page.getByRole('menuitemcheckbox').nth(1).innerText()
+      await input.press('ArrowDown')
+      await input.press('Enter')
+      await page.getByRole('menuitemcheckbox').first().waitFor({ state: 'hidden' })
+      assert.equal(await input.inputValue(), secondSuggestion.trim(), 'choosing a suggestion fills the draft')
+      await input.press('End')
+      await input.press('Space')
+      await input.press('Shift+Enter')
+      assert.equal(await input.inputValue(), secondSuggestion.trim() + ' \n')
+      await input.fill('')
+      for (const width of [1440, 1024, 375]) {
+        await page.setViewportSize({ width, height: 768 })
+        const box = await panel.boundingBox()
+        if (width >= 801) {
+          const graph = await page.locator('.generation-graph').boundingBox()
+          assert.ok(Math.abs(graph.x + graph.width + 8 - box.x) <= 1, 'canvas and drawer have separate working areas')
+        }
+        assert.ok(Math.abs(box.x + box.width - width + (width === 375 ? 4 : 8)) <= 1, 'drawer leaves room around its corners')
+        assert.ok(Math.abs(box.width - (width === 375 ? 367 : Math.max(420, Math.min(560, width * 0.38)))) <= 1)
+        const overflow = await panel.evaluate(drawer => [drawer, ...drawer.querySelectorAll(
+          '.canvas-assistant-history, .canvas-assistant-turn, .canvas-assistant-markdown, table, pre, td, .canvas-assistant-composer',
+        )].filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.className || node.tagName))
+        assert.deepEqual(overflow, [], 'long links, table cells and code fit at ' + width)
+        if (name === '自由') await page.screenshot({ path: join(output, 'assistant-drawer-' + width + '.png') })
+      }
+      await page.setViewportSize({ width: 1440, height: 960 })
+      await input.press('Escape')
+      await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '打开画布助手')
+      await open()
     }
     await sendLive('流式回归提案')
     await delay(650)
@@ -386,7 +465,7 @@ try {
     await page.reload()
     await open()
     await first.waitFor()
-    await panel.getByRole('button', { name: '停止助手', exact: true }).click()
+    await panel.getByRole('button', { name: '停止回复', exact: true }).click()
     await panel.getByText('助手已停止', { exact: true }).waitFor()
     replyGates.get('流式回归草稿')()
     await page.reload()
@@ -419,7 +498,7 @@ try {
   const sceneQueue = panel.getByRole('region', { name: '下一轮队列' })
   await sceneQueue.getByText('分镜后续只分析第四场').waitFor()
   await sceneComposer.fill('先别生成，先给简洁方案')
-  await sceneSend.click()
+  await panel.getByRole('button', { name: '发送补充', exact: true }).click()
   await panel.getByText('已采纳补充，先给简洁方案', { exact: true }).waitFor()
   releaseSceneSource()
   await panel.getByText('答复 分镜后续只分析第四场', { exact: true }).waitFor()
@@ -457,15 +536,23 @@ try {
     signal: AbortSignal.timeout(2500),
   })
   assert.ok(rename.ok, await rename.clone().text())
+  await queuedComposer.evaluate((input, canvasId) => {
+    const clipboardData = new DataTransfer()
+    clipboardData.setData('text/plain', 'jellyfish:cards:1:' + JSON.stringify({ canvasId, cardIds: ['next-reference'] }))
+    input.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }))
+  }, scene.id)
+  const nextReference = panel.getByRole('button', { name: /其他画布的只读引用.*next-ref/ })
+  await nextReference.waitFor()
   acceptSlowReply()
   await askWhileEditing
   await panel.getByText('答复 实际处理的后续任务', { exact: true }).waitFor()
+  await nextReference.click()
   assert.deepEqual(prompts, [['自由一'], ['分镜一'], ['自由一', '自由二'], ['自由一', '自由二', '实际处理的后续任务']])
   await queuedComposer.fill('需要补充的一轮')
   await panel.getByRole('button', { name: '发送消息' }).click()
   await Promise.race([steerSourceStarted, delay(8000).then(() => { throw Error('原轮次未进入供应商') })])
   await queuedComposer.fill('先别生成，先给简洁方案')
-  await panel.getByRole('button', { name: '发送消息' }).click()
+  await panel.getByRole('button', { name: '发送补充', exact: true }).click()
   await panel.getByText('已采纳补充，先给简洁方案', { exact: true }).waitFor()
   releaseSteerSource()
   const steeringHistory = (await (await fetch(canvasApi + '/' + free.id + '/assistant')).json()).data
@@ -579,6 +666,7 @@ try {
     await panel.getByText('browser-tool-model', { exact: true }).waitFor()
     await panel.getByRole('button', { name: '关闭画布助手' }).click()
     const target = canvas.project_id ? 'camera-movement' : 'target'
+    await page.getByRole('button', { name: '适应全部', exact: true }).click()
     await page.locator('[data-card-id="' + target + '"]').click()
     if (canvas.project_id) await page.getByRole('button', { name: '关闭详情', exact: true }).click()
     await page.locator('[data-card-id="' + target + '"]').focus()
@@ -681,8 +769,16 @@ try {
       await confirmation.focus()
       await page.keyboard.press('Tab')
       await page.keyboard.press('Shift+Tab')
-      assert.equal(await confirmation.evaluate(input =>
-        getComputedStyle(input.closest('.canvas-assistant-sender')).outlineStyle), 'solid')
+      assert.equal(await confirmation.evaluate(input => {
+        const composer = input.closest('form')
+        const focus = getComputedStyle(composer).getPropertyValue('--wb-focus').trim()
+        const color = document.createElement('span')
+        color.style.color = focus
+        composer.append(color)
+        const expected = getComputedStyle(color).color
+        color.remove()
+        return getComputedStyle(composer).borderTopColor === expected
+      }), true)
       const fields = await storedMovement()
       assert.equal(fields.movement_path.text, '弧线')
       assert.notEqual(fields.movement_start.text, '走廊入口')
@@ -694,6 +790,7 @@ try {
     assert.equal(await storedText(), original, 'one undo restores the saved field')
     if (canvas.project_id) {
       assert.notEqual((await storedMovement()).movement_path.text, '弧线')
+      await page.getByRole('button', { name: '适应全部', exact: true }).click()
       await page.locator('[data-card-id="target"]').click()
       await open()
       await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('只把 target 的推近放慢')
@@ -749,7 +846,7 @@ try {
       const setMode = async name => {
         await panel.getByRole('combobox', { name: '审批模式' }).click()
         await page.locator('.ant-select-item-option').getByText(name, { exact: true }).click()
-        await panel.locator('.ant-select-content').filter({ hasText: name }).waitFor()
+        await panel.locator('.ant-select-content').filter({ hasText: name === '自动审批明确请求' ? '自动审批' : name }).waitFor()
       }
       await setMode('自动审批明确请求')
       await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('把这张卡的推近放慢')
@@ -763,7 +860,7 @@ try {
       await page.reload()
       await open()
       await panel.getByText('自动审批明确请求 · 已写入画布', { exact: true }).waitFor()
-      await panel.getByText('自动审批明确请求', { exact: true }).waitFor()
+      await panel.getByText('自动审批', { exact: true }).waitFor()
       await setMode('手动审批')
     } else {
       await open()
@@ -947,6 +1044,7 @@ try {
     const originalRuns = (await read('/runtime')).runs
     const requestCount = videoRequests.length
     await page.goto(base + (canvas.project_id ? storyboardCanvasPath(canvas) : '/canvases/' + canvas.id))
+    await page.getByRole('button', { name: '适应全部', exact: true }).click()
     await page.locator('[data-card-id="target"]').click()
     await open()
     await panel.getByRole('combobox', { name: '助手模型' }).click()
