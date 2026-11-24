@@ -3,17 +3,17 @@
 import asyncio
 from dataclasses import dataclass
 import json
-from typing import Literal
 
 from deepagents import create_deep_agent
 from fastapi import HTTPException
 from langchain.agents.middleware import wrap_model_call
 from langchain_core.messages import HumanMessage
-from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.canvas_assistant import CanvasAssistantSession, CanvasAssistantTurn
 from app.schemas.canvas_assistant_edit import CanvasAssistantIndependentReview, CanvasAssistantProposal
 from app.schemas.generation_canvas import CanvasDocument
+from app.services.automatic_approval import AutomaticReviewer, AutomaticReviewEvidence, AutomaticReviewVerdict
 from app.services.generation_canvas.assistant_approval import automatic_approval_allowed
 from app.services.generation_canvas.store import CanvasStore
 from app.services.llm.resolver import build_text_chat_model
@@ -25,14 +25,6 @@ REVIEW_PROMPT = (
     '才返回 {"decision":"approve","reason":"简述明确依据"}。存在疑义则返回 '
     '{"decision":"manual","reason":"需要人工核对的原因"}。禁止调用工具或执行画布操作。只返回一个 JSON 对象。'
 )
-
-
-class ReviewResponse(BaseModel):
-    """The only accepted response from the independent agent."""
-
-    model_config = ConfigDict(extra='forbid')
-    decision: Literal['approve', 'manual']
-    reason: str = Field(min_length=1, max_length=600)
 
 
 @dataclass(frozen=True)
@@ -58,6 +50,22 @@ async def review_without_tools(request, handler):
     if any(message.tool_calls for message in response.result):
         raise ValueError('Unexpected tool call in automatic approval review')
     return response
+
+
+async def _review_with_agent(client, evidence: dict) -> AutomaticReviewVerdict:
+    agent = create_deep_agent(model=client, tools=[], system_prompt=REVIEW_PROMPT, middleware=[review_without_tools])
+    answer = await agent.ainvoke({'messages': [HumanMessage(content=json.dumps(evidence, ensure_ascii=False))]})
+    return AutomaticReviewVerdict.model_validate_json(answer['messages'][-1].text)
+
+
+def canvas_approval_reviewer(sessions: async_sessionmaker[AsyncSession], model_id: str) -> AutomaticReviewer:
+    """使用服务端选择的模型和无工具复核 Agent，仅传递待核对的事实。"""
+    async def review(evidence: AutomaticReviewEvidence) -> AutomaticReviewVerdict:
+        async with sessions() as db:
+            client = await build_text_chat_model(db, model_id=model_id, thinking=False)
+        return await _review_with_agent(client, evidence.model_dump(mode='json'))
+
+    return review
 
 
 async def conduct_review(db, project_id, canvas_id, source_id, decision, validate_targets):
@@ -99,9 +107,7 @@ async def conduct_review(db, project_id, canvas_id, source_id, decision, validat
     if client is not None:
         try:
             async with asyncio.timeout(20):
-                agent = create_deep_agent(model=client, tools=[], system_prompt=REVIEW_PROMPT, middleware=[review_without_tools])
-                answer = await agent.ainvoke({'messages': [HumanMessage(content=json.dumps(evidence, ensure_ascii=False))]})
-            result = ReviewResponse.model_validate_json(answer['messages'][-1].text)
+                result = await _review_with_agent(client, evidence)
             receipt = CanvasAssistantIndependentReview(status='approved' if result.decision == 'approve' else 'manual_required',
                                                        reviewer_model_id=model_id, reason=result.reason)
         except Exception:  # pylint: disable=broad-exception-caught

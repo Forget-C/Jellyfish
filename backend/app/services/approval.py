@@ -202,6 +202,15 @@ class ApprovalService:
     async def decide(self, access: ApprovalAccess, request_id: str, *, version: str, group_ids: tuple[str, ...],
                      action: DecisionAction, idempotency_key: str) -> ApprovalDecisionView:
         """按所见版本和组签发决定；原重放优先于过期及已决定检查。"""
+        if access.source == 'automatic':
+            raise ApprovalError('review_required', '自动审批必须先经过授权校验和独立复核')
+        return await self._decide(access, request_id, version=version, group_ids=group_ids,
+                                  action=action, idempotency_key=idempotency_key)
+
+    async def _decide(self, access: ApprovalAccess, request_id: str, *, version: str, group_ids: tuple[str, ...],
+                      action: DecisionAction, idempotency_key: str,
+                      reviewed_states: dict[str, GroupState] | None = None) -> ApprovalDecisionView:
+        """保存人工决定或已通过自动授权和复核的决定。"""
         _require(access, 'decide')
         if not idempotency_key.strip() or action not in ('approve', 'reject'):
             raise ApprovalError('invalid_decision', '审批决定需要动作和稳定的幂等键')
@@ -211,7 +220,9 @@ class ApprovalService:
         if set(group_ids) - set(request.group_ids):
             raise ApprovalError('invalid_groups', '所选组不属于所见审批版本')
         selection = [group_id for group_id in request.group_ids if group_id in group_ids]
-        decision_id = _hash(subject.id, idempotency_key)
+        # 人工幂等键不能与框架生成的自动审批键冲突。
+        decision_id = (_hash(subject.id, 'automatic', idempotency_key) if access.source == 'automatic'
+                       else _hash(subject.id, idempotency_key))
         digest = _hash(access.actor_id, access.source, request_id, version, action, selection)
         replay = await self.db.get(ApprovalDecision, decision_id, with_for_update=True)
         if replay:
@@ -220,6 +231,8 @@ class ApprovalService:
             return _decision_view(request, replay)
         if request.version != version or subject.active_request_id != request.id:
             raise ApprovalError('superseded', '所见审批版本已失效，请重新核对')
+        if reviewed_states is not None and reviewed_states != request.group_states:
+            raise ApprovalError('review_stale', '复核期间审批状态已改变')
         if any(request.group_states[group_id] != 'pending' for group_id in selection):
             raise ApprovalError('already_decided', '所选组包含已作出决定的事项')
         row = ApprovalDecision(
