@@ -75,7 +75,7 @@ async def test_assistant_loads_requested_professional_skills_and_retains_their_v
         assert response.status_code == 200, response.text
         result = response.json()['data']
         assert {entry['id'] for entry in result['skills']} == set(selected)
-        assert all(entry['name'] and entry['version'] == '1.0.0' for entry in result['skills'])
+        assert all(entry['name'] and entry['version'] == ('1.1.0' if entry['id'] == 'video-generation' else '1.0.0') for entry in result['skills'])
         assert '景别' in result['reply']
         assert (await canvas_client.post(url + '/assistant', json=command)).json()['data'] == result
     turns = (await canvas_client.get(url + '/assistant')).json()['data']['turns']

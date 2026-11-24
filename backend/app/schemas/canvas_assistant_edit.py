@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_vali
 
 from app.schemas.canvas_assistant_generation import CanvasAssistantGenerationRead
 from app.schemas.canvas_assistant_structure import (
-    AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCards, ConnectCardsTarget, MovementFieldName,
+    AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCards, ConnectCardsTarget, MovementFieldName, VideoInputTarget, VideoTextUse, VideoCharacterUse,
 )
 from app.schemas.generation_canvas import CanvasRead, CanvasSaved
 
@@ -93,7 +93,7 @@ CanvasAssistantRemovalTarget = Annotated[DeleteCardEdit | ReleaseBindingEdit | D
 CanvasAssistantEditTarget = Annotated[
     VideoPromptSegmentEdit | ModelPromptSegmentEdit | CardTextEdit | ReferenceNameEdit | DesignTextFieldEdit | MovementFieldEdit | VideoDurationEdit
     | DeleteCardEdit | ReleaseBindingEdit | DisconnectCardsEdit | AddCanvasCardTarget | AdoptFirstFrameTarget
-    | AdjustShotMovementTarget | ConnectCardsTarget,
+    | AdjustShotMovementTarget | ConnectCardsTarget | VideoInputTarget,
     Field(discriminator='kind'),
 ]
 
@@ -265,7 +265,7 @@ class ProposedCanvasBatchGroup(BaseModel):
     model_config = ConfigDict(extra='forbid')
     title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
     changes: list[Annotated[
-        ProposedBatchField | ProposedBatchCard | ProposedBatchRemoval | ProposedBatchConnection, Field(discriminator='kind'),
+        ProposedBatchField | ProposedBatchCard | ProposedBatchRemoval | ProposedBatchConnection | VideoTextUse | VideoCharacterUse, Field(discriminator='kind'),
     ]] = Field(min_length=1)
 
 

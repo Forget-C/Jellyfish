@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { buildFileDownloadUrl } from '../assets/utils'
 import { Alert, Checkbox } from 'antd'
 import { WorkbenchButton } from '../../../components/workbench/WorkbenchButton'
 import type { CanvasAssistantChange, CanvasAssistantEditGroup, CanvasAssistantProposal, CanvasDocument } from '../../../services/generated'
@@ -90,6 +91,10 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
       existingCards.add(target.movement_card_id)
       if (target.copy_card_id) newCards.set(target.copy_card_id, '运镜卡')
     }
+    if ('use' in target) {
+      existingCards.add(target.use.source_card)
+      if (target.adds_edge) candidateLinks++
+    }
     if ('source_card' in target) {
       existingCards.add(target.target_card)
       candidateLinks++
@@ -144,6 +149,14 @@ export function AssistantEditGroups({ groups, undone, selected, onSelectionChang
               : group.state === 'rejected' ? '建议已拒绝' : '建议已被修订替代')}</span></>}</summary>
           {group.edits.map((edit, index) => {
             const { target } = edit
+            if ('use' in target) return <dl key={target.identity}>
+              <dt>{uiText(target.use.kind === 'use_video_text' ? '采用文本描述' : '采用角色主体图')}</dt>
+              <dd>{target.use.source_card} → {target.use.target_card}</dd>
+              {target.use.kind === 'use_video_character' && <dd>{target.file_id && <img width={56} height={56}
+                loading="lazy" alt={target.use.subject_name} src={buildFileDownloadUrl(target.file_id)} />} {target.use.subject_name}</dd>}
+              <dt>{uiText('原生成正文')}</dt><dd>{edit.before || '—'}</dd>
+              <dt>{uiText('采用后的生成正文')}</dt><dd>{edit.after || '—'}</dd>
+            </dl>
             if ('movement_card_id' in target) return <dl key={target.connection_id}>
               <dt>{uiText('已采用运镜')} · {uiText(movementFields[target.movement_field])}</dt>
               <dd title={target.movement_card_id}>{target.movement_card_id}</dd>

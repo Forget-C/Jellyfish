@@ -787,3 +787,126 @@ async def test_followup_reuses_applied_video_cards(canvas_client, monkeypatch, s
             assert original_ids < ids and len(ids) == 4
             assert [card['config'].get('seconds') for card in canvas['document']['cards']
                     if card['id'] in ids - original_ids].count(9) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures('assistant_edit_model')
+@pytest.mark.parametrize('surface', ['scene', 'free', 'draft', 'free-native'])
+async def test_approved_video_inputs_compile_once(canvas_client, monkeypatch, surface):
+    from tests.generation_canvas_reference_fixtures import reference_image_sources
+    from uuid import uuid4
+    from app.models.llm import Provider
+    scene = surface == 'scene'
+    client = canvas_client
+    async with client.canvas_sessions.begin() as db:
+        (await db.get(Model, 'canvas-text')).capability_profile = (
+            {'tool_calling': {'declaration': 'supported'}} if surface == 'free-native' else None)
+        db.add(Provider(id='subject-provider', provider_key='vidu', name='vidu', base_url='https://video.test'))
+        await db.flush()
+        model = await db.get(Model, 'canvas-video')
+        model.name, model.provider_id = 'viduq2-pro', 'subject-provider'
+    created = (await seed_scene_canvas(client, '/canvases/p', json={'name': '镜头'})
+               if scene else await client.get(f'/canvases/drafts/{uuid4()}') if surface == 'draft'
+               else await client.post('/canvases', json={'name': '镜头'}))
+    canvas = created.json()['data']
+    path = f"/canvases/{canvas['id']}"
+    query = '?project_id=p' if scene else ''
+    uploaded = await client.post('/files/upload', data={'usage_kind': 'canvas_upload', 'source_ref': canvas['id'],
+                                 **({'project_id': 'p'} if scene else {})}, files={'file': ('face.png', b'image', 'image/png')})
+    assert uploaded.status_code == 201, uploaded.text
+    file_id = uploaded.json()['data']['id']
+    document = canvas['document']
+    document['cards'] = [
+        {'type': 'content.text', 'id': 'desc', 'text': '雨夜推镜'},
+        {'type': 'reference.character', 'id': 'face', 'name': '小雪', 'image_binding': {'file_id': file_id}},
+        *[{'type': 'model.video', 'id': card, 'model_id': 'canvas-video', 'config': {'ratio': '16:9', 'seconds': 5}, 'prompt': {'segments': [
+            {'kind': 'text', 'id': 'body', 'text': '雨夜推镜'}]}} for card in ('direct', 'referenced')],
+    ]
+    reference_image_sources(document)
+    if surface != 'draft':
+        saved = await client.put(path + query, json={'request_id': 'setup', 'expected_revision': 0, 'document': document})
+        assert saved.status_code == 200, saved.text
+    changes = [{'kind': 'use_video_text', 'source_card': 'desc', 'target_card': 'referenced'},
+               *[{'kind': 'use_video_character', 'source_card': 'face', 'target_card': card, 'subject_name': '小雪'}
+                 for card in ('direct', 'referenced')]]
+    original = httpx.AsyncClient.send
+
+    async def respond(self, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original(self, request, **kwargs)
+        groups = [{'title': '采用镜头输入', 'changes': changes}]
+        answer = {'role': 'assistant', 'content': json.dumps({'reply': '请审批', 'groups': groups})}
+        if surface == 'free-native':
+            history = json.loads(request.content)['messages']
+            seen = {m.get('tool_call_id') for m in history if m['role'] == 'tool'}
+            if 'preview' in seen:
+                answer = {'role': 'assistant', 'content': '已核对生成输入。'}
+            else:
+                name, identity, args = ('propose_canvas_changes', 'preview', {'groups': groups}) if 'read' in seen else (
+                    'read_canvas_context', 'read', {})
+                answer = {'role': 'assistant', 'tool_calls': [{
+                    'id': identity, 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(args)},
+                }]}
+        return httpx.Response(200, request=request, json={'id': 'reply', 'object': 'chat.completion',
+            'created': 1, 'model': 'canvas-text', 'choices': [{'index': 0,
+            'finish_reason': 'tool_calls' if 'tool_calls' in answer else 'stop', 'message': answer}]})
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    for key in ('apply', 'repeat'):
+        draft_turn = surface == 'draft' and key == 'apply'
+        active_path = path.replace('/canvases/', '/canvases/drafts/') if draft_turn else path
+        state = {'revision': 0, 'document': document} if draft_turn else (await client.get(path + query)).json()['data']
+        turn = (await client.post(active_path + '/assistant' + query, json={'text': '采用描述和角色图', 'request_id': key,
+            'context': {'scope': 'canvas', 'draft': state['document'], 'revision': state['revision']}})).json()['data']
+        if key == 'repeat':
+            assert not turn['proposal'] and not turn.get('proposal_issues'), turn
+            break
+        assert turn['proposal'], turn.get('proposal_issues')
+        edits = turn['proposal']['groups'][0]['edits']
+        assert edits[-1]['target']['file_id'] == file_id
+        assert edits[-1]['after'].count('雨夜推镜') == 1
+        if draft_turn:
+            result = await client.put(active_path, json={'request_id': 'save-inputs', 'expected_revision': 0,
+                'document': document, 'assistant': {'turns': [turn]}, 'assistant_approval': {'source_id': key, 'group_ids': ['1']}})
+            assert result.status_code == 200, result.text
+            continue
+        result = await client.post(path + '/assistant/proposals/apply' + query, json={
+            'action': 'approve', 'expected_revision': state['revision'], 'group_ids': ['1']})
+        assert result.json()['data']['receipt'], result.text
+    for card_id, count in [('direct', 1), ('referenced', 2)]:
+        compiled = (await client.get(path + '/cards/' + card_id + '/compile' + query)).json()['data']
+        assert compiled['can_run'], compiled['diagnostics']
+        assert compiled['text'].count('雨夜推镜') == 1
+        assert compiled['video_media']['subjects'][0]['name'] == '小雪'
+        assert [m['file_id'] for m in compiled['video_media']['subjects'][0]['media']] == [file_id]
+        video = next(c for c in state['document']['cards'] if c['id'] == card_id)
+        assert len(video['input_bindings']) == count
+
+    next(c for c in state['document']['cards'] if c['id'] == 'desc')['text'] = '晨光拉远'
+    updated = await client.put(path + query, json={'request_id': 'update-description', 'expected_revision': state['revision'],
+                                                   'document': state['document']})
+    assert updated.status_code == 200, updated.text
+    for card_id, expected in [('direct', '雨夜推镜'), ('referenced', '晨光拉远')]:
+        compiled = (await client.get(path + '/cards/' + card_id + '/compile' + query)).json()['data']
+        assert compiled['text'].count(expected) == 1
+
+    changes[:] = [{'kind': 'use_video_text', 'source_card': 'desc', 'target_card': 'direct', 'replace_segment_id': 'body'}]
+    state = (await client.get(path + query)).json()['data']
+    async def preview(request_id):
+        response = await client.post(path + '/assistant' + query, json={'text': '采用输入', 'request_id': request_id,
+            'context': {'scope': 'canvas', 'draft': state['document'], 'revision': state['revision']}})
+        assert response.status_code == 200, response.text
+        return response.json()['data']
+
+    different = await preview('different')
+    assert not different['proposal'] and '片段' in different['proposal_issues'][0]['message']
+    changes[0].pop('replace_segment_id')
+    pending = await preview('pending')
+    assert pending['proposal']
+    next(c for c in state['document']['cards'] if c['id'] == 'desc')['text'] = '用户重新编辑'
+    saved = await client.put(path + query, json={'request_id': 'change-before-approval',
+        'expected_revision': state['revision'], 'document': state['document']})
+    assert saved.status_code == 200, saved.text
+    conflict = (await client.post(path + '/assistant/proposals/pending' + query, json={
+        'action': 'approve', 'expected_revision': state['revision'], 'group_ids': ['1']})).json()['data']
+    assert conflict['conflicts'] and not conflict['receipt']

@@ -68,6 +68,37 @@ class AdjustShotMovement(BaseModel):
     text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16000)]
 
 
+class VideoTextUse(BaseModel):
+    """Insert a dynamic text reference at a selected segment or after existing text."""
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['use_video_text'] = Field(json_schema_extra={'enum': ['use_video_text']})
+    source_card: str
+    target_card: str
+    before_segment_id: str | None = None
+    replace_segment_id: str | None = None
+
+
+class VideoCharacterUse(BaseModel):
+    """Use a named character image as an explicit video subject."""
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['use_video_character'] = Field(json_schema_extra={'enum': ['use_video_character']})
+    position: int = Field(default=0, ge=0)
+    before_segment_id: str | None = None
+    source_card: str
+    target_card: str
+    subject_name: str = Field(min_length=1, max_length=255)
+
+
+class VideoInputTarget(BaseModel):
+    """Freeze the source, generated identities and previewed media for approval."""
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['adopt_video_input'] = Field(json_schema_extra={'enum': ['adopt_video_input']})
+    adds_edge: bool
+    use: Annotated[VideoTextUse | VideoCharacterUse, Field(discriminator='kind')]
+    identity: str
+    file_id: str | None = None
+
+
 class ConnectCards(BaseModel):
     """Connect two in-scope cards with compatible candidate ports."""
 

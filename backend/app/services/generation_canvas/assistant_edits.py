@@ -27,7 +27,7 @@ from app.schemas.canvas_assistant_edit import (
     VideoDurationEdit, VideoPromptSegmentEdit,
 )
 from app.schemas.canvas_assistant_structure import (
-    AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCardsTarget,
+    AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCardsTarget, VideoInputTarget, VideoTextUse, VideoCharacterUse,
 )
 from app.schemas.generation_canvas import (
     CanvasDocument, CanvasSave, CreativeBasisCard, GenerationCanvasEdge, ModelCard, MovementCard, NamedImageReferenceCard, ObjectDescriptionCard, PromptText,
@@ -42,6 +42,7 @@ from app.services.generation_canvas.assistant_removals import apply_removal, rem
 from app.services.generation_canvas.assistant_structure import (
     append_candidate_edge, apply_structural_change, assistant_card_configuration, assistant_card_copy, preview_assistant_connection,
 )
+from app.services.generation_canvas.assistant_video_inputs import adopt_video_input, check_video_input
 from app.services.generation_canvas.errors import CanvasDomainError
 from app.services.generation_canvas.graph import validate_graph
 from app.services.generation_canvas.store import CanvasStore
@@ -125,6 +126,7 @@ class CanvasAssistantEditDraft:
         self.visible_edges = {edge.id for edge in self.visible_document.edges}
         self.unavailable_origins: dict[tuple[str | None, str], bool] = {}
         self.visible_ids = {card.id for card in self.visible_document.cards}
+        self.video_inputs = ({}, {})
         self.applied_cards: dict[str, CanvasAssistantChange] = {}
         self.reused_cards: set[str] = set()
         self.repair_exclusions: set[tuple[str, str, str]] = set()
@@ -299,7 +301,7 @@ class CanvasAssistantEditDraft:
                     ))
         for index, operations in known_operations.items():
             for position, op in operations:
-                if isinstance(op, ProposedBatchConnection):
+                if isinstance(op, (ProposedBatchConnection, VideoTextUse, VideoCharacterUse)):
                     references = (op.source_card, op.target_card)
                 elif isinstance(op, ProposedBatchField):
                     references = (op.change.card_id,)
@@ -352,7 +354,7 @@ class CanvasAssistantEditDraft:
                         raise ToolException('Each proposed change must appear once')
                     group_targets.add(key)
                     edits.append(change)
-                if any(isinstance(edit.target, ConnectCardsTarget) for edit in edits):
+                if any(isinstance(edit.target, (ConnectCardsTarget, VideoInputTarget)) for edit in edits):
                     validate_graph(local.visible_document, self.visible_document)
             except ToolException as error:
                 self.proposal_issues.append(self._batch_issue(member, position, operation, str(error), getattr(error, 'card_ids', None)))
@@ -391,11 +393,22 @@ class CanvasAssistantEditDraft:
         )
 
     def _batch_operation(self, local, operation, references):
+        if isinstance(operation, (VideoTextUse, VideoCharacterUse)):
+            use = operation.model_copy(update={k: references.get(v, v) for k, v in (
+                ('source_card', operation.source_card), ('target_card', operation.target_card))})
+            if use.source_card not in local.cards or use.target_card not in local.cards:
+                raise ToolException('请选择当前范围内的来源卡和视频卡。')
+            change = adopt_video_input(local.visible_document, use, *self.video_inputs)
+            if change:
+                video = next(card for card in local.visible_document.cards if card.id == use.target_card)
+                local.cards[video.id] = video.model_dump(mode='json')
+                local.saved_cards[video.id] = video
+            else:
+                local.reused_cards.update((use.source_card, use.target_card))
+            return change
         if isinstance(operation, ProposedBatchField):
             edit = operation.change
-            card_id = references.get(edit.card_id)
-            if card_id is None:
-                return self._preview(edit.card_id, edit.target, edit.text)
+            card_id = references.get(edit.card_id, edit.card_id)
             change = local._preview(card_id, edit.target, edit.text)
             card = next(item for item in local.visible_document.cards if item.id == card_id)
             local.saved_cards[card_id] = card
@@ -812,7 +825,11 @@ async def _apply_group(store, canvas, document, group):
     conflicts = []
     for change in group.edits:
         current = None
-        if isinstance(change.target, (AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCardsTarget)):
+        if isinstance(change.target, VideoInputTarget):
+            current = await check_video_input(store, canvas, document, change)
+            if current is None:
+                continue
+        elif isinstance(change.target, (AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCardsTarget)):
             if await apply_structural_change(store, canvas, document, change):
                 continue
         elif isinstance(change.target, (DeleteCardEdit, ReleaseBindingEdit, DisconnectCardsEdit)):

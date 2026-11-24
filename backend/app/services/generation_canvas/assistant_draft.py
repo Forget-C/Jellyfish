@@ -13,11 +13,12 @@ from app.models.generation_canvas import GenerationCanvas
 from app.schemas.canvas_assistant import CanvasAssistantExchange, CanvasAssistantProgress
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposal
 from app.schemas.canvas_assistant_draft import CanvasDraftSave, DraftAssistantMessage, DraftAssistantReply
-from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, ConnectCardsTarget
+from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, ConnectCardsTarget, VideoInputTarget
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
 from app.services.generation_canvas.assistant import CanvasAssistant, MODEL_FAILED, MODEL_FAILURE_REPLIES, MODEL_TIMEOUT, PROPOSAL_INVALID, PROPOSAL_RETRY_GUIDANCE, prepare_proposal_repair
 from app.services.generation_canvas.assistant_context import resolve_assistant_context, resolve_external_canvas_cards
+from app.services.generation_canvas.assistant_video_inputs import check_video_input, video_input_context
 from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
 from app.services.generation_canvas.assistant_events import publish_events
 from app.services.generation_canvas.assistant_media import (
@@ -61,6 +62,7 @@ class DraftCanvasAssistant(CanvasAssistant):
             canvas = GenerationCanvas(id=canvas_id, kind='free', revision=0)
             context = resolve_assistant_context(canvas, command.context, command.text)
             edit_draft = CanvasAssistantEditDraft(context, empty, CanvasDocument.model_validate(command.context.draft))
+            edit_draft.video_inputs = await video_input_context(self.db, canvas, edit_draft.visible_document, edit_draft.cards)
         model, provider, capability = await self._resolve_model(command.model_id)
         client = await self._model_client(model, provider, capability)
         model_id = model.id
@@ -178,10 +180,13 @@ def _valid_proposal(proposal: CanvasAssistantProposal | None) -> bool:
                     return False
                 local.add(edit.card_id)
                 added.add(edit.card_id)
+            elif isinstance(target, VideoInputTarget):
+                if edit.card_id != target.use.target_card:
+                    return False
             elif (not isinstance(target, ConnectCardsTarget) or edit.card_id != target.target_card
                   or {target.source_card, target.target_card} - local):
                 return False
-        if not local:
+        if not local and not any(isinstance(e.target, VideoInputTarget) for e in group.edits):
             return False
     return True
 
@@ -208,6 +213,11 @@ async def prepare_draft_approval(store, canvas, command: CanvasDraftSave):
     for group in proposal.groups:
         if group.id in selected_ids:
             for edit in group.edits:
+                if isinstance(edit.target, VideoInputTarget):
+                    conflict = await check_video_input(store, canvas, document, edit)
+                    if conflict:
+                        raise HTTPException(409, conflict)
+                    continue
                 if not await apply_structural_change(store, canvas, document, edit):
                     raise HTTPException(409, 'The proposed card or connection is no longer valid')
     return document.model_dump(mode='json')

@@ -32,6 +32,7 @@ from app.schemas.canvas_assistant_edit import CanvasAssistantProposal, CanvasAss
 from app.schemas.canvas_assistant_layout import CanvasAssistantLayout
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.assistant_budget import CONTEXT_LIMIT_ERROR, messages_within_budget, revision_subject
+from app.services.generation_canvas.assistant_video_inputs import video_input_context
 from app.services.generation_canvas.assistant_checkpoint import CanvasCheckpointer, CheckpointMediaUnavailable
 from app.services.generation_canvas.assistant_context import (
     CANVAS_PAGE_SIZE, context_page, prioritize_context_cards, read_context_coverage, read_text_context_coverage, resolve_assistant_context, resolve_external_canvas_cards,
@@ -450,6 +451,7 @@ class CanvasAssistant:
             context = scoped.model_dump(mode='json')
             edit_draft = CanvasAssistantEditDraft(scoped, CanvasDocument.model_validate(canvas.document),
                                                       CanvasDocument.model_validate(command.context.draft))
+            edit_draft.video_inputs = await video_input_context(self.db, canvas, edit_draft.visible_document, edit_draft.cards)
             edit_draft.user_request = command.text
             if scoped.layout_positions:
                 layout_draft = CanvasAssistantLayoutDraft(scoped, edit_draft.visible_document)
@@ -808,6 +810,11 @@ class CanvasAssistant:
         if edit_draft and edit_draft.applied_cards:
             professional += ('按历史审批回执定位原卡，补充字段或连线用真实 ID。只有用户明确要求另建副本时，'
                              '使用批量 add_card 并指定 copy_of 原卡 ID，在审批摘要显式说明复制。')
+        if edit_draft:
+            professional += ('单镜头完整描述直接写视频卡；复用文本卡用 use_video_text(source_card,target_card,可选replace_segment_id)，'
+                             '只保留镜头补充。角色图用 use_video_character(source_card,target_card,subject_name)，'
+                             '两个操作均可用 before_segment_id 在镜头补充前插入引用。缺图时将独立文案另组送审。'
+                             '按镜头指定覆盖图优先并尊重人工改绑。上述 kind 与参数同级，使用真实卡 ID 或新卡 reference。')
         if planning:
             professional += ('\n当前轮仅给出只读方案。说明镜头取舍、各段时长和合计、实施步骤与涉及的卡片。'
                              '基于实际读取的资料，明确缺失依据。等待用户要求按此方案继续。')
