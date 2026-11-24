@@ -12,6 +12,7 @@ from app.schemas.canvas_assistant_layout import (
     CanvasAssistantGrouping, CanvasAssistantLayout, CanvasAssistantPlacement, CardId, MoveCanvasCards,
 )
 from app.schemas.canvas_assistant import CanvasAssistantExchange
+from app.services.generation_canvas.approval_upgrade import require_unexpired_approval
 from app.services.generation_canvas.assistant_events import publish_events
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.store import CanvasStore
@@ -61,6 +62,7 @@ async def decide_assistant_layout(db, project_id, canvas_id, source_id, action) 
     turn = await db.get(CanvasAssistantTurn, (canvas_id, source_id), with_for_update=True, populate_existing=True)
     if turn is None or turn.layout is None:
         raise HTTPException(404, 'Canvas assistant layout proposal not found')
+    require_unexpired_approval(turn, 'layout')
     result = CanvasAssistantLayout.model_validate(turn.layout)
     expected, target = {
         'approve': ('proposed', 'waiting'), 'reject': ('proposed', 'rejected'),

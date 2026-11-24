@@ -60,6 +60,8 @@ class CanvasAssistantTurn(Base):
     subtasks: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     attachments: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     approval_audit: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    approval_requests: Mapped[dict[str, str] | None] = mapped_column(JSON, nullable=True)
+    expired_approval_kinds: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     question_answers: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     instructions: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     stopped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default='0')

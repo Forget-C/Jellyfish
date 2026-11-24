@@ -14,6 +14,7 @@ from app.schemas.canvas_assistant_generation import (CanvasAssistantGenerationAp
                                                        CanvasAssistantGenerationVersion)
 from app.schemas.generation_canvas import CanvasDocument, CanvasPrecheckRequest, CanvasRunSubmit
 from app.schemas.canvas_assistant import CanvasAssistantExchange
+from app.services.generation_canvas.approval_upgrade import legacy_generation_request_id as _request_id, require_unexpired_approval
 from app.services.generation_canvas.assistant_events import publish_events
 from app.services.generation_canvas.assistant_auto_review import conduct_review
 from app.services.generation_canvas.assistant_edits import automatic_targets_current, resolve_assistant_proposal
@@ -21,7 +22,7 @@ from app.services.generation_canvas.assistant_layout import decide_assistant_lay
 from app.services.generation_canvas.assistant_targets import explicit_generation_quantity, shot_request_matches
 from app.services.generation_canvas.runtime import CanvasRuntime
 from app.services.generation_canvas.store import CanvasStore
-from app.services.task_service import utcnow
+from app.services.task_service import SUBMISSION_UNKNOWN, utcnow
 
 
 def _presentation_guidance(text: str) -> bool:
@@ -90,6 +91,8 @@ async def decide_assistant_generation_edit(
     db: AsyncSession, project_id: str, canvas_id: str, source_id: str, body: CanvasAssistantProposalDecision,
 ) -> CanvasAssistantProposalResult:
     """An edit decision and its effect on a waiting generation commit together."""
+    await CanvasStore(db, project_id).get(canvas_id)
+    require_unexpired_approval(await db.get(CanvasAssistantTurn, (canvas_id, source_id)), 'edit')
     review = await conduct_review(db, project_id, canvas_id, source_id, body, automatic_targets_current)
     result = await resolve_assistant_proposal(db, project_id, canvas_id, source_id, body, automatic_review=review)
     if result.replayed:
@@ -149,10 +152,6 @@ def _fail_generation(entry: CanvasAssistantGeneration, error: HTTPException) -> 
     entry.error = error.detail.get('message', '生成预检未通过') if isinstance(error.detail, dict) else str(error.detail)
 
 
-def _request_id(source_id: str, version: int) -> str:
-    return 'assistant-run:' + sha256(f'{version}:{source_id}'.encode()).hexdigest()[:48]
-
-
 async def _receipts(db: AsyncSession, entry: CanvasAssistantGeneration) -> dict[str, CanvasRunReceipt]:
     ids = [_request_id(entry.source_id, sequence) for sequence in range(1, entry.requested_count + 1)]
     return {item.request_id: item for item in await db.scalars(select(CanvasRunReceipt).where(
@@ -177,7 +176,8 @@ async def read_generation(db: AsyncSession, canvas_id: str, source_id: str) -> C
         if receipt is not None and receipt.response['run_id'] in nodes:
             node, revision = nodes[receipt.response['run_id']]
             versions.append(CanvasAssistantGenerationVersion(version=version, request_id=receipt.request_id,
-                run_id=node.run_id, input_revision=revision, state=node.status, error=node.error_message))
+                run_id=node.run_id, input_revision=revision, state='unknown' if node.stage == SUBMISSION_UNKNOWN else node.status,
+                error=node.error_message))
     state, error = entry.state, entry.error
     active = any(version.state not in ('succeeded', 'failed', 'cancelled') for version in versions)
     if entry.state in ('queued', 'submitted') and active:
@@ -187,7 +187,7 @@ async def read_generation(db: AsyncSession, canvas_id: str, source_id: str) -> C
             state = 'completed'
         else:
             state = 'failed'
-            error = next((version.error for version in versions if version.error), None) or '有已授权的版本未完成'
+            error = next((version.error for version in versions if version.error), None) or error or '有已授权的版本未完成'
     review = CanvasAssistantGenerationReview(
         state=entry.review_state, results=entry.review_results or [],
     ) if entry.review_state else None
@@ -274,6 +274,7 @@ def _hold_changed_input(entry, preview, basis):
 async def reapprove_generation(db, project_id, canvas_id, source_id, command: CanvasAssistantGenerationApproval):
     """Approve changed input after checking the exact preview against the current canvas."""
     await CanvasStore(db, project_id).get(canvas_id, lock=True)
+    require_unexpired_approval(await db.get(CanvasAssistantTurn, (canvas_id, source_id)), 'generation')
     entry = await db.get(CanvasAssistantGeneration, (canvas_id, source_id), with_for_update=True, populate_existing=True)
     if entry is None:
         raise HTTPException(404, 'Canvas generation authorization not found')

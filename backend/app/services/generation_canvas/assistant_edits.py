@@ -33,6 +33,7 @@ from app.schemas.generation_canvas import (
     CanvasDocument, CanvasSave, CreativeBasisCard, GenerationCanvasEdge, ModelCard, MovementCard, NamedImageReferenceCard, ObjectDescriptionCard, PromptText,
     TextContentCard, VideoModelCard, VideoModelConfig,
 )
+from app.services.generation_canvas.approval_upgrade import require_unexpired_approval
 from app.services.generation_canvas.catalog import CARD_TITLES, design_fields
 from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
 from app.services.generation_canvas.assistant_approval import automatic_approval_allowed, automatically_reviewed_change
@@ -597,6 +598,7 @@ async def resolve_assistant_proposal(
     turn = await db.get(CanvasAssistantTurn, (canvas_id, source_id), with_for_update=True, populate_existing=True)
     if turn is None or turn.proposal is None:
         raise HTTPException(404, 'Canvas assistant proposal not found')
+    require_unexpired_approval(turn, 'edit')
     proposal = CanvasAssistantProposal.model_validate(turn.proposal)
     receipts = turn.proposal_receipt or {}
     selected = sorted(decision.group_ids or ())
