@@ -83,7 +83,7 @@ async def decide(sessions, access, request):
                                                 action='approve', idempotency_key='approve-one')
 
 
-async def observe_unknown(sessions, client, access, decision_id):
+async def observe_receipt(sessions, client, access, decision_id, *, state):
     worker = TaskWorker(sessions, client=client)
     running = asyncio.create_task(worker.run())
     try:
@@ -91,7 +91,7 @@ async def observe_unknown(sessions, client, access, decision_id):
             while True:
                 async with sessions() as db:
                     status = await CanvasGenerationApprovals(db).read_receipt(access, decision_id)
-                if status.state == 'unknown':
+                if status.state == state:
                     return status
                 await asyncio.sleep(0.02)
     finally:
@@ -134,7 +134,7 @@ async def test_restarted_worker_tracks_original_task_after_provider_response_los
             await asyncio.gather(*running.jobs.values())
         finally:
             running.text_pool.shutdown()
-        status = await observe_unknown(sessions, client, access, decision.id)
+        status = await observe_receipt(sessions, client, access, decision.id, state='unknown')
         assert status.admission == original.admission
         assert status.run.nodes[0].task_id == original.admission.task_ids[0]
         assert [method for method, _ in calls] == ['POST']
@@ -142,17 +142,11 @@ async def test_restarted_worker_tracks_original_task_after_provider_response_los
         trusted = ApprovalAccess(scope=access.scope, actor_id='provider-reconciler', permissions={'read'}, source='service')
         async with sessions.begin() as db:
             await CanvasGenerationApprovals(db).record_provider_id(trusted, decision.id, 'remote-video')
-        poller = TaskWorker(sessions, client=client)
-        try:
-            await poller.tick()
-            await asyncio.gather(*poller.jobs.values())
-        finally:
-            poller.text_pool.shutdown()
-    async with sessions() as db:
-        receipt = await CanvasGenerationApprovals(db).read_receipt(access, decision.id)
-        assert receipt.state == 'succeeded', (receipt, calls)
-        assert receipt.admission == original.admission
-        assert receipt.run.nodes[0].outputs[0].file_id
+        # MySQL stores the due time at second precision. Let the real worker
+        # reach that time instead of assuming its first tick can poll the task.
+        receipt = await observe_receipt(sessions, client, access, decision.id, state='succeeded')
+    assert receipt.admission == original.admission
+    assert receipt.run.nodes[0].outputs[0].file_id
     assert calls == [('POST', '/videos'), ('GET', '/videos/remote-video'), ('GET', '/videos/remote-video/content')]
 
 
@@ -219,7 +213,7 @@ async def test_crash_after_durable_send_marker_does_not_resubmit(generation_sess
         return httpx.Response(500)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
-        recovered = await observe_unknown(sessions, client, access, decision.id)
+        recovered = await observe_receipt(sessions, client, access, decision.id, state='unknown')
     assert recovered.admission == accepted.admission
     assert recovered.run.nodes[0].error_code == 'submission_unknown'
     assert requests == []
