@@ -1254,9 +1254,14 @@ try {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '只读预演送审' }),
   })).json()).data
   const exactPath = canvasApi + '/' + exactCanvas.id
+  const exactModel = await fetch(exactPath + '/assistant/model', {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model_id: 'browser-tool-model' }),
+  })
+  assert.ok(exactModel.ok, await exactModel.clone().text())
   await page.goto(base + '/canvases/' + exactCanvas.id)
   await open()
-  await ask('新增潮水文本卡，只给方案，先不要写入画布')
+  await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('新增潮水文本卡，只给方案，先不要写入画布')
+  await panel.getByRole('button', { name: '发送消息' }).click()
   const readOnly = panel.getByRole('region', { name: '修改预演' })
   await readOnly.getByText('潮水涌入', { exact: true }).waitFor()
   assert.equal(await readOnly.getByRole('checkbox').count(), 0)

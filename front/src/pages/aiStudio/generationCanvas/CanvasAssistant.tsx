@@ -1046,8 +1046,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             {!!turn.proposal_issues?.length && <details open className="canvas-assistant-evidence">
               <summary>{uiText('待修正的画布操作')}</summary>
               <ul>{turn.proposal_issues.map((issue, index) => <li key={index}>
-                {issue.group != null && <>{uiText('第 {{group}} 组', { group: issue.group })} · </>}
-                {issue.operation != null && <>{uiText('第 {{operation}} 项', { operation: issue.operation })} · </>}
+                {typeof issue.group === 'number' && <>{uiText('第 {{group}} 组', { group: issue.group })} · </>}
+                {typeof issue.operation === 'number' && <>{uiText('第 {{operation}} 项', { operation: issue.operation })} · </>}
                 {issue.field && <code>{issue.field} · </code>}
                 {issue.message}
                 {issue.candidate_ids?.map(id => <span key={id}>
