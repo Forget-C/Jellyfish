@@ -14,6 +14,8 @@ import pytest_asyncio
 
 from app.models.llm import Model, ModelSettings, Provider
 from tests.canvas_urls import append_canvas_path, canvas_url, seed_scene_canvas
+from tests.isolated_mysql import isolated_storage_environment
+from tests.services.test_task_mysql import isolated_database_url
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # pylint: disable=unused-import
 
 
@@ -290,14 +292,15 @@ async def test_assistant_edit_requires_approval_and_replays_original_save(canvas
 
 
 @asynccontextmanager
-async def _live_mysql_app(tmp_path):
+async def _live_mysql_app(tmp_path, storage_env):
     """Start the real HTTP and Worker processes against the isolated test DB."""
     with socket.socket() as listener:
         listener.bind(('127.0.0.1', 0))
         port = listener.getsockname()[1]
     env = {
         **os.environ,
-        'DATABASE_URL': os.environ['JELLYFISH_TEST_MYSQL_URL'],
+        **storage_env,
+        'DATABASE_URL': isolated_database_url(),
         'JELLYFISH_DEV_RUNTIME_DIR': str(tmp_path / 'identities'),
         'ASSISTANT_APPROVAL_COMMITTED_MARKER': str(tmp_path / 'committed'),
     }
@@ -331,13 +334,14 @@ async def _live_mysql_app(tmp_path):
 
 
 async def _restart_and_replay(tmp_path, url, decision, groups):
+    storage_env = isolated_storage_environment()
     path = '/api/v1/studio/generation-canvases/' + url.rsplit('/', 1)[-1] + '/assistant'
-    async with _live_mysql_app(tmp_path) as client:
+    async with _live_mysql_app(tmp_path, storage_env) as client:
         history = (await client.get(path)).json()['data']['turns']
         assert history[0]['proposal']['groups'] == groups
 
     decision_url = path + '/proposals/edit-speed'
-    async with _live_mysql_app(tmp_path) as client:
+    async with _live_mysql_app(tmp_path, storage_env) as client:
         waiting = asyncio.create_task(client.post(decision_url, json=decision, headers={'x-test-drop-receipt': '1'}))
         try:
             async with asyncio.timeout(10):
@@ -348,7 +352,7 @@ async def _restart_and_replay(tmp_path, url, decision, groups):
         finally:
             waiting.cancel()
             await asyncio.gather(waiting, return_exceptions=True)
-    async with _live_mysql_app(tmp_path) as client:
+    async with _live_mysql_app(tmp_path, storage_env) as client:
         replay = await client.post(decision_url, json=decision)
         assert replay.status_code == 200, replay.text
         assert replay.json()['data']['receipt']['revision'] == decision['expected_revision'] + 2

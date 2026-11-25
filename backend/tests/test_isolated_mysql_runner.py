@@ -50,3 +50,17 @@ def test_isolated_mysql_runner_rejects_before_opening_connection(
     )
     assert result.returncode == 2
     assert message in result.stderr
+
+
+def test_isolated_mysql_uses_fresh_storage_prefix_and_clears_inherited_authorization(monkeypatch):
+    from app.config import settings
+    from tests.isolated_mysql import test_environment
+
+    monkeypatch.setattr(settings, "database_url", "mysql+aiomysql://app@localhost/jellyfish")
+    monkeypatch.setattr(settings, "s3_base_path", "/development/")
+    monkeypatch.setenv("JELLYFISH_TEST_MYSQL_URL", "mysql+aiomysql://test@localhost/jellyfish_check_worker")
+    monkeypatch.setenv("S3_ORPHAN_CLEANUP_SCOPE", "development-authorization")
+    first, second = test_environment(), test_environment()
+    assert first["S3_BASE_PATH"].startswith("development/validation/")
+    assert first["S3_BASE_PATH"] != second["S3_BASE_PATH"]
+    assert first["S3_ORPHAN_CLEANUP_SCOPE"] == ""

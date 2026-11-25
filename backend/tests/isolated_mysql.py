@@ -5,6 +5,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
@@ -43,9 +44,18 @@ def test_environment() -> dict[str, str]:
     if current.get_backend_name() == "mysql" and url.database.casefold() == (current.database or "").casefold():
         raise ValueError("The isolated MySQL test target cannot be the current database")
 
-    env = os.environ.copy()
+    env = {**os.environ, **isolated_storage_environment()}
     env.update(DATABASE_URL=target, JELLYFISH_TEST_MYSQL_URL=target, JELLYFISH_DIRECTING_MYSQL_URL=target)
     return env
+
+
+def isolated_storage_environment() -> dict[str, str]:
+    """Keep test media outside the configured worker's files/ and generated/ scans."""
+    from app.config import settings
+
+    base = settings.s3_base_path.strip().strip("/")
+    prefix = "/".join(filter(None, (base, "validation", uuid4().hex)))
+    return {"S3_BASE_PATH": prefix, "S3_ORPHAN_CLEANUP_SCOPE": ""}
 
 
 def main() -> None:
