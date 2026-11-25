@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import aclosing
 from dataclasses import dataclass
 from uuid import uuid4
 
 from fastapi import HTTPException, status
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,13 +35,14 @@ from app.core.contracts.streaming import (
     StreamMessageData,
     StreamEventType,
 )
+from app.core.contracts.model_provider import ProviderChatMessage, TextModelProvider
 from app.core.contracts.text_generation import TextChatInput, TextChatMessage
 from app.core.db import async_session_maker
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.runtime.text_streaming import TextStreamRunNotFoundError, TextStreamingRuntime
 from app.services.generation.submission import GenerationAccepted, GenerationSubmitter
-from app.services.llm.resolver import build_text_chat_model
+from app.services.llm.resolver import build_laboratory_chat
 from app.schemas.studio.text_lab import TextLabRunRequest
 from app.services.studio.experiment_interaction import (
     find_text_request, interaction_request_payload, text_stream_origin, text_stream_result,
@@ -91,7 +94,7 @@ async def create_text_stream_run(
 ) -> tuple[str, GenerationStreamEvent]:
     """持久化用户消息并创建内存 SSE run，不写入异步任务表。"""
     session = await _require_text_session(db, session_id=session_id)
-    await build_text_chat_model(db, model_id=model_id, thinking=False)
+    await build_laboratory_chat(db, model_id=model_id)
     run_id = uuid4().hex
     draft = experiment_user_message(prompt=content, model_id=model_id)
     if request_id:
@@ -236,22 +239,33 @@ async def _require_text_session(db: AsyncSession, *, session_id: str) -> Experim
     return session
 
 
-def _as_langchain_messages(messages: list[dict[str, object]]) -> list[HumanMessage | AIMessage | SystemMessage]:
-    """将任务快照中的文本消息转换为受限 LangChain 消息类型。"""
-    result: list[HumanMessage | AIMessage | SystemMessage] = []
+def _snapshot_messages(messages: list[dict[str, object]]) -> list[ProviderChatMessage]:
+    """恢复已保存的纯文本消息。"""
+    result: list[ProviderChatMessage] = []
     for message in messages:
-        content, role = str(message.get("content") or ""), str(message.get("role") or "")
-        if role == "user":
-            result.append(HumanMessage(content=content))
-        elif role == "assistant":
-            result.append(AIMessage(content=content))
-        elif role == "system":
-            result.append(SystemMessage(content=content))
-        else:
+        role = message.get("role")
+        if role not in ("user", "assistant", "system"):
             raise RuntimeError("text chat snapshot contains an unsupported role")
+        result.append({"role": role, "content": str(message.get("content") or "")})
     if not result:
         raise RuntimeError("text chat snapshot contains no messages")
     return result
+
+
+async def _stream_chat(
+    model: TextModelProvider | BaseChatModel, content: str,
+) -> AsyncGenerator[str, None]:
+    if isinstance(model, BaseChatModel):
+        async for chunk in model.astream([HumanMessage(content=content)]):
+            if text := _chunk_text(chunk):
+                yield text
+        return
+    async with aclosing(model.stream([{"role": "user", "content": content}])) as events:
+        async for event in events:
+            if event.kind == "error":
+                raise RuntimeError(event.error or "Text model stream failed")
+            if event.kind == "delta" and event.choice == 0 and event.text:
+                yield event.text
 
 
 async def _invoke_text_snapshot(db: AsyncSession, *, snapshot_payload: dict[str, object]) -> str:
@@ -262,9 +276,19 @@ async def _invoke_text_snapshot(db: AsyncSession, *, snapshot_payload: dict[str,
     model_id = str(snapshot_payload.get("model_id") or "")
     if not model_id:
         raise RuntimeError("text chat snapshot model is unavailable")
-    model = await build_text_chat_model(db, model_id=model_id, thinking=False)
-    response = await model.ainvoke(_as_langchain_messages(list(operation_input.get("messages") or [])))
-    text = _chunk_text(response).strip()
+    model = await build_laboratory_chat(db, model_id=model_id)
+    messages = _snapshot_messages(list(operation_input.get("messages") or []))
+    if isinstance(model, BaseChatModel):
+        response = await model.ainvoke([
+            {"user": HumanMessage, "assistant": AIMessage, "system": SystemMessage}[message["role"]](
+                content=str(message["content"] or "")
+            )
+            for message in messages
+        ])
+        text = _chunk_text(response).strip()
+    else:
+        result = await model.invoke(messages)
+        text = next((choice.text.strip() for choice in result.choices if choice.choice == 0), "")
     if not text:
         raise RuntimeError("text model returned an empty response")
     return text
@@ -275,13 +299,13 @@ async def stream_text_run(run_id: str) -> None:
     try:
         stream_input = await _get_stream_input(run_id)
         async with async_session_maker() as db:
-            model = await build_text_chat_model(db, model_id=stream_input.model_id, thinking=False)
+            model = await build_laboratory_chat(db, model_id=stream_input.model_id)
         deltas = []
-        async for chunk in model.astream([HumanMessage(content=stream_input.content)]):
-            if await _runtime.is_cancel_requested(run_id):
-                await _cancel(run_id, "cancel_requested")
-                return
-            if text := _chunk_text(chunk):
+        async with aclosing(_stream_chat(model, stream_input.content)) as chunks:
+            async for text in chunks:
+                if await _runtime.is_cancel_requested(run_id):
+                    await _cancel(run_id, "cancel_requested")
+                    return
                 if stream_input.request_id:
                     deltas.append([len(deltas) + 2, text])
                     await _checkpoint_text(stream_input, deltas)

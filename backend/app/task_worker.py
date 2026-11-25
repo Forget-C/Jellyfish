@@ -15,13 +15,17 @@ import httpx
 from fastapi import HTTPException
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
+from langchain_core.language_models.chat_models import BaseChatModel
 from openai import APIStatusError, APITimeoutError
 from sqlalchemy import func, or_, select
 
 from app.core.db import async_session_maker, close_db
 from app.core.dev_runtime import process_identity
-from app.core.integrations.media_provider import MediaProvider, ProviderDataError
+from app.core.contracts.provider_media import RemoteTaskReference
+from app.core.contracts.model_capabilities import ModelCapabilityProfile
+from app.core.integrations.langchain_chat import build_langchain_chat
+from app.core.integrations.text_capabilities import describe_model
+from app.core.integrations.media_provider import bind_media_provider, ProviderDataError
 from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardApplication, StoryboardOrganization, StoryboardReviewReport
 from app.core.contracts.task import TaskStatus
 from app.models.llm import Model, ModelCategoryKey, Provider
@@ -50,6 +54,7 @@ from app.services.llm.provider_resolver import resolve_provider_config_from_prov
 from app.services.script_processing_worker import generate_script_result
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
 from app.services.task_service import (
+    REMOTE_CANCEL_SENT,
     AUTO_CHECK_DISPATCH, MEDIA_KINDS, SUBMISSION_UNKNOWN, TASK_KINDS, TaskService, utcnow,
 )
 
@@ -213,7 +218,10 @@ class TaskWorker:
             due = list(await db.scalars(select(Task.id).where(
                 Task.status == "running", Task.execution_mode == "remote", Task.provider_task_id.is_not(None),
                 Task.id.not_in(list(self.jobs)),
-                or_(Task.next_poll_at <= utcnow(), Task.cancel_requested_at.is_not(None), Task.deadline_at <= utcnow()),
+                or_(Task.next_poll_at <= utcnow(), Task.deadline_at <= utcnow(),
+                    Task.cancel_requested_at.is_not(None) & or_(
+                        Task.remote_status.is_(None), Task.remote_status.not_in(REMOTE_CANCEL_SENT),
+                    )),
             ).order_by(Task.next_poll_at, Task.id).limit(max(0, available))))
             await db.commit()
         for task_id in due:
@@ -234,13 +242,13 @@ class TaskWorker:
 
         job.add_done_callback(done)
 
-    async def _load(self, task_id: str):
+    async def _load(self, task_id: str, *, handle_remote_cancel: bool = False):
         """读取最新活动任务并裁决取消，返回脱离数据库会话的任务数据。"""
         async with self.sessions() as db:
             task = await db.get(Task, task_id)
             if task is None or task.status != TaskStatus.running:
                 return None
-            if task.cancel_requested_at:
+            if task.cancel_requested_at and not (handle_remote_cancel and task.provider_task_id):
                 await TaskService(db).finish(task_id, cancelled=True)
                 await db.commit()
                 return None
@@ -274,10 +282,14 @@ class TaskWorker:
                     async with self.sessions.begin() as db:
                         if not await begin_approved_provider_submission(db, task_id, worker_id=self.worker_id):
                             return
-                result = await MediaProvider(self.client).submit(cfg, inp)
-                if isinstance(result, str):
+                elif task.execution_mode == "remote":
+                    async with self.sessions.begin() as db:
+                        if not await TaskService(db).begin_provider_submission(task_id, worker_id=self.worker_id):
+                            return
+                result = await bind_media_provider(cfg, client=self.client).invoke(inp)
+                if isinstance(result, RemoteTaskReference):
                     async with self.sessions() as db:
-                        await TaskService(db).record_submission(task_id, provider_task_id=result, tracking_seconds=self.limits.tracking_seconds)
+                        await TaskService(db).record_submission(task_id, provider_task_id=result.task_id, tracking_seconds=self.limits.tracking_seconds)
                         await db.commit()
                 else:
                     await self._save(task, result)
@@ -313,7 +325,12 @@ class TaskWorker:
 
     async def _preserve_unknown_submission(self, task_id: str) -> bool:
         async with self.sessions.begin() as db:
-            return await preserve_approved_provider_submission(db, task_id)
+            if await preserve_approved_provider_submission(db, task_id):
+                return True
+            task = await db.get(Task, task_id, with_for_update=True, populate_existing=True)
+            if task is None or task.execution_mode != "remote" or task.target_type == "canvas_node":
+                return False
+            return bool(task.provider_task_id) or await TaskService(db).mark_provider_submission_unknown(task_id)
 
     async def _poll(self, task_id: str) -> None:
         """单次查询失败可延后再查；跟踪截止后最终查询仍未完成则结束本地任务。"""
@@ -321,12 +338,27 @@ class TaskWorker:
         # pylint: disable=try-except-raise
         try:
             async with asyncio.timeout(self.limits.execution_seconds):
-                task = await self._load(task_id)
+                task = await self._load(task_id, handle_remote_cancel=True)
                 if task is None:
                     return
                 cfg = restore_media_config(task)
+                provider = bind_media_provider(cfg, client=self.client)
+                reference = RemoteTaskReference(task.kind, task.provider_task_id)
                 try:
-                    observed = await MediaProvider(self.client).poll(cfg, kind=task.kind, task_id=task.provider_task_id)
+                    if task.cancel_requested_at and task.remote_status not in REMOTE_CANCEL_SENT:
+                        async with self.sessions.begin() as db:
+                            sending = await TaskService(db).begin_remote_cancel(task_id)
+                        if not sending:
+                            return
+                        profile = ModelCapabilityProfile.model_validate(
+                            (task.input_snapshot.get("execution_config") or {}).get("capability_profile") or {},
+                        )
+                        outcome = ("unsupported" if profile.remote_cancel.declaration == "unsupported"
+                                   else await provider.cancel(reference))
+                        async with self.sessions.begin() as db:
+                            await TaskService(db).record_remote_cancel(task_id, outcome)
+                        return
+                    observed = await provider.poll(reference)
                 except (httpx.TransportError, httpx.HTTPStatusError) as error:
                     if task.deadline_at and task.deadline_at <= utcnow():
                         await self._fail(task_id, "tracking_timeout", "供应商状态跟踪超时")
@@ -383,7 +415,9 @@ class TaskWorker:
                 raise ProviderDataError("provider_route_changed")
             params = dict(model.params or {})
             params.update(model=task.input_snapshot["model_name"], api_key=cfg.api_key, base_url=cfg.base_url,
-                          max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
+                          max_retries=0, timeout=self.limits.request_seconds)
+            if task.kind == "text_chat":
+                params["http_async_client"] = self.client
             if task.kind != "text_chat":
                 params["callbacks"] = [ScriptStopHandler(stopped, monotonic() + self.limits.execution_seconds)]
             directing = task.kind in {"directing_storyboard", STORYBOARD_CHECK_KIND, "directing_object_extract", "directing_shooting_check", "directing_divide", "directing_design", "directing_review", "directing_review_revision"}
@@ -392,7 +426,10 @@ class TaskWorker:
                 params["streaming"] = True
             if directing or task.kind == "text_chat":
                 params["extra_body"] = {**params.get("extra_body", {}), "enable_thinking": False}
-            llm = ChatOpenAI(**params)
+            capability = describe_model(cfg.provider_key, model.name, ModelCapabilityProfile.model_validate(
+                model.capability_profile or {},
+            ), operation="chat")
+            llm = build_langchain_chat(provider_key=cfg.provider_key, tools_available=capability.tool_results, **params)
             stage = {"directing_storyboard": "extracting_storyboard", STORYBOARD_CHECK_KIND: 'reviewing_storyboard',
                      "directing_object_extract": "extracting_objects"}.get(task.kind)
             if task.input_snapshot.get('review_retry_from'):
@@ -769,7 +806,7 @@ class TaskWorker:
         checkpoint = await self._write_storyboard_prompts(task, llm, stopped, checkpoint, prior_prompts)
         return checkpoint, await self._review_storyboard_checkpoint(task, llm, stopped, checkpoint)
 
-    def _frozen_text_model(self, task: Task, *, multimodal: bool = False) -> ChatOpenAI:
+    def _frozen_text_model(self, task: Task, *, multimodal: bool = False) -> BaseChatModel:
         """Use only the provider and model configuration captured at admission."""
         from app.core.contracts.generation import FrozenGenerationConfig
         from app.services.generation_canvas.check_models import check_model_parameters
@@ -783,7 +820,10 @@ class TaskWorker:
                 params['use_responses_api'] = False
         params.update(model=frozen.model_name, api_key=frozen.api_key, base_url=frozen.base_url,
                       max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
-        return ChatOpenAI(**params)
+        capability = describe_model(frozen.provider_key, frozen.model_name, ModelCapabilityProfile.model_validate(
+            frozen.capability_profile or {},
+        ), operation="chat")
+        return build_langchain_chat(provider_key=frozen.provider_key, tools_available=capability.tool_results, **params)
 
     async def _canvas_check(self, task: Task) -> None:
         """Execute one semantic item and publish only its validated observation."""

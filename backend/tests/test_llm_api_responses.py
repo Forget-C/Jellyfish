@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator, Iterator
 from datetime import UTC, datetime
 
 import pytest
+import httpx
 from fastapi.testclient import TestClient
 
 from app.dependencies import get_db
@@ -268,6 +269,32 @@ def test_get_vidu_model_catalog_returns_importable_official_models(client: TestC
     assert body["data"]["provider_key"] == "vidu"
     assert body["data"]["source"] == "provider_catalog"
     assert {item["name"] for item in body["data"]["models"]} >= {"viduq2", "viduq3-turbo"}
+
+
+def test_catalog_uses_default_endpoint_when_base_url_is_blank(client: TestClient, monkeypatch) -> None:
+    db = _FakeLlmDB()
+    provider = _seed_provider(db, "p-openai-catalog")
+    provider.base_url = "   "
+    requests = []
+    async_client = httpx.AsyncClient
+
+    def get_models(request: httpx.Request) -> httpx.Response:
+        requests.append((str(request.url), request.headers["Authorization"]))
+        return httpx.Response(200, json={"data": [{"id": "gateway-text"}]})
+
+    transport = httpx.MockTransport(get_models)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: async_client(transport=transport, **kwargs))
+    llm_app.dependency_overrides[get_db] = _override_db(db)
+    try:
+        response = client.get("/api/v1/llm/providers/p-openai-catalog/models/catalog")
+    finally:
+        llm_app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["source"] == "provider_api"
+    assert [model["name"] for model in data["models"]] == ["gateway-text"]
+    assert requests == [("https://api.openai.com/v1/models", "Bearer secret")]
 
 
 def test_get_video_generation_options_returns_ratio_capability(client: TestClient) -> None:

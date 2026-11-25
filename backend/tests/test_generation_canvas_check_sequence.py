@@ -62,7 +62,7 @@ def text_provider(monkeypatch, answer):
 
         async def ainvoke(self, messages):
             return SimpleNamespace(content=json.dumps(answer(json.loads(messages[1].content))))
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', Provider)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', Provider)
 
 
 @pytest.mark.asyncio

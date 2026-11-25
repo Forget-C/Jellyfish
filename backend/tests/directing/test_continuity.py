@@ -136,7 +136,7 @@ async def test_queued_dependency_rechecked_before_provider_submission(tmp_path, 
             before = await db.scalar(select(func.count()).select_from(Task))
         monkeypatch.setattr('app.task_worker.build_media_input', AsyncMock(return_value=None))
         submit = AsyncMock(side_effect=AssertionError('must not call provider'))
-        monkeypatch.setattr('app.task_worker.MediaProvider.submit', submit)
+        monkeypatch.setattr('app.core.integrations.media_provider.MediaProvider.invoke', submit)
         worker = TaskWorker(sessions)
         try:
             await worker._execute(task_id)

@@ -559,7 +559,7 @@ async def test_ai_worker_freezes_preview_before_first_read(tmp_path, monkeypatch
         async def generate(*args):
             return ReviewRevisionCandidate(input_identity=context['input_identity'], changes=[{'target': 'unit',
                 'path': '/duration_ms', 'before': context['unit']['duration_ms'], 'after': 8000, 'reason': '延长'}])
-        monkeypatch.setattr('app.task_worker.ChatOpenAI', lambda **kwargs: object())
+        monkeypatch.setattr('app.task_worker.build_langchain_chat', lambda **kwargs: object())
         async with httpx.AsyncClient() as client:
             worker = TaskWorker(sessions, client=client)
             monkeypatch.setattr(worker, '_run_script', generate)

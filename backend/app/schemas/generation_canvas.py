@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.core.contracts.directing.storyboard_prompt import GeneratedVideoPrompt
 from app.schemas.common import ApiResponse
 from app.core.contracts.media import VideoMediaInput
+from app.core.contracts.model_capabilities import VideoModeDeclaration, VideoOperationMode
 from app.core.contracts.video_generation import AudioCapability
 from app.core.contracts.generation_canvas import DesignMediaUse, CompositionDesignFields, DesignFrameTarget, DesignMediaOrigin, BasisTextOutputPayload, DialogueReferencePayload, OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignScope, CriterionReferencePayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload
 
@@ -187,6 +188,8 @@ class VideoModelConfig(BaseModel):
     model_config = ConfigDict(extra='forbid')
     ratio: str | None = None
     seconds: int | None = None
+    resolution: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    audio: bool | None = Field(default=None, exclude_if=lambda value: value is None)
     seed: int | None = None
 
 
@@ -291,6 +294,7 @@ class CanvasModelCapability(BaseModel):
     supports_duplicate_reference_images: bool = True
     min_seconds: int | None = None
     max_seconds: int | None = None
+    video_modes: dict[VideoOperationMode, VideoModeDeclaration] = Field(default_factory=dict)
     supports_seed: bool = False
     supports_subject_reference_with_frame_reference: bool = False
     max_subjects: int | None = None

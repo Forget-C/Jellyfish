@@ -12,8 +12,9 @@ from app.core.integrations.volcengine.images import (
     build_volcengine_image_generations_url,
 )
 from app.core.contracts.provider_media import ProviderImageInput as ImageGenerationInput, ProviderImageReference as InputImageRef
-from app.core.integrations.media_provider import MediaProvider
+from app.core.integrations.media_provider import bind_media_provider
 from app.core.contracts.provider import ProviderConfig
+from app.core.contracts.provider_media import RemoteTaskReference
 from app.core.integrations.image_capabilities import (
     ImageModelCapability,
     clear_image_model_capability_overrides,
@@ -273,10 +274,11 @@ async def test_openai_image_adapter_rejects_unsupported_watermark(monkeypatch: p
 async def _submit(*, cfg, input_):
     """通过新供应商入口验证单次提交协议。"""
     async with httpx.AsyncClient() as client:
-        return await MediaProvider(client).submit(cfg, input_)
+        result = await bind_media_provider(cfg, client=client).invoke(input_)
+        return result.task_id if isinstance(result, RemoteTaskReference) else result
 
 
 async def _poll(*, cfg, task_id, kind="video_generation"):
     """通过新供应商入口验证一次状态观察及结果归一化。"""
     async with httpx.AsyncClient() as client:
-        return await MediaProvider(client).poll(cfg, task_id=task_id, kind=kind)
+        return await bind_media_provider(cfg, client=client).poll(RemoteTaskReference(kind, task_id))

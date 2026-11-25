@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { AudioCapability } from './AudioCapability';
+import type { VideoModeDeclaration } from './VideoModeDeclaration';
 /**
  * 当前适配器真正接入的模态、用途、组合、数量及参数范围。
  */
@@ -21,6 +22,7 @@ export type CanvasModelCapability = {
     supports_duplicate_reference_images?: boolean;
     min_seconds?: (number | null);
     max_seconds?: (number | null);
+    video_modes?: Record<string, VideoModeDeclaration>;
     supports_seed?: boolean;
     supports_subject_reference_with_frame_reference?: boolean;
     max_subjects?: (number | null);

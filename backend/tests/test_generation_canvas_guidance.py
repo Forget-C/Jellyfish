@@ -129,7 +129,7 @@ async def test_actual_worker_automatically_uses_linked_acceptance_without_extra_
         async def astream(self, messages):
             received.append(messages[0].content)
             yield SimpleNamespace(content='要求分析')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ProviderText)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ProviderText)
     def provider_http(request):
         if request.method == 'POST':
             body = json.loads(request.content)

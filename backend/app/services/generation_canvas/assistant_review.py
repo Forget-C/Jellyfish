@@ -119,7 +119,7 @@ async def _review_version(sessions, identity, item, question, project_id, model_
             return None
     try:
         result.reply, result.skills = await CanvasAssistant.review_evidence(
-            model, content, supports_tools=capability.tool_calling, max_input_tokens=capability.max_input_tokens)
+            model, content, supports_tools=capability.tool_results, max_input_tokens=capability.max_input_tokens)
     except HTTPException:
         result.reply = '未收到本次生成结果的审看回复。'
     return result

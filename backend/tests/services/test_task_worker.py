@@ -1,10 +1,12 @@
 """新 Worker 的提交、轮询、收取与本地终态集成。"""
 
 import asyncio
+import json
 
 import httpx
 import pytest
 from botocore.exceptions import ClientError
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.db import Base
@@ -28,11 +30,17 @@ async def test_worker_restart_polls_original_id_without_new_submission(monkeypat
     requests, uploads = [], []
 
     def handle(request):
-        """模拟供应商与下载，任何再次 POST 都使测试失败。"""
+        """模拟一次创建，后续只允许查询原地址和任务 ID。"""
         requests.append(request)
-        assert request.method == "GET"
+        if request.method == "POST":
+            assert len(requests) == 1
+            assert request.url.path == "/ent/v2/text2video"
+            assert json.loads(request.content)["resolution"] == "720p"
+            assert json.loads(request.content)["duration"] == 8
+            return httpx.Response(200, json={"task_id": "original-id"})
         if request.url.host == "media.invalid":
             return httpx.Response(200, content=b"video", headers={"content-type": "video/mp4"})
+        assert request.url.host == "provider.invalid"
         assert request.url.path == "/ent/v2/tasks/original-id/creations"
         return httpx.Response(200, json={"state": "success", "creations": [{"url": "https://media.invalid/video"}]})
 
@@ -54,22 +62,40 @@ async def test_worker_restart_polls_original_id_without_new_submission(monkeypat
             db.add(Provider(id="provider", provider_key='vidu', name="Vidu", api_key="test", base_url="https://provider.invalid"))
             db.add(ExperimentSession(id="session", lab_type="video"))
             await db.flush()
-            db.add(Model(id="model", provider_id="provider", category="video", name="viduq2"))
+            db.add(Model(id="model", provider_id="provider", category="video", name="viduq3-turbo",
+                         capability_profile={"video_modes": {"text_to_video": {"duration_by_resolution": {
+                             "720p": {"min_seconds": 5, "max_seconds": 15}, "1080p": [5, 10],
+                         }}}}))
             await db.flush()
-            accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(db, GenerationCommand.model_validate({
+            payload = {
                 "modality": "video", "operation": "video_generation", "delivery": "async_polling",
                 "target": {"kind": "experiment_session", "entity_id": "session"},
-                "request": {"model_id": "model", "execution_prompt": "test", "operation_input": {"kind": "video_generation", "ratio": "16:9"}},
-            }))
+                "request": {"model_id": "model", "execution_prompt": "test", "operation_input": {
+                    "kind": "video_generation", "ratio": "16:9", "resolution": "1080p", "seconds": 8,
+                }},
+            }
+            submitter = GenerationSubmitter(entity_gate=GenerationEntityGate())
+            with pytest.raises(HTTPException, match="seconds are outside"):
+                await submitter.submit_async(db, GenerationCommand.model_validate(payload))
+            payload["request"]["operation_input"]["resolution"] = "720p"
+            accepted = await submitter.submit_async(db, GenerationCommand.model_validate(payload))
             task_id = accepted.task_id
-            service = TaskService(db)
-            await service.claim(task_id, worker_id="previous-process")
-            await service.record_submission(task_id, provider_task_id="original-id")
             await db.commit()
         async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            original_worker = TaskWorker(sessions, client=client)
+            try:
+                await original_worker.tick()
+                await asyncio.gather(*list(original_worker.jobs.values()))
+            finally:
+                original_worker.text_pool.shutdown(wait=True)
             worker = TaskWorker(sessions, client=client)
             try:
                 async with sessions() as db:
+                    provider = await db.get(Provider, "provider")
+                    provider.base_url = "https://changed.invalid"
+                    task = await db.get(Task, task_id)
+                    assert task.provider_task_id == "original-id"
+                    task.next_poll_at = task.created_at
                     await TaskService(db).interrupt_previous_workers(worker_id=worker.worker_id)
                     await db.commit()
                 await worker.tick()
@@ -78,7 +104,8 @@ async def test_worker_restart_polls_original_id_without_new_submission(monkeypat
                     task = await db.get(Task, task_id)
                     assert task.status == "succeeded"
                     assert task.provider_task_id == "original-id"
-                assert len(requests) == 2 and uploads == [b"video"]
+                assert [request.method for request in requests] == ["POST", "GET", "GET"]
+                assert uploads == [b"video"]
             finally:
                 worker.text_pool.shutdown(wait=True)
     finally:
@@ -129,7 +156,7 @@ async def test_text_worker_success_is_atomic_and_not_repeated(monkeypatch):
             calls.append(messages)
             return AIMessage(content="generated text")
 
-    monkeypatch.setattr("app.task_worker.ChatOpenAI", FakeModel)
+    monkeypatch.setattr("app.task_worker.build_langchain_chat", FakeModel)
     try:
         task_id = await _seed_text_task(sessions)
         async with httpx.AsyncClient() as client:
@@ -174,7 +201,7 @@ async def test_text_cancel_during_provider_call_prevents_assistant_delivery(monk
             await release.wait()
             return AIMessage(content="late text")
 
-    monkeypatch.setattr("app.task_worker.ChatOpenAI", FakeModel)
+    monkeypatch.setattr("app.task_worker.build_langchain_chat", FakeModel)
     try:
         task_id = await _seed_text_task(sessions)
         async with httpx.AsyncClient() as client:
@@ -373,7 +400,7 @@ async def test_directing_worker_streams_without_thinking(monkeypatch, kind):
         """隔离工作单生成，只检查任务客户端策略和正常交付。"""
         return SimpleNamespace(model_dump=lambda: {'checked': True})
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', capture_model)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', capture_model)
     try:
         task_id = await _seed_text_task(sessions)
         async with sessions.begin() as db:
@@ -395,5 +422,63 @@ async def test_directing_worker_streams_without_thinking(monkeypatch, kind):
         assert captured['max_retries'] == 0
         async with sessions() as db:
             assert (await db.get(Task, task_id)).status == 'succeeded'
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider_key", ["vidu", "volcengine"])
+async def test_worker_keeps_remote_cancellation_separate_from_local_stop(provider_key):
+    from app.services.task_queries import TaskQueries
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    requests = []
+
+    def respond(request):
+        requests.append((request.method, request.url.path))
+        if request.method == "POST":
+            assert json.loads(request.content) == {"id": "remote-job"}
+            return httpx.Response(202, json={})
+        return httpx.Response(200, json={"state": "cancelled"})
+
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        async with sessions.begin() as db:
+            service = TaskService(db)
+            task = await service.submit(kind="video_generation", execution_mode="remote", snapshot={
+                "execution_config": {"provider_key": provider_key, "provider_id": "test", "model_name": "test",
+                                     "base_url": "https://provider.invalid", "api_key": "test-key"},
+            })
+            task_id = task.id
+            await service.claim(task_id, worker_id="previous-worker")
+            await service.record_submission(task_id, provider_task_id="remote-job")
+            await service.request_cancel(task_id)
+            assert (await TaskQueries(db).status(task_id)).remote_cancellation == "requested"
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            worker = TaskWorker(sessions, client=client)
+            try:
+                await worker.tick()
+                await asyncio.gather(*list(worker.jobs.values()))
+                async with sessions.begin() as db:
+                    view = await TaskQueries(db).status(task_id)
+                    if provider_key == "volcengine":
+                        assert view.status == "cancelled" and view.remote_cancellation == "unsupported"
+                        assert not requests
+                        return
+                    assert view.status == "running" and view.remote_cancellation == "accepted"
+                    task = await db.get(Task, task_id)
+                    task.next_poll_at = task.created_at
+                await worker.tick()
+                await asyncio.gather(*list(worker.jobs.values()))
+                async with sessions() as db:
+                    view = await TaskQueries(db).status(task_id)
+                    assert view.status == "cancelled" and view.remote_cancellation == "confirmed"
+                assert requests == [
+                    ("POST", "/ent/v2/tasks/remote-job/cancel"), ("GET", "/ent/v2/tasks/remote-job/creations"),
+                ]
+            finally:
+                worker.text_pool.shutdown(wait=True)
     finally:
         await engine.dispose()

@@ -130,7 +130,7 @@ async def test_adopted_description_executes_with_its_own_identity_without_privat
         async def astream(self, messages):
             received.append(messages[0].content)
             yield SimpleNamespace(content='已完成描述创作')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', Provider)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', Provider)
     worker = TaskWorker(runtime.sessions)
     try:
         await worker.tick()

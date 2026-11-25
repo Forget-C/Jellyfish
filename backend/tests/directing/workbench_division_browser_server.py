@@ -50,7 +50,7 @@ class ControlledTextModel:
 @asynccontextmanager
 async def lifespan(_app):
     """执行隔离数据库的真实排队任务，随测试服务关闭。"""
-    task_worker.ChatOpenAI = ControlledTextModel
+    task_worker.build_langchain_chat = ControlledTextModel
     worker = task_worker.TaskWorker(sessions)
 
     async def tick():

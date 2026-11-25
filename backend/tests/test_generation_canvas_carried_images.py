@@ -58,7 +58,7 @@ async def test_worker_freezes_carried_image_and_text_model_field_reference(runti
             pass
         async def astream(self, _messages):
             yield SimpleNamespace(content='实际原文 @图片99 /首帧参考')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', TextModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', TextModel)
     await accept_text(runtime)
     worker = TaskWorker(runtime.sessions)
     await worker.tick()

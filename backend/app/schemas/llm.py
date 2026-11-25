@@ -9,7 +9,10 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, HttpUrl, f
 
 from pydantic.json_schema import SkipJsonSchema
 
-from app.core.contracts.model_capabilities import EffectiveModelCapabilities, ModelCapabilityProfile
+from app.core.contracts.model_capabilities import (
+    EffectiveModelCapabilities, ImageModeDeclaration, ImageOperationMode, ModelCapabilityProfile,
+    VideoModeDeclaration, VideoOperationMode,
+)
 from app.core.contracts.model_catalog import ModelCatalogSource, ProviderModelCandidate
 from app.models.llm import LogLevel, ModelCategoryKey, ProviderStatus
 
@@ -153,6 +156,7 @@ class VideoGenerationOptionsRead(BaseModel):
     model_name: str = Field(..., description="默认视频模型名称")
     allowed_ratios: list[str] = Field(default_factory=list, description="当前模型允许的比例选项")
     default_ratio: str = Field(..., description="当前模型默认比例")
+    video_modes: dict[VideoOperationMode, VideoModeDeclaration] = Field(default_factory=dict)
     supports_subject_image_reference: bool = Field(False, description="是否支持参考主体图片")
     supports_subject_video_reference: bool = Field(False, description="是否支持参考主体视频")
     supports_subject_reference_with_frame_reference: bool = Field(
@@ -217,6 +221,8 @@ class ModelRead(ModelBase):
     capability_profile: ModelCapabilityProfile = Field(default_factory=ModelCapabilityProfile)
     effective_capabilities: EffectiveModelCapabilities = Field(default_factory=EffectiveModelCapabilities)
     storyboard_inspection_capabilities: EffectiveModelCapabilities = Field(default_factory=EffectiveModelCapabilities)
+    effective_image_modes: dict[ImageOperationMode, ImageModeDeclaration] = Field(default_factory=dict)
+    effective_video_modes: dict[VideoOperationMode, VideoModeDeclaration] = Field(default_factory=dict)
 
     @field_validator("capability_profile", mode="before")
     @classmethod

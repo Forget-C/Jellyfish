@@ -13,12 +13,14 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.task import TERMINAL_TASK_STATUSES, TaskExecutionMode, TaskStatus
+from app.core.contracts.provider_media import RemoteCancellation
 from app.models.studio import FileItem
 from app.models.task import Task, TaskInput, TaskOutput
 
 AUTO_CHECK_DISPATCH = 'canvas_auto_check'
 SUBMISSION_IN_FLIGHT = 'submission_in_flight'
 SUBMISSION_UNKNOWN = 'submission_unknown'
+REMOTE_CANCEL_SENT = {"cancel_sending", "cancel_accepted"}
 TASK_KINDS = frozenset({
     "text_chat", "canvas_check", AUTO_CHECK_DISPATCH, "image_generation", "video_generation",
     "script_consistency",
@@ -187,7 +189,8 @@ class TaskService:
         if error:
             await self.db.flush()
             return row
-        row.remote_status = remote_status
+        if remote_status != "running" or row.remote_status not in REMOTE_CANCEL_SENT:
+            row.remote_status = remote_status
         if remote_status == "failed":
             return await self.finish(task_id, error_code="provider_failed", error="供应商生成失败")
         if remote_status == "cancelled":
@@ -195,6 +198,28 @@ class TaskService:
         row.stage = "saving" if remote_status == "succeeded" else "polling"
         await self.db.flush()
         return row
+
+    async def begin_remote_cancel(self, task_id: str) -> bool:
+        """保存取消请求发送边界，恢复时查询原任务，避免重复发送。"""
+        row = await self._lock(task_id)
+        if (row is None or row.status != TaskStatus.running or not row.provider_task_id
+                or not row.cancel_requested_at or row.remote_status in REMOTE_CANCEL_SENT):
+            return False
+        row.remote_status = "cancel_sending"
+        row.next_poll_at = utcnow() + timedelta(seconds=5)
+        await self.db.flush()
+        return True
+
+    async def record_remote_cancel(self, task_id: str, outcome: RemoteCancellation) -> None:
+        """保存供应商回执；只在供应商确认时登记远端已取消。"""
+        row = await self._lock(task_id)
+        if row is None or row.status != TaskStatus.running or row.remote_status != "cancel_sending":
+            return
+        row.remote_status = "cancelled" if outcome == "confirmed" else f"cancel_{outcome}"
+        if outcome == "accepted":
+            await self.db.flush()
+        else:
+            await self.finish(task_id, cancelled=True)
 
     async def report_progress(self, task_id: str, *, progress: int | None, stage: str) -> None:
         """更新活动任务进度；终态不可被迟到事件修改。"""

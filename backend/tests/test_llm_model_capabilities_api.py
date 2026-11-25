@@ -58,14 +58,38 @@ async def test_model_capabilities_follow_each_provider_config(tmp_path) -> None:
             assert not configured["effective_capabilities"]["video_inputs"]
 
             updated = await http.patch(path + "/models/a", json={"capability_profile": {
-                **configured["capability_profile"], "tool_calling": supported,
+                **configured["capability_profile"],
+                "tool_calling": supported,
+                "tool_results": supported,
+                "parallel_tool_calls": supported,
+                "streaming_tool_arguments": supported,
+                "native_streaming": supported,
+                "image_outputs": supported,
+                "max_output_tokens": 1024,
             }})
             assert updated.status_code == 200, updated.text
-            assert updated.json()["data"]["effective_capabilities"]["tool_calling"]
+            effective = updated.json()["data"]["effective_capabilities"]
+            assert effective["tool_calling"]
+            assert effective["tool_results"]
+            assert effective["parallel_tool_calls"]
+            assert effective["streaming_tool_arguments"]
+            assert effective["native_streaming"]
+            assert not effective["image_outputs"]
+            assert effective["max_output_tokens"] == 1024
+            assert effective["non_streaming"]
+            assert (await http.patch(path + "/providers/a", json={
+                "base_url": "https://replacement.test/v1",
+            })).status_code == 200
             listed = (await http.get(path + "/models")).json()["data"]["items"]
             by_id = {item["id"]: item for item in listed}
             assert by_id["a"]["capability_profile"] == updated.json()["data"]["capability_profile"]
             assert by_id["b"]["capability_profile"]["tool_calling"]["declaration"] == "unknown"
+            assert by_id["b"]["effective_capabilities"]["max_output_tokens"] is None
+            assert not by_id["b"]["effective_capabilities"]["native_streaming"]
+            assert set(by_id["b"]["effective_capabilities"]["builtin_defaults"]) == {
+                "text_inputs", "text_outputs", "non_streaming", "direct_result",
+            }
+            assert "image_inputs" in by_id["b"]["storyboard_inspection_capabilities"]["builtin_defaults"]
 
             assert (await http.patch(path + "/providers/a", json={"status": "disabled"})).status_code == 200
             disabled = (await http.get(path + "/models/a")).json()["data"]

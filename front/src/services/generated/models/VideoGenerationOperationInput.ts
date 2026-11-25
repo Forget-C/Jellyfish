@@ -9,6 +9,7 @@ export type VideoGenerationOperationInput = {
     kind?: string;
     ratio: string;
     seconds?: (number | null);
+    resolution?: (string | null);
+    audio?: (boolean | null);
     seed?: (number | null);
 };
-

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import httpx
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -15,12 +16,15 @@ from app.api.utils import apply_keyword_filter, apply_order, paginate
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider
 from app.core.integrations.image_capabilities import (
     DEFAULT_VIDEO_REFERENCE_RATIO_SIZE_MAP,
+    describe_image_modes,
     resolve_image_capability,
 )
-from app.core.integrations.video_capabilities import resolve_default_ratio, resolve_video_capability
-from app.core.integrations.model_catalog import discover_provider_models
+from app.core.integrations.video_capabilities import describe_video_modes, resolve_default_ratio, resolve_video_capability
+from app.core.integrations.media_provider import supports_remote_cancel
 from app.core.contracts.model_catalog import ProviderModelCandidate
-from app.core.contracts.provider import ProviderConfig
+from app.core.contracts.model_capabilities import ModelCapabilityProfile
+from app.core.contracts.model_provider import ModelProviderConfig, ModelProviderConfigurationError
+from app.core.integrations.model_provider_registry import has_remote_model_catalog, list_provider_models
 from app.schemas.common import ApiResponse, PaginatedData, paginated_response
 from app.schemas.llm import (
     ImageGenerationOptionsRead,
@@ -178,13 +182,17 @@ async def get_provider_model_catalog(
         provider=provider,
         category=spec.supported_categories[0],
     )
-    catalog = await discover_provider_models(
-        cfg=ProviderConfig(
-            provider=resolved.provider_key,  # type: ignore[arg-type]
-            api_key=resolved.api_key,
-            base_url=(provider.base_url or spec.default_base_url or "").strip() or None,
+    try:
+        catalog = await list_provider_models(
+            ModelProviderConfig(
+                provider=resolved.provider_key,
+                api_key=resolved.api_key,
+                base_url=(provider.base_url or "").strip() or spec.default_base_url,
+            ),
+            client_factory=lambda: httpx.AsyncClient(timeout=15.0),
         )
-    )
+    except ModelProviderConfigurationError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return ProviderModelCatalogRead(
         provider_id=provider.id,
         provider_key=catalog.provider_key,
@@ -323,6 +331,22 @@ def _model_read(model: Model, provider: Provider) -> ModelRead:
     data.storyboard_inspection_capabilities = effective_storyboard_inspection_capabilities(
         model, provider, data.capability_profile,
     )
+    if model.category == ModelCategoryKey.image:
+        data.effective_image_modes = describe_image_modes(
+            provider.provider_key, model.name, data.capability_profile.image_modes,
+        )
+    if model.category == ModelCategoryKey.video:
+        data.effective_video_modes = describe_video_modes(
+            provider.provider_key, model.name, data.capability_profile.video_modes,
+        )
+    if model.category in (ModelCategoryKey.image, ModelCategoryKey.video) and provider.status != "disabled":
+        remote = model.category == ModelCategoryKey.video or provider.provider_key in {"vidu", "kling"}
+        data.effective_capabilities.direct_result = not remote
+        data.effective_capabilities.remote_task = remote
+        data.effective_capabilities.remote_cancel = (
+            remote and supports_remote_cancel(provider.provider_key, f"{data.category.value}_generation")
+            and data.capability_profile.remote_cancel.declaration != "unsupported"
+        )
     return data
 
 
@@ -433,6 +457,9 @@ async def get_video_generation_options(
         model_name=model.name,
         allowed_ratios=allowed_ratios,
         default_ratio=default_ratio,
+        video_modes=describe_video_modes(
+            provider_key, model.name, ModelCapabilityProfile.model_validate(model.capability_profile or {}).video_modes,
+        ),
         supports_subject_image_reference=capability.supports_subject_image_reference,
         supports_subject_video_reference=capability.supports_subject_video_reference,
         supports_subject_reference_with_frame_reference=capability.supports_subject_reference_with_frame_reference,
@@ -486,7 +513,7 @@ def list_supported_providers(*, category: ModelCategoryKey | None) -> list[Provi
             key=spec.key,
             display_name=spec.display_name,
             test_prompts={c: PROMPTS[c] for c in PATHS.get(spec.key, {}) if c in spec.supported_categories},
-            live_model_catalog=spec.key in {"openai", "volcengine", "aliyun_bailian"},
+            live_model_catalog=has_remote_model_catalog(spec.key),
             aliases=list(spec.aliases),
             supported_categories=list(spec.supported_categories),
             default_base_url=spec.default_base_url,

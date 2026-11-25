@@ -111,7 +111,7 @@ async def test_check_and_recheck_one_retained_product(runtime, monkeypatch):
                 for item in context['requirements']
             ]}))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', Model)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', Model)
     worker = TaskWorker(runtime.sessions)
 
     async def advance():

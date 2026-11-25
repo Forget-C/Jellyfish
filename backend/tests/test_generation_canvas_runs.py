@@ -159,7 +159,7 @@ async def test_frozen_text_stream_persists_partial_then_publishes_only_complete_
             assert state['runs'][0]['nodes'][0]['text'] == 'First '
             assert state['current_outputs'] == {}
             yield SimpleNamespace(content='second')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', FakeModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', FakeModel)
     worker = TaskWorker(runtime.sessions)
     await worker.tick()
     await asyncio.gather(*worker.jobs.values())
@@ -193,7 +193,7 @@ async def test_success_current_output_receipt_replay_and_failure_keep_prior_publ
             assert params['max_retries'] == 0
         async def astream(self, messages):
             yield SimpleNamespace(content='Complete output')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', GoodModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', GoodModel)
     worker = TaskWorker(runtime.sessions)
     await worker.tick()
     await asyncio.gather(*worker.jobs.values())
@@ -216,7 +216,7 @@ async def test_success_current_output_receipt_replay_and_failure_keep_prior_publ
             calls.append('provider request')
             yield SimpleNamespace(content='Incomplete')
             raise httpx.ReadError('acceptance unknown')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', FailingModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', FailingModel)
     await worker.tick()
     await asyncio.gather(*worker.jobs.values())
     await worker.tick()
@@ -286,7 +286,7 @@ async def test_related_edit_keeps_completed_text_only_in_history(runtime, monkey
         async def astream(self, messages):
             assert messages[0].content == 'Frozen prompt'
             yield SimpleNamespace(content='Historical result')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', FakeModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', FakeModel)
     worker = TaskWorker(runtime.sessions)
     await worker.tick()
     await asyncio.gather(*worker.jobs.values())
@@ -387,7 +387,7 @@ async def test_single_card_uses_published_input_without_executing_upstream_and_r
         async def astream(self, messages):
             calls.append(messages[0].content)
             yield SimpleNamespace(content='Actual source')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', FakeModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', FakeModel)
     worker = TaskWorker(runtime.sessions)
     await accept(runtime)
     await worker.tick()
@@ -559,7 +559,7 @@ async def test_lost_cancel_response_observes_real_worker_without_reexecution(run
             started.set()
             await release.wait()
             yield SimpleNamespace(content='Discarded after cancellation')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     accepted, _ = await accept(runtime)
     worker = TaskWorker(runtime.sessions)
     await worker.tick()
@@ -643,7 +643,7 @@ async def test_bound_creative_basis_runs_through_worker_and_publishes_typed_outp
         async def astream(self, messages):
             assert messages[0].content == '张三望向门口'
             yield SimpleNamespace(content='门口传来敲门声')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', FakeModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', FakeModel)
     worker = TaskWorker(runtime.sessions)
     await worker.tick()
     await asyncio.gather(*worker.jobs.values())
@@ -669,7 +669,7 @@ async def test_snapshot_keeps_admission_order_when_run_timestamps_tie_and_events
             pass
         async def astream(self, _messages):
             yield SimpleNamespace(content='first result')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', FakeModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', FakeModel)
     first, _ = await accept(runtime, 'first-in-same-second')
     worker = TaskWorker(runtime.sessions)
     await worker.tick()

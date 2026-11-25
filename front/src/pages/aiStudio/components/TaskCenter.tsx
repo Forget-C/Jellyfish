@@ -31,6 +31,13 @@ const TASK_CENTER_OPEN_STORAGE_KEY = 'jellyfish_task_center_open_v1'
 const TASK_CENTER_PAGE_SIZE = 3
 
 function taskTone(task: TaskUiItem): { color: string; label: string } {
+  switch (task.remoteCancellation) {
+    case 'confirmed': return { color: 'orange', label: uiText('远端已取消') }
+    case 'accepted': return { color: 'orange', label: uiText('远端取消已受理') }
+    case 'unsupported': return { color: 'orange', label: uiText('已停止等待，远端不支持取消') }
+    case 'rejected': return { color: 'orange', label: uiText('已停止等待，远端拒绝取消') }
+    case 'unconfirmed': return { color: 'orange', label: uiText('已停止等待，远端取消未确认') }
+  }
   if (task.status === 'cancelled') return { color: 'orange', label: uiText("已取消") }
   if (task.status === 'failed') return { color: 'red', label: uiText("失败") }
   if (task.status === 'succeeded') return { color: 'green', label: uiText("已完成") }

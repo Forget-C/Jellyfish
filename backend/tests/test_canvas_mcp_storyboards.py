@@ -43,7 +43,7 @@ async def _data(response):
 
 @asynccontextmanager
 async def _workspace(tmp_path, monkeypatch):
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', _Model)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', _Model)
     app = create_mcp_app()
     async with database(tmp_path) as sessions:
         monkeypatch.setattr(dependencies, 'async_session_maker', sessions)

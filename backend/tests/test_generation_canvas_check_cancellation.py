@@ -55,7 +55,7 @@ async def test_cancel_check_distinguishes_running_provider_from_queued_work(runt
             await release.wait()
             return SimpleNamespace(content=json.dumps({'outcome': 'conforming', 'message': '迟到的供应商结果'}))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', HeldModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', HeldModel)
     worker = TaskWorker(runtime.sessions)
     try:
         running = await start_check(client, checks)

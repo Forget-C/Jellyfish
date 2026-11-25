@@ -120,7 +120,7 @@ async def test_production_design_task_keeps_results_sources_and_file_protection(
         def invoke(self, _messages):
             return SimpleNamespace(content=json.dumps(expected, ensure_ascii=False))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             _, sequence_id, _, _, _ = await setup_story(db)

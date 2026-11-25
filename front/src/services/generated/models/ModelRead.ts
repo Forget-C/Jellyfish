@@ -3,8 +3,10 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { EffectiveModelCapabilities } from './EffectiveModelCapabilities';
-import type { ModelCapabilityProfile } from './ModelCapabilityProfile';
+import type { ImageModeDeclaration } from './ImageModeDeclaration';
+import type { ModelCapabilityProfile_Output } from './ModelCapabilityProfile_Output';
 import type { ModelCategoryKey } from './ModelCategoryKey';
+import type { VideoModeDeclaration } from './VideoModeDeclaration';
 /**
  * 对外返回的模型信息。
  */
@@ -37,8 +39,9 @@ export type ModelRead = {
      * 模型 ID
      */
     id: string;
-    capability_profile?: ModelCapabilityProfile;
+    capability_profile?: ModelCapabilityProfile_Output;
     effective_capabilities?: EffectiveModelCapabilities;
     storyboard_inspection_capabilities?: EffectiveModelCapabilities;
+    effective_image_modes?: Record<string, ImageModeDeclaration>;
+    effective_video_modes?: Record<string, VideoModeDeclaration>;
 };
-

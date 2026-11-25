@@ -1,8 +1,9 @@
 """从已接入 DTO 和适配器能力派生画布选项，不依赖界面示例模型名。"""
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.contracts.video_generation import AudioCapability
+from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.core.integrations.image_capabilities import resolve_image_capability, DEFAULT_VIDEO_REFERENCE_RATIO_SIZE_MAP
-from app.core.integrations.video_capabilities import resolve_video_capability
+from app.core.integrations.video_capabilities import describe_video_modes, resolve_video_capability
 from app.core.integrations.video_adapter_usage import resolve_video_adapter_usage
 from app.models.llm import Model, Provider
 from app.schemas.generation_canvas import CanvasModelCapability, ModelCard
@@ -29,6 +30,9 @@ async def model_capability(db: AsyncSession, model_id: str) -> CanvasModelCapabi
         result.max_reference_images = cap.max_reference_images
         result.supports_duplicate_reference_images = cap.supports_duplicate_reference_images
     if model.category == 'video':
+        result.video_modes = describe_video_modes(
+            key, model.name, ModelCapabilityProfile.model_validate(model.capability_profile or {}).video_modes,
+        )
         cap = resolve_video_capability(provider=key, model=model.name)
         usage = resolve_video_adapter_usage(provider=key, model=model.name)
         result.native_audio_output = cap.native_audio_output

@@ -71,7 +71,7 @@ async def test_review_retry_uses_the_retained_draft_and_protects_application(tmp
                                     {'id': 'second', 'excerpt': '镜头切到张三右手。'}]}
             return SimpleNamespace(content=json.dumps(result, ensure_ascii=False))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
@@ -210,7 +210,7 @@ async def test_targeted_repair_preserves_evidence_and_never_repeats(tmp_path, mo
                 result = draft
             return SimpleNamespace(content=json.dumps(result, ensure_ascii=False))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
@@ -369,7 +369,7 @@ async def test_risk_acceptance_requires_exact_conflicts_and_real_restore(tmp_pat
             args = json.loads(messages[1].content)
             return SimpleNamespace(content=json.dumps(report if 'storyboard_draft' in args else draft, ensure_ascii=False))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
@@ -502,7 +502,7 @@ async def test_structural_retry_retains_draft_and_does_not_regenerate(tmp_path, 
                 if outcome == 'unsafe':
                     result['shots'][0]['designs'][0]['fields']['position']['text'] = '改成奔跑'
             return SimpleNamespace(content=json.dumps(result))
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = '张三等待。张三离开。' if outcome == 'shared_multiple' else '张三等待。'

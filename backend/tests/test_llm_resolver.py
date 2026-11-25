@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-import sys
-import types
+import asyncio
+import json
+
+import httpx
 
 import pytest
 from fastapi import HTTPException
@@ -130,16 +132,31 @@ async def test_get_provider_by_id_or_obj_supports_both_inputs() -> None:
     await engine.dispose()
 
 
+@pytest.fixture
+def chat_requests(monkeypatch: pytest.MonkeyPatch):
+    observed = []
+
+    def reply(request: httpx.Request) -> httpx.Response:
+        observed.append((str(request.url), request.headers["authorization"], json.loads(request.content)))
+        return httpx.Response(200, json={
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "生成结果"},
+                         "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5},
+        })
+
+    transport = httpx.MockTransport(reply)
+    original_init = httpx.AsyncClient.__init__
+
+    def init_client(self, *args, **kwargs):
+        kwargs.setdefault("transport", transport)
+        original_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(httpx.AsyncClient, "__init__", init_client)
+    return observed
+
+
 @pytest.mark.asyncio
-async def test_build_chat_model_from_provider_builds_chatopenai_with_model_params(monkeypatch: pytest.MonkeyPatch) -> None:
-    class FakeChatOpenAI:
-        def __init__(self, **kwargs):  # noqa: ANN003, ANN204
-            self.kwargs = kwargs
-
-    fake_module = types.ModuleType("langchain_openai")
-    fake_module.ChatOpenAI = FakeChatOpenAI
-    monkeypatch.setitem(sys.modules, "langchain_openai", fake_module)
-
+async def test_build_chat_model_from_provider_sends_bound_config(chat_requests) -> None:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
     session_local = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with engine.begin() as conn:
@@ -159,26 +176,20 @@ async def test_build_chat_model_from_provider_builds_chatopenai_with_model_param
 
         chat_model = await build_chat_model_from_provider(db, "p1")
 
-        assert isinstance(chat_model, FakeChatOpenAI)
-        assert chat_model.kwargs["model"] == "gpt-4o-mini"
-        assert chat_model.kwargs["api_key"] == "k"
-        assert chat_model.kwargs["base_url"] == "https://api.openai.com/v1"
-        assert chat_model.kwargs["temperature"] == 0.2
-        assert chat_model.kwargs["max_tokens"] == 256
+        result = await chat_model.ainvoke("测试")
+        assert result.content == "生成结果"
+        assert result.usage_metadata["total_tokens"] == 5
+        [(url, auth, payload)] = chat_requests
+        assert (url, auth) == ("https://api.openai.com/v1/chat/completions", "Bearer k")
+        assert payload["model"] == "gpt-4o-mini"
+        assert payload["temperature"] == 0.2
+        assert payload["max_tokens"] == 256
 
     await engine.dispose()
 
 
 @pytest.mark.asyncio
-async def test_build_default_text_llm_supports_thinking_toggle(monkeypatch: pytest.MonkeyPatch) -> None:
-    class FakeChatOpenAI:
-        def __init__(self, **kwargs):  # noqa: ANN003, ANN204
-            self.kwargs = kwargs
-
-    fake_module = types.ModuleType("langchain_openai")
-    fake_module.ChatOpenAI = FakeChatOpenAI
-    monkeypatch.setitem(sys.modules, "langchain_openai", fake_module)
-
+async def test_build_default_text_llm_supports_thinking_toggle(chat_requests) -> None:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
     session_local = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with engine.begin() as conn:
@@ -200,10 +211,10 @@ async def test_build_default_text_llm_supports_thinking_toggle(monkeypatch: pyte
         thinking_llm = await build_default_text_llm(db, thinking=True)
         nothinking_llm = await build_default_text_llm(db, thinking=False)
 
-        assert isinstance(thinking_llm, FakeChatOpenAI)
-        assert "extra_body" not in thinking_llm.kwargs
-        assert isinstance(nothinking_llm, FakeChatOpenAI)
-        assert nothinking_llm.kwargs["extra_body"]["enable_thinking"] is False
+        assert (await thinking_llm.ainvoke("测试")).content == "生成结果"
+        assert (await asyncio.to_thread(nothinking_llm.invoke, "测试")).content == "生成结果"
+        assert "enable_thinking" not in chat_requests[0][2]
+        assert chat_requests[1][2]["enable_thinking"] is False
 
     await engine.dispose()
 

@@ -157,7 +157,7 @@ async def test_sound_text_classifier_needs_real_source_evidence_and_uses_frozen_
                 'needs': ['audio_switch'], 'excerpt': requirement if len(calls) == 1 or body.get('recheck') else '凭空引用',
             }))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', Classifier)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', Classifier)
     worker = TaskWorker(runtime.sessions)
     try:
         for expected in ('risk', 'indeterminate'):

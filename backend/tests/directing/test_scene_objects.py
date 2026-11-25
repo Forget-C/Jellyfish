@@ -39,7 +39,7 @@ async def test_object_extraction_uses_confirmed_source_and_preserves_candidates_
             calls.append(str(messages))
             return SimpleNamespace(content=json.dumps(next(responses), ensure_ascii=False))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
@@ -243,7 +243,7 @@ async def test_first_object_result_survives_source_and_membership_changes(tmp_pa
             calls.append(str(messages))
             return SimpleNamespace(content='{"objects":[{"kind":"character","name":"小雨","excerpt":"小雨提包"}]}')
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original

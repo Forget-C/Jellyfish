@@ -115,6 +115,8 @@ class VideoGenerationInput(BaseModel):
     model: Optional[str] = Field(None, description="视频模型名称（可选，供应商透传）")
     ratio: VideoRatio = Field(..., description="视频宽高比，业务层唯一主参数")
     seconds: Optional[int] = Field(None, description="时长（秒）（可选，供应商透传）")
+    resolution: str | None = None
+    audio: bool | None = None
     seed: Optional[int] = Field(
         None,
         ge=-1,

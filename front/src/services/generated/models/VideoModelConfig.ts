@@ -8,5 +8,7 @@
 export type VideoModelConfig = {
     ratio?: (string | null);
     seconds?: (number | null);
+    resolution?: (string | null);
+    audio?: (boolean | null);
     seed?: (number | null);
 };

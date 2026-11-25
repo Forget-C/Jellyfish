@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from fastapi import HTTPException
 from langchain_core.language_models.chat_models import BaseChatModel
 from sqlalchemy.orm import Session
 
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider
-from app.services.llm.provider_resolver import resolve_effective_base_url
+from app.services.llm.resolver import build_provider_agent_model
 
 
 def _default_model_id(settings_row: ModelSettings | None, category: ModelCategoryKey) -> str | None:
@@ -50,27 +48,4 @@ def build_default_text_llm_sync(
 ) -> BaseChatModel:
     provider, model = _require_provider_and_model_sync(db, category=ModelCategoryKey.text)
 
-    api_key = (provider.api_key or "").strip()
-    if not api_key:
-        raise HTTPException(status_code=503, detail=f"Provider api_key is empty for provider_id={provider.id}")
-
-    try:
-        from langchain_openai import ChatOpenAI
-    except ImportError as e:
-        raise HTTPException(status_code=503, detail="Install langchain-openai to enable script-processing tasks") from e
-
-    kwargs: dict[str, Any] = dict(model.params or {})
-    kwargs["model"] = model.name
-    kwargs["api_key"] = api_key
-    kwargs.setdefault("temperature", 0)
-
-    base_url = resolve_effective_base_url(provider=provider, category=ModelCategoryKey.text)
-    if base_url:
-        kwargs.setdefault("base_url", base_url)
-
-    if not thinking:
-        extra_body = dict(kwargs.get("extra_body") or {})
-        extra_body["enable_thinking"] = False
-        kwargs["extra_body"] = extra_body
-
-    return ChatOpenAI(**kwargs)
+    return build_provider_agent_model(provider=provider, model=model, thinking=thinking)

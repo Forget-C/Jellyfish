@@ -68,7 +68,7 @@ from app.services.generation_canvas.assistant_preview_submission import claim_pr
 from app.services.generation_canvas.model_adapter import CanvasModelAdapter, CanvasModelApprovalScope, INVALID_COMMAND, PREVIEW_TOOL
 from app.services.generation_canvas.planning_tools import CanvasPlanningPreview, CanvasPlanningTools
 from app.services.generation_canvas.catalog import canvas_catalog
-from app.services.generation_canvas.check_models import supports_synchronized_video_audio
+from app.core.integrations.text_capabilities import supports_synchronized_video_audio
 from app.services.generation_canvas.store import CanvasStore
 from app.services.llm.model_capabilities import effective_chat_capabilities
 from app.services.llm.resolver import build_text_chat_model, get_model_by_category, get_provider_by_model_or_id
@@ -299,17 +299,20 @@ class CanvasAssistant:
             raise HTTPException(422, 'ASSISTANT_TEXT_CAPABILITY_REQUIRED')
         return model, provider, capability
 
-    async def _model_client(self, model, provider, capability):
+    async def _model_client(self, model, provider, capability, *, stream_reply=False):
         """Resolve the provider transport needed to deliver the model's actual media inputs."""
-        client = await build_text_chat_model(self.db, model_id=model.id, thinking=False)
-        if supports_synchronized_video_audio(provider.provider_key, model.name):
-            extra_body = dict(client.extra_body or {})
-            extra_body.pop('enable_thinking', None)
-            extra_body.update(modalities=['text'], reasoning_effort='none')
-            return client.model_copy(update={'streaming': True, 'use_responses_api': False, 'extra_body': extra_body})
-        if capability.video_inputs:
-            return client.model_copy(update={'use_responses_api': False})
-        return client
+        def configure(params):
+            if stream_reply:
+                params['streaming'] = True
+            if supports_synchronized_video_audio(provider.provider_key, model.name):
+                extra_body = dict(params.get('extra_body') or {})
+                extra_body.pop('enable_thinking', None)
+                extra_body.update(modalities=['text'], reasoning_effort='none')
+                params.update(streaming=True, use_responses_api=False, extra_body=extra_body)
+            elif capability.video_inputs:
+                params['use_responses_api'] = False
+
+        return await build_text_chat_model(self.db, model_id=model.id, thinking=False, configure=configure)
 
     async def _ensure_session(self, canvas_id: str) -> None:
         await self.store.get(canvas_id)
@@ -525,7 +528,7 @@ class CanvasAssistant:
             pending['model_id'] if resuming and not pending.get('reselect_model') else session.model_id,
         )
         model_id = model.id
-        client = await self._model_client(model, provider, capability)
+        client = await self._model_client(model, provider, capability, stream_reply=command.stream_reply)
         messages = []
         readable_approvals = []
         for turn in await self._turns(canvas_id):
@@ -610,7 +613,7 @@ class CanvasAssistant:
                 client, model_id, scoped, content, attachments or [], checkpoint, prior_delegations,
             ) if scoped or attachments else None
             result = self._reply(
-                client, messages, scoped, edit_draft, supports_tools=capability.tool_calling, structure_tool=structure_tool,
+                client, messages, scoped, edit_draft, supports_tools=capability.tool_results, structure_tool=structure_tool,
                 layout_draft=layout_draft, model_adapter=model_adapter,
                 checkpoint=checkpoint, on_reply=(lambda text: checkpoint.report_progress(reply=text)) if command.stream_reply else None,
                 on_phase=(lambda phase: checkpoint.report_progress(phase=phase)) if command.stream_reply else None,

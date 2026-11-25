@@ -37,7 +37,7 @@ async def test_storyboard_stack_changes_require_exact_review_and_restore_as_one_
                 return SimpleNamespace(content='{"issues": []}')
             return SimpleNamespace(content=json.dumps({'shots': shots}, ensure_ascii=False))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original

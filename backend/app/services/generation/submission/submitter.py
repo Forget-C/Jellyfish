@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.generation import FrozenGenerationConfig, GenerationCommand, GenerationDelivery, ResolvedGenerationSnapshot
 from app.core.contracts.task import TaskExecutionMode
+from app.core.contracts.generation import GenerationTargetKind
+from app.core.integrations.media_validation import validate_media_parameters
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.generation.submission.capabilities import GenerationCapabilityRegistry, generation_capability_registry
@@ -71,8 +73,17 @@ class GenerationSubmitter:
             model_name, provider_id, provider_key = model.name, provider.id, config.provider_key
             if command.modality.value in {"image", "video"}:
                 frozen = FrozenGenerationConfig(model_name=model.name, model_params=model.params or {},
+                    capability_profile=model.capability_profile,
                     provider_id=provider.id, provider_key=config.provider_key, api_key=config.api_key, base_url=config.base_url)
                 snapshot = snapshot.model_copy(update={"execution_config": frozen})
+        if frozen:
+            try:
+                validate_media_parameters(
+                    frozen, snapshot.operation_input, snapshot.media, snapshot.execution_prompt,
+                    image_purpose="asset_image" if snapshot.canonical_target.kind == GenerationTargetKind.asset_image_slot else "video_reference",
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
         mode = TaskExecutionMode.direct
         if command.operation.value == "video_generation" or (
             command.operation.value == "image_generation" and provider_key in {"vidu", "kling"}

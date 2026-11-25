@@ -14,6 +14,7 @@ export type TaskResultRead = {
     stage: string;
     progress?: (number | null);
     cancel_requested?: boolean;
+    remote_cancellation?: ('requested' | 'unsupported' | 'accepted' | 'confirmed' | 'rejected' | 'unconfirmed' | null);
     cancel_requested_at_ts?: (number | null);
     started_at_ts?: (number | null);
     finished_at_ts?: (number | null);
@@ -24,4 +25,3 @@ export type TaskResultRead = {
     error?: string;
     error_code?: (string | null);
 };
-

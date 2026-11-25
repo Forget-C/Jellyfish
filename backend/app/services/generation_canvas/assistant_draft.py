@@ -72,7 +72,7 @@ class DraftCanvasAssistant(CanvasAssistant):
             sessions = async_sessionmaker(bind=self.db.bind, expire_on_commit=False)
             adapter = CanvasModelAdapter(CanvasPlanningTools(sessions, None, canvas_id, context, edit_draft, draft=True))
         model, provider, capability = await self._resolve_model(command.model_id)
-        client = await self._model_client(model, provider, capability)
+        client = await self._model_client(model, provider, capability, stream_reply=command.stream_reply)
         model_id = model.id
         sources = await resolve_assistant_media(self.db, None, command.attachment_file_ids)
         structure = structural_preview_tool(edit_draft, 'free', sources) if edit_draft else None
@@ -95,7 +95,7 @@ class DraftCanvasAssistant(CanvasAssistant):
         async def complete(on_reply=None, on_phase=None, partial_reply=lambda: ''):
             try:
                 reply, skills, observed = await self._reply(
-                    client, messages, context, edit_draft, supports_tools=capability.tool_calling, model_adapter=adapter,
+                    client, messages, context, edit_draft, supports_tools=capability.tool_results, model_adapter=adapter,
                     structure_tool=structure,
                     max_input_tokens=capability.max_input_tokens, on_reply=on_reply, on_phase=on_phase,
                 )

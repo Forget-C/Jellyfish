@@ -42,7 +42,7 @@ async def test_storyboard_optional_empty_reference_and_explicit_media_admission(
                 return SimpleNamespace(content='{"issues": []}')
             return SimpleNamespace(content=json.dumps(semantic, ensure_ascii=False))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledText)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledText)
     bootstrap_all_registries()
     calls = []
 

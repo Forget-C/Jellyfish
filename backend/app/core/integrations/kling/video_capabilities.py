@@ -71,6 +71,16 @@ def resolve_kling_video_capability(model: str | None) -> VideoModelCapability:
 
 def validate_kling_video_options(input_: VideoGenerationInput) -> None:
     """在请求可灵前校验项目通用视频参数是否可映射。"""
+    from app.core.integrations.video_adapter_usage import resolve_video_adapter_usage
     from app.core.integrations.video_capabilities import validate_video_options
 
     validate_video_options(provider="kling", model=input_.model, input_=input_)
+    usage = resolve_video_adapter_usage(provider="kling", model=input_.model)
+    if not usage.model_supported:
+        raise ValueError("Kling video model must be kling-3.0 or kling-3.0-turbo")
+    frames = input_.frame_references
+    if frames.key_frames:
+        raise ValueError("Kling 3.0 Omni image-to-video does not support key_frame")
+    references = (frames.first_frame, frames.last_frame)
+    if not usage.frame_roles and any(ref.strip() if isinstance(ref, str) else ref for ref in references):
+        raise ValueError("Kling 3.0 Turbo only supports text-to-video")

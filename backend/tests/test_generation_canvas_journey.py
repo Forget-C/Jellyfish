@@ -29,7 +29,7 @@ async def test_text_then_image_then_video_uses_completed_outputs_and_preview(run
             prompts.append(messages[0].content)
             yield SimpleNamespace(content='A red boat ')
             yield SimpleNamespace(content='on a quiet lake')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', TextModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', TextModel)
     def external(request):
         calls.append(request)
         if request.url.host == 'frozen.test':

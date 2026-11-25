@@ -7,7 +7,7 @@ import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
  */
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Select, Tag, message } from 'antd'
+import { Button, InputNumber, Select, Tag, message } from 'antd'
 import {
   LlmService,
   StudioGenerationTasksService,
@@ -40,6 +40,8 @@ import type { ExperimentLabType } from '../hooks/useExperimentSessions'
 type VideoMessage = {
   id: string; role: 'user' | 'assistant'; content: string; taskId?: string; status?: string
   progress?: number | null; videoUrl?: string; error?: string; ratio?: string
+  resolution?: string
+  seconds?: number
   frameFileIds?: Partial<Record<FrameSlot, string>>
   subjectReferences?: VideoSubjectDraft[]
   inputSnapshot?: ExperimentInputSnapshot
@@ -82,6 +84,10 @@ function toVideoMessage(item: ExperimentMessageRead): VideoMessage {
     error: typeof payload.error === 'string' ? payload.error : undefined,
     ratio: operation && typeof operation === 'object' && 'ratio' in operation && typeof operation.ratio === 'string'
       ? operation.ratio : undefined,
+    resolution: operation && typeof operation === 'object' && 'resolution' in operation && typeof operation.resolution === 'string'
+      ? operation.resolution : undefined,
+    seconds: operation && typeof operation === 'object' && 'seconds' in operation && typeof operation.seconds === 'number'
+      ? operation.seconds : undefined,
     frameFileIds, subjectReferences, inputSnapshot,
   }
 }
@@ -106,12 +112,14 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     loadTemplates, selectTemplate, confirmReplacement, applyFreeInput, replacementDialog,
   } = useExperimentTemplates(['video_prompt'], draft, setDraft)
   const [ratio, setRatio] = useState<string>('16:9')
+  const [resolution, setResolution] = useState<string>()
+  const [seconds, setSeconds] = useState<number>()
   const [frameFileIds, setFrameFileIds] = useState<Partial<Record<FrameSlot, string>>>({})
   const [subjectReferences, setSubjectReferences] = useState<VideoSubjectDraft[]>([])
   const [capability, setCapability] = useState<VideoGenerationOptionsRead>()
   const [capabilityState, setCapabilityState] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')
   const capabilityRequest = useRef(0)
-  const inputSignature = (prompt: string) => JSON.stringify([prompt, selectedTemplate?.id, selectedTemplate?.version, templateValues, ratio, frameFileIds, subjectReferences])
+  const inputSignature = (prompt: string) => JSON.stringify([prompt, selectedTemplate?.id, selectedTemplate?.version, templateValues, ratio, resolution, seconds, frameFileIds, subjectReferences])
   const submission = useExperimentSubmission(sessionId, history, inputSignature(draft))
   const { submitting } = submission
   useExperimentLeaveStatus(submission.dirty)
@@ -128,7 +136,18 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   const referenceIssues = videoReferenceIssues(references, capability)
   const hasSubjectReferences = subjectReferences.length > 0
   const hasFrameReferences = Object.values(frameFileIds).some(Boolean)
-  const allowedRatios = capability?.allowed_ratios
+  const mode = hasSubjectReferences ? 'subject_reference' : frameFileIds.key ? 'key_frames'
+    : frameFileIds.first && frameFileIds.last ? 'first_last_frames' : hasFrameReferences ? 'first_frame' : 'text_to_video'
+  const videoMode = capability?.video_modes?.[mode]
+  const durationOptions = videoMode?.duration_by_resolution
+  const resolutions = Object.keys(durationOptions ?? {})
+  const duration = resolution ? durationOptions?.[resolution] : undefined
+  const durationConflict = resolutions.length > 0 && (
+    !duration || seconds == null || (Array.isArray(duration) ? !duration.includes(seconds)
+      : seconds < duration.min_seconds || seconds > duration.max_seconds)
+  )
+  const modeConflict = videoMode?.supported === false
+  const allowedRatios = capability?.allowed_ratios?.filter(value => videoMode?.ratios?.includes(value) ?? true)
   const ratioConflict = Boolean(allowedRatios && !allowedRatios.includes(ratio))
   const capabilityBlocked = Boolean(modelId && capabilityState !== 'ready')
   const capabilityIncomplete = capability && (
@@ -165,6 +184,8 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
 
   const selectModel = (nextModelId?: string) => {
     setModelId(nextModelId)
+    setResolution(undefined)
+    setSeconds(undefined)
     void loadCapability(nextModelId)
   }
 
@@ -172,7 +193,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   const submit = async () => {
     if (!modelId) return message.warning(uiText("请选择视频模型"))
     if (!currentPrompt) return message.warning(selectedTemplate ? uiText("请填写模板变量，生成有效提示词") : uiText("请输入视频提示词"))
-    if (disabled || capabilityBlocked || ratioConflict || referenceIssues.length) return
+    if (disabled || capabilityBlocked || ratioConflict || durationConflict || modeConflict || referenceIssues.length) return
     await submission.submitTask({
       ensureSession: () => sessionId ? Promise.resolve({ id: sessionId }) : ensureSession('video'),
       request: async (targetSessionId, idempotencyKey) => {
@@ -192,7 +213,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
                 media: subject.media.map(({ id, kind }, ordinal) => ({ file_id: id, media_kind: kind, ordinal })),
               })),
             },
-            operation_input: { kind: 'video_generation', ratio },
+            operation_input: { kind: 'video_generation', ratio, ...(resolutions.length ? { resolution, seconds } : {}) },
           },
         })
         return response.data
@@ -214,6 +235,8 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
       applyFreeInput(snapshot.prompt)
       selectModel(snapshot.model_id ?? undefined)
       if (item.ratio) setRatio(item.ratio)
+      setResolution(item.resolution)
+      setSeconds(item.seconds)
       setFrameFileIds(item.frameFileIds ?? {})
       setSubjectReferences(item.subjectReferences ?? [])
       focusExperimentPromptEditor()
@@ -239,7 +262,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     })}
   </ExperimentHistory>
   const referencePicker = useRef<ExperimentReferenceHandle>(null)
-  const composer = <ExperimentOptionBar models={models.map((item) => ({ id: item.id, name: item.name }))} templates={templates.map((item) => ({ id: item.id, name: item.name, version: item.version, preview: item.preview, category: '视频提示词' }))} modelId={modelId} selectedTemplate={selectedTemplate ?? undefined} modelsLoading={modelsLoading} modelsFailed={modelsFailed} onRefreshModels={() => void loadModels(true)} templatesLoading={templatesLoading} templatesFailed={templatesFailed} onRefreshTemplates={() => void loadTemplates(true)} disabled={disabled} modelLabel={uiText("视频模型")} onModelChange={selectModel} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} referenceAction={{ label: uiText("配置参考素材"), onOpen: trigger => referencePicker.current?.open(trigger) }} >{({ modelControl, addControl }) => (<ExperimentComposer submitting={disabled} submitDisabled={disabled || submission.outcomePending || capabilityBlocked || ratioConflict || referenceIssues.length > 0} onSubmit={() => void submit()} options={<>{modelControl}    <Select
+  const composer = <ExperimentOptionBar models={models.map((item) => ({ id: item.id, name: item.name }))} templates={templates.map((item) => ({ id: item.id, name: item.name, version: item.version, preview: item.preview, category: '视频提示词' }))} modelId={modelId} selectedTemplate={selectedTemplate ?? undefined} modelsLoading={modelsLoading} modelsFailed={modelsFailed} onRefreshModels={() => void loadModels(true)} templatesLoading={templatesLoading} templatesFailed={templatesFailed} onRefreshTemplates={() => void loadTemplates(true)} disabled={disabled} modelLabel={uiText("视频模型")} onModelChange={selectModel} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} referenceAction={{ label: uiText("配置参考素材"), onOpen: trigger => referencePicker.current?.open(trigger) }} >{({ modelControl, addControl }) => (<ExperimentComposer submitting={disabled} submitDisabled={disabled || submission.outcomePending || capabilityBlocked || ratioConflict || durationConflict || modeConflict || referenceIssues.length > 0} onSubmit={() => void submit()} options={<>{modelControl}    <Select
       value={ratio}
       onChange={setRatio}
       disabled={disabled}
@@ -250,7 +273,17 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
         disabled: Boolean(allowedRatios && !allowedRatios.includes(value)),
       }))}
       aria-label={uiText("视频比例")}
-    /></>} addAction={addControl} contextActions={<>
+    />
+    {!!resolutions.length && <Select value={resolution} disabled={disabled} placeholder={uiText('分辨率')}
+      aria-label={uiText('分辨率')} options={resolutions.map(value => ({ value, label: value }))}
+      onChange={value => { setResolution(value); setSeconds(undefined) }} />}
+    {duration && (Array.isArray(duration)
+      ? <Select value={seconds} disabled={disabled} placeholder={uiText('时长（秒）')} aria-label={uiText('时长（秒）')}
+        options={duration.map(value => ({ value, label: value }))} onChange={setSeconds} />
+      : <InputNumber value={seconds} precision={0} disabled={disabled} placeholder={uiText('时长（秒）')}
+        aria-label={uiText('时长（秒）')} min={duration.min_seconds} max={duration.max_seconds}
+        onChange={value => setSeconds(value ?? undefined)} />)}
+    </>} addAction={addControl} contextActions={<>
 
     <VideoExperimentReferences ref={referencePicker}
       key={sessionId ?? 'draft'}
@@ -267,6 +300,8 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     {capabilityState === 'failed' && <span role="alert" className="experiment-video-reference-issue">{uiText("视频模型能力读取失败")} <Button type="link" onClick={() => void loadCapability(modelId)}>{uiText("重试读取能力")}</Button></span>}
     {capabilityIncomplete && <span className="experiment-video-reference-summary">{uiText("模型未提供完整参考限制，提交时由服务端校验")}</span>}
     {ratioConflict && <span role="alert" className="experiment-video-reference-issue">{uiText("当前模型不支持比例")} {ratio}{uiText("，请重新选择")}</span>}
+    {modeConflict && <span role="alert" className="experiment-video-reference-issue">{uiText('当前模型不支持此视频操作')}</span>}
+    {durationConflict && <span role="alert" className="experiment-video-reference-issue">{uiText('请选择允许的分辨率和时长')}</span>}
     {referenceIssues.length > 0 && <span role="alert" className="experiment-video-reference-issue">{referenceIssues.join('；')}</span>}
 </>}>{replacementDialog}<ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} /><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder={uiText("描述你想生成的视频；Shift + Enter 换行")} label={uiText("视频提示词")} disabled={disabled} submitOnEnter onSubmit={() => void submit()} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>)}</ExperimentOptionBar>
   const clearHistory = async () => {

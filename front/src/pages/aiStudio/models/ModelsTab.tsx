@@ -38,7 +38,7 @@ import { ApiError, LlmService } from '../../../services/generated'
 import { ModelCapabilityVerifications } from './ModelCapabilityVerifications'
 import type {
   ModelRead,
-  ModelCapabilityProfile,
+  ModelCapabilityProfile_Input,
   ModelCategoryKey,
   ProviderRead,
   ProviderSupportedRead,
@@ -69,12 +69,37 @@ const MODEL_CAPABILITIES = [
   ['audio_inputs', '音频输入'],
   ['text_outputs', '文本输出'],
   ['tool_calling', '工具调用'],
+  ['image_outputs', '图片输出'],
+  ['video_outputs', '视频输出'],
+  ['audio_outputs', '音频输出'],
+  ['non_streaming', '非流式响应'],
+  ['native_streaming', '原生流式响应'],
+  ['tool_results', '工具结果回传'],
+  ['parallel_tool_calls', '并行工具调用'],
+  ['streaming_tool_arguments', '流式工具参数'],
+  ['json_object', 'JSON 对象输出'],
+  ['json_schema', 'JSON Schema 结构化输出'],
+  ['direct_result', '直接返回结果'],
+] as const
+const TOKEN_LIMITS = [
+  ['max_input_tokens', '上下文上限（tokens）'],
+  ['max_output_tokens', '输出上限（tokens）'],
 ] as const
 const DECLARATION_LABELS = {
   supported: '支持',
   unsupported: '不支持',
   unknown: '未知',
 } as const
+
+function capabilityOperationLabel(
+  label: string,
+  capabilities: ModelRead['effective_capabilities'],
+  key: (typeof MODEL_CAPABILITIES)[number][0],
+) {
+  return capabilities?.builtin_defaults?.includes(key)
+    ? `${label} (${uiText('内置默认')})`
+    : label
+}
 
 function ModelCapabilities({ model }: { model: ModelRead }) {
   return (
@@ -91,8 +116,10 @@ function ModelCapabilities({ model }: { model: ModelRead }) {
           {MODEL_CAPABILITIES.map(([key, label]) => {
             const declaration = model.capability_profile?.[key]
             const availableIn = [
-              ...(model.effective_capabilities?.[key] ? [uiText('文字对话')] : []),
-              ...(model.storyboard_inspection_capabilities?.[key] ? [uiText('分镜检查')] : []),
+              ...(model.effective_capabilities?.[key]
+                ? [capabilityOperationLabel(uiText('文字对话'), model.effective_capabilities, key)] : []),
+              ...(model.storyboard_inspection_capabilities?.[key]
+                ? [capabilityOperationLabel(uiText('分镜检查'), model.storyboard_inspection_capabilities, key)] : []),
             ]
             return (
               <tr key={key} className="border-b align-top">
@@ -107,9 +134,15 @@ function ModelCapabilities({ model }: { model: ModelRead }) {
           })}
         </tbody>
       </table>
-      {!!model.capability_profile?.max_input_tokens && (
-        <p className="mt-2 text-xs">{uiText('上下文上限（tokens）')} {model.capability_profile.max_input_tokens}</p>
-      )}
+      {TOKEN_LIMITS.map(([key, label]) => {
+        const declared = model.capability_profile?.[key]
+        const effective = model.effective_capabilities?.[key]
+        return declared == null ? null : (
+          <p key={key} className="mt-2 text-xs">
+            {uiText(label)} · {uiText('模型能力声明')} {declared} · {uiText('当前接入可用')} {effective ?? '—'}
+          </p>
+        )
+      })}
       {model.storyboard_inspection_capabilities?.image_inputs &&
         !model.storyboard_inspection_capabilities.video_inputs && (
           <p className="mt-2 text-xs">{uiText('分镜检查可读取图片和视频静帧，当前接入无法读取连续视频。')}</p>
@@ -136,11 +169,117 @@ function ModelCapabilityFields() {
           </Form.Item>
         </div>
       ))}
-      <Form.Item name={['capability_profile', 'max_input_tokens']} label={uiText('上下文上限（tokens）')}>
-        <InputNumber min={1} precision={0} className="w-full" />
-      </Form.Item>
+      {TOKEN_LIMITS.map(([key, label]) => (
+        <Form.Item key={key} name={['capability_profile', key]} label={uiText(label)}>
+          <InputNumber min={1} precision={0} className="w-full" />
+        </Form.Item>
+      ))}
     </fieldset>
   )
+}
+
+const IMAGE_MODES = [
+  ['text_to_image', '文生图'],
+  ['reference_image', '参考图生图'],
+  ['edit', '图片编辑'],
+] as const
+
+const SUPPORT_OPTIONS = [
+  { value: true, label: '支持' },
+  { value: false, label: '不支持' },
+] as const
+
+function ImageCapabilityFields({ model, providerKey }: { model: ModelRead | null; providerKey?: string }) {
+  const supportOptions = SUPPORT_OPTIONS.map(({ value, label }) => ({ value, label: uiText(label) }))
+  return IMAGE_MODES.filter(([mode]) => mode === 'text_to_image' ||
+    (providerKey === 'openai' ? mode === 'edit' : mode === 'reference_image')).map(([mode, label]) => {
+    const effective = model?.effective_image_modes?.[mode]
+    return (
+      <fieldset key={mode} className="mb-4">
+        <legend className="mb-2 text-sm">{uiText(label)}</legend>
+        {effective && <p className="mb-2 text-xs">
+          {uiText('当前接入可用')} · {uiText(effective.supported ? '支持' : '不支持')}
+          {effective.sizes?.length ? ` · ${effective.sizes.join(', ')}` : ''}
+        </p>}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {(['supported', 'seed', 'watermark'] as const).map((key, index) => (
+            <Form.Item key={key} name={['capability_profile', 'image_modes', mode, key]}
+              label={uiText(['是否支持此操作', '随机种子', '水印'][index])}>
+              <Select allowClear placeholder={uiText('未知')} options={supportOptions} />
+            </Form.Item>
+          ))}
+          {(['sizes', 'ratios', 'resolution_profiles'] as const).map((key, index) => (
+            <Form.Item key={key} name={['capability_profile', 'image_modes', mode, key]}
+              label={uiText(['尺寸', '宽高比', '分辨率档位'][index])}>
+              <Select mode="tags" tokenSeparators={[',']} placeholder={uiText('未知')} />
+            </Form.Item>
+          ))}
+          {(['max_outputs', 'max_reference_images'] as const).map((key, index) => (
+            <Form.Item key={key} name={['capability_profile', 'image_modes', mode, key]}
+              label={uiText(['最大出图数', '最大参考图数'][index])}>
+              <InputNumber min={index === 0 ? 1 : 0} max={index === 0 ? 10 : undefined} precision={0} className="w-full" />
+            </Form.Item>
+          ))}
+        </div>
+      </fieldset>
+    )
+  })
+}
+
+const VIDEO_MODES = [
+  ['text_to_video', '文生视频'],
+  ['first_frame', '首帧'],
+  ['first_last_frames', '首尾帧'],
+  ['key_frames', '关键帧'],
+  ['subject_reference', '主体参考'],
+] as const
+
+function VideoCapabilityFields({ model, providerKey }: { model: ModelRead | null; providerKey?: string }) {
+  const supportOptions = SUPPORT_OPTIONS.map(({ value, label }) => ({ value, label: uiText(label) }))
+  return VIDEO_MODES.map(([mode, label]) => (
+    <fieldset key={mode} className="mb-4">
+      <legend className="mb-2 text-sm">{uiText(label)}</legend>
+      {model?.effective_video_modes?.[mode] && <p className="mb-2 text-xs">
+        {uiText('当前接入可用')} · {uiText(model.effective_video_modes[mode].supported ? '支持' : '不支持')}
+      </p>}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {([
+          ['supported', '是否支持此操作'],
+          ['combine_subjects_and_frames', '组合主体与帧参考'],
+          ['audio_reference_input', '音频参考输入'],
+          ['native_audio_output', '原生音轨输出'],
+          ['audio_switch', '音轨开关'],
+        ] as const).map(([key, fieldLabel]) => (
+          <Form.Item key={key} name={['capability_profile', 'video_modes', mode, key]} label={uiText(fieldLabel)}>
+            <Select allowClear options={supportOptions} placeholder={uiText('未知')} />
+          </Form.Item>
+        ))}
+        <Form.Item name={['capability_profile', 'video_modes', mode, 'ratios']} label={uiText('宽高比')}>
+          <Select mode="tags" tokenSeparators={[',']} placeholder={uiText('未知')} />
+        </Form.Item>
+        <Form.Item name={['capability_profile', 'video_modes', mode, 'reference_kinds']} label={uiText('参考素材类型')}>
+          <Select mode="multiple" options={([
+            ['image', '图片'], ['video', '视频'], ['audio', '音频'],
+          ] as const).map(([value, item]) => ({ value, label: uiText(item) }))} />
+        </Form.Item>
+        <Form.Item name={['capability_profile', 'video_modes', mode, 'max_references']} label={uiText('最大参考素材数')}>
+          <InputNumber min={0} precision={0} className="w-full" />
+        </Form.Item>
+      </div>
+      {providerKey === 'vidu' && <Form.Item name={['videoDurationRules', mode]} label={uiText('按分辨率声明时长（JSON）')}
+        rules={[{ validator: async (_, value?: string) => {
+          if (!value?.trim()) return
+          try {
+            const rules: unknown = JSON.parse(value)
+            if (!rules || typeof rules !== 'object' || Array.isArray(rules)) throw new Error()
+          } catch {
+            throw new Error(uiText('参数必须为 JSON 对象'))
+          }
+        } }]}>
+        <Input.TextArea rows={2} placeholder='{"720p":{"min_seconds":5,"max_seconds":15},"1080p":[5,10]}' />
+      </Form.Item>}
+    </fieldset>
+  ))
 }
 
 /** 选择器读取完整目录，独立于表格的搜索条件和当前页。 */
@@ -164,7 +303,8 @@ interface ModelFormValues {
   names?: string[]
   description?: string
   params?: string
-  capability_profile?: ModelCapabilityProfile
+  capability_profile?: ModelCapabilityProfile_Input
+  videoDurationRules?: Partial<Record<(typeof VIDEO_MODES)[number][0], string>>
 }
 
 export default function ModelsTab({ header }: { header: ReactNode }) {
@@ -198,6 +338,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
   const advanced = useRef<HTMLDetailsElement>(null)
   const [discardOpen, setDiscardOpen] = useState(false)
   const [modelEditing, setModelEditing] = useState<ModelRead | null>(null)
+  const editorTrigger = useRef<HTMLElement | null>(null)
   const [providerOptionsLoading, setProviderOptionsLoading] = useState(true)
   const [providerOptionsFailed, setProviderOptionsFailed] = useState(false)
   const [providerOptionsRevision, setProviderOptionsRevision] = useState(0)
@@ -390,6 +531,8 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
   }, [modelEditorOpen, modelEditing, selectedFormProviderId])
 
   const closeModelEditor = () => {
+    const trigger = editorTrigger.current
+    editorTrigger.current = null
     pendingName.current = ''
     setDiscardOpen(false)
     setModelEditorOpen(false)
@@ -397,6 +540,9 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
     setFormCatalog(null)
     setFormCatalogLoading(false)
     form.resetFields()
+    requestAnimationFrame(() => {
+      if (!editorTrigger.current && trigger?.isConnected) trigger.focus({ preventScroll: true })
+    })
   }
 
   const requestClose = () => {
@@ -418,10 +564,23 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
     setSavingModel(true)
     try {
       const params = values.params?.trim() ? JSON.parse(values.params) as Record<string, unknown> : {}
-      const capabilities = values.capability_profile
+      let capabilities = values.capability_profile
+      if (values.category === 'video' && values.videoDurationRules) {
+        const modes = { ...capabilities?.video_modes }
+        for (const [mode] of VIDEO_MODES) {
+          const text = values.videoDurationRules[mode]?.trim()
+          if (text || modes[mode]) modes[mode] = {
+            ...modes[mode], duration_by_resolution: text ? JSON.parse(text) : {},
+          }
+        }
+        capabilities = { ...capabilities, video_modes: modes }
+      }
       const hasCapabilities = capabilities && (
-        typeof capabilities.max_input_tokens === 'number' || MODEL_CAPABILITIES.some(([key]) => {
-          const capability = capabilities[key]
+        !!Object.keys(capabilities.image_modes ?? {}).length ||
+        !!Object.keys(capabilities.video_modes ?? {}).length ||
+        !!capabilities.remote_cancel?.declaration ||
+        TOKEN_LIMITS.some(([key]) => typeof capabilities?.[key] === 'number') || MODEL_CAPABILITIES.some(([key]) => {
+          const capability = capabilities?.[key]
           return capability?.declaration !== undefined || !!capability?.source
         })
       )
@@ -516,6 +675,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
   }
 
   const openModelEditor = (model?: ModelRead, copy = false) => {
+    editorTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setModelEditing(copy ? null : model ?? null)
     setFormCatalog(null)
     form.resetFields()
@@ -526,6 +686,10 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
       description: model.description ?? '',
       params: JSON.stringify(model.params ?? {}, null, 2),
       capability_profile: model.capability_profile ?? undefined,
+      videoDurationRules: model.category === 'video' ? Object.fromEntries(VIDEO_MODES.flatMap(([mode]) => {
+        const rules = model.capability_profile?.video_modes?.[mode]?.duration_by_resolution
+        return rules && Object.keys(rules).length ? [[mode, JSON.stringify(rules, null, 2)]] : []
+      })) : undefined,
     } : {}
     form.setFieldsValue(initialFields.current)
     setModelEditorOpen(true)
@@ -864,7 +1028,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
               </Form.Item>
             </details>
           </section>
-          <section className="project-settings-group">
+          {selectedFormCategory === 'text' && <section className="project-settings-group">
             <details>
               <summary>{uiText('模型能力')}</summary>
               {modelEditing && <>
@@ -874,7 +1038,24 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
               </>}
               <ModelCapabilityFields />
             </details>
-          </section>
+          </section>}
+          {selectedFormCategory === 'image' && <section className="project-settings-group">
+            <details>
+              <summary>{uiText('模型能力声明')}</summary>
+              <ImageCapabilityFields model={modelEditing} providerKey={selectedFormProvider?.provider_key} />
+            </details>
+          </section>}
+          {selectedFormCategory === 'video' && <section className="project-settings-group">
+            <details>
+              <summary>{uiText('模型能力声明')}</summary>
+              <VideoCapabilityFields model={modelEditing} providerKey={selectedFormProvider?.provider_key} />
+            </details>
+          </section>}
+          {(selectedFormCategory === 'image' || selectedFormCategory === 'video') && selectedFormProvider?.provider_key === 'vidu' &&
+            <Form.Item name={['capability_profile', 'remote_cancel', 'declaration']} label={uiText('远端取消')}>
+              <Select allowClear options={Object.entries(DECLARATION_LABELS).map(([value, label]) => ({ value, label: uiText(label) }))}
+                placeholder={uiText('未知')} />
+            </Form.Item>}
           {modelEditing && <Typography.Text type="secondary">{uiText("创建人")} · {modelEditing.created_by || '—'}</Typography.Text>}
         </Form>
       </ResourceEditorFrame>}

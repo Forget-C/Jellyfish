@@ -3,16 +3,76 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from unittest.mock import AsyncMock
 
 import pytest
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.core.contracts.model_provider import ProviderChatEvent
 from app.core.db import Base
 from app.models.experiment_sessions import ExperimentSession
+from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.task import Task
 from app.services.generation.runtime import text_chat_streaming
+
+
+@pytest.mark.asyncio
+async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch) -> None:
+    from app.dependencies import get_db
+    from app.main import app
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'gateway.db'}")
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(text_chat_streaming, "async_session_maker", sessions)
+    requests = []
+
+    def reply(request: httpx.Request) -> httpx.Response:
+        requests.append((str(request.url), request.headers["authorization"], json.loads(request.content)))
+        return httpx.Response(200, headers={"Content-Type": "text/event-stream"}, text=(
+            'data: {"choices":[{"index":0,"delta":{"content":"第一段"},"finish_reason":null}]}\n\n'
+            'data: {"choices":[{"index":0,"delta":{"content":"第二段"},"finish_reason":"stop"}]}\n\n'
+            'data: [DONE]\n\n'
+        ))
+
+    async def db_session():
+        async with sessions() as db:
+            yield db
+
+    monkeypatch.setitem(app.dependency_overrides, get_db, db_session)
+    transport = httpx.MockTransport(reply)
+    original_init = httpx.AsyncClient.__init__
+
+    def init_client(self, *args, **kwargs):
+        kwargs.setdefault("transport", transport)
+        original_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(httpx.AsyncClient, "__init__", init_client)
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        async with sessions.begin() as db:
+            db.add(Provider(id="custom", name="Custom", provider_key="openai",
+                            base_url="https://gateway.test/v1", api_key="gateway-key"))
+            db.add(Model(id="custom-text", name="compatible-chat", category=ModelCategoryKey.text,
+                         provider_id="custom", params={"temperature": 0.4, "use_responses_api": False}))
+            db.add(ExperimentSession(id="gateway-session", lab_type="text"))
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post("/api/v1/studio/labs/text/sessions/gateway-session/stream",
+                                         json={"model_id": "custom-text", "content": "你好"})
+        assert response.status_code == 200
+        assert "event: completed" in response.text
+        assert "第一段" in response.text and "第二段" in response.text
+        [(url, auth, payload)] = requests
+        assert (url, auth) == ("https://gateway.test/v1/chat/completions", "Bearer gateway-key")
+        assert payload["model"] == "compatible-chat"
+        assert payload["messages"] == [{"role": "user", "content": "你好"}]
+        assert payload["temperature"] == 0.4
+        assert payload["stream"] is True
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -21,7 +81,7 @@ async def test_text_stream_creates_message_without_generation_task(tmp_path, mon
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'text-stream.db'}", future=True)
     session_local = async_sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr(text_chat_streaming, "async_session_maker", session_local)
-    monkeypatch.setattr(text_chat_streaming, "build_text_chat_model", AsyncMock(return_value=object()))
+    monkeypatch.setattr(text_chat_streaming, "build_laboratory_chat", AsyncMock(return_value=object()))
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     try:
@@ -65,12 +125,12 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
     received = []
 
     class ControlledTextModel:
-        async def astream(self, messages):
-            received.extend(message.text for message in messages)
-            yield '第一段'
-            yield '第二段'
+        async def stream(self, messages):
+            received.extend(message["content"] for message in messages)
+            yield ProviderChatEvent(kind='delta', text='第一段')
+            yield ProviderChatEvent(kind='delta', text='第二段')
 
-    monkeypatch.setattr(text_chat_streaming, 'build_text_chat_model', AsyncMock(return_value=ControlledTextModel()))
+    monkeypatch.setattr(text_chat_streaming, 'build_laboratory_chat', AsyncMock(return_value=ControlledTextModel()))
 
     async def test_db():
         async with sessions() as db:
@@ -115,12 +175,12 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
             first_delta = asyncio.Event()
 
             class InterruptedTextModel:
-                async def astream(self, _messages):
-                    yield '已经送达的前缀'
+                async def stream(self, _messages):
+                    yield ProviderChatEvent(kind='delta', text='已经送达的前缀')
                     first_delta.set()
                     await asyncio.Future()
 
-            monkeypatch.setattr(text_chat_streaming, 'build_text_chat_model', AsyncMock(return_value=InterruptedTextModel()))
+            monkeypatch.setattr(text_chat_streaming, 'build_laboratory_chat', AsyncMock(return_value=InterruptedTextModel()))
             interrupted = {'Idempotency-Key': 'interrupted-stream'}
             interrupted_body = {**body, 'content': '恢复未结束的流'}
             original = asyncio.create_task(client.post(url, json=interrupted_body, headers=interrupted))

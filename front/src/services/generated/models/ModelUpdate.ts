@@ -2,7 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { ModelCapabilityProfile } from './ModelCapabilityProfile';
+import type { ModelCapabilityProfile_Input } from './ModelCapabilityProfile_Input';
 import type { ModelCategoryKey } from './ModelCategoryKey';
 /**
  * 更新模型请求体（全部可选）。
@@ -28,6 +28,5 @@ export type ModelUpdate = {
      * 说明
      */
     description?: (string | null);
-    capability_profile?: (ModelCapabilityProfile | null);
+    capability_profile?: (ModelCapabilityProfile_Input | null);
 };
-

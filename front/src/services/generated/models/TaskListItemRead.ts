@@ -13,6 +13,7 @@ export type TaskListItemRead = {
     stage: string;
     progress?: (number | null);
     cancel_requested?: boolean;
+    remote_cancellation?: ('requested' | 'unsupported' | 'accepted' | 'confirmed' | 'rejected' | 'unconfirmed' | null);
     cancel_requested_at_ts?: (number | null);
     started_at_ts?: (number | null);
     finished_at_ts?: (number | null);
@@ -26,4 +27,3 @@ export type TaskListItemRead = {
     created_at_ts: number;
     updated_at_ts: number;
 };
-

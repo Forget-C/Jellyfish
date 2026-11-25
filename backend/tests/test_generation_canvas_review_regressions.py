@@ -86,7 +86,7 @@ async def test_target_only_model_reference_freezes_without_adopting_movement(run
             pass
         async def astream(self, _messages):
             yield SimpleNamespace(content='目标画面人物站窗边')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', TextModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', TextModel)
     await accept_text(runtime)
     worker = TaskWorker(runtime.sessions)
     await worker.tick()

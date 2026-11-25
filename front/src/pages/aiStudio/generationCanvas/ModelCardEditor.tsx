@@ -93,7 +93,14 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   }, [capability, card, defaultModelId, disabled, models, onChange, suppressAutomaticDefaults])
   let parameters: ReactNode = null
   if (card.type === 'model.image') parameters = <ImageModelParameters card={card as ImageModelCard} capability={capability} disabled={disabled} onChange={onChange} />
-  if (card.type === 'model.video') parameters = <VideoModelParameters card={card as VideoModelCard} capability={capability} disabled={disabled} onChange={onChange} />
+  if (card.type === 'model.video') {
+    const media = resolved.compiled?.video_media
+    const mode = media?.subjects?.length ? 'subject_reference' : media?.frames?.keys?.length ? 'key_frames'
+      : media?.frames?.first && media.frames.last ? 'first_last_frames'
+        : media?.frames?.first || media?.frames?.last ? 'first_frame' : 'text_to_video'
+    parameters = <VideoModelParameters card={card as VideoModelCard} capability={capability} mode={mode}
+      disabled={disabled} onChange={onChange} />
+  }
   const hasSavedSoundDesign = !resolved.loading && resolved.compiled?.used?.some(item =>
     item.available !== false && !!item.text && item.payload && 'design_type' in item.payload &&
     ['direction.dialogue', 'direction.sound'].includes(item.payload.design_type))
