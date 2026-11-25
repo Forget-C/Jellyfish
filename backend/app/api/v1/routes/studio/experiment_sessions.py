@@ -5,11 +5,11 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
-from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
+from app.models.experiment_sessions import ExperimentMessage, ExperimentSession, ExperimentSessionEvent
 from app.schemas.interaction import InteractionSnapshot
 from app.schemas.common import ApiResponse, created_response, empty_response, success_response
 from app.schemas.studio.experiment_sessions import (
@@ -126,6 +126,7 @@ async def clear_experiment_messages(session_id: str, db: AsyncSession = Depends(
     has_task = await has_active_experiment_tasks(db, session_id)
     if has_task:
         raise HTTPException(status_code=409, detail="Session with generation tasks cannot be cleared")
+    await db.execute(delete(ExperimentSessionEvent).where(ExperimentSessionEvent.session_id == session_id))
     rows = (await db.execute(select(ExperimentMessage).where(ExperimentMessage.session_id == session_id))).scalars().all()
     for row in rows:
         await db.delete(row)

@@ -70,3 +70,17 @@ class ExperimentChatEvent(Base):
 
 
 __all__ = ["ExperimentSession", "ExperimentMessage"]
+
+
+class ExperimentSessionEvent(Base):
+    """Committed public event for incremental recovery of an experiment session."""
+
+    __tablename__ = "experiment_session_events"
+
+    cursor: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("experiment_sessions.id", ondelete="CASCADE"))
+    turn_id: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[dict] = mapped_column(JSON)
+    __table_args__ = (Index("ix_experiment_events_session_cursor", "session_id", "cursor"),
+                      {"sqlite_autoincrement": True})
