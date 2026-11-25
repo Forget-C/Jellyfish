@@ -1,14 +1,18 @@
 """Serve the shared canvas tools over MCP Streamable HTTP."""
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
-from starlette.types import Receive, Scope, Send
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.canvas_mcp import (
     canvas_checks, generation_inputs, generation_runs, grouped_edits, layout, lifecycle, storyboards, tools,
 )
-from app.canvas_mcp.connection import MCP_PATH, accepts_credential, allows_origin
+from app.canvas_mcp.connection import MCP_PATH, allows_origin, connection_state
 
 
 def create_server() -> FastMCP:
@@ -32,6 +36,33 @@ def create_server() -> FastMCP:
     return server
 
 
+@asynccontextmanager
+async def run_transport() -> AsyncIterator[ASGIApp]:
+    """The task that enters the SDK's cancel scope must also exit it."""
+    server = create_server()
+    transport = server.streamable_http_app()
+    started = asyncio.Event()
+    stop = asyncio.Event()
+
+    async def run():
+        async with server.session_manager.run():
+            started.set()
+            await stop.wait()
+
+    manager = asyncio.create_task(run())
+    ready = asyncio.create_task(started.wait())
+    try:
+        await asyncio.wait((manager, ready), return_when=asyncio.FIRST_COMPLETED)
+        if manager.done():
+            await manager
+        yield transport
+    finally:
+        ready.cancel()
+        stop.set()
+        await asyncio.gather(ready, return_exceptions=True)
+        await manager
+
+
 class CanvasMcpEndpoint:
     """Validate the browser origin and bearer credential for every MCP HTTP request."""
 
@@ -41,7 +72,8 @@ class CanvasMcpEndpoint:
         if origin is not None and not allows_origin(origin):
             await JSONResponse({'error': 'Invalid Origin'}, status_code=403)(scope, receive, send)
             return
-        if not accepts_credential(headers.get('authorization', '')):
+        scheme, _, credential = headers.get('authorization', '').partition(' ')
+        if scheme.lower() != 'bearer' or not credential or not connection_state.accepts(credential):
             await JSONResponse(
                 {'error': 'A valid canvas MCP credential is required'},
                 status_code=401,
