@@ -123,7 +123,7 @@ try {
       await page.setViewportSize({ width: 1440, height: 900 })
       await page.evaluate(value => localStorage.setItem('jellyfish_appearance', value), theme)
       await page.goto(origin + '/lab?session=' + mode)
-      await page.getByRole('button', { name: '选择模型', exact: true }).click()
+      await page.locator('.experiment-model-trigger').click()
       await page.getByRole('menuitemradio').first().click()
       if (mode === 'image') {
         await openLabAddition(page, '添加参考图')
