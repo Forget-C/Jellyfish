@@ -125,11 +125,11 @@ def test_worker_command_records_actual_subprocess_identity_and_stops_cleanly(tmp
 
     asyncio.run(prepare())
     runtime = tmp_path / '.dev-runtime'
+    from tests.worker_process import sqlite_worker_environment, start_test_worker
+
+    env = {**sqlite_worker_environment(database), 'JELLYFISH_DEV_RUNTIME_DIR': str(runtime)}
     with (tmp_path / 'worker.log').open('w') as log:
-        worker = subprocess.Popen([sys.executable, '-m', 'app.dev', 'worker'],
-            cwd=Path(__file__).resolve().parents[1], stdout=log, stderr=subprocess.STDOUT,
-            env={**os.environ, 'DATABASE_URL': f'sqlite+aiosqlite:///{database}',
-                 'JELLYFISH_DEV_RUNTIME_DIR': str(runtime)})
+        worker = start_test_worker(env, sqlite_root=tmp_path, dev=True, stdout=log, stderr=subprocess.STDOUT)
         try:
             deadline = time.monotonic() + 10
             while not (runtime / 'worker.json').exists() and worker.poll() is None and time.monotonic() < deadline:

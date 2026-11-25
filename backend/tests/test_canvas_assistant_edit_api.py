@@ -16,6 +16,7 @@ from app.models.llm import Model, ModelSettings, Provider
 from tests.canvas_urls import append_canvas_path, canvas_url, seed_scene_canvas
 from tests.isolated_mysql import isolated_storage_environment
 from tests.services.test_task_mysql import isolated_database_url
+from tests.worker_process import start_test_worker, validate_worker_environment
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # pylint: disable=unused-import
 
 
@@ -294,9 +295,6 @@ async def test_assistant_edit_requires_approval_and_replays_original_save(canvas
 @asynccontextmanager
 async def _live_mysql_app(tmp_path, storage_env):
     """Start the real HTTP and Worker processes against the isolated test DB."""
-    with socket.socket() as listener:
-        listener.bind(('127.0.0.1', 0))
-        port = listener.getsockname()[1]
     env = {
         **os.environ,
         **storage_env,
@@ -304,14 +302,19 @@ async def _live_mysql_app(tmp_path, storage_env):
         'JELLYFISH_DEV_RUNTIME_DIR': str(tmp_path / 'identities'),
         'ASSISTANT_APPROVAL_COMMITTED_MARKER': str(tmp_path / 'committed'),
     }
+    validate_worker_environment(env)
+    with socket.socket() as listener:
+        listener.bind(('127.0.0.1', 0))
+        port = listener.getsockname()[1]
     backend = Path(__file__).resolve().parents[1]
     with (tmp_path / 'processes.log').open('ab') as log:
-        processes = [
-            await asyncio.create_subprocess_exec(sys.executable, '-m', *command, cwd=backend, env=env, stdout=log, stderr=log)
-            for command in (('uvicorn', 'tests.canvas_assistant_restart_server:app', '--port', str(port)),
-                            ('app.task_worker',))
-        ]
+        api = await asyncio.create_subprocess_exec(
+            sys.executable, '-m', 'uvicorn', 'tests.canvas_assistant_restart_server:app', '--port', str(port),
+            cwd=backend, env=env, stdout=log, stderr=log,
+        )
+        worker = None
         try:
+            worker = start_test_worker(env, stdout=log, stderr=log)
             async with httpx.AsyncClient(base_url=f'http://127.0.0.1:{port}', trust_env=False, timeout=15) as client:
                 async with asyncio.timeout(15):
                     while True:
@@ -323,14 +326,18 @@ async def _live_mysql_app(tmp_path, storage_env):
                         await asyncio.sleep(.1)
                     worker_identity = tmp_path / 'identities' / 'worker.json'
                     while (not worker_identity.is_file()
-                           or json.loads(worker_identity.read_text())['pid'] != processes[1].pid):
+                           or json.loads(worker_identity.read_text())['pid'] != worker.pid):
                         await asyncio.sleep(.1)
                 yield client
         finally:
-            for process in processes:
-                if process.returncode is None:
-                    process.kill()
-            await asyncio.gather(*(process.wait() for process in processes))
+            if api.returncode is None:
+                api.kill()
+            if worker is not None:
+                if worker.poll() is None:
+                    worker.kill()
+                await asyncio.gather(api.wait(), asyncio.to_thread(worker.wait))
+            else:
+                await api.wait()
 
 
 async def _restart_and_replay(tmp_path, url, decision, groups):

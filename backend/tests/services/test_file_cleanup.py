@@ -1,6 +1,8 @@
 """文件清理的重试、历史保留、分页范围和事务边界。"""
 
 from datetime import UTC, datetime, timedelta
+import json
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -16,7 +18,7 @@ from app.services.task_service import TaskService, utcnow
 
 
 @pytest.mark.asyncio
-async def test_cleanup_retries_preserves_rows_and_skips_active_objects(tmp_path, monkeypatch):
+async def test_cleanup_retries_preserves_rows_and_skips_active_objects(tmp_path, monkeypatch, caplog):
     """失败删除不饿死下一批，存储 I/O 无事务，注册对象和活动生成对象保留。"""
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'owned.sqlite'}")
     monkeypatch.setattr(settings, "s3_endpoint_url", "https://storage.example.test")
@@ -41,6 +43,7 @@ async def test_cleanup_retries_preserves_rows_and_skips_active_objects(tmp_path,
     event.listen(engine.sync_engine, "begin", begin)
     event.listen(engine.sync_engine, "commit", end)
     event.listen(engine.sync_engine, "rollback", end)
+    caplog.set_level(logging.INFO)
     deleted = []
     failure = True
     now = datetime.now(UTC)
@@ -52,7 +55,7 @@ async def test_cleanup_retries_preserves_rows_and_skips_active_objects(tmp_path,
     async def delete(*, key):
         """模拟一次网络失败，其他对象仍可继续删除。"""
         assert transactions == 0
-        if key == "files/a" and failure:
+        if key == "files/delete-fails" or (key == "files/a" and failure):
             raise RuntimeError("temporary error")
         deleted.append(key)
 
@@ -79,10 +82,10 @@ async def test_cleanup_retries_preserves_rows_and_skips_active_objects(tmp_path,
             await db.commit()
         pages.update({
             ("files/", None): ([obj("files/saved"), obj("files/thumb-saved"), obj("files/new", age=0)], "page-2"),
-            ("files/", "page-2"): ([obj("files/orphan")], None),
+            ("files/", "page-2"): ([obj("files/orphan"), obj("files/delete-fails")], None),
             ("generated/", None): ([obj(f"generated/{active.id}/0"), obj("generated/missing/0")], None),
         })
-        cleaner = FileCleaner(sessions, batch_size=1)
+        cleaner = FileCleaner(sessions, batch_size=1, worker_id="test-worker")
         await cleaner.run_once()
         assert deleted == []
         await cleaner.run_once()
@@ -98,6 +101,18 @@ async def test_cleanup_retries_preserves_rows_and_skips_active_objects(tmp_path,
             assert (await db.get(FileItem, "b")).deleted_at is not None
             assert (await db.get(FileItem, "saved")).deleted_at is None
         assert "files/a" in deleted
+        audited = [
+            json.loads(record.getMessage().partition(" ")[2]) for record in caplog.records
+            if record.getMessage().startswith("orphan_object_deleted ")
+        ]
+        assert [row["object_key"] for row in audited] == ["files/orphan", "generated/missing/0"]
+        for row in audited:
+            assert row["bucket"] == "test-owned" and row["prefix"] == "validation/owned"
+            assert row["worker_id"] == "test-worker"
+            assert row["endpoint_host"] == "storage.example.test"
+            assert row["endpoint_port"] == 443
+            assert row["reason"] == "unregistered_object_past_grace_period"
+            assert datetime.fromisoformat(row["at"]).utcoffset() == timedelta(0)
     finally:
         await engine.dispose()
 

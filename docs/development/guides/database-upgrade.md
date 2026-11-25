@@ -30,6 +30,18 @@ uv run python -m tests.isolated_mysql pytest -q \
 
 重复执行迁移和种子应保持唯一的版本记录、全局设置和内置模板数量。业务用例通过 API 创建本轮数据，使用模型与对象存储替身，实际运行 Worker；再次执行整组用例时使用专用空库。
 
+### 回归真实 Worker 的启动与审计
+
+审批重启回归可用以下命令独立运行。入口在启动前校验测试库，为本轮分配随机对象前缀，并清除继承的孤儿扫描授权。
+
+```bash
+uv run python -m tests.isolated_mysql pytest -q tests/test_canvas_assistant_edit_api.py -k restart
+```
+
+新增真实 Worker 进程测试时复用 `tests.worker_process`。专用 MySQL 必须与测试入口指定的连接一致，最终传给子进程的对象前缀必须位于本轮的验证范围。SQLite 测试使用临时目录里的独立数据库，并显式禁用真实 S3。配置不匹配时，入口在运行 Worker 前退出。审批重启用例在同一隔离环境中核对批准结果和原回执重放。
+
+启用[孤儿扫描](../reference/env.md#启用孤儿对象扫描)时，每次成功删除都会在 Worker 日志留下 `orphan_object_deleted` JSON 事件。可按对象键、桶和前缀定位删除，再用 Worker 标识及 UTC 时间对照运行记录。
+
 ## 新基线之后的升级与回退
 
 按目标版本核对 `alembic current` 和 `alembic heads`，确认 API 与 Worker 使用预期库。停写并备份后执行正式迁移和种子入口，成功后再启动应用。MySQL DDL 可能部分生效。失败后先核对版本与实际表结构，再按已执行的步骤处理。回退初始 revision 需要恢复备份并使用对应代码。

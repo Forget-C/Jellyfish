@@ -1039,12 +1039,11 @@ try {
   await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill('生成两版')
   await panel.getByRole('button', { name: '发送消息' }).click()
   await panel.getByText('已授权生成版本数 2 · 已排队，等待提交', { exact: true }).waitFor()
-  const workerEntrypoint = 'import asyncio; from tests.generation_canvas_browser_server import configure_media_storage; from app.task_worker import main; configure_media_storage(); asyncio.run(main())'
-  worker = spawn(python || 'uv', [...(python ? [] : ['run', '--no-sync', 'python']), '-c', workerEntrypoint], {
+  worker = spawn(python || 'uv', [...(python ? [] : ['run', '--no-sync', 'python']), '-m', 'tests.worker_process', '--sqlite-root', output], {
     cwd: join(root, '../backend'),
     env: { ...process.env, DATABASE_URL: 'sqlite+aiosqlite:///' + join(output, 'browser.sqlite'),
       CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'),
-      S3_PUBLIC_BASE_URL: api },
+      S3_PUBLIC_BASE_URL: api, S3_BUCKET_NAME: '', S3_ENDPOINT_URL: '', S3_ORPHAN_CLEANUP_SCOPE: '' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   captureBackend(worker, output)

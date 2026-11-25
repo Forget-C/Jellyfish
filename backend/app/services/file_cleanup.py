@@ -5,6 +5,7 @@ from hashlib import sha256
 import json
 import logging
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from sqlalchemy import or_, select, update
 from sqlalchemy.engine import URL, make_url
@@ -16,6 +17,7 @@ from app.models.task import Task
 from app.services.task_service import utcnow
 
 logger = logging.getLogger(__name__)
+ORPHAN_AUDIT_LOGGER = "app.services.file_cleanup.audit"
 
 
 def orphan_cleanup_scope(database: URL) -> str | None:
@@ -36,9 +38,10 @@ def orphan_cleanup_scope(database: URL) -> str | None:
 class FileCleaner:
     """每轮只处理一批删除和一页孤儿对象；游标仅用于公平扫描，不承担恢复执行。"""
 
-    def __init__(self, sessions, *, batch_size: int = 100):
+    def __init__(self, sessions, *, batch_size: int = 100, worker_id: str | None = None):
         """注入会话工厂，存储调用前关闭读事务。"""
         self.sessions = sessions
+        self.worker_id = worker_id
         self.batch_size = batch_size
         self.delete_cursor = ""
         self.prefix = "files/"
@@ -100,6 +103,18 @@ class FileCleaner:
                 await storage.delete_file(key=obj.key)
             except Exception as error:
                 logger.warning("orphan cleanup failed: error=%s", type(error).__name__)
+            else:
+                endpoint = urlsplit(settings.s3_endpoint_url or "")
+                logging.getLogger(ORPHAN_AUDIT_LOGGER).info("orphan_object_deleted %s", json.dumps({
+                    "at": datetime.now(UTC).isoformat(),
+                    "worker_id": self.worker_id,
+                    "endpoint_host": endpoint.hostname,
+                    "endpoint_port": endpoint.port or (443 if endpoint.scheme == "https" else 80),
+                    "bucket": settings.s3_bucket_name,
+                    "prefix": settings.s3_base_path.strip().strip("/"),
+                    "object_key": obj.key,
+                    "reason": "unregistered_object_past_grace_period",
+                }, ensure_ascii=False))
         self.object_cursor = cursor
         if cursor is None:
             self.prefix = "generated/" if self.prefix == "files/" else "files/"

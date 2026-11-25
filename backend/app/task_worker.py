@@ -26,7 +26,7 @@ from app.core.contracts.directing.scene_storyboard import SceneStoryboard, Story
 from app.core.contracts.task import TaskStatus
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.task import Task
-from app.services.file_cleanup import FileCleaner
+from app.services.file_cleanup import FileCleaner, ORPHAN_AUDIT_LOGGER
 from app.services.directing.errors import DirectingOutputError
 from app.services.directing.review_revision import ReviewRevisionService
 from app.services.directing.storyboard_assembly import validate_storyboard
@@ -101,7 +101,7 @@ class TaskWorker:
         self.text_pool = ThreadPoolExecutor(max_workers=self.limits.text, thread_name_prefix="task-text")
         self.text_threads: dict[str, asyncio.Future] = {}
         self.stopping = asyncio.Event()
-        self.cleaner = FileCleaner(self.sessions)
+        self.cleaner = FileCleaner(self.sessions, worker_id=self.worker_id)
         self.maintenance: asyncio.Task | None = None
         self.assistant_review: asyncio.Task | None = None
         self.next_cleanup_at = 0.0
@@ -998,6 +998,10 @@ class TaskWorker:
 
 async def main() -> None:
     """命令行入口，停止信号只结束本地工作，不重新提交远端生成。"""
+    audit = logging.getLogger(ORPHAN_AUDIT_LOGGER)
+    audit.setLevel(logging.INFO)
+    if not audit.hasHandlers():
+        audit.addHandler(logging.StreamHandler())
     worker = TaskWorker()
     for sig in (signal.SIGINT, signal.SIGTERM):
         asyncio.get_running_loop().add_signal_handler(sig, worker.stopping.set)
