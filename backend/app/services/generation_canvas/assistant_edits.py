@@ -24,7 +24,8 @@ from app.schemas.canvas_edit_intents import (
     MovementFieldEdit, ReleaseBindingEdit, VideoDurationEdit, VideoPromptSegmentEdit,
 )
 from app.schemas.generation_canvas import (
-    CanvasDocument, GenerationCanvasEdge, ModelCard, NamedImageReferenceCard, PromptText,
+    CanvasDocument, GenerationCanvasEdge, ModelCard, NamedImageReferenceCard, PromptReference, PromptText,
+    TextContentCard, VideoModelCard,
 )
 from app.services.generation_canvas.catalog import CARD_TITLES, design_fields
 from app.services.generation_canvas.editable_fields import EDITABLE_CONTENT_TYPES, apply_text, editable_text, normalize_text
@@ -34,8 +35,15 @@ from app.services.generation_canvas.assistant_structure import (
     append_candidate_edge, assistant_card_configuration, assistant_card_copy, preview_assistant_connection,
 )
 from app.services.generation_canvas.assistant_video_inputs import adopt_video_input
+from app.services.generation_canvas.capabilities import parameter_diagnostics
 from app.services.generation_canvas.errors import CanvasDomainError
 from app.services.generation_canvas.graph import validate_graph
+
+
+SHOT_GROUP_CODE = re.compile(r'(?<![\w-])S\d{2,}(?![\w-])', re.ASCII | re.IGNORECASE)
+SHOT_BODY_CODE = re.compile(r'^\s*(?:镜头\s*)?S\d{2,}(?![\w-])', re.ASCII | re.IGNORECASE)
+SHOT_DURATION_CLAUSE = re.compile(r'\d+(?:\.\d+)?\s*(?:秒|s|seconds?)', re.IGNORECASE)
+SHOT_TOTAL_DURATION = re.compile(r'总时长\s*[：:]?\s*' + SHOT_DURATION_CLAUSE.pattern, re.IGNORECASE)
 
 
 class ExistingCardChoice(ToolException):
@@ -58,6 +66,7 @@ class CanvasAssistantEditDraft:
         self.proposal: CanvasAssistantProposal | None = None
         self.proposal_issues: list[CanvasAssistantProposalIssue] = []
         self.user_request = ''
+        self.writing_shot_plan = False
         self.visible_edges = {edge.id for edge in self.visible_document.edges}
         self.unavailable_origins: dict[tuple[str | None, str], bool] = {}
         self.visible_ids = {card.id for card in self.visible_document.cards}
@@ -233,6 +242,7 @@ class CanvasAssistantEditDraft:
             references: dict[str, str] = {}
             edits = []
             group_targets = set()
+            title = ' / '.join(parsed[member].title for member in sorted(members))
             try:
                 for member, position, operation in operations:
                     change = self._batch_operation(local, operation, references)
@@ -252,11 +262,15 @@ class CanvasAssistantEditDraft:
             except CanvasDomainError as error:
                 self.proposal_issues.append(CanvasAssistantProposalIssue(group=first, message=error.detail['message']))
             else:
+                try:
+                    title = local._review_shot_group(title, edits)
+                except ToolException as error:
+                    self.proposal_issues.append(CanvasAssistantProposalIssue(group=first, message=str(error)))
+                    continue
                 self.reused_cards.update(local.reused_cards)
                 if not edits:
                     continue
                 targets.update(group_targets)
-                title = ' / '.join(parsed[member].title for member in sorted(members))
                 if local.reused_cards:
                     title = f'沿用 {len(local.reused_cards)} 张已有卡 · {title}'
                 group = CanvasAssistantEditGroup(id=str(first), title=title[:100], edits=edits)
@@ -264,6 +278,71 @@ class CanvasAssistantEditDraft:
         if preview:
             self.proposal = CanvasAssistantProposal(**preview[0].edits[0].model_dump(), groups=preview)
         return self.proposal
+
+    def _review_shot_group(self, title, edits):
+        """Check the resulting cards for a numbered shot before offering its approval."""
+        code = SHOT_GROUP_CODE.search(title)
+        if not code and not self.writing_shot_plan:
+            return title
+        cards = {card.id: card for card in self.visible_document.cards}
+        changed = dict.fromkeys(edit.card_id for edit in edits)
+        created = {edit.card_id for edit in edits if isinstance(edit.target, AddCanvasCardTarget)}
+        adopted = [edit.target.use for edit in edits if isinstance(edit.target, VideoInputTarget)
+                   and isinstance(edit.target.use, VideoTextUse)]
+        descriptions = {card.id for card in cards.values() if isinstance(card, TextContentCard)}
+        _, capabilities = self.video_inputs
+        video_ids = set()
+        involved_text = descriptions & changed.keys()
+        for video_id in changed:
+            video = cards.get(video_id)
+            if not isinstance(video, VideoModelCard):
+                continue
+            video_ids.add(video_id)
+            mentioned = {part.binding_id for part in video.prompt.segments if isinstance(part, PromptReference)}
+            refs = {binding.source.card_id for binding in video.input_bindings
+                    if binding.id in mentioned and binding.input_port == 'text'
+                    and binding.source.canvas_id == self.visible_document.id and binding.source.card_id in descriptions}
+            candidates = {edge.source_card for edge in self.visible_document.edges if edge.target_card == video_id
+                          and edge.target_port == 'text' and edge.source_card in descriptions}
+            new_pair = video_id in created and len(descriptions & created) == 1
+            linked_this_group = {edit.target.source_card for edit in edits if isinstance(edit.target, ConnectCardsTarget)
+                                 and edit.target.target_card == video_id}
+            required = (candidates & linked_this_group) | (descriptions & created if new_pair else set())
+            if required - refs:
+                raise ToolException('请使用 use_video_text 写入真实 @引用。来源连线只提供候选。')
+            involved_text.update(refs)
+            supplements = [part.text for part in video.prompt.segments if isinstance(part, PromptText)]
+            uses = [use for use in adopted if use.target_card == video_id]
+            if refs and (video_id in created or uses) and any(text.strip() for text in supplements) and not all(
+                use.before_segment_id or use.replace_segment_id for use in uses
+            ):
+                raise ToolException('请明确替换已有的重复片段，或在独立镜头补充前插入 @引用。')
+            for text in supplements:
+                self._validate_shot_body(text)
+            if code and video.config.seconds is None:
+                raise ToolException('请使用 video_duration 单独填写该镜头的整镜秒数。')
+            capability = capabilities.get(video.model_id)
+            if capability and any(issue['target']['path'] == ['config', 'seconds']
+                                  for issue in parameter_diagnostics(video, capability)):
+                raise ToolException(f'所选模型不支持 {video.config.seconds} 秒，请核对模型范围后确认目标时长。')
+        for card in self.visible_document.cards:
+            if card.id in involved_text:
+                self._validate_shot_body(card.text)
+        storyboard = self.visible_document.storyboard
+        if code and storyboard and video_ids:
+            shots = [shot for shot in storyboard.shots if video_ids.intersection(shot.model_card_ids)]
+            if len(shots) == 1:
+                name = getattr(cards.get(shots[0].card_id), 'name', None)
+                if name and name not in title:
+                    title = f'{title[:code.end()]} · {name}{title[code.end():]}'
+        return title
+
+    @staticmethod
+    def _validate_shot_body(text):
+        clauses = re.split(r'[\n。；;，,]+', text.strip(' \n。；;，,'))
+        if (SHOT_BODY_CODE.match(text) or SHOT_TOTAL_DURATION.search(text)
+                or any(SHOT_DURATION_CLAUSE.fullmatch(clause.strip()) for clause in (clauses[0], clauses[-1]))):
+            raise ToolException('请将分镜编号留在审批组标题，将整镜秒数填入视频时长参数，正文保留镜内动作和节奏。')
 
     @staticmethod
     def _repair_identity(change):
@@ -288,6 +367,8 @@ class CanvasAssistantEditDraft:
         if isinstance(operation, (VideoTextUse, VideoCharacterUse)):
             use = operation.model_copy(update={k: references.get(v, v) for k, v in (
                 ('source_card', operation.source_card), ('target_card', operation.target_card))})
+            if operation.target_card in references and use.before_segment_id == operation.target_card:
+                use.before_segment_id = use.target_card
             if (use.source_card not in local.cards and use.source_card not in self.readable_card_ids
                     or use.target_card not in local.cards):
                 raise ToolException('请选择当前范围内的来源卡和视频卡。')
