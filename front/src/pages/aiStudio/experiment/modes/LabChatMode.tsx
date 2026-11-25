@@ -43,6 +43,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     setError(detail === 'ASSISTANT_MODEL_INPUT_UNSUPPORTED' ? uiText('主聊天模型无法理解此素材，请更换模型后发送') :
       detail === 'CHAT_TOOL_MODEL_REQUIRED' ? uiText('请选择支持工具调用的主聊天模型') :
       detail === 'CHAT_IMAGE_MODEL_REQUIRED' ? uiText('请先选择图片模型') :
+      detail === 'CHAT_VIDEO_MODEL_REQUIRED' ? uiText('请先选择视频模型') :
       detail || (failure instanceof Error ? failure.message : uiText('请求失败')))
   }
 
@@ -164,7 +165,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
       contextActions={<details><summary>{uiText('模态配置')}</summary>{modelSelect('image')} {modelSelect('video')}</details>}
       secondaryAction={snapshot?.active_turn && <Button onClick={() => void stop()}>{uiText('停止回复')}</Button>}
       feedback={(error || upload.uploadError) && <Alert type="error" message={error || upload.uploadError?.message} />}>
-      <Suggestion block items={[{ label: '/imagegen', value: '/imagegen' }]} onSelect={value => setText(value + ' ')}>
+      <Suggestion block items={['/imagegen', '/videogen'].map(value => ({ label: value, value }))} onSelect={value => setText(value + ' ')}>
         {({ onTrigger, onKeyDown, open }) => <Input.TextArea aria-label={uiText('聊天消息')} disabled={busy} value={text}
           onChange={event => { setText(event.target.value); onTrigger(event.target.value === '/' ? undefined : false) }}
           onKeyDown={event => { if (open) onKeyDown(event) }}

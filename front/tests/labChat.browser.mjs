@@ -46,7 +46,10 @@ try {
   await composer.fill('/')
   await page.getByText('/imagegen', {exact: true}).click()
   assert.equal((await composer.inputValue()).trim(), '/imagegen')
-  await composer.fill('/imagegen 雨夜')
+  await composer.fill('/')
+  await page.getByText('/videogen', {exact: true}).click()
+  assert.equal((await composer.inputValue()).trim(), '/videogen')
+  await composer.fill('/videogen 雨夜')
   assert.equal(await page.getByRole('button', {name: '发送', exact: true}).isEnabled(), true)
 } finally {
   await cleanup()

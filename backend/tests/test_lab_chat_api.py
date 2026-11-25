@@ -160,7 +160,7 @@ async def test_chat_model_submits_requested_image_and_receives_task_receipt(canv
             return await original(client, request, **kwargs)
         body = json.loads(request.content)
         calls.append(body)
-        assert [tool['function']['name'] for tool in body['tools']] == ['generate_image']
+        assert [tool['function']['name'] for tool in body['tools']] == ['generate_image', 'generate_video']
         if body['messages'][-1]['role'] == 'tool':
             assert body['messages'][-1]['tool_call_id'] == 'rain-one'
             answer = {'role': 'assistant', 'content': '已提交'}
@@ -242,3 +242,111 @@ async def test_image_command_requires_selected_models_before_admission(canvas_cl
     result = await canvas_client.post(url + '/turns', json={'text': '/imagegen 雨夜', 'request_id': 'request'})
     assert result.status_code == 422 and error in result.text
     assert not (await canvas_client.get(url)).json()['data']['messages']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('canvas_client', ['app-handler'], indirect=True)
+@pytest.mark.parametrize('action', ['wait', 'submit', 'stop', 'fail', 'cancel', 'analyze'])
+async def test_chat_video_uses_attached_first_frame(canvas_client, monkeypatch, action):
+    import asyncio
+    import base64
+    from botocore.exceptions import ClientError
+    from app.task_worker import TaskWorker
+
+    async with canvas_client.canvas_sessions.begin() as db:
+        (await db.get(Provider, 'canvas-provider')).api_key = 'local'
+        (await db.get(Model, 'canvas-text')).capability_profile = {
+            'image_inputs': {'declaration': 'unsupported'}, 'tool_calling': {'declaration': 'supported'},
+            'native_streaming': {'declaration': 'unsupported'}}
+        db.add(Provider(id='video-provider', provider_key='vidu', name='Vidu', api_key='local', base_url='https://video.test'))
+        await db.flush()
+        video = await db.get(Model, 'canvas-video')
+        video.name, video.provider_id = 'viduq2', 'video-provider'
+        db.add(ModelSettings(id=1, default_text_model_id='canvas-text', default_video_model_id=video.id))
+    blobs = {}
+    async def upload(*, key, data, **kwargs):
+        blobs[key] = data.read()
+    async def download(*, key):
+        return blobs[key]
+    monkeypatch.setattr('app.core.storage.upload_file', upload)
+    monkeypatch.setattr('app.core.storage.download_file', download)
+    frame = b'rain at night'
+    uploaded = await canvas_client.post('/api/v1/studio/files/upload', files={'file': ('rain.png', frame, 'image/png')})
+    frame_id = uploaded.json()['data']['id']
+    original = httpx.AsyncClient.send
+    results = []
+
+    async def chat(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original(client, request, **kwargs)
+        messages = json.loads(request.content)['messages']
+        if action == 'analyze':
+            answer = {'role': 'assistant', 'content': '无法查看图片'}
+        elif messages[-1]['role'] == 'tool':
+            results.append(json.loads(messages[-1]['content']))
+            answer = {'role': 'assistant', 'content': '任务回执已收到'}
+        else:
+            assert frame_id in json.dumps(messages) and 'image_url' not in json.dumps(messages)
+            answer = {'role': 'assistant', 'tool_calls': [{'id': 'shot', 'type': 'function', 'function': {
+                'name': 'generate_video', 'arguments': json.dumps({'prompt': 'push in', 'seconds': 4,
+                    'first_frame_id': frame_id, 'submit_only': action == 'submit'})}}]}
+        return httpx.Response(200, request=request, json={'choices': [{'index': 0, 'message': answer,
+                'finish_reason': 'tool_calls' if 'tool_calls' in answer else 'stop'}]})
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', chat)
+    session = await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})
+    url = '/api/v1/studio/chat/sessions/lab/' + session.json()['data']['id']
+    body = {'request_id': 'film', 'text': ('/videogen ' if action == 'submit' else '') + '把附件用作首帧推进4秒',
+            'file_ids': [frame_id]}
+    if action == 'analyze':
+        response = await canvas_client.post(url + '/turns', json={**body, 'text': 'Describe the colors in my attachment'})
+        assert response.status_code == 422 and 'ASSISTANT_MODEL_INPUT_UNSUPPORTED' in response.text, response.text
+        return
+    sending = asyncio.create_task(canvas_client.post(url + '/turns', json=body))
+    async with asyncio.timeout(8):
+        while True:
+            if sending.done():
+                sent = sending.result()
+                assert sent.is_success, sent.text
+            snap = (await canvas_client.get(url)).json()['data']
+            tasks = [m for m in snap['messages'] if m['role'] == 'task']
+            if tasks:
+                break
+            await asyncio.sleep(.05)
+    task_id = tasks[0]['task_id']
+    if action == 'stop':
+        await canvas_client.post(url + '/turns/film/stop')
+    elif action == 'cancel':
+        cancel = await canvas_client.post(f'/api/v1/film/tasks/{task_id}/cancel', json={'reason': 'user_cancelled'})
+        assert cancel.is_success, cancel.text
+    elif action in ('wait', 'fail'):
+        async def head(**_):
+            raise ClientError({'Error': {'Code': 'NoSuchKey'}}, 'HeadObject')
+        monkeypatch.setattr('app.core.storage.get_file_info', head)
+        submissions = []
+        def provider(request):
+            if request.method == 'GET':
+                return httpx.Response(200, json={'state': 'success', 'creations': [{'b64_json': 'dg=='}]})
+            submissions.append(json.loads(request.content))
+            return httpx.Response(400 if action == 'fail' else 200, json={'task_id': 'remote-video'})
+        async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as http:
+            worker = TaskWorker(canvas_client.canvas_sessions, client=http)
+            try:
+                for _ in range(2):
+                    await worker.tick()
+                    await asyncio.gather(*list(worker.jobs.values()))
+            finally:
+                worker.text_pool.shutdown(wait=True)
+        post, = submissions
+        assert (post['model'], post['duration']) == ('viduq2', 4)
+        assert post['images'] == ['data:image/png;base64,' + base64.b64encode(frame).decode()]
+    sent = await asyncio.wait_for(sending, 8)
+    assert sent.is_success, sent.text
+    if action != 'stop':
+        receipt, = results
+        assert receipt['status'] == {'submit': 'queued', 'wait': 'succeeded', 'fail': 'failed', 'cancel': 'cancelled'}[action]
+        assert receipt['tool_call_id'] == 'shot' and receipt['model_id'] == 'canvas-video'
+        if action == 'wait':
+            assert receipt['artifacts'][0]['file_id']
+    else:
+        assert not results

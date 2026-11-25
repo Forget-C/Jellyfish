@@ -7,9 +7,9 @@ from sqlalchemy import select
 
 from app.core.contracts.generation import (
     GenerationCommand, GenerationDelivery, GenerationModality, GenerationOperation,
-    GenerationSubmitRequest, GenerationTarget, GenerationTargetKind, ImageGenerationOperationInput,
+    GenerationSubmitRequest, GenerationTarget, GenerationTargetKind, ImageGenerationOperationInput, VideoGenerationOperationInput,
 )
-from app.core.contracts.media import ImageMediaInput, MediaReference
+from app.core.contracts.media import ImageMediaInput, MediaReference, VideoFrameMediaReferences, VideoMediaInput
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.submission import GenerationSubmitter
@@ -96,3 +96,26 @@ class LaboratoryMediaTools:
             return await self.execute(runtime.tool_call_id, 'generate_image', GenerationModality.image, request, submit_only)
 
         return generate_image
+
+    def video(self):
+        @tool
+        async def generate_video(runtime: ToolRuntime, prompt: str, first_frame_id: str | None = None,
+                                 seconds: int | None = None, ratio: str = '16:9',
+                                 resolution: str | None = None, audio: bool | None = None,
+                                 seed: int | None = None, submit_only: bool = False):
+            """Generate a video. Pass the attached image ID as first_frame_id to animate it. Wait for the file unless asked only to submit."""
+            if not self.models.video:
+                raise HTTPException(422, 'CHAT_VIDEO_MODEL_REQUIRED')
+            media = None
+            if first_frame_id:
+                if first_frame_id not in self.file_ids:
+                    raise HTTPException(422, 'Unknown first frame')
+                media = VideoMediaInput(frames=VideoFrameMediaReferences(
+                    first=MediaReference(file_id=first_frame_id, media_kind='image')))
+            request = GenerationSubmitRequest(
+                model_id=self.models.video, execution_prompt=prompt, media=media,
+                operation_input=VideoGenerationOperationInput(
+                    ratio=ratio, seconds=seconds, resolution=resolution, audio=audio, seed=seed))
+            return await self.execute(runtime.tool_call_id, 'generate_video', GenerationModality.video, request, submit_only)
+
+        return generate_video

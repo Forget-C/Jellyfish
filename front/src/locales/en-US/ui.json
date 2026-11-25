@@ -1,4 +1,5 @@
 {
+  "请先选择视频模型": "Select a video model first",
   "请先选择图片模型": "Select an image model first",
   "请选择支持工具调用的主聊天模型": "Select a chat model that supports tools",
   "主聊天模型": "Main chat model",

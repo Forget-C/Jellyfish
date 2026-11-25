@@ -4,7 +4,7 @@ from contextlib import aclosing
 
 from fastapi import HTTPException
 from langchain.agents.middleware import wrap_model_call
-from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -22,7 +22,7 @@ from app.services.studio.session_events import append_session_event, session_eve
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, read_experiment_messages
 
 
-def laboratory_tools(tools, media):
+def laboratory_tools(tools, media, reference_only=False):
     """Offer only the profile tools and honor a stop before each model request."""
     allowed = {tool.name for tool in tools}
 
@@ -34,6 +34,9 @@ def laboratory_tools(tools, media):
         response = await handler(request.override(tools=exposed, tool_choice=None))
         if any(call['name'] not in allowed for message in response.result for call in message.tool_calls):
             raise HTTPException(422, 'CHAT_TOOL_MODEL_REQUIRED')
+        if reference_only and isinstance(request.messages[-1], HumanMessage):
+            if not any(message.tool_calls for message in response.result):
+                raise HTTPException(422, 'ASSISTANT_MODEL_INPUT_UNSUPPORTED')
         return response
 
     return select_tools
@@ -90,24 +93,25 @@ async def prepare(db, model_id, body):
     parts = body.text.split(maxsplit=1)
     if not parts:
         raise HTTPException(422, 'Empty message')
-    shortcut = parts[0] == '/imagegen'
+    shortcut = {'/imagegen': 'image', '/videogen': 'video'}.get(parts[0])
     if shortcut and not caps.tool_results:
         raise HTTPException(422, 'CHAT_TOOL_MODEL_REQUIRED')
     sources = await resolve_assistant_media(db, None, body.file_ids)
     if set(sources) != set(body.file_ids):
         raise HTTPException(422, 'Attachment unavailable')
-    if shortcut:
+    reference_only = any(not getattr(caps, source.file_type + '_inputs') for source in sources.values())
+    if reference_only and not (caps.tool_results or shortcut):
+        raise HTTPException(422, 'ASSISTANT_MODEL_INPUT_UNSUPPORTED')
+    if shortcut or reference_only:
         content = body.text
     else:
-        if any(not getattr(caps, source.file_type + '_inputs') for source in sources.values()):
-            raise HTTPException(422, 'ASSISTANT_MODEL_INPUT_UNSUPPORTED')
         content, evidence = await describe_assistant_media(body.text, body.file_ids, sources, capability=caps)
         if evidence and any(item['observation'] == 'unavailable' for item in evidence):
             raise HTTPException(422, 'Attachment unavailable')
     streaming = caps.native_streaming and profile.native_streaming.declaration != 'unsupported'
     client = build_provider_agent_model(provider=provider, model=model, thinking=False,
                                        configure=lambda params: params.update(streaming=streaming, disable_streaming=not streaming))
-    return client, content, streaming, caps.tool_results, shortcut
+    return client, content, streaming, caps.tool_results, shortcut, reference_only
 
 
 async def finish(db, session_id, turn_id, status, text=''):
@@ -132,9 +136,9 @@ async def send(db, session_id, body):
     choices = await model_choices(db, session)
     if session.active_turn:
         raise HTTPException(409, 'Chat turn active')
-    client, content, streaming, supports_tools, shortcut = await prepare(db, choices.text, body)
-    if shortcut and not choices.image:
-        raise HTTPException(422, 'CHAT_IMAGE_MODEL_REQUIRED')
+    client, content, streaming, supports_tools, shortcut, reference_only = await prepare(db, choices.text, body)
+    if shortcut and not getattr(choices, shortcut):
+        raise HTTPException(422, f'CHAT_{shortcut.upper()}_MODEL_REQUIRED')
     if body.file_ids:
         references = 'Attachment file IDs: ' + ', '.join(body.file_ids)
         content = ([{'type': 'text', 'text': content}] if isinstance(content, str) else list(content)) + [
@@ -156,16 +160,23 @@ async def send(db, session_id, body):
     try:
         media = LaboratoryMediaTools(async_sessionmaker(db.bind, expire_on_commit=False),
                                     session_id, body.request_id, choices, body.file_ids)
-        tools = [media.image()] if supports_tools else []
+        tools = [media.image(), media.video()] if supports_tools else []
         prompt = '你是综合聊天助手。'
         if shortcut:
-            prompt += '用户已选择生成图片。要求充分时调用 generate_image，关键信息不清时向用户提问。'
-        agent = build_chat_agent(client, tools=tools, middleware=[laboratory_tools(tools, media)],
+            prompt += f'用户已指定使用 generate_{shortcut}。要求充分时执行，关键信息不清时向用户提问。'
+        if reference_only:
+            prompt += '附件仅提供文件引用。可以把引用传给生成工具。若请求需要理解文件内容，请说明当前模型无法查看素材。'
+        agent = build_chat_agent(client, tools=tools, middleware=[laboratory_tools(tools, media, reference_only and not shortcut)],
                                  system_prompt=prompt)
         if streaming:
             async with aclosing(agent.astream({'messages': conversation}, stream_mode='messages')) as stream:
+                # Opaque file references can be forwarded to tools but cannot support
+                # visual claims. Publish prose only after the model has used a tool.
+                can_publish_text = not reference_only or bool(shortcut)
                 async for chunk, meta in stream:
-                    if isinstance(chunk, AIMessageChunk) and meta.get('langgraph_node') == 'model' and chunk.text:
+                    if isinstance(chunk, ToolMessage):
+                        can_publish_text = True
+                    if can_publish_text and isinstance(chunk, AIMessageChunk) and meta.get('langgraph_node') == 'model' and chunk.text:
                         if (await session_for(db, session_id, lock=True)).active_turn != body.request_id:
                             break
                         text += chunk.text
