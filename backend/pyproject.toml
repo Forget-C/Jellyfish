@@ -25,6 +25,7 @@ dependencies = [
     "jinja2",
     "pillow>=12",
     "deepagents==0.7.41",
+    "mcp>=1.27.1,<2",
 ]
 
 [project.optional-dependencies]

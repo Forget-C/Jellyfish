@@ -4,6 +4,18 @@
   "role": "Role",
   "save": "Save",
   "updated": "Basic info updated (demo).",
+  "mcp": {
+    "title": "Canvas MCP",
+    "open": "Open MCP connection",
+    "close": "Close MCP connection",
+    "address": "MCP server URL",
+    "credential": "Temporary MCP credential",
+    "bearer": "Use this credential as a bearer token in your MCP client.",
+    "expiresAt": "Connection expires at {{date}}",
+    "retryStatus": "Retry loading connection status",
+    "statusError": "Unable to load the MCP connection status.",
+    "error": "The MCP connection could not be updated. Try again."
+  },
   "roleOptions": {
     "admin": "Administrator",
     "operator": "Operator",

@@ -62,6 +62,7 @@
 - [双画布助手的专业技能与批量修改提案](adr/0016-canvas-assistant-skills-and-change-proposals.md)
 - [实验室与画布助手共用交互会话协议](adr/0017-interaction-session-protocol.md)
 - [画布能力协议与独立审批](adr/0018-canvas-capabilities-and-approval.md)
+- [通过 MCP 暴露统一画布协议](adr/0019-unified-canvas-mcp.md)
 
 ## 开发与维护指南
 

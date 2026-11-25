@@ -6,10 +6,13 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.routing import Route
 
 from app.api.v1 import router as api_v1_router
 from app.bootstrap import bootstrap_all_registries
 from app.config import settings
+from app.canvas_mcp.connection import MCP_PATH
+from app.canvas_mcp.server import CanvasMcpEndpoint, run_transport
 from app.core.dev_runtime import process_identity
 from app.schemas.common import ApiResponse
 
@@ -64,7 +67,9 @@ async def lifespan(app: FastAPI):
     # 启动时幂等注册供应商能力；任务由独立 Worker 执行。
     with process_identity('api'):
         bootstrap_all_registries()
-        yield
+        async with run_transport() as transport:
+            app.state.canvas_mcp_transport = transport
+            yield
 
 
 app = FastAPI(
@@ -90,6 +95,7 @@ app.add_middleware(
 )
 
 app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
+app.router.routes.append(Route(MCP_PATH, CanvasMcpEndpoint()))
 # 影视技能路由同时挂到主应用，保证 /api/v1/film 一定可访问
 
 

@@ -4,6 +4,18 @@
   "role": "角色",
   "save": "保存设置",
   "updated": "已更新基础信息（示例）",
+  "mcp": {
+    "title": "画布 MCP",
+    "open": "开启 MCP 连接",
+    "close": "关闭 MCP 连接",
+    "address": "MCP 服务地址",
+    "credential": "MCP 临时凭据",
+    "bearer": "在 MCP 客户端中将此凭据配置为 Bearer 令牌。",
+    "expiresAt": "连接有效至 {{date}}",
+    "retryStatus": "重试读取连接状态",
+    "statusError": "无法读取 MCP 连接状态。",
+    "error": "操作 MCP 连接失败，请重试。"
+  },
   "roleOptions": {
     "admin": "系统管理员",
     "operator": "运营人员",
