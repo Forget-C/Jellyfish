@@ -108,7 +108,9 @@ try {
     selectModel(from, model),
   ])
 
-  await page.getByRole('button', { name: '验收模型 A', exact: true }).waitFor()
+  await page.locator('.experiment-model-trigger').click()
+  await page.getByRole('menuitemradio', { name: '验收模型 A', exact: true, checked: true }).waitFor()
+  await page.keyboard.press('Escape')
   await prompt.fill('验证混合主体素材与帧引用')
   await openLabAddition(page, '配置参考素材')
   await panel.getByRole('button', { name: '选择首帧', exact: true }).click()
