@@ -1,7 +1,7 @@
 """Shared HTTP and event identities for interactive sessions."""
 
 from datetime import datetime
-from typing import Annotated, Generic, TypeVar
+from typing import Annotated, Generic, Literal, TypeVar
 
 from fastapi import Header
 from pydantic import BaseModel
@@ -32,3 +32,11 @@ class InteractionEvent(BaseModel, Generic[Payload]):
     target_version: str | None = None
     group_ids: list[str] | None = None
     subject: str | None = None
+
+
+class ChatToolCall(BaseModel):
+    """Public identity and lifecycle of a tool chosen by the main chat model."""
+
+    id: str
+    name: str
+    state: Literal['started', 'completed', 'failed']

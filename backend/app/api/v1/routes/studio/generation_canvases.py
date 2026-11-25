@@ -104,7 +104,10 @@ async def get_assistant_history(canvas_id: str, project_id: str = '',
 async def get_assistant_events(canvas_id: str, after: Annotated[int, Query(ge=0)] = 0, project_id: str = '',
                                db: AsyncSession = Depends(get_db, scope='function')):
     """Read the next page of committed assistant events for a saved canvas."""
-    return success_response(await CanvasAssistant(db, project_id).events(canvas_id, after))
+    events = await CanvasAssistant(db, project_id).events(canvas_id, after)
+    progress_kinds = {'turn.accepted', 'tool.started', 'tool.completed', 'tool.failed', 'message.updated'}
+    return success_response([event.model_copy(update={'type': 'turn.progress'}) if event.type in progress_kinds
+                             else event for event in events])
 
 
 @router.post('/{canvas_id}/assistant', response_model=ApiResponse[CanvasAssistantExchange],

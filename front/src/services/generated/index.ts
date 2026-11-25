@@ -312,6 +312,7 @@ export type { CharacterSituation_Input } from './models/CharacterSituation_Input
 export type { CharacterSituation_Output } from './models/CharacterSituation_Output';
 export type { CharacterSituationCard } from './models/CharacterSituationCard';
 export type { CharacterUpdate } from './models/CharacterUpdate';
+export type { ChatToolCall } from './models/ChatToolCall';
 export type { CheckCard } from './models/CheckCard';
 export type { CompilationDecision } from './models/CompilationDecision';
 export type { CompileRequest } from './models/CompileRequest';
@@ -761,6 +762,7 @@ export type { WorkbenchSceneSummary } from './models/WorkbenchSceneSummary';
 export type { WorkbenchTaskSummary } from './models/WorkbenchTaskSummary';
 export type { WorkspaceRead } from './models/WorkspaceRead';
 
+export { ChatService } from './services/ChatService';
 export { DefaultService } from './services/DefaultService';
 export { FilmService } from './services/FilmService';
 export { HealthService } from './services/HealthService';

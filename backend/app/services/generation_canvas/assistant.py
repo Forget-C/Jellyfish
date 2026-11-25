@@ -18,6 +18,7 @@ from pydantic import Field, ValidationError
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.services.chat.harness import build_chat_agent
 from app.models.canvas_assistant import (
     CanvasAssistantEvent, CanvasAssistantGeneration, CanvasAssistantQueuedMessage, CanvasAssistantSession, CanvasAssistantTurn,
 )
@@ -304,14 +305,19 @@ class CanvasAssistant:
 
     async def _model_client(self, model, provider, capability, *, stream_reply=False):
         """Resolve the provider transport needed to deliver the model's actual media inputs."""
+        streaming_disabled = ModelCapabilityProfile.model_validate(
+            model.capability_profile or {}).native_streaming.declaration == 'unsupported'
+
         def configure(params):
-            if stream_reply:
+            if streaming_disabled:
+                params.update(streaming=False, disable_streaming=True)
+            elif stream_reply:
                 params['streaming'] = True
             if not params.get("use_responses_api") and supports_synchronized_video_audio(provider.provider_key, model.name):
                 extra_body = dict(params.get('extra_body') or {})
                 extra_body.pop('enable_thinking', None)
                 extra_body.update(modalities=['text'], reasoning_effort='none')
-                params.update(streaming=True, extra_body=extra_body)
+                params.update(streaming=not streaming_disabled, extra_body=extra_body)
 
         return await build_text_chat_model(self.db, model_id=model.id, thinking=False, configure=configure)
 
@@ -567,6 +573,10 @@ class CanvasAssistant:
             session.pending_request = {**session.pending_request, 'delegations': prior_delegations}
         if not resuming:
             session.pending_checkpoint = None
+            publish_events(self.db, session, CanvasAssistantExchange(
+                request_id=command.request_id, text=command.text, sequence=session.sequence + 1,
+                model_id=model_id, reply='',
+            ), 'turn.accepted')
         snapshot = session.pending_checkpoint
         # Keep database locks away from provider I/O. The short lease serializes
         # turns for this conversation and can expire after an interrupted process.
@@ -1011,8 +1021,9 @@ class CanvasAssistant:
 
             middleware.append(observe_proposal_validation)
         system_prompt = CANVAS_ASSISTANT_PROMPT + guidance + professional
-        agent = create_deep_agent(model=client, middleware=middleware, tools=tools,
-                                  checkpointer=checkpoint, system_prompt=system_prompt)
+        agent = build_chat_agent(client, middleware=middleware, tools=tools, checkpointer=checkpoint,
+                                 system_prompt=system_prompt,
+                                 on_tool=checkpoint.report_tool if checkpoint else None)
         if on_phase:
             await on_phase('waiting_model')
         deadline = asyncio.get_running_loop().time() + MODEL_DEADLINE_SECONDS

@@ -379,7 +379,7 @@ try {
       await automatic.waitFor({ state: 'hidden' })
       const text = '流式回归' + name
       const waiting = panel.getByText('等待模型响应', { exact: true })
-      const requestUrl = /\/generation-canvases\/[^/]+\/assistant(?:\?|$)/
+      const requestUrl = /\/chat\/sessions\/canvas\/[^/]+\/turns(?:\?|$)/
       let observedWaiting = false
       const holdFirstReply = async route => {
         if (route.request().method() === 'POST') {
@@ -398,14 +398,14 @@ try {
       await page.unroute(requestUrl, holdFirstReply)
       assert.ok(observedWaiting, 'Think is visible while waiting for the first chunk')
       assert.equal(await panel.getByRole('table').count(), 0)
+      await page.route('**/chat/sessions/canvas/*/events?*', route => route.abort())
       await page.reload()
       await open()
       await first.waitFor()
-      await page.route('**/assistant/events?*', route => route.abort())
       replyGates.get(text)()
       await delay(550)
       assert.equal(await panel.getByRole('table').count(), 0)
-      await page.unroute('**/assistant/events?*')
+      await page.unroute('**/chat/sessions/canvas/*/events?*')
       await panel.getByRole('cell', { name: '中景' }).waitFor()
       await page.reload()
       await open()
@@ -458,7 +458,7 @@ try {
       await input.press('Escape')
       await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '打开画布助手')
       await open()
-      const assistantUrl = /\/generation-canvases\/[^/]+\/assistant(?:\?|$)/
+      const assistantUrl = /\/chat\/sessions\/canvas\/[^/]+\/turns(?:\?|$)/
       await page.route(assistantUrl, lostReceipt)
       await ask('完成回执丢失' + name)
       await page.waitForFunction(() => document.querySelector('[aria-label="审批模式"]')?.getAttribute('aria-disabled') !== 'true')

@@ -5,6 +5,7 @@ import { XMarkdown } from '@ant-design/x-markdown'
 import { Sender, Suggestion, Think, ThoughtChain } from '@ant-design/x'
 import { WorkbenchConversation } from '../../../components/workbench/WorkbenchConversation'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
+import { canvasChat } from '../../../services/chatSession'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasDocument, CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantFieldRevision, CanvasAssistantGroupReference, CanvasAssistantHistory, CanvasAssistantInstruction, CanvasAssistantLayout, CanvasAssistantMessage, CanvasAssistantProgress, CanvasAssistantQuestion, CanvasAssistantQueueItem, FileRead, ModelRead } from '../../../services/generated'
 import { AssistantEditGroups, AssistantProposal, groupIsPending } from './AssistantProposal'
@@ -258,7 +259,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       } catch (error) {
         if (active && error instanceof ApiError && error.status === 409) {
           const epoch = mutationEpoch.current
-          const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId }).catch(() => ({ data: undefined }))
+          const { data } = await canvasChat.snapshot({ canvasId, projectId }).catch(() => ({ data: undefined }))
           if (active && data) applySnapshot(data, epoch)
         }
         // Retry pending work and reuse the browser receipt when delivery fails.
@@ -280,7 +281,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       return
     }
     const epoch = mutationEpoch.current
-    const request = Canvases.canvasAssistantHistory({ canvasId, projectId })
+    const request = canvasChat.snapshot({ canvasId, projectId })
     let current = true
     void request.then(response => {
       if (!response.data) throw new Error('missing assistant history')
@@ -292,74 +293,76 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   useEffect(() => {
     if (!open || localDraft) return
     let active = true
-    let request: ReturnType<typeof Canvases.canvasAssistantEvents> | undefined
+    const controller = new AbortController()
+    let subscribing = false
     const timer = window.setInterval(async () => {
       const checkpoint = snapshotCursor.current
-      if (request || checkpoint?.canvasId !== canvasId) return
-      request = Canvases.canvasAssistantEvents({ canvasId, projectId, after: checkpoint.cursor })
+      if (subscribing || checkpoint?.canvasId !== canvasId) return
+      subscribing = true
       try {
-        const { data } = await request
-        if (!active || !data?.length) return
-        const cursor = snapshotCursor.current?.cursor ?? 0
-        const updates = data.filter(event => event.session_id === canvasId && event.cursor > cursor)
-        if (!updates.length) return
-        snapshotCursor.current = { canvasId, cursor: updates[updates.length - 1].cursor }
-        const queueUpdates = updates.flatMap(event => 'message' in event.payload ? [event.payload] : [])
-        if (queueUpdates.length) setQueue(current => queueUpdates.reduce(updateQueue, current))
-        setTurns(turns => updates.reduce<CanvasAssistantExchange[]>((history, event) => {
-          const payload = event.payload
-          if ('message' in payload || event.type === 'question.asked' || event.type === 'turn.steered' || event.type === 'turn.progress' || event.type === 'turn.interrupted') return history
-          if (event.type === 'turn.completed') return appendExchange(history, payload)
-          const existing = history.find(turn => turn.request_id === event.turn_id)
-          return existing ? history.map(turn => turn === existing ? {
-            ...turn, ...payload, generation: payload.generation ?? turn.generation,
-          } : turn) : appendExchange(history, payload)
-        }, turns ?? []))
-        for (const { type, turn_id, payload } of updates) {
-          if (type === 'turn.progress' && 'progress' in payload && payload.progress) {
-            setLiveRequest(payload)
-            setProgress(payload.progress)
-          }
-          if (type === 'turn.interrupted') {
-            const recovered = updates.some(event => event.turn_id === turn_id && event.type === 'turn.completed')
-            if (turn_id && !recovered && 'error_code' in payload && payload.error_code) {
-              setFailedReplyId(turn_id)
-              setSendError(assistantSendError(payload.error_code))
-            }
-            if (!recovered && 'progress' in payload && payload.progress?.reply) {
+        for await (const update of canvasChat.events(canvasId, projectId, checkpoint.cursor, controller.signal)) {
+          if (!active) return
+          const cursor = snapshotCursor.current?.cursor ?? 0
+          const updates = [update].filter(event => event.session_id === canvasId && event.cursor > cursor)
+          if (!updates.length) continue
+          snapshotCursor.current = { canvasId, cursor: updates[updates.length - 1].cursor }
+          const queueUpdates = updates.flatMap(event => 'message' in event.payload ? [event.payload] : [])
+          if (queueUpdates.length) setQueue(current => queueUpdates.reduce(updateQueue, current))
+          setTurns(turns => updates.reduce<CanvasAssistantExchange[]>((history, event) => {
+            const payload = event.payload
+            if ('message' in payload || ['turn.accepted', 'message.updated'].includes(event.type) || event.type.startsWith('tool.') || event.type === 'question.asked' || event.type === 'turn.steered' || event.type === 'turn.progress' || event.type === 'turn.interrupted') return history
+            if (event.type === 'turn.completed') return appendExchange(history, payload)
+            const existing = history.find(turn => turn.request_id === event.turn_id)
+            return existing ? history.map(turn => turn === existing ? {
+              ...turn, ...payload, generation: payload.generation ?? turn.generation,
+            } : turn) : appendExchange(history, payload)
+          }, turns ?? []))
+          for (const { type, turn_id, payload } of updates) {
+            if ((type === 'turn.progress' || type === 'message.updated' || type.startsWith('tool.')) && 'progress' in payload && payload.progress) {
               setLiveRequest(payload)
               setProgress(payload.progress)
-            } else {
-              setProgress(current => current?.request_id !== turn_id ? current : current.reply ? { ...current, streaming: false } : undefined)
+            }
+            if (type === 'turn.interrupted') {
+              const recovered = updates.some(event => event.turn_id === turn_id && event.type === 'turn.completed')
+              if (turn_id && !recovered && 'error_code' in payload && payload.error_code) {
+                setFailedReplyId(turn_id)
+                setSendError(assistantSendError(payload.error_code))
+              }
+              if (!recovered && 'progress' in payload && payload.progress?.reply) {
+                setLiveRequest(payload)
+                setProgress(payload.progress)
+              } else {
+                setProgress(current => current?.request_id !== turn_id ? current : current.reply ? { ...current, streaming: false } : undefined)
+              }
+            }
+            if (type === 'turn.steered' || type === 'question.asked' || type === 'turn.completed' || type === 'turn.stopped') {
+              setProgress(current => current?.request_id === turn_id ? undefined : current)
             }
           }
-          if (type === 'turn.steered' || type === 'question.asked' || type === 'turn.completed' || type === 'turn.stopped') {
-            setProgress(current => current?.request_id === turn_id ? undefined : current)
+          const steerUpdate = [...updates].reverse().find(event => event.type === 'turn.steered')
+          if (steerUpdate && !('message' in steerUpdate.payload)) {
+            const stillRunning = !updates.some(event => event.turn_id === steerUpdate.turn_id && event.type === 'turn.completed')
+            setPendingInstructions(stillRunning ? steerUpdate.payload.instructions ?? [] : [])
           }
-        }
-        const steerUpdate = [...updates].reverse().find(event => event.type === 'turn.steered')
-        if (steerUpdate && !('message' in steerUpdate.payload)) {
-          const stillRunning = !updates.some(event => event.turn_id === steerUpdate.turn_id && event.type === 'turn.completed')
-          setPendingInstructions(stillRunning ? steerUpdate.payload.instructions ?? [] : [])
-        }
-        const lastQuestion = [...updates].reverse().map(event => event.payload).find(payload =>
-          'question' in payload && !!payload.question)
-        const completed = (id?: string) => updates.some(event => event.turn_id === id &&
-          (event.type === 'turn.completed' || event.type === 'turn.stopped'))
-        if (lastQuestion && 'question' in lastQuestion && !completed(lastQuestion.request_id)) {
-          setPendingServerRequest({ request_id: lastQuestion.request_id, text: lastQuestion.text })
-          setPendingQuestion(lastQuestion.question ?? undefined)
-        } else if (pendingServerRequest && completed(pendingServerRequest.request_id)) {
-          setPendingServerRequest(undefined)
-          setPendingQuestion(undefined)
+          const lastQuestion = [...updates].reverse().map(event => event.payload).find(payload =>
+            'question' in payload && !!payload.question)
+          const completed = (id?: string) => updates.some(event => event.turn_id === id &&
+            (event.type === 'turn.completed' || event.type === 'turn.stopped'))
+          if (lastQuestion && 'question' in lastQuestion && !completed(lastQuestion.request_id)) {
+            setPendingServerRequest({ request_id: lastQuestion.request_id, text: lastQuestion.text })
+            setPendingQuestion(lastQuestion.question ?? undefined)
+          } else if (pendingServerRequest && completed(pendingServerRequest.request_id)) {
+            setPendingServerRequest(undefined)
+            setPendingQuestion(undefined)
+          }
         }
       } catch {
         // Retry with the same cursor after loss of the connection.
       } finally {
-        request = undefined
+        subscribing = false
       }
     }, activeRequestId || pendingServerRequest ? 250 : 1500)
-    return () => { active = false; window.clearInterval(timer); request?.cancel() }
+    return () => { active = false; window.clearInterval(timer); controller.abort() }
   }, [open, canvasId, projectId, localDraft, pendingServerRequest, activeRequestId, setTurns])
 
   useEffect(() => {
@@ -549,7 +552,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const cancelRun = async (runId: string) => {
     await Canvases.canvasCancelRun({ canvasId, projectId, runId })
     const epoch = mutationEpoch.current
-    const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId })
+    const { data } = await canvasChat.snapshot({ canvasId, projectId })
     if (data) applySnapshot(data, epoch)
   }
 
@@ -560,7 +563,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
 
   const refreshDecision = async (sourceId: string, clearSelection = true) => {
     const epoch = mutationEpoch.current
-    const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId }).catch(() => ({ data: undefined }))
+    const { data } = await canvasChat.snapshot({ canvasId, projectId }).catch(() => ({ data: undefined }))
     if (!data) {
       setRetryLoad(value => value + 1)
       return false
@@ -765,7 +768,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         ? Canvases.canvasDraftAssistantSend({ canvasId, requestBody: {
           ...requestBody, turns: readDraftAssistant(canvasId).turns, model_id: modelId,
         } })
-        : Canvases.canvasAssistantSend({ canvasId, projectId, requestBody })
+        : canvasChat.send({ canvasId, projectId, requestBody })
       setActiveRequestId(requestBody.request_id)
       activeRequest.current = request
       const turn = await request.then(({ data }) => {
@@ -780,7 +783,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           if (receipt?.data?.state === 'running' || receipt?.data?.state === 'stopped') return undefined
         } else {
           const epoch = mutationEpoch.current
-          const receipt = await Canvases.canvasAssistantHistory({ canvasId, projectId }).catch(() => undefined)
+          const receipt = await canvasChat.snapshot({ canvasId, projectId }).catch(() => undefined)
           const snapshot = receipt?.data
           if (snapshot) {
             applySnapshot(snapshot, epoch)
@@ -819,7 +822,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         try {
           if (!await approve(turn.request_id, groupIds, true)) setApprovalError(true)
           const epoch = mutationEpoch.current
-          const { data } = await Canvases.canvasAssistantHistory({ canvasId, projectId })
+          const { data } = await canvasChat.snapshot({ canvasId, projectId })
           if (data) applySnapshot(data, epoch)
         } catch {
           setApprovalError(true)

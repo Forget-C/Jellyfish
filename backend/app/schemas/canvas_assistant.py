@@ -12,7 +12,7 @@ from app.schemas.canvas_assistant_subtasks import CanvasAssistantSubtask
 from app.schemas.canvas_assistant_layout import CanvasAssistantLayout, CanvasAssistantPoint, CardId
 
 
-from app.schemas.interaction import InteractionSnapshot
+from app.schemas.interaction import ChatToolCall, InteractionSnapshot
 
 
 class CanvasAssistantDraftContext(BaseModel):
@@ -148,6 +148,7 @@ class CanvasAssistantProgress(BaseModel):
     reply: str | None = Field(default=None, exclude_if=lambda value: value is None)
     streaming: bool | None = Field(default=None, exclude_if=lambda value: value is None)
     error_code: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    tool_call: ChatToolCall | None = Field(default=None, exclude_if=lambda value: value is None)
     phase: CanvasAssistantPhase | None = None
     phase_started_at: dict[str, datetime] = Field(default_factory=dict)
     request_id: str

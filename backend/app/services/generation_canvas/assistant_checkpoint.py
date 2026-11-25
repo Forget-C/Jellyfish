@@ -124,6 +124,10 @@ class CanvasCheckpointer(CanvasGraphSnapshot):
             if not result.rowcount:
                 raise HTTPException(409, 'Canvas assistant reply lease expired')
 
+    async def report_tool(self, **call):
+        """Commit a public tool identity before the next model step."""
+        await self.report_progress(tool_call=call)
+
     async def report_progress(self, **changes):
         """Commit observed facts only while this execution owns the turn lease."""
         async with self._lock, self._sessions() as db:
@@ -150,10 +154,15 @@ class CanvasCheckpointer(CanvasGraphSnapshot):
             value = progress.model_dump(mode='json')
             if previous != value:
                 session.pending_request = {**pending, 'progress': value}
+                event = 'turn.progress'
+                if 'tool_call' in changes:
+                    event = f"tool.{changes['tool_call']['state']}"
+                elif 'reply' in changes:
+                    event = 'message.updated'
                 publish_events(db, session, CanvasAssistantExchange(
                     request_id=progress.request_id, text=pending['command']['text'], sequence=session.sequence + 1,
                     model_id=progress.model_id, reply='', progress=progress,
-                ), 'turn.progress')
+                ), event)
             await self._commit(db)
 
     async def save_canvas_preview(self, preview):
