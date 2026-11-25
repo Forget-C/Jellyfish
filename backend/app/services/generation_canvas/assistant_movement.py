@@ -10,6 +10,7 @@ from langchain_core.tools import ToolException
 from app.core.contracts.generation_canvas import InputBinding, ReferenceDesignField
 from app.schemas.canvas_assistant_edit import CanvasAssistantChange
 from app.schemas.canvas_assistant_structure import AdjustShotMovement, AdjustShotMovementTarget
+from app.schemas.canvas_edit_intents import CanvasEditIntent
 from app.schemas.generation_canvas import CanvasDocument, GenerationCanvasEdge, MovementCard, VideoModelCard
 from app.services.generation_canvas.design_references import design_field_references
 
@@ -88,7 +89,7 @@ def movement_basis_matches(document: CanvasDocument, card_id: str, target: Adjus
     return bool(impact and impact.basis == target.basis)
 
 
-def apply_shot_movement(canvas, document: CanvasDocument, edit: CanvasAssistantChange,
+def apply_shot_movement(canvas, document: CanvasDocument, edit: CanvasEditIntent,
                         target: AdjustShotMovementTarget) -> bool:
     """Recheck the source and sharing before applying one indivisible change."""
     impact = _movement_impact(document, edit.card_id, target.movement_field)

@@ -14,6 +14,7 @@ from app.schemas.canvas_assistant_structure import (
     AdjustShotMovement, AdjustShotMovementTarget,
     ConnectCards, ConnectCardsTarget, ProposedStructure, ReplaceFirstFrame,
 )
+from app.schemas.canvas_edit_intents import CanvasEditIntent
 from app.schemas.generation_canvas import (
     CanvasDocument, GenerationCanvasEdge, ImageContentCard, ImageModelCard, MovementCard, PromptDocument,
     PromptInstruction, PromptReference, PromptText, TextContentCard, TextModelCard, VideoModelCard,
@@ -188,7 +189,7 @@ def append_candidate_edge(document: CanvasDocument, edge: GenerationCanvasEdge) 
     append_edge(document, edge)
 
 
-async def apply_structural_change(store, canvas, document: CanvasDocument, edit: CanvasAssistantChange) -> bool:
+async def apply_structural_change(store, canvas, document: CanvasDocument, edit: CanvasEditIntent) -> bool:
     """Apply a structural edit to a tentative document after checking its current basis."""
     change = edit.target
     if isinstance(change, AdjustShotMovementTarget):

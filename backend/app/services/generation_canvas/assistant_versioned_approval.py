@@ -10,8 +10,9 @@ from app.models.canvas_assistant import CanvasAssistantSession, CanvasAssistantT
 from app.schemas.canvas_assistant import CanvasAssistantExchange
 from app.schemas.canvas_assistant_edit import (
     CanvasAssistantApprovalAudit, CanvasAssistantIndependentReview, CanvasAssistantProposal, CanvasAssistantProposalDecision,
-    CanvasAssistantProposalResult, DeleteCardEdit,
+    CanvasAssistantProposalResult,
 )
+from app.schemas.canvas_edit_intents import DeleteCardEdit
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.approval import ApprovalAccess, ApprovalError, ApprovalScope, ApprovalService
 from app.services.automatic_approval import ApprovalEffect, AutomaticApprovalBasis, AutomaticApprovalService

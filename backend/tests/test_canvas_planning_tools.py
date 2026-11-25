@@ -124,6 +124,25 @@ async def test_video_preview_checks_actual_adopted_description_and_image(canvas_
     assert {guard.path[1] for guard in preview.plan.groups[0].source_guards} == {
         'description', 'character', 'character-picture', 'video',
     }
+    from app.schemas.canvas_edit_intents import CanvasEditIntent
+    from app.services.generation_canvas.edits import project_canvas_edit_group
+    from app.services.generation_canvas.generation_inputs import canvas_generation_inputs
+
+    async with canvas_client.canvas_sessions() as db:
+        group = preview.proposal.groups[0]
+        intents = [
+            CanvasEditIntent(edit.card_id, edit.target, edit.before, edit.after, edit.copy_of, edit.impact_fingerprint)
+            for edit in group.edits
+        ]
+        direct = await canvas_edits(db, project).preview_visible_group(
+            visible, group.id, intents, expected_revision=None if draft else canvas['revision'],
+        )
+        document_with_refs = project_canvas_edit_group(visible, direct)
+        compiled = await canvas_generation_inputs(db, project).compile_document(
+            document_with_refs, 'video', draft=draft, expected_revision=None if draft else canvas['revision'],
+        )
+        assert compiled.can_run and compiled.text.count('雨夜推镜') == 1
+        assert [item.file_id for item in compiled.video_media.subjects[0].media] == [file_id]
     for card_id, group_id, text in [('video', '1', '雨夜推镜'), ('direct', '2', '日出拉远')]:
         result = await tools.inspect_inputs(card_id, group_id=group_id, preview_id=preview.preview_id)
         assert result.can_run and result.text.count(text) == 1
@@ -133,3 +152,60 @@ async def test_video_preview_checks_actual_adopted_description_and_image(canvas_
     else:
         assert (await canvas_client.get(path, params=params)).json()['data']['revision'] == canvas['revision']
         assert (await canvas_client.get(path + '/runtime', params=params)).json()['data']['runs'] == []
+
+
+@pytest.mark.asyncio
+async def test_edit_protocol_previews_visible_intents_without_saving(tmp_path):
+    from app.schemas.canvas_edit_intents import CanvasEditIntent, CardTextEdit
+
+    async with database(tmp_path) as sessions, sessions.begin() as db:
+        canvas = await free_canvas_lifecycle(db).create_free(CanvasCreate(name='镜头'))
+        edits = canvas_edits(db, None)
+        seed = await edits.preview(canvas.id, [CanvasEditGroup(id='seed', cards=[
+            TextContentCard(id='target', text='初稿'),
+            TextContentCard(id='unrelated', text='已保存'),
+        ])])
+        await edits.submit(seed, request_id='seed')
+        saved = await free_canvas_lifecycle(db).read(canvas.id)
+        visible = saved.document.model_copy(deep=True)
+        next(card for card in visible.cards if card.id == 'unrelated').text = '本地草稿'
+        plan = await edits.preview_visible_group(visible, 'text', [
+            CanvasEditIntent(card_id='target', target=CardTextEdit(kind='card_text'), before='初稿', after='修订'),
+        ], expected_revision=saved.revision)
+        assert [(item.path, item.before.value, item.after.value) for item in plan.differences] == [
+            (('cards', 'target', 'text'), '初稿', '修订'),
+        ]
+        assert await free_canvas_lifecycle(db).read(canvas.id) == saved
+
+
+@pytest.mark.asyncio
+async def test_draft_intents_reject_invalid_values_and_previews_after_first_save(tmp_path):
+    from app.schemas.canvas_assistant_draft import CanvasDraftSave
+    from app.schemas.canvas_assistant_structure import AddCanvasCardTarget, AddCatalogCard, ConnectCardsTarget
+    from app.schemas.canvas_edit_intents import CanvasEditIntent, VideoDurationEdit
+    from app.services.generation_canvas.edits import free_canvas_edits
+    from app.services.generation_canvas.errors import CanvasDomainError
+
+    visible = CanvasDocument(id=str(uuid4()), name='自由草稿', cards=[
+        TextContentCard(id='description', text='雨夜'),
+        VideoModelCard(id='shot', config={'seconds': 5}, prompt=video_prompt('推镜')),
+    ])
+    async with database(tmp_path) as sessions, sessions.begin() as db:
+        edits = free_canvas_edits(db)
+        for intent in (
+            CanvasEditIntent('shot', VideoDurationEdit(kind='video_duration'), '5', 'invalid'),
+            CanvasEditIntent('unknown', AddCanvasCardTarget(kind='add_canvas_card',
+                card=AddCatalogCard(kind='add_catalog_card', card_type='unknown')), '', ''),
+        ):
+            with pytest.raises(CanvasDomainError) as error:
+                await edits.preview_visible_group(visible, 'invalid', [intent], expected_revision=None)
+            assert error.value.detail['code'] == 'INVALID_EDIT_VALUE'
+        link = CanvasEditIntent('shot', ConnectCardsTarget(kind='connect_cards', connection_id='edge',
+            source_card='description', source_port='text', target_card='shot', target_port='text'), '', '')
+        preview = await edits.preview_visible_group(visible, 'connect', [link], expected_revision=None)
+        assert ('edges', 'edge') in {item.path for item in preview.differences}
+        assert (await free_canvas_lifecycle(db).read_free_draft(visible.id)).revision == -1
+        await edits.save_free_draft(visible.id, CanvasDraftSave(expected_revision=0, request_id='first', document=visible))
+        with pytest.raises(CanvasDomainError) as error:
+            await edits.preview_visible_group(visible, 'connect', [link], expected_revision=None)
+        assert error.value.detail['code'] == 'REVISION_CONFLICT'

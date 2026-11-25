@@ -8,6 +8,7 @@ from langchain_core.tools import ToolException
 from app.core.contracts.generation_canvas import InputBinding
 from app.schemas.canvas_assistant_edit import CanvasAssistantChange
 from app.schemas.canvas_assistant_structure import VideoInputTarget, VideoTextUse
+from app.schemas.canvas_edit_intents import CanvasEditIntent
 from app.schemas.generation_canvas import GenerationCanvasEdge, PromptReference, PromptText, VideoModelCard
 from app.services.generation_canvas.graph_edit import append_edge
 from app.services.generation_canvas.capabilities import model_capability
@@ -124,7 +125,7 @@ def adopt_video_input(document, use, outputs, capabilities, identity=None):
         impact_fingerprint=basis, target=VideoInputTarget(kind='adopt_video_input', use=use, file_id=file_id, adds_edge=not exists, identity=identity))
 
 
-async def check_video_input(store, canvas, document, edit):
+async def check_video_input(store, canvas, document, edit: CanvasEditIntent):
     """Re-resolve media, model and prompt in the approval transaction before accepting a change."""
     target = edit.target
     inputs = await video_input_context(store.db, canvas, document, {target.use.source_card, target.use.target_card})
@@ -132,6 +133,8 @@ async def check_video_input(store, canvas, document, edit):
         checked = adopt_video_input(document, target.use, *inputs, identity=target.identity)
     except ToolException as error:
         return str(error)
-    if checked and checked == edit:
+    if checked and CanvasEditIntent(
+        checked.card_id, checked.target, checked.before, checked.after, checked.copy_of, checked.impact_fingerprint,
+    ) == edit:
         return None
     return '视频输入或来源已变化，请重新预演。'

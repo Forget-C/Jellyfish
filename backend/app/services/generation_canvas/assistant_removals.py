@@ -3,14 +3,14 @@
 from hashlib import sha256
 import json
 
-from app.schemas.canvas_assistant_edit import (
-    CanvasAssistantRemovalTarget, DeleteCardEdit, DisconnectCardsEdit, ReleaseBindingEdit,
+from app.schemas.canvas_edit_intents import (
+    CanvasRemovalTarget, DeleteCardEdit, DisconnectCardsEdit, ReleaseBindingEdit,
 )
 from app.schemas.generation_canvas import CanvasDocument, ModelCard, PromptInstruction, PromptReference
 from app.services.generation_canvas.graph_edit import remove_card, remove_edges
 
 
-def removal_impact(document: CanvasDocument, card_id: str, target: CanvasAssistantRemovalTarget) -> tuple[str, str] | None:
+def removal_impact(document: CanvasDocument, card_id: str, target: CanvasRemovalTarget) -> tuple[str, str] | None:
     """Return the preview label and a digest of affected saved content."""
     card = next((item for item in document.cards if item.id == card_id), None)
     if card is None:
@@ -50,7 +50,7 @@ def removal_impact(document: CanvasDocument, card_id: str, target: CanvasAssista
     return label, sha256(json.dumps(impact, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
-def apply_removal(document: CanvasDocument, card_id: str, target: CanvasAssistantRemovalTarget) -> None:
+def apply_removal(document: CanvasDocument, card_id: str, target: CanvasRemovalTarget) -> None:
     """Update references for the approved change and leave canonical save validation in charge."""
     if isinstance(target, DeleteCardEdit):
         remove_card(document, card_id)

@@ -13,6 +13,10 @@ from app.services.generation_canvas.store import CanvasStore
 class CanvasLifecycle(Protocol):
     """在已授权的项目或自由画布范围内操作，由调用方管理事务。"""
 
+    async def ensure_access(self, canvas_id: str) -> None:
+        """Check existence, kind and scope without loading the document for use."""
+        ...
+
     async def read(self, canvas_id: str) -> CanvasRead:
         """读取对应文档及其修订。"""
         ...

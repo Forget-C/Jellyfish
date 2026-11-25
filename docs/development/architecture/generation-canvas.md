@@ -143,6 +143,8 @@
 
 HTTP 边界为 `/api/v1/studio/generation-canvases/{project_id}` 的列表／创建，以及 `/{canvas_id}` 的读取／PUT 保存／删除。读取、写入和删除均限定项目归属，沿用现有项目 API 的访问边界。前端普通请求由 OpenAPI generated client 发出。
 
+编辑协议使用用户可见文档和基准修订重放类型化改动，按组返回经过校验的差异。已保存画布仅核对受影响的卡片、连线和引用来源。未保存自由草稿在内存中预演，首次保存后要求重新读取。助手批量改动、特殊结构改动和待审批字段修订共用该入口。
+
 保存提交 `request_id`、`expected_revision` 和完整 `document`。事务先锁文档行，再核实持久回执，最后执行 revision CAS。文档更新和 `generation_canvas_save_receipts` 在同一事务提交。同请求重放原回执，不因后续 revision 改变；同身份不同正文返回 HTTP 409 `IDEMPOTENCY_CONFLICT`，过期修订返回 HTTP 409 `REVISION_CONFLICT`。结构、类型和身份错误返回带 `code`、`severity`、`message`、`target`、`blocks` 的文档诊断。画布领域异常使用标准 `{code,message,data,meta}` 封套，`data` 保留类型化诊断；不从 message 反解析字段。普通 HTTP 异常仍保持原有 `data=null`，命令封套基本校验沿用统一 422 处理。
 
 迁移 `d6a0b4c8e957` 建立文档和保存回执表，`473ab089b58f` 增加独立运行、节点、预检、执行回执、占用、成果、当前输出指向及事件表；`8a10d04c631e` 增加等待节点私有执行快照和预检范围意图。验证 CAS、同请求竞争及迁移／模型一致性时使用隔离 MySQL 库与独立 HTTP 事务。SQLite 可验证功能持久化与页面旅程，MySQL 并发结论以对应数据库验证为准。
@@ -199,7 +201,7 @@ HTTP 边界为 `/api/v1/studio/generation-canvases/{project_id}` 的列表／创
 
 `TaskService` 仍是唯一任务写入口。领取、进度和唯一终态裁决后调用窄范围画布事实同步；成功、失败、取消、排队取消、过期和启动中断均在 Task 的原事务更新节点与事件。完整成功才创建 ResultSet；相关当前依据仍匹配时整体更新当前输出指向，不推进编辑 revision。失败及取消保留未完成正文和旧正式成果。正式指向即使依据已变也保留，`basis_current=false` 表示不能作为单卡有效输入；实际内容仍可显示和绑定引用。结果集身份作为实际输入依据的一部分，未使用候选和无关文档编辑不使已有成果失效。
 
-`GET /{canvas_id}/runtime` 返回一致快照；generated `GET /{canvas_id}/events/connection` 提供公共 SSE 地址，传输层逐段解析并恢复订阅。每张画布的一条连接复用 `snapshot`、`node.updated`、`text.delta`、`node.finished` 和 `run.finished`，单次运行结束不关闭连接。事件头行锁使事实、事件游标和提交顺序一致；快照使用同一把锁复制事实及游标。既有 Task 写入遵守 Task → event head 顺序，受理只创建新 Task；流每次追读使用独立短事务，释放所有锁后才 yield。恢复游标之后只重放已提交事件，过期／超前游标发送权威快照，前端按游标去重；没有运行状态轮询。
+`GET /{canvas_id}/runtime` 返回一致快照；generated `GET /{canvas_id}/events/connection` 提供公共 SSE 地址，传输层逐段解析并恢复订阅。连接地址和事件流入口均通过生命周期协议核实画布与项目归属，事件追读由运行协议负责。每张画布的一条连接复用 `snapshot`、`node.updated`、`text.delta`、`node.finished` 和 `run.finished`，单次运行结束不关闭连接。事件头行锁使事实、事件游标和提交顺序一致；快照使用同一把锁复制事实及游标。既有 Task 写入遵守 Task → event head 顺序，受理只创建新 Task；流每次追读使用独立短事务，释放所有锁后才 yield。恢复游标之后只重放已提交事件，过期／超前游标发送权威快照，前端按游标去重；没有运行状态轮询。
 
 ## 检查依据、报告及媒体观察
 

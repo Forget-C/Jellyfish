@@ -658,9 +658,8 @@ class CanvasAssistant:
                 raise
             if command.revises_field:
                 try:
-                    proposal, superseded = await replace_proposed_field(
-                        self.store, locked_canvas, revised_proposal.proposal, command.revises_field,
-                        proposal, edit_draft.visible_document,
+                    proposal, superseded = replace_proposed_field(
+                        revised_proposal.proposal, command.revises_field, proposal,
                     )
                     unchanged = CanvasAssistantProposal.model_validate(revised_proposal.proposal)
                     remaining = [group for group in unchanged.groups

@@ -1,7 +1,6 @@
 """Translate scoped model operations into reviewable edit candidates."""
 
 from copy import copy
-from dataclasses import dataclass
 import re
 from uuid import uuid4
 
@@ -9,90 +8,34 @@ from fastapi import HTTPException
 from langchain_core.tools import ToolException
 from pydantic import ValidationError
 
-from app.core.contracts.generation_canvas import DesignField
 from app.schemas.canvas_assistant import CanvasAssistantFieldRevision, CanvasAssistantReadContext
 from app.schemas.canvas_assistant_edit import (
-    CanvasAssistantChange, CanvasAssistantEditConflict, CanvasAssistantEditGroup,
+    CanvasAssistantChange, CanvasAssistantEditGroup,
     CanvasAssistantEditTarget,
     CanvasAssistantProposal, CanvasAssistantProposalIssue,
-    CanvasAssistantRemovalTarget, CardTextEdit, DeleteCardEdit, DesignTextFieldEdit, DisconnectCardsEdit, ModelPromptSegmentEdit,
-    MovementFieldEdit, ProposedBatchCard, ProposedBatchConnection, ProposedBatchField, ProposedBatchRemoval,
-    ProposedCanvasBatchGroup, ReferenceNameEdit, ReleaseBindingEdit,
-    VideoDurationEdit, VideoPromptSegmentEdit,
+    CanvasAssistantRemovalTarget, ProposedBatchCard, ProposedBatchConnection, ProposedBatchField, ProposedBatchRemoval,
+    ProposedCanvasBatchGroup,
 )
 from app.schemas.canvas_assistant_structure import (
-    AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCardsTarget, VideoInputTarget, VideoTextUse, VideoCharacterUse,
+    AddCanvasCardTarget, ConnectCardsTarget, VideoInputTarget, VideoTextUse, VideoCharacterUse,
+)
+from app.schemas.canvas_edit_intents import (
+    CardTextEdit, DeleteCardEdit, DesignTextFieldEdit, DisconnectCardsEdit, ModelPromptSegmentEdit,
+    MovementFieldEdit, ReleaseBindingEdit, VideoDurationEdit, VideoPromptSegmentEdit,
 )
 from app.schemas.generation_canvas import (
-    CanvasDocument, CreativeBasisCard, GenerationCanvasEdge, ModelCard, MovementCard, NamedImageReferenceCard, ObjectDescriptionCard, PromptText,
-    TextContentCard, VideoModelCard, VideoModelConfig,
+    CanvasDocument, GenerationCanvasEdge, ModelCard, NamedImageReferenceCard, PromptText,
 )
 from app.services.generation_canvas.catalog import CARD_TITLES, design_fields
+from app.services.generation_canvas.editable_fields import EDITABLE_CONTENT_TYPES, apply_text, editable_text, normalize_text
 from app.services.generation_canvas.allowed_cards import FREE_CARD_TYPES
 from app.services.generation_canvas.assistant_removals import apply_removal, removal_impact
 from app.services.generation_canvas.assistant_structure import (
-    append_candidate_edge, apply_structural_change, assistant_card_configuration, assistant_card_copy, preview_assistant_connection,
+    append_candidate_edge, assistant_card_configuration, assistant_card_copy, preview_assistant_connection,
 )
-from app.services.generation_canvas.assistant_video_inputs import adopt_video_input, check_video_input
+from app.services.generation_canvas.assistant_video_inputs import adopt_video_input
 from app.services.generation_canvas.errors import CanvasDomainError
 from app.services.generation_canvas.graph import validate_graph
-from app.services.generation_canvas.store import CanvasStore
-
-
-_TEXT_CONTENT = (TextContentCard, CreativeBasisCard, ObjectDescriptionCard)
-
-
-@dataclass
-class _VideoDuration:
-    config: VideoModelConfig
-
-    @property
-    def text(self) -> str:
-        return str(self.config.seconds or '')
-
-    @text.setter
-    def text(self, value: str) -> None:
-        self.config.seconds = int(value)
-
-
-@dataclass
-class _ReferenceName:
-    card: NamedImageReferenceCard
-
-    @property
-    def text(self) -> str:
-        return self.card.name
-
-    @text.setter
-    def text(self, value: str) -> None:
-        self.card.name = value
-
-
-def _editable_text(card, target: CanvasAssistantEditTarget):
-    if isinstance(target, VideoDurationEdit) and isinstance(card, VideoModelCard):
-        return _VideoDuration(card.config)
-    if isinstance(target, ReferenceNameEdit) and isinstance(card, NamedImageReferenceCard):
-        if not (card.name_binding or card.scene_object_source):
-            return _ReferenceName(card)
-    if isinstance(target, CardTextEdit) and isinstance(card, _TEXT_CONTENT):
-        return card
-    if isinstance(target, MovementFieldEdit) and isinstance(card, MovementCard):
-        field = getattr(card.fields, target.field)
-        # A structured field can own references. This operation only edits plain text.
-        if field.document is None:
-            return field
-    if isinstance(target, DesignTextFieldEdit) and card is not None:
-        if any(definition.id == target.field_name for definition in design_fields(type(card))):
-            field = getattr(getattr(card, 'fields', card), target.field_name, None)
-            if isinstance(field, DesignField) and getattr(field, 'document', None) is None and not hasattr(field, 'size'):
-                return field
-    if isinstance(card, ModelCard) and (
-        isinstance(target, ModelPromptSegmentEdit)
-        or isinstance(card, VideoModelCard) and isinstance(target, VideoPromptSegmentEdit)
-    ):
-        return next((part for part in card.prompt.segments
-                     if isinstance(part, PromptText) and part.id == target.segment_id), None)
-    return None
 
 
 class ExistingCardChoice(ToolException):
@@ -191,7 +134,7 @@ class CanvasAssistantEditDraft:
     @property
     def available(self) -> bool:
         """Only an existing editable card can get a proposal tool."""
-        return any((isinstance(card, (ModelCard, NamedImageReferenceCard, *_TEXT_CONTENT)) or design_fields(type(card)))
+        return any((isinstance(card, (ModelCard, NamedImageReferenceCard, *EDITABLE_CONTENT_TYPES)) or design_fields(type(card)))
                    and self.cards[card.id]['type'] == card.type
                    for card in self.saved_cards.values())
 
@@ -200,23 +143,18 @@ class CanvasAssistantEditDraft:
         if saved is None or self.cards[card_id]['type'] != saved.type:
             raise ToolException('Choose an existing card in the locked scope')
         card = type(saved).model_validate(self.cards[card_id])
-        field = _editable_text(card, target)
-        if isinstance(target, ReferenceNameEdit) and len(text) > 255:
-            raise ToolException('Reference names must be at most 255 characters')
-        if isinstance(target, VideoDurationEdit):
-            try:
-                if int(text) < 1:
-                    raise ValueError
-                text = str(int(text))
-            except ValueError as error:
-                raise ToolException('Enter the duration as a positive number of seconds') from error
+        field = editable_text(card, target)
+        try:
+            text = normalize_text(target, text)
+        except CanvasDomainError as error:
+            raise ToolException(error.detail['message']) from error
         if field is None or field.text == text:
             raise ToolException('Choose an existing plain-text field and provide different text')
         return CanvasAssistantChange(
             card_id=card_id, card_name=CARD_TITLES[card.type], target=target, before=field.text, after=text,
         )
 
-    def preview_batch(self, groups: list, *, on_group=None) -> CanvasAssistantProposal | None:
+    def preview_batch(self, groups: list) -> CanvasAssistantProposal | None:
         """Preview independent groups atomically and report failures against original positions."""
         if self.proposal:
             raise ToolException('A preview has already been prepared for this turn')
@@ -323,8 +261,6 @@ class CanvasAssistantEditDraft:
                     title = f'沿用 {len(local.reused_cards)} 张已有卡 · {title}'
                 group = CanvasAssistantEditGroup(id=str(first), title=title[:100], edits=edits)
                 preview.append(group)
-                if on_group is not None:
-                    on_group(group, local.visible_document)
         if preview:
             self.proposal = CanvasAssistantProposal(**preview[0].edits[0].model_dump(), groups=preview)
         return self.proposal
@@ -367,14 +303,14 @@ class CanvasAssistantEditDraft:
             edit = operation.change
             card_id = references.get(edit.card_id, edit.card_id)
             if card_id in local.saved_cards:
-                current = _editable_text(type(local.saved_cards[card_id]).model_validate(local.cards[card_id]), edit.target)
+                current = editable_text(type(local.saved_cards[card_id]).model_validate(local.cards[card_id]), edit.target)
                 if current is not None and current.text == edit.text:
                     local.reused_cards.add(card_id)
                     return None
             change = local._preview(card_id, edit.target, edit.text)
             card = next(item for item in local.visible_document.cards if item.id == card_id)
             local.saved_cards[card_id] = card
-            _apply_text(card, _editable_text(card, edit.target), change)
+            apply_text(card, editable_text(card, edit.target), change.target, change.after)
             local.cards[card_id] = card.model_dump(mode='json')
             return change
         if isinstance(operation, ProposedBatchRemoval):
@@ -471,8 +407,8 @@ def revision_field(proposal: dict, reference: CanvasAssistantFieldRevision):
     return current, group, change
 
 
-async def replace_proposed_field(store, canvas, original, reference, proposal, visible_document):
-    """Keep the original dependent edits and verify the rebuilt group before replacing it."""
+def replace_proposed_field(original, reference, proposal):
+    """Merge the revised field into the original group for protocol validation."""
     previous, group, selected = revision_field(original, reference)
     changes = [change for entry in proposal.groups for change in entry.edits] if proposal.groups else [proposal]
     if len(changes) != 1 or changes[0].card_id != selected.card_id or changes[0].target != selected.target:
@@ -481,52 +417,7 @@ async def replace_proposed_field(store, canvas, original, reference, proposal, v
     replacement = changes[0]
     edits[reference.change_index] = CanvasAssistantChange.model_validate(replacement.model_dump(exclude={'groups', 'state'}))
     revised = group.model_copy(update={'edits': edits})
-    if await project_assistant_group(store, canvas, visible_document.model_copy(deep=True), revised):
-        raise HTTPException(409, 'The revised group needs to be previewed against the latest canvas')
     group.state = 'superseded'
     if all(item.state != 'pending' for item in previous.groups):
         previous.state = 'superseded'
     return CanvasAssistantProposal(**edits[0].model_dump(), groups=[revised]), previous.model_dump(mode='json')
-
-
-def _apply_text(card, field, change: CanvasAssistantChange) -> None:
-    field.text = change.after
-    if isinstance(field, DesignField):
-        field.authorship = 'user'
-        field.extraction_context = None
-        field.extraction_reason = None
-    elif isinstance(card, VideoModelCard) and card.generated_prompt and not isinstance(change.target, VideoDurationEdit):
-        card.generated_prompt.edit_confirmed = True
-
-
-async def project_assistant_group(store, canvas, document, group):
-    """Rebuild a special or revised group in a private document for canonical preview."""
-    conflicts = []
-    for change in group.edits:
-        current = None
-        if isinstance(change.target, VideoInputTarget):
-            current = await check_video_input(store, canvas, document, change)
-            if current is None:
-                continue
-        elif isinstance(change.target, (AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCardsTarget)):
-            if await apply_structural_change(store, canvas, document, change):
-                continue
-        elif isinstance(change.target, (DeleteCardEdit, ReleaseBindingEdit, DisconnectCardsEdit)):
-            impact = removal_impact(document, change.card_id, change.target)
-            if impact:
-                current, fingerprint = impact
-                if fingerprint == change.impact_fingerprint:
-                    apply_removal(document, change.card_id, change.target)
-                    continue
-        else:
-            card = next((item for item in document.cards if item.id == change.card_id), None)
-            field = _editable_text(card, change.target)
-            if field is not None:
-                current = field.text
-                if current == change.before:
-                    _apply_text(card, field, change)
-                    continue
-        conflicts.append(CanvasAssistantEditConflict(
-            group_id=group.id, card_id=change.card_id, target=change.target, current=current,
-        ))
-    return conflicts

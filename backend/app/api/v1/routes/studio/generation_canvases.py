@@ -12,7 +12,6 @@ from app.schemas.canvas_assistant_draft import CanvasDraftSave, CanvasDraftSaved
 from app.services.generation_canvas.assistant_draft import DraftCanvasAssistant, draft_reply_snapshot
 from app.schemas.common import PaginatedData, paginated_response, ApiResponse, created_response, empty_response, success_response
 from app.schemas.generation_canvas import CanvasRename, CanvasSummary, CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError, CanvasModelCapability, CanvasCompiledInput
-from app.services.generation_canvas.store import CanvasStore
 from app.services.generation_canvas.lifecycle import canvas_lifecycle, free_canvas_lifecycle
 from app.services.generation_canvas.edits import canvas_edits, free_canvas_edits
 from app.services.generation_canvas.generation_inputs import canvas_generation_inputs
@@ -268,7 +267,7 @@ async def get_canvas_runtime(canvas_id: str, project_id: str = '', db: AsyncSess
 @router.get('/{canvas_id}/events/connection', response_model=ApiResponse[CanvasStreamConnection], operation_id='canvas_stream_connection')
 async def canvas_stream_connection(canvas_id: str, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """提供 generated client 可获取的公共流连接地址。"""
-    await CanvasStore(db, project_id).get(canvas_id)
+    await canvas_lifecycle(db, project_id).ensure_access(canvas_id)
     return success_response(CanvasStreamConnection(url=f'/api/v1/studio/generation-canvases/{canvas_id}/events' + (f'?project_id={project_id}' if project_id else '')))
 
 
@@ -278,7 +277,7 @@ async def canvas_events(canvas_id: str, cursor: int | None = None, project_id: s
     from fastapi.responses import StreamingResponse
     from sqlalchemy.ext.asyncio import async_sessionmaker
     from app.services.generation_canvas.stream import stream_events
-    await CanvasStore(db, project_id).get(canvas_id)
+    await canvas_lifecycle(db, project_id).ensure_access(canvas_id)
     sessions = async_sessionmaker(db.bind, expire_on_commit=False)
     await db.commit()
     return StreamingResponse(stream_events(sessions, project_id, canvas_id, cursor), media_type='text/event-stream',

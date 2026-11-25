@@ -854,3 +854,22 @@ async def test_scene_source_change_warns_without_altering_saved_canvas(canvas_cl
     assert reopened['source_changed']
     assert reopened['document'] == canvas['document']
     assert reopened['revision'] == canvas['revision']
+
+
+@pytest.mark.asyncio
+async def test_canvas_event_connection_checks_scope_before_starting_stream(canvas_client):
+    free = (await canvas_client.post('/canvases', json={'name': '自由画布'})).json()['data']
+    scene = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '分镜画布'})).json()['data']
+    for canvas, project_id in ((free, ''), (scene, 'p')):
+        path = f'/canvases/{canvas["id"]}/events'
+        response = await canvas_client.get(path + '/connection', params={'project_id': project_id})
+        assert response.status_code == 200
+        expected_suffix = f'?project_id={project_id}' if project_id else ''
+        assert response.json()['data']['url'].endswith(f'/{canvas["id"]}/events{expected_suffix}')
+    for canvas_id, project_id in ((free['id'], 'p'), (scene['id'], ''), (scene['id'], 'other'), ('missing', 'p')):
+        path = f'/canvases/{canvas_id}/events'
+        for suffix in ('/connection', ''):
+            response = await asyncio.wait_for(
+                canvas_client.get(path + suffix, params={'project_id': project_id}), timeout=2,
+            )
+            assert response.status_code == 404

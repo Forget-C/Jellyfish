@@ -87,9 +87,16 @@ class CanvasStore:
             GenerationCanvas.project_id == self.project_id).order_by(GenerationCanvas.created_at, GenerationCanvas.id))).all())
         return [await self.get(canvas_id) for canvas_id in ids]
 
+    def _canvas_scope(self, canvas_id: str):
+        return (GenerationCanvas.id == canvas_id, GenerationCanvas.project_id == self.project_id)
+
+    def _check_canvas_kind(self, kind: str | None) -> None:
+        if kind != ('scene' if self.project_id else 'free'):
+            raise HTTPException(404, 'Canvas not found')
+
     async def get(self, canvas_id: str, *, lock: bool = False) -> GenerationCanvas:
         """锁住文档行后再读回执，使同画布的竞争请求按数据库顺序核实。"""
-        identity = (GenerationCanvas.id == canvas_id, GenerationCanvas.project_id == self.project_id)
+        identity = self._canvas_scope(canvas_id)
         stmt = select(GenerationCanvas).where(*identity)
         if lock:
             if self.db.get_bind().dialect.name == 'sqlite':
@@ -100,9 +107,15 @@ class CanvasStore:
                                       .execution_options(synchronize_session=False))
             stmt = stmt.with_for_update().execution_options(populate_existing=True)
         canvas = await self.db.scalar(stmt)
-        if canvas is None or canvas.kind != ('scene' if self.project_id else 'free'):
+        if canvas is None:
             raise HTTPException(404, 'Canvas not found')
+        self._check_canvas_kind(canvas.kind)
         return canvas
+
+    async def ensure_access(self, canvas_id: str) -> None:
+        """Apply the same scope and canvas-kind checks used by reads."""
+        kind = await self.db.scalar(select(GenerationCanvas.kind).where(*self._canvas_scope(canvas_id)))
+        self._check_canvas_kind(kind)
 
     async def read(self, canvas_id: str) -> CanvasRead:
         """附带固定依据的新鲜度，普通画布仍只读取自身文档。"""
@@ -320,17 +333,23 @@ class CanvasStore:
     async def compile_document(self, document: CanvasDocument, card_id: str, *,
                                draft: bool = False, expected_revision: int | None = None) -> CanvasCompiledInput:
         """编译调用方已核对的工作文档，检查所属画布与目标修订。"""
+        canvas = await self.visible_basis(document, draft=draft, expected_revision=expected_revision)
+        return await self._compile_document(canvas, document, card_id)
+
+    async def visible_basis(self, document: CanvasDocument, *, draft: bool = False,
+                            expected_revision: int | None = None) -> GenerationCanvas:
+        """Resolve the authorized persistence basis for a caller's visible document."""
         if document.project_id != self.project_id:
             raise HTTPException(404, 'Canvas not found')
         if draft:
             if self.project_id or (await self.read_free_draft(document.id)).revision >= 0:
                 raise diagnostic('REVISION_CONFLICT', '草稿已变化，请重新读取', {'canvas_id': document.id}, status=409)
-            canvas = GenerationCanvas(id=document.id, kind='free', revision=0)
-        else:
-            canvas = await self.get(document.id)
-            if expected_revision is not None and canvas.revision != expected_revision:
-                raise diagnostic('REVISION_CONFLICT', '画布已变化，请重新读取', {'canvas_id': document.id}, status=409)
-        return await self._compile_document(canvas, document, card_id)
+            return GenerationCanvas(id=document.id, kind='free', revision=0, document=document.model_dump(mode='json'),
+                                    card_types={card.id: card.type for card in document.cards}, detached_proofs={})
+        canvas = await self.get(document.id)
+        if expected_revision is not None and canvas.revision != expected_revision:
+            raise diagnostic('REVISION_CONFLICT', '画布已变化，请重新读取', {'canvas_id': document.id}, status=409)
+        return canvas
 
     async def _compile_document(self, canvas: GenerationCanvas, document: CanvasDocument,
                                 card_id: str) -> CanvasCompiledInput:

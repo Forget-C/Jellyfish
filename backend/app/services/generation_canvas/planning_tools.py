@@ -8,24 +8,21 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models.generation_canvas import GenerationCanvas
 from app.schemas.canvas_assistant import CanvasAssistantReadContext
 from app.schemas.canvas_assistant_edit import (
     CanvasAssistantEditGroup, CanvasAssistantProposal, CanvasAssistantProposalIssue, ProposedCanvasBatchGroup,
 )
-from app.schemas.canvas_assistant_structure import AdoptFirstFrameTarget, ConnectCardsTarget, VideoInputTarget
+from app.schemas.canvas_edit_intents import CanvasEditIntent
 from app.schemas.generation_canvas import CanvasCompiledInput, CanvasDocument, CanvasRead
 from app.services.generation_canvas.assistant_context import context_page, prioritize_context_cards
-from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft, project_assistant_group
-from app.services.generation_canvas.assistant_video_inputs import video_input_context
+from app.services.generation_canvas.assistant_edits import CanvasAssistantEditDraft
 from app.services.generation_canvas.catalog import canvas_catalog
 from app.services.generation_canvas.edits import (
-    CanvasEditGroup, CanvasEditGroupPreview, CanvasEditPreview, canvas_edits, free_canvas_edits, project_canvas_edit_group,
+    CanvasEditGroupPreview, CanvasEditPreview, canvas_edits, project_canvas_edit_group,
 )
 from app.services.generation_canvas.errors import CanvasDomainError, diagnostic
 from app.services.generation_canvas.generation_inputs import canvas_generation_inputs
 from app.services.generation_canvas.lifecycle import canvas_lifecycle, free_canvas_lifecycle
-from app.services.generation_canvas.store import CanvasStore
 
 
 class CanvasPlanningPreview(BaseModel):
@@ -92,23 +89,22 @@ class CanvasPlanningTools:
         draft.reused_cards = set()
         if self.draft:
             draft.saved_cards = {card.id: card for card in draft.visible_document.cards if card.id in draft.cards}
-        proposed = []
         approved: list[CanvasEditGroupPreview] = []
         summaries = []
         candidates = {}
         async with self.sessions() as db:
             current = await self._current(db)
-            canvas = GenerationCanvas(id=current.id, project_id=current.project_id, revision=current.revision,
-                                      kind='scene' if current.project_id else 'free')
-            draft.video_inputs = await video_input_context(db, canvas, draft.visible_document,
-                                                           draft.readable_card_ids | draft.cards.keys())
-            draft.preview_batch(groups, on_group=lambda group, document: proposed.append((group, document)))
+            draft.video_inputs = await canvas_generation_inputs(db, self.project_id).video_reference_context(
+                draft.visible_document, draft.readable_card_ids | draft.cards.keys(),
+                expected_revision=None if self.draft else current.revision,
+            )
+            proposed = draft.preview_batch(groups)
             issues = draft.proposal_issues
             if _changed_cards(draft.visible_document, current.document, draft.reused_cards):
                 issues.append(CanvasAssistantProposalIssue(message='沿用的卡片已变化，请重新读取后核对'))
-            for group, candidate in proposed:
+            for group in (proposed.groups if proposed else None) or ():
                 try:
-                    checked = await self._check_group(db, current, group, candidate)
+                    checked = await self._check_group(db, current, group)
                     if checked.differences:
                         candidates[group.id] = project_canvas_edit_group(current.document, checked)
                 except CanvasDomainError as exc:
@@ -130,22 +126,16 @@ class CanvasPlanningTools:
         self.latest = result
         return result
 
-    async def _check_group(self, db: AsyncSession, current: CanvasRead, group: CanvasAssistantEditGroup,
-                           candidate: CanvasDocument) -> CanvasEditGroupPreview:
-        visible = self.planner.visible_document
-        change = _domain_group(visible, candidate, group)
-        affected = set(change.source_card_ids) | change.remove_cards | {card.id for card in change.cards}
-        visible_edges = {edge.id: edge for edge in visible.edges}
-        current_edges = {edge.id: edge for edge in current.document.edges}
-        edges = change.remove_edges | {edge.id for edge in change.edges}
-        if (_changed_cards(visible, current.document, affected)
-                or any(visible_edges.get(key) != current_edges.get(key) for key in edges)):
-            raise diagnostic('EDIT_SOURCE_CHANGED', '改动目标或来源已变化，请保存或重新读取后预演', {'group_id': group.id})
-        if self.draft:
-            plan = await free_canvas_edits(db).preview_draft(visible, [change])
-        else:
-            plan = await canvas_edits(db, self.project_id).preview(self.canvas_id, [change], expected_revision=current.revision)
-        return plan.groups[0]
+    async def _check_group(self, db: AsyncSession, current: CanvasRead,
+                           group: CanvasAssistantEditGroup) -> CanvasEditGroupPreview:
+        intents = [
+            CanvasEditIntent(edit.card_id, edit.target, edit.before, edit.after, edit.copy_of, edit.impact_fingerprint)
+            for edit in group.edits
+        ]
+        return await canvas_edits(db, self.project_id).preview_visible_group(
+            self.planner.visible_document, group.id, intents,
+            expected_revision=None if self.draft else current.revision,
+        )
 
     def get_preview(self, preview_id: str) -> CanvasPlanningPreview | None:
         """只能从同一会话工具的可信预演记录取得待送审计划。"""
@@ -156,22 +146,13 @@ class CanvasPlanningTools:
                                        proposal: CanvasAssistantProposal) -> CanvasPlanningPreview:
         """Lower an already scoped special preview or field revision to the same domain plan."""
         current = await self._current(db)
-        store = CanvasStore(db, self.project_id)
-        visible = self.planner.visible_document
-        canvas = (GenerationCanvas(id=visible.id, kind='free', revision=0,
-                                   card_types={card.id: card.type for card in visible.cards})
-                  if self.draft else await store.get(self.canvas_id))
         groups = []
         summaries = []
         candidates = {}
         issues = []
         for group in proposal.groups or ():
-            candidate = visible.model_copy(deep=True)
             try:
-                conflicts = await project_assistant_group(store, canvas, candidate, group)
-                if conflicts:
-                    raise diagnostic('EDIT_SOURCE_CHANGED', '改动目标或来源已变化，请重新预演', {'group_id': group.id})
-                checked = await self._check_group(db, current, group, candidate)
+                checked = await self._check_group(db, current, group)
                 if checked.differences:
                     candidates[group.id] = project_canvas_edit_group(current.document, checked)
                     groups.append(checked)
@@ -213,42 +194,6 @@ class CanvasPlanningTools:
             return await canvas_generation_inputs(db, self.project_id).compile_document(
                 document, card_id, draft=self.draft, expected_revision=current.revision,
             )
-
-
-def _domain_group(before: CanvasDocument, after: CanvasDocument, summary: CanvasAssistantEditGroup) -> CanvasEditGroup:
-    old_cards, old_edges = ({card.id: card for card in before.cards}, {edge.id: edge for edge in before.edges})
-    cards = {card.id: card for card in after.cards}
-    edges = {edge.id: edge for edge in after.edges}
-    sources = set()
-    for edit in summary.edits:
-        if isinstance(edit.target, VideoInputTarget):
-            sources.update((edit.target.use.source_card, edit.card_id))
-        if isinstance(edit.target, AdoptFirstFrameTarget):
-            sources.add(edit.card_id)
-        if isinstance(edit.target, ConnectCardsTarget):
-            sources.update((edit.target.source_card, edit.target.target_card))
-        if edit.copy_of:
-            sources.add(edit.copy_of)
-    changed_cards = [card for key, card in cards.items() if old_cards.get(key) != card]
-    for card in changed_cards:
-        sources.update(_adopted_sources(card, before.id))
-    pending = list(sources)
-    while pending:
-        new = _adopted_sources(cards.get(pending.pop()), before.id) - sources
-        sources.update(new)
-        pending.extend(new)
-    return CanvasEditGroup(
-        id=summary.id, source_card_ids=tuple(sorted(sources)), cards=changed_cards, remove_cards=old_cards.keys() - cards.keys(),
-        edges=[edge for key, edge in edges.items() if old_edges.get(key) != edge], remove_edges=old_edges.keys() - edges.keys(),
-    )
-
-
-def _adopted_sources(card, canvas_id: str) -> set[str]:
-    refs = [binding.source for binding in getattr(card, 'input_bindings', ())]
-    image = getattr(card, 'image_binding', None)
-    if image and image.source:
-        refs.append(image.source)
-    return {ref.card_id for ref in refs if ref.canvas_id == canvas_id}
 
 
 def _changed_cards(visible: CanvasDocument, current: CanvasDocument, affected: set[str]) -> bool:

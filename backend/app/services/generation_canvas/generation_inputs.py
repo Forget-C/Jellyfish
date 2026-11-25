@@ -7,8 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.contracts.directing.scene_storyboard import StoryboardBasis, StoryboardRetryBasis
 from app.schemas.canvas_checks import CanvasCheckPreview, CanvasCheckProduct, CanvasPostCheckPreview
 from app.schemas.generation_canvas import (
-    CanvasCompiledInput, CanvasDocument, CanvasPrecheck, CanvasPrecheckRequest, CanvasVideoFrameRequest, ImageContentCard,
+    CanvasCompiledInput, CanvasDocument, CanvasModelCapability, CanvasPrecheck, CanvasPrecheckRequest,
+    CanvasResolvedOutput, CanvasVideoFrameRequest, ImageContentCard,
 )
+from app.services.generation_canvas.assistant_video_inputs import video_input_context
 from app.services.generation_canvas.checks import CanvasChecks
 from app.services.generation_canvas.post_checks import CanvasPostChecks
 from app.services.generation_canvas.runtime import CanvasRuntime
@@ -26,6 +28,15 @@ class CanvasGenerationInputs(Protocol):
     async def compile_document(self, document: CanvasDocument, card_id: str, *,
                                draft: bool = False, expected_revision: int | None = None) -> CanvasCompiledInput:
         """仅编译调用方核对过的已保存或预演工作文档。"""
+        ...
+
+    async def video_reference_context(
+        self, document: CanvasDocument, card_ids: set[str], *, expected_revision: int | None,
+    ) -> tuple[dict[str, list[CanvasResolvedOutput]], dict[str, CanvasModelCapability]]:
+        """Read available outputs and model ports for the caller's visible cards.
+
+        A missing revision identifies an unsaved free draft.
+        """
         ...
 
     async def precheck(self, canvas_id: str, command: CanvasPrecheckRequest) -> CanvasPrecheck:
@@ -75,6 +86,14 @@ class _ScopedGenerationInputs:
         return await CanvasStore(self.db, self.project_id).compile_document(
             document, card_id, draft=draft, expected_revision=expected_revision,
         )
+
+    async def video_reference_context(
+        self, document: CanvasDocument, card_ids: set[str], *, expected_revision: int | None,
+    ) -> tuple[dict[str, list[CanvasResolvedOutput]], dict[str, CanvasModelCapability]]:
+        canvas = await CanvasStore(self.db, self.project_id).visible_basis(
+            document, draft=expected_revision is None, expected_revision=expected_revision,
+        )
+        return await video_input_context(self.db, canvas, document, card_ids)
 
     async def precheck(self, canvas_id: str, command: CanvasPrecheckRequest) -> CanvasPrecheck:
         return await CanvasRuntime(self.db, self.project_id).precheck(canvas_id, command)

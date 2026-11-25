@@ -9,9 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.directing.scene_storyboard import StoryboardApplication, StoryboardDiff, StoryboardRestore
 from app.models.generation_canvas import GenerationCanvas
+from app.schemas.canvas_assistant_structure import (
+    AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCardsTarget, VideoInputTarget,
+)
+from app.schemas.canvas_edit_intents import CanvasEditIntent, DeleteCardEdit, DisconnectCardsEdit, ReleaseBindingEdit
 from app.schemas.generation_canvas import (
     CanvasCard, CanvasDiagnostic, CanvasDocument, CanvasRead, CanvasSave, GenerationCanvasEdge, GenerationCanvasGroup,
 )
+from app.services.generation_canvas.editable_fields import apply_text, editable_text
 from app.services.generation_canvas.errors import CanvasDomainError, diagnostic
 from app.services.generation_canvas.graph_edit import append_edge, remove_card, remove_edges
 from app.services.generation_canvas.store import CanvasStore
@@ -158,6 +163,16 @@ class CanvasEdits(Protocol):
     async def preview(self, canvas_id: str, groups: list[CanvasEditGroup], *,
                       expected_revision: int | None = None) -> CanvasEditPreview:
         """预演候选并返回经过业务校验的实际差异。"""
+        ...
+
+    async def preview_visible_group(
+        self, visible: CanvasDocument, group_id: str, intents: list[CanvasEditIntent], *,
+        expected_revision: int | None,
+    ) -> CanvasEditGroupPreview:
+        """Check edits against the visible basis and return a canonical difference.
+
+        A missing revision identifies an unsaved free draft.
+        """
         ...
 
     async def submit(self, plan: CanvasEditPreview, *, request_id: str,
@@ -325,6 +340,78 @@ def _replace_edges(document: CanvasDocument, replacements: list[GenerationCanvas
         append_edge(document, edge)
 
 
+def _group_from_candidate(before: CanvasDocument, after: CanvasDocument, group_id: str, intents: list[CanvasEditIntent]) -> CanvasEditGroup:
+    old_cards, old_edges = ({card.id: card for card in before.cards}, {edge.id: edge for edge in before.edges})
+    cards = {card.id: card for card in after.cards}
+    edges = {edge.id: edge for edge in after.edges}
+    sources = set()
+    for edit in intents:
+        if isinstance(edit.target, VideoInputTarget):
+            sources.update((edit.target.use.source_card, edit.card_id))
+        if isinstance(edit.target, AdoptFirstFrameTarget):
+            sources.add(edit.card_id)
+        if isinstance(edit.target, ConnectCardsTarget):
+            sources.update((edit.target.source_card, edit.target.target_card))
+        if edit.copy_of:
+            sources.add(edit.copy_of)
+    changed_cards = [card for key, card in cards.items() if old_cards.get(key) != card]
+    for card in changed_cards:
+        sources.update(_adopted_sources(card, before.id))
+    pending = list(sources)
+    while pending:
+        new = _adopted_sources(cards.get(pending.pop()), before.id) - sources
+        sources.update(new)
+        pending.extend(new)
+    return CanvasEditGroup(
+        id=group_id, source_card_ids=tuple(sorted(sources)), cards=changed_cards, remove_cards=old_cards.keys() - cards.keys(),
+        edges=[edge for key, edge in edges.items() if old_edges.get(key) != edge], remove_edges=old_edges.keys() - edges.keys(),
+    )
+
+
+def _adopted_sources(card, canvas_id: str) -> set[str]:
+    refs = [binding.source for binding in getattr(card, 'input_bindings', ())]
+    image = getattr(card, 'image_binding', None)
+    if image and image.source:
+        refs.append(image.source)
+    return {ref.card_id for ref in refs if ref.canvas_id == canvas_id}
+
+
+async def _project_intents(store, canvas, document, group_id: str, intents: list[CanvasEditIntent]) -> None:
+    """Apply typed edits to the private document and stop at the first invalid basis."""
+    from app.services.generation_canvas.assistant_removals import apply_removal, removal_impact
+    from app.services.generation_canvas.assistant_structure import apply_structural_change
+    from app.services.generation_canvas.assistant_video_inputs import check_video_input
+
+    for change in intents:
+        current = None
+        if isinstance(change.target, VideoInputTarget):
+            current = await check_video_input(store, canvas, document, change)
+            if current is None:
+                continue
+        elif isinstance(change.target, (AddCanvasCardTarget, AdoptFirstFrameTarget, AdjustShotMovementTarget, ConnectCardsTarget)):
+            try:
+                if await apply_structural_change(store, canvas, document, change):
+                    continue
+            except ValueError as error:
+                raise diagnostic('INVALID_EDIT_VALUE', str(error), {'group_id': group_id, 'card_id': change.card_id}) from error
+        elif isinstance(change.target, (DeleteCardEdit, ReleaseBindingEdit, DisconnectCardsEdit)):
+            impact = removal_impact(document, change.card_id, change.target)
+            if impact:
+                current, fingerprint = impact
+                if fingerprint == change.impact_fingerprint:
+                    apply_removal(document, change.card_id, change.target)
+                    continue
+        else:
+            card = next((item for item in document.cards if item.id == change.card_id), None)
+            field = editable_text(card, change.target)
+            if field is not None:
+                current = field.text
+                if current == change.before:
+                    apply_text(card, field, change.target, change.after)
+                    continue
+        raise diagnostic('EDIT_SOURCE_CHANGED', '改动目标或来源已变化，请重新预演', {'group_id': group_id})
+
+
 class _CanvasEdits(CanvasStore):
     async def preview_layout(self, canvas_id: str, positions: dict[str, CanvasLayoutPoint],
                              desired: dict[str, CanvasLayoutPoint]) -> CanvasLayoutPreview:
@@ -354,11 +441,27 @@ class _CanvasEdits(CanvasStore):
         return await self._preview_document(canvas, groups)
 
     async def preview_draft(self, document: CanvasDocument, groups: list[CanvasEditGroup]) -> CanvasEditPreview:
-        if document.project_id or (await self.read_free_draft(document.id)).revision >= 0:
+        if self.project_id or document.project_id:
             raise diagnostic('REVISION_CONFLICT', '草稿已变化，请重新读取后预演', {'canvas_id': document.id}, status=409)
-        canvas = GenerationCanvas(id=document.id, kind='free', revision=0, document=document.model_dump(mode='json'),
-                                  card_types={card.id: card.type for card in document.cards}, detached_proofs={})
-        return await self._preview_document(canvas, groups)
+        return await self._preview_document(await self.visible_basis(document, draft=True), groups)
+
+    async def preview_visible_group(
+        self, visible: CanvasDocument, group_id: str, intents: list[CanvasEditIntent], *,
+        expected_revision: int | None,
+    ) -> CanvasEditGroupPreview:
+        canvas = await self.visible_basis(visible, draft=expected_revision is None, expected_revision=expected_revision)
+        candidate = visible.model_copy(deep=True)
+        await _project_intents(self, canvas, candidate, group_id, intents)
+        group = _group_from_candidate(visible, candidate, group_id, intents)
+        current = CanvasDocument.model_validate(canvas.document)
+        affected = set(group.source_card_ids) | group.remove_cards | {card.id for card in group.cards}
+        edges = group.remove_edges | {edge.id for edge in group.edges}
+        visible_cards, current_cards = ({card.id: card for card in doc.cards} for doc in (visible, current))
+        visible_edges, current_edges = ({edge.id: edge for edge in doc.edges} for doc in (visible, current))
+        if (any(visible_cards.get(key) != current_cards.get(key) for key in affected)
+                or any(visible_edges.get(key) != current_edges.get(key) for key in edges)):
+            raise diagnostic('EDIT_SOURCE_CHANGED', '改动目标或来源已变化，请保存或重新读取后预演', {'group_id': group_id})
+        return (await self._preview_document(canvas, [group])).groups[0]
 
     async def _preview_document(self, canvas: GenerationCanvas, groups: list[CanvasEditGroup]) -> CanvasEditPreview:
         canvas_id = canvas.id

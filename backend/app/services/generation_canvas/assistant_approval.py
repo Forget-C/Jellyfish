@@ -2,7 +2,7 @@
 
 import re
 
-from app.schemas.canvas_assistant_edit import DeleteCardEdit, MovementFieldEdit, ReleaseBindingEdit, VideoPromptSegmentEdit
+from app.schemas.canvas_edit_intents import DeleteCardEdit, MovementFieldEdit, ReleaseBindingEdit, VideoPromptSegmentEdit
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.automatic_approval import ApprovalEffect
 from app.services.generation_canvas.assistant_targets import explicit_generation_quantity, shot_request_matches
