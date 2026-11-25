@@ -7,7 +7,7 @@ import { WorkbenchConversation } from '../../../components/workbench/WorkbenchCo
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { canvasChat } from '../../../services/chatSession'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasDocument, CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantFieldRevision, CanvasAssistantGroupReference, CanvasAssistantHistory, CanvasAssistantInstruction, CanvasAssistantLayout, CanvasAssistantMessage, CanvasAssistantProgress, CanvasAssistantQuestion, CanvasAssistantQueueItem, FileRead, ModelRead } from '../../../services/generated'
+import type { CanvasDocument, CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantFieldRevision, CanvasAssistantGroupReference, CanvasAssistantHistory, CanvasAssistantInstruction, CanvasAssistantLayout, CanvasAssistantMessage, CanvasAssistantProgress, CanvasAssistantQuestion, FileRead, ModelRead } from '../../../services/generated'
 import { AssistantEditGroups, AssistantProposal, groupIsPending } from './AssistantProposal'
 import { AssistantMarkdownTable } from './AssistantMarkdownTable'
 import { AssistantLayout } from './AssistantLayout'
@@ -49,14 +49,6 @@ function appendExchange(turns: CanvasAssistantExchange[], incoming: CanvasAssist
       state: groups?.some(group => (group.state ?? 'pending') === 'pending') ? 'pending' as const : 'superseded' as const,
       groups } }
   }).sort((left, right) => left.sequence - right.sequence)
-}
-
-function updateQueue(queue: CanvasAssistantQueueItem[], item: CanvasAssistantQueueItem) {
-  const current = queue.findIndex(entry => entry.request_id === item.request_id)
-  if (item.state === 'removed' || item.state === 'completed') {
-    return queue.filter(entry => entry.request_id !== item.request_id)
-  }
-  return current === -1 ? [...queue, item] : queue.map((entry, index) => index === current ? item : entry)
 }
 
 /** Nonmodal conversation for one saved canvas. Closing it keeps the draft and in-flight reply. */
@@ -156,7 +148,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       decision_id: crypto.randomUUID(), expected_revision: readDraft().revision,
     }
     pendingRejections.current.set(key, decision)
-    const { data } = await Canvases.canvasAssistantDecideProposal({
+    const { data } = await canvasChat.decide({
       canvasId, projectId, sourceId, requestBody: { ...decision, action: 'reject', group_ids: groupIds },
     })
     if (data) pendingRejections.current.delete(key)
@@ -170,15 +162,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const [progress, setProgress] = useState<CanvasAssistantProgress>()
   const [pendingQuestion, setPendingQuestion] = useState<CanvasAssistantQuestion>()
   const [questionAnswer, setQuestionAnswer] = useState('')
-  const [queue, setQueue] = useState<CanvasAssistantQueueItem[]>([])
-  const [queueEditing, setQueueEditing] = useState<{ id: string; text: string }>()
-  const [queueBusy, setQueueBusy] = useState(false)
-  const [queueError, setQueueError] = useState(false)
-  const pumpingQueue = useRef(false)
-  const queuedRequest = useRef<CanvasAssistantMessage>()
-  const [steeringFor, setSteeringFor] = useState<string>()
   const [pendingInstructions, setPendingInstructions] = useState<CanvasAssistantInstruction[]>([])
-  const retryInstruction = useRef<{ sourceId: string; body: CanvasAssistantInstruction }>()
   const activeRequest = useRef<ReturnType<typeof Canvases.canvasAssistantSend>>()
   const stoppedRequest = useRef<string>()
   const panel = useRef<HTMLElement>(null)
@@ -193,17 +177,12 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const phaseSteps = Object.entries(progress?.phase_started_at ?? {})
     .sort(([, first], [, second]) => Date.parse(first) - Date.parse(second))
   const displayedTurns = liveTurn ? [...(turns ?? []), liveTurn] : turns
-  const runningId = activeRequestId || steeringFor || draftStreamId ||
+  const runningId = activeRequestId || draftStreamId ||
     (progress?.streaming && !pendingQuestion ? progress.request_id : undefined)
   const draftText = draft.trim()
-  const approvalIntent = confirmationKind(draftText)
-  const supplementing = !!runningId && !localDraft && !pendingQuestion && !steeringFor && stopping !== runningId && !approvalIntent
-  const showStop = !!runningId && !draftText
-  const sendLabel = uiText(supplementing ? '发送补充' : '发送消息')
   const canSend = !!draftText && !!turns && !draftPromoting && !draftStreamId &&
     !stopping && !savingModel && !savingApproval && !uploadingReference && !referenceIsMissing &&
-    (!pendingQuestion || !!approvalIntent) &&
-    (runningId ? supplementing || (!!approvalIntent && approvalIntent !== 'revise') : !sending)
+    !pendingQuestion && !runningId && !sending
   const panelId = 'canvas-assistant-' + canvasId
   const applySnapshot = useCallback((data: CanvasAssistantHistory, epoch: number) => {
     if (mutationEpoch.current !== epoch) return false
@@ -219,7 +198,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       setSendError(assistantSendError(data.pending_progress.error_code))
     }
     setLiveRequest(data.pending_request ?? undefined)
-    setQueue(data.queue ?? [])
     setPendingInstructions(data.pending_instructions ?? [])
     setModelId(data.model_id ?? null)
     setAutomaticApproval(data.approval_mode === 'automatic')
@@ -248,10 +226,10 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       busy = true
       try {
         const outcome = await layoutEditor.current(sourceId, layout, async () => {
-          await Canvases.canvasAssistantDecideLayout({ projectId, canvasId, sourceId, requestBody: { action: 'claim' } })
+          await canvasChat.layout({ projectId, canvasId, sourceId, requestBody: { action: 'claim' } })
         })
         if (!active || outcome === 'deferred') return
-        const { data } = await Canvases.canvasAssistantDecideLayout({
+        const { data } = await canvasChat.layout({
           projectId, canvasId, sourceId, requestBody: { action: outcome },
         })
         if (active && data) setTurns(previous => previous?.map(turn =>
@@ -306,8 +284,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           const updates = [update].filter(event => event.session_id === canvasId && event.cursor > cursor)
           if (!updates.length) continue
           snapshotCursor.current = { canvasId, cursor: updates[updates.length - 1].cursor }
-          const queueUpdates = updates.flatMap(event => 'message' in event.payload ? [event.payload] : [])
-          if (queueUpdates.length) setQueue(current => queueUpdates.reduce(updateQueue, current))
           setTurns(turns => updates.reduce<CanvasAssistantExchange[]>((history, event) => {
             const payload = event.payload
             if ('message' in payload || ['turn.accepted', 'message.updated'].includes(event.type) || event.type.startsWith('tool.') || event.type === 'question.asked' || event.type === 'turn.steered' || event.type === 'turn.progress' || event.type === 'turn.interrupted') return history
@@ -318,7 +294,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             } : turn) : appendExchange(history, payload)
           }, turns ?? []))
           for (const { type, turn_id, payload } of updates) {
-            if ((type === 'turn.progress' || type === 'message.updated' || type.startsWith('tool.')) && 'progress' in payload && payload.progress) {
+            if ((type === 'turn.accepted' || type === 'turn.progress' || type === 'message.updated' || type.startsWith('tool.')) && 'progress' in payload && payload.progress) {
               setLiveRequest(payload)
               setProgress(payload.progress)
             }
@@ -418,35 +394,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     return () => { active = false; window.clearInterval(timer) }
   }, [open, localDraft, canvasId, draftStreamId, setTurns])
 
-  const queueHead = queue[0]
-  useEffect(() => {
-    if (!open || !queueHead || localDraft || sending || pendingQuestion) return
-    let active = true
-    const pump = async () => {
-      if (!active || sendingNow.current || pumpingQueue.current) return
-      pumpingQueue.current = true
-      try {
-        const { data } = await Canvases.canvasAssistantRunQueue({
-          canvasId, projectId, requestId: queueHead.request_id,
-        })
-        if (!active || !data) return
-        if (data.question) {
-          setPendingQuestion(data.question)
-          setPendingServerRequest({ request_id: data.request_id, text: data.text })
-        } else {
-          setQueue(current => current.filter(entry => entry.request_id !== queueHead.request_id))
-          setTurns(current => appendExchange(current || [], data))
-        }
-      } catch {
-        if (active) setQueueError(true)
-      } finally {
-        pumpingQueue.current = false
-      }
-    }
-    const timer = window.setInterval(() => void pump(), 1200)
-    return () => { active = false; window.clearInterval(timer) }
-  }, [canvasId, localDraft, open, pendingQuestion, projectId, queueHead, sending, setTurns])
-
   useEffect(() => {
     if (!open) return
     let current = true
@@ -515,17 +462,17 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         setProgress(undefined)
         return
       }
-      const { data } = await Canvases.canvasAssistantStop({ canvasId, projectId, sourceId })
+      const { data } = await canvasChat.stop({ canvasId, projectId, sourceId })
       if (!data) throw new Error('missing assistant stop receipt')
       setTurns(current => current?.some(turn => turn.request_id === sourceId)
         ? current.map(turn => turn.request_id === sourceId ? data : turn) : [...(current || []), data])
       setPendingServerRequest(request => request?.request_id === sourceId ? undefined : request)
       setProgress(current => current?.request_id === sourceId ? undefined : current)
       if (pendingServerRequest?.request_id === sourceId) setPendingQuestion(undefined)
-      if (pendingServerRequest?.request_id === sourceId || activeRequestId === sourceId || steeringFor === sourceId) {
+      if (pendingServerRequest?.request_id === sourceId || activeRequestId === sourceId) {
         setPendingInstructions([])
       }
-      if (activeRequestId === sourceId || steeringFor === sourceId) {
+      if (activeRequestId === sourceId) {
         stoppedRequest.current = sourceId
         activeRequest.current?.cancel()
         pending.current = undefined
@@ -542,7 +489,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   }
 
   const decideLayout = async (sourceId: string, action: 'approve' | 'reject') => {
-    const { data } = await Canvases.canvasAssistantDecideLayout({
+    const { data } = await canvasChat.layout({
       projectId, canvasId, sourceId, requestBody: { action },
     })
     if (!data) throw new Error('missing assistant layout decision')
@@ -584,56 +531,20 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     return accepted
   }
 
-  const steer = async (sourceId: string, text: string) => {
-    const previous = retryInstruction.current
-    const body = previous?.sourceId === sourceId && previous.body.text === text ? previous.body :
-      { request_id: crypto.randomUUID(), text }
-    retryInstruction.current = { sourceId, body }
-    setSteeringFor(sourceId)
-    setSendError(undefined)
-    setConfirmationHint(undefined)
-    try {
-      const { data } = await Canvases.canvasAssistantSteer({ canvasId, projectId, sourceId, requestBody: body })
-      if (!data) throw new Error('missing supplemental instruction receipt')
-      retryInstruction.current = undefined
-      setPendingInstructions([])
-      setSendError(undefined)
-      setDraft(current => current.trim() === text ? '' : current)
-      if (data.question) {
-        setPendingQuestion(data.question)
-        setPendingServerRequest({ request_id: data.request_id, text: data.text })
-      } else {
-        setTurns(current => appendExchange(current || [], data))
-      }
-    } catch (error) {
-      if (stoppedRequest.current !== sourceId) {
-        setConfirmationHint(error instanceof ApiError && error.status === 409
-          ? uiText('本轮已结束或正在等待回答，补充指令未接收。') : uiText('暂未核实补充指令，请重试。'))
-      }
-    } finally {
-      setSteeringFor(undefined)
-    }
-  }
-
-  const send = async (resume?: CanvasAssistantMessage, enqueue = false, replan = false) => {
+  const send = async (resume?: CanvasAssistantMessage, replan = false) => {
     const text = (resume?.text ?? draft).trim()
-    if (!resume && !enqueue && /^(按此方案继续|写入画布|送审)[。！!]?$/.test(text)) {
+    if (!resume && /^(按此方案继续|写入画布|送审)[。！!]?$/.test(text)) {
       const latest = turns ? turns[turns.length - 1] : undefined
       if (latest?.preview && !latest.stopped && !turns?.some(turn => turn.submitted_preview_id === latest.preview?.id)) {
         resume = { request_id: crypto.randomUUID(), text, submit_preview_id: latest.preview.id,
           context: { ...readDraft(), scope: 'canvas' } }
       }
     }
-    if (draftStreamId || draftPromoting || (enqueue && queueBusy) || savingModel || savingApproval || uploadingReference || !turns || !text) return
-    const intent = resume || enqueue ? undefined : confirmationKind(text)
-    const replyInProgress = sendingNow.current || !!runningId
-    if (!enqueue && replyInProgress && !intent) {
-      if (!localDraft && !resume && runningId && supplementing) await steer(runningId, text)
-      return
-    }
-    if (replyInProgress && intent === 'revise') return
-    let revision = enqueue ? undefined : revising
-    let fieldRevision = enqueue ? undefined : revisingField
+    if (draftStreamId || draftPromoting || savingModel || savingApproval || uploadingReference || !turns || !text) return
+    const intent = resume ? undefined : confirmationKind(text)
+    if (sendingNow.current || runningId || pendingQuestion) return
+    let revision = revising
+    let fieldRevision = revisingField
     if (intent) {
       const candidates = turns.filter(turn => !turn.stopped && turn.proposal &&
         (turn.proposal.state ?? 'pending') === 'pending' &&
@@ -644,7 +555,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       const highlighted = candidates.filter(turn => checked(turn).length)
       const target = candidates.length === 1 ? candidates[0] : highlighted.length === 1 ? highlighted[0] : undefined
       if (!target?.proposal) {
-        if (intent !== 'write' || candidates.length || replyInProgress) {
+        if (intent !== 'write' || candidates.length) {
           setConfirmationHint(candidates.length
             ? uiText('有多份待审批建议，请先勾选要确认的建议，或使用该建议的确认按钮。')
             : uiText('当前没有可以确认的修改建议，请核对最新对话。'))
@@ -666,10 +577,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           setConfirmationHint(uiText('请完成当前编辑并取得画布编辑权后再确认。'))
           return
         }
-        if (!replyInProgress) {
-          sendingNow.current = true
-          setSending(true)
-        }
+        sendingNow.current = true
+        setSending(true)
         setConfirmationHint(undefined)
         try {
           if (!await approveProposal(target.request_id, available ? groups : undefined)) throw new Error('approval failed')
@@ -678,15 +587,13 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         } catch {
           setConfirmationHint(uiText('未能完成审批，请核对画布状态后重试。'))
         } finally {
-          if (!replyInProgress) {
-            sendingNow.current = false
-            setSending(false)
-          }
+          sendingNow.current = false
+          setSending(false)
         }
         return
       }
     }
-    if (!resume && ((!enqueue && pendingQuestion) || referenceIsMissing)) return
+    if (!resume && (pendingQuestion || referenceIsMissing)) return
     const useCurrentSelection = /(?:当前选区|当前选择)/.test(text)
     const explicitReferences = useCurrentSelection ? [] : referenceIds
     const crossCanvas = useCurrentSelection ? [] : Object.entries(externalReferences).filter(([, ids]) => ids.length)
@@ -699,8 +606,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         (!fieldRevision || group.id === fieldRevision.group_id))
         .flatMap(group => group.edits.filter(edit => edit.target.kind !== 'add_canvas_card').map(edit => edit.card_id)))]
       : revision?.proposal ? [revision.proposal.card_id] : []
-    const requestBody: CanvasAssistantMessage = resume ?? (enqueue && queuedRequest.current?.text === text
-      ? queuedRequest.current : !enqueue && pending.current?.text === text && pending.current.revises === revision?.request_id && pending.current.repairs === repairSource
+    const requestBody: CanvasAssistantMessage = resume ?? (pending.current?.text === text && pending.current.revises === revision?.request_id && pending.current.repairs === repairSource
       ? pending.current : {
           text,
           request_id: crypto.randomUUID(),
@@ -719,28 +625,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             ...readDraft(), scope: 'auto', card_ids: selectedCards,
           },
         })
-    if (enqueue) {
-      queuedRequest.current = requestBody
-      setQueueBusy(true)
-      setQueueError(false)
-      try {
-        const { data } = await Canvases.canvasAssistantEnqueue({ canvasId, projectId, requestBody })
-        if (!data) throw new Error('missing assistant queue receipt')
-        queuedRequest.current = undefined
-        setQueue(current => updateQueue(current, data))
-        setDraft(current => current.trim() === text ? '' : current)
-        setReferenceFiles([])
-        setCardReferences([])
-        setReferenceGroups([])
-        setExternalReferences({})
-        setExternalGroups({})
-      } catch {
-        setQueueError(true)
-      } finally {
-        setQueueBusy(false)
-      }
-      return
-    }
     const consumeDraft = !resume || (!!resume.submit_preview_id && draft.trim() === text) || (replan && pending.current === resume && draft.trim() === text)
     pending.current = requestBody
     if (consumeDraft) {
@@ -800,6 +684,12 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         throw error
       })
       if (!turn || stoppedRequest.current === requestBody.request_id) return
+      if (turn.progress?.streaming) {
+        setLiveRequest(requestBody)
+        setProgress(turn.progress)
+        setPendingServerRequest(requestBody)
+        return
+      }
       if (turn.question) {
         setPendingQuestion(turn.question)
         setPendingServerRequest(requestBody)
@@ -872,7 +762,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     setFailedReplyId(sourceId)
     setActiveRequestId(sourceId)
     try {
-      const request = Canvases.canvasAssistantAnswer({
+      const request = canvasChat.answer({
         canvasId, projectId, sourceId, requestBody: { question_id: pendingQuestion.id, answer },
       })
       activeRequest.current = request
@@ -895,24 +785,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       setActiveRequestId(undefined)
       sendingNow.current = false
       setSending(false)
-    }
-  }
-
-  const changeQueue = async (id: string, text?: string) => {
-    setQueueBusy(true)
-    setQueueError(false)
-    try {
-      const result = text === undefined
-        ? await Canvases.canvasAssistantRemoveQueue({ canvasId, projectId, requestId: id })
-        : await Canvases.canvasAssistantEditQueue({ canvasId, projectId, requestId: id, requestBody: { text } })
-      const item = result.data
-      if (!item) throw new Error('missing assistant queue receipt')
-      setQueue(current => updateQueue(current, item))
-      setQueueEditing(undefined)
-    } catch {
-      setQueueError(true)
-    } finally {
-      setQueueBusy(false)
     }
   }
 
@@ -1046,6 +918,10 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                 streaming={{ hasNextChunk: turn === liveTurn && !!progress?.streaming && !pendingQuestion }} />,
             },
           ]} />
+            {!!turn.tool_calls?.length && <details><summary>{uiText('工具调用')} · {turn.model_id}</summary>
+              {turn.tool_calls.map(call => <p key={call.id}>{call.name} · {uiText(call.state === 'failed' ? '失败' : call.state === 'completed' ? '已完成' : '运行中')}
+                {Object.entries(call.parameters ?? {}).map(([key, value]) => <span key={key}> · {key}={value}</span>)}</p>)}
+            </details>}
             {!!turn.attachments?.length && <CanvasAssistantEvidence attachments={turn.attachments} />}
             {!!turn.proposal_issues?.length && <details open className="canvas-assistant-evidence">
               <summary>{uiText('待修正的画布操作')}</summary>
@@ -1084,7 +960,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           {turn.generation && <AssistantGeneration generation={turn.generation}
             openRun={runId => { close(); openRun(runId) }} cancelRun={cancelRun} approvalDisabled={approvalDisabled}
             reapprove={async requestBody => {
-              const { data } = await Canvases.canvasAssistantReapproveGeneration({
+              const { data } = await canvasChat.generation({
                 projectId, canvasId, sourceId: turn.request_id, requestBody,
               })
               if (!data) throw new Error('missing generation approval receipt')
@@ -1206,11 +1082,12 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
               item?.querySelector('[aria-label="' + CSS.escape(label) + '"]')?.scrollIntoView({ block: 'nearest' })
             }} />}
         </article>)}
+        {progress?.tool_call && <p role="status">{uiText('工具调用')} · {progress.model_id} · {progress.tool_call.name}</p>}
         {!!pendingInstructions.length && <div role="status">
           <strong>{uiText('本轮已接收补充指令')}</strong>
           <ul>{pendingInstructions.map(instruction => <li key={instruction.request_id}>{instruction.text}</li>)}</ul>
         </div>}
-        {!pendingQuestion && (sending || steeringFor || progress?.streaming) && <div role="status">
+        {!pendingQuestion && (sending || progress?.streaming) && <div role="status">
           {(!liveTurn || progress?.phase === 'generating_proposal' || progress?.phase === 'validating_proposal') && <Think className="canvas-assistant-wait"
             loading blink expanded={thinkingExpanded} onExpand={setThinkingExpanded}
             title={<button type="button" className="canvas-assistant-think-toggle" aria-expanded={thinkingExpanded}
@@ -1246,9 +1123,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
               </section>)}
             </div> },
         ]} />}</div>}
-        {runningId && !showStop && <WorkbenchButton variant="quiet" loading={stopping === runningId}
-          onClick={() => { void stopTurn(runningId) }}>{uiText("停止助手")}</WorkbenchButton>}
-        {!activeRequestId && !steeringFor && pendingServerRequest && <div>
+        {!activeRequestId && pendingServerRequest && <div>
           {pendingQuestion ? <form aria-label={uiText('创作问题')} onSubmit={event => {
             event.preventDefault(); void answerQuestion(questionAnswer)
           }}>
@@ -1279,31 +1154,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             setRevising(undefined); setRevisingField(undefined); pending.current = undefined
           }}>{uiText("取消修订")}</WorkbenchButton>
         </div>}
-        {!!queue.length && <section aria-label={uiText('下一轮队列')}>
-          <strong>{uiText('下一轮队列')}</strong>
-          <ul>{queue.map(item => <li key={item.request_id}>
-            {queueEditing?.id === item.request_id ? <>
-              <Input aria-label={uiText('修改排队消息')} value={queueEditing.text} maxLength={16000}
-                onChange={event => setQueueEditing({ id: item.request_id, text: event.target.value })} />
-              <WorkbenchButton variant="quiet" disabled={!queueEditing.text.trim() || queueBusy || item.state !== 'queued'}
-                onClick={() => { void changeQueue(item.request_id, queueEditing.text) }}>{uiText('保存')}</WorkbenchButton>
-              <WorkbenchButton variant="quiet" onClick={() => setQueueEditing(undefined)}>{uiText('取消')}</WorkbenchButton>
-            </> : <>
-              <span>{item.message.text}</span>
-              {item.state === 'queued' ? <>
-                <WorkbenchButton variant="quiet" disabled={queueBusy}
-                  onClick={() => setQueueEditing({ id: item.request_id, text: item.message.text })}>{uiText('编辑')}</WorkbenchButton>
-                <WorkbenchButton variant="quiet" disabled={queueBusy}
-                  onClick={() => { void changeQueue(item.request_id) }}>{uiText('移除')}</WorkbenchButton>
-              </> : <>
-                <small>{uiText('已开始处理')}</small>
-                {item.turn_id && <WorkbenchButton variant="quiet" loading={stopping === item.turn_id}
-                  onClick={() => { if (item.turn_id) void stopTurn(item.turn_id) }}>{uiText('停止排队任务')}</WorkbenchButton>}
-              </>}
-            </>}
-          </li>)}</ul>
-        </section>}
-        {queueError && <Alert type="warning" message={uiText('暂时无法更新助手队列')} />}
         {confirmationHint && <Alert type="warning" message={confirmationHint} />}
         {sendError && !replyRecovered && <Alert type="error" message={sendError === 'tools'
           ? uiText("当前模型无法调用画布工具。切换支持提出画布修改的模型后，发送同一消息即可接续。")
@@ -1317,7 +1167,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           : sendError === 'model' ? uiText('模型处理失败，可以继续本轮或切换模型。')
             : uiText("未收到助手回复，请检查助手模型后重试")}
           action={sendError === 'proposal' && (pendingServerRequest || pending.current) && <WorkbenchButton
-            variant="quiet" disabled={!!runningId} onClick={() => { void send(pendingServerRequest ?? pending.current, false, true) }}>
+            variant="quiet" disabled={!!runningId} onClick={() => { void send(pendingServerRequest ?? pending.current, true) }}>
             {uiText('重新规划提案')}
           </WorkbenchButton>} />}
         <CanvasAssistantAttachments projectId={projectId} files={referenceFiles} uploading={uploadingReference}
@@ -1395,7 +1245,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                 <Sender aria-label={uiText("给画布助手发消息")} value={draft}
                   placeholder={uiText("输入问题，或输入 / 查看提问建议")}
                   className="canvas-assistant-sender" suffix={false}
-                  autoSize={{ minRows: 2, maxRows: 4 }} disabled={draftPromoting}
+                  autoSize={{ minRows: 2, maxRows: 4 }} disabled={draftPromoting || !!runningId || sending || !!pendingQuestion}
                   onChange={value => {
                     updateDraft(value.slice(0, 16000))
                     if (value === '/' || suggestionsOpen) onTrigger(value === '/' ? undefined : false)
@@ -1455,10 +1305,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
               )}
             </Suggestion>
             {modelError && <span role="alert">{uiText("无法读取或切换助手模型")}</span>}
-            {!localDraft && (runningId || pendingServerRequest || queue.length > 0) && !!draftText &&
-              <WorkbenchButton className="canvas-assistant-queue-action" variant="quiet"
-                disabled={queueBusy || draftPromoting || !turns || referenceIsMissing}
-                onClick={() => { void send(undefined, true) }}>{uiText('排到下一轮')}</WorkbenchButton>}
             <div className="canvas-assistant-footer">
               {add}
               <Select className="canvas-assistant-approval" variant="borderless"
@@ -1482,11 +1328,11 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                       disabled: !model.effective_capabilities?.text_inputs || !model.effective_capabilities?.text_outputs,
                     })),
                   ]} />
-                {showStop && runningId ? <WorkbenchIconButton className="canvas-assistant-primary"
+                {runningId ? <WorkbenchIconButton className="canvas-assistant-primary"
                   label={uiText('停止回复')} title={uiText('停止回复')} tooltipOpen={false} icon={<StopOutlined />} variant="primary" loading={stopping === runningId}
                   onClick={() => { void stopTurn(runningId) }} />
                   : <WorkbenchIconButton className="canvas-assistant-primary"
-                    label={sendLabel} title={sendLabel} tooltipOpen={false} icon={<ArrowUpOutlined />}
+                    label={uiText("发送消息")} title={uiText("发送消息")} tooltipOpen={false} icon={<ArrowUpOutlined />}
                     htmlType="submit" variant="primary"
                     disabled={!canSend} />}
               </div>

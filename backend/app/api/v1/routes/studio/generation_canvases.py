@@ -16,7 +16,7 @@ from app.services.generation_canvas.lifecycle import canvas_lifecycle, free_canv
 from app.services.generation_canvas.edits import canvas_edits, free_canvas_edits
 from app.services.generation_canvas.generation_inputs import canvas_generation_inputs
 from app.schemas.canvas_assistant import (
-    CanvasAssistantEventPayload, CanvasAssistantInstruction, CanvasAssistantQuestionAnswer, CanvasAssistantQueuedText, CanvasAssistantQueueItem,
+    CanvasAssistantEventPayload, CanvasAssistantQuestionAnswer,
 )
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposalDecision, CanvasAssistantProposalResult
 from app.services.generation_canvas.assistant import CanvasAssistant
@@ -132,46 +132,6 @@ async def set_assistant_approval(canvas_id: str, body: CanvasAssistantApprovalSe
                                  db: AsyncSession = Depends(get_db, scope='function')):
     """Set the assistant approval mode for this canvas."""
     return success_response(await CanvasAssistant(db, project_id).set_approval(canvas_id, body))
-
-
-@router.post('/{canvas_id}/assistant/queue', response_model=ApiResponse[CanvasAssistantQueueItem],
-             operation_id='canvas_assistant_enqueue')
-async def enqueue_assistant_message(canvas_id: str, body: CanvasAssistantMessage, project_id: str = '',
-                                    db: AsyncSession = Depends(get_db, scope='function')):
-    """Save an editable message for a future turn."""
-    return success_response(await CanvasAssistant(db, project_id).enqueue(canvas_id, body))
-
-
-@router.patch('/{canvas_id}/assistant/queue/{request_id}', response_model=ApiResponse[CanvasAssistantQueueItem],
-              operation_id='canvas_assistant_edit_queue')
-async def edit_assistant_queue(canvas_id: str, request_id: str, body: CanvasAssistantQueuedText, project_id: str = '',
-                               db: AsyncSession = Depends(get_db, scope='function')):
-    """Change the text of a message before it is admitted."""
-    return success_response(await CanvasAssistant(db, project_id).change_queue_item(canvas_id, request_id, body.text))
-
-
-@router.delete('/{canvas_id}/assistant/queue/{request_id}', response_model=ApiResponse[CanvasAssistantQueueItem],
-               operation_id='canvas_assistant_remove_queue')
-async def remove_assistant_queue(canvas_id: str, request_id: str, project_id: str = '',
-                                 db: AsyncSession = Depends(get_db, scope='function')):
-    """Remove an item that has not started."""
-    return success_response(await CanvasAssistant(db, project_id).change_queue_item(canvas_id, request_id, None))
-
-
-@router.post('/{canvas_id}/assistant/queue/{request_id}/run', response_model=ApiResponse[CanvasAssistantExchange | None],
-             operation_id='canvas_assistant_run_queue')
-async def run_assistant_queue(canvas_id: str, request_id: str, project_id: str = '',
-                              db: AsyncSession = Depends(get_db, scope='function')):
-    """Start the next item once the current turn has finished."""
-    return success_response(await CanvasAssistant(db, project_id).run_queued(canvas_id, request_id))
-
-
-@router.post('/{canvas_id}/assistant/turns/{source_id}/steer', response_model=ApiResponse[CanvasAssistantExchange],
-             operation_id='canvas_assistant_steer')
-async def steer_assistant_turn(canvas_id: str, source_id: str, body: CanvasAssistantInstruction,
-                               project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
-    """Redirect the running assistant turn with a user instruction."""
-    return success_response(await CanvasAssistant(db, project_id).steer(canvas_id, source_id, body))
 
 
 @router.post('/{canvas_id}/assistant/turns/{source_id}/answer', response_model=ApiResponse[CanvasAssistantExchange],

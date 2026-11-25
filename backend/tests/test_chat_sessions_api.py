@@ -90,3 +90,7 @@ async def test_read_card_tool_is_identified_before_reply(canvas_client, monkeypa
     assert [(e['type'], e['payload']['progress']['tool_call']['id']) for e in tool_events] == [
         ('tool.started', 'read-note'), ('tool.completed', 'read-note')]
     assert tool_events[-1]['cursor'] < events[-1]['cursor']
+    snapshot = (await canvas_client.get(url)).json()['data']
+    tool, = snapshot['turns'][0]['tool_calls']
+    assert (tool['id'], tool['name'], tool['state']) == ('read-note', 'read_canvas', 'completed')
+    assert snapshot['turns'][0]['model_id'] == 'canvas-text'
