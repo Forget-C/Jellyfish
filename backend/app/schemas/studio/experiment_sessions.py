@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.media_task import MediaTaskReceipt
 
-LabType = Literal["text", "image", "video"]
+LabType = Literal["chat", "text", "image", "video"]
 MessageRole = Literal["user", "assistant", "task"]
 
 

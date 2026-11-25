@@ -21,6 +21,8 @@ class ExperimentSession(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="会话 ID")
     lab_type: Mapped[str] = mapped_column(String(16), nullable=False, index=True, comment="实验室类型：text/image/video")
     title: Mapped[str] = mapped_column(String(255), nullable=False, default="新会话", comment="用户可见会话标题")
+    chat_models: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    active_turn: Mapped[str | None] = mapped_column(String(64), nullable=True)
     message_sequence: Mapped[int] = mapped_column(
         Integer,
         nullable=False,

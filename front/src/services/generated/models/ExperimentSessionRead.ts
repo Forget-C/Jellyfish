@@ -7,7 +7,7 @@
  */
 export type ExperimentSessionRead = {
     id: string;
-    lab_type: 'text' | 'image' | 'video';
+    lab_type: 'chat' | 'text' | 'image' | 'video';
     title: string;
     created_at: string;
     updated_at: string;

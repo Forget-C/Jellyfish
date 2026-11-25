@@ -43,7 +43,7 @@ export class StudioExperimentSessionsService {
     public static listExperimentSessionsApiV1StudioExperimentSessionsGet({
         labType,
     }: {
-        labType: 'text' | 'image' | 'video',
+        labType: 'chat' | 'text' | 'image' | 'video',
     }): CancelablePromise<ApiResponse_list_ExperimentSessionRead__> {
         return __request(OpenAPI, {
             method: 'GET',

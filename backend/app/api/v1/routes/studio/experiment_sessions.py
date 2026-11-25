@@ -113,7 +113,7 @@ async def delete_experiment_session(session_id: str, db: AsyncSession = Depends(
     if session is None:
         raise HTTPException(status_code=404, detail="Experiment session not found")
     has_task = await has_active_experiment_tasks(db, session_id)
-    if has_task:
+    if session.active_turn or has_task:
         raise HTTPException(status_code=409, detail="Session with generation tasks cannot be deleted")
     await db.delete(session)
     await db.commit()
@@ -126,10 +126,11 @@ async def clear_experiment_messages(session_id: str, db: AsyncSession = Depends(
 
     P2 的保留策略落地前维持物理删除；后续归档策略不能影响运行中任务保护。
     """
-    if await db.get(ExperimentSession, session_id, with_for_update=True) is None:
+    session = await db.get(ExperimentSession, session_id, with_for_update=True)
+    if session is None:
         raise HTTPException(status_code=404, detail="Experiment session not found")
     has_task = await has_active_experiment_tasks(db, session_id)
-    if has_task:
+    if session.active_turn or has_task:
         raise HTTPException(status_code=409, detail="Session with generation tasks cannot be cleared")
     await db.execute(delete(ExperimentSessionEvent).where(ExperimentSessionEvent.session_id == session_id))
     rows = (await db.execute(select(ExperimentMessage).where(ExperimentMessage.session_id == session_id))).scalars().all()

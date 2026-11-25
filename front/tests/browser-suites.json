@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "lab-multimodal-chat": { "file": "labChat.browser.mjs", "ports": [4917], "timeoutMs": 90000 },
     "canvas-assistant-journey": { "file": "canvasAssistant.browser.mjs", "ports": [4462, 8462], "timeoutMs": 240000 },
     "canvas-assistant-media": { "file": "canvasAssistantMedia.browser.mjs", "ports": [4464, 8464], "timeoutMs": 180000 },
     "canvas-locale": { "file": "canvasLocale.browser.mjs", "ports": [4689, 8689], "timeoutMs": 180000 },
@@ -178,7 +179,7 @@
     "management-ui": ["resource-editor","image-source","asset-detail", "provider-management", "model-management", "runtime-settings", "management-assets", "prompt-management", "file-management", "agent-management"],
     "home-project-layout": ["appearance-preferences", "home-activity", "project-lobby", "project-overview", "project-chapters-ui", "project-actors", "project-roles", "project-resources", "project-files", "project-settings", "management-navigation", "lab-navigation", "legacy-labs"],
 
-    "lab-ui": ["lab-composer", "lab-navigation", "lab-template-configuration", "lab-image-references", "lab-video-references", "lab-results", "lab-submission-recovery", "lab-draft-guard"],
+    "lab-ui": ["lab-multimodal-chat", "lab-composer", "lab-navigation", "lab-template-configuration", "lab-image-references", "lab-video-references", "lab-results", "lab-submission-recovery", "lab-draft-guard"],
     "sound-constraint": ["generation-canvas-sound-constraints", "generation-canvas-sound", "generation-canvas-continuity", "generation-canvas-guidance"],
     "performance-design": ["generation-canvas-narrative-spatial-objects", "generation-canvas-performance", "generation-canvas-spatial", "generation-canvas-performance-designs"],
     "canvas-design": ["generation-canvas-associations","generation-canvas-design-focus","generation-canvas-multipath-protection","generation-canvas-candidate-states","generation-canvas-design-names","generation-canvas-design-metadata","generation-canvas-design-relations", "generation-canvas-carried-video", "generation-canvas-carried-images", "generation-canvas-design-references", "generation-canvas-frame-targets", "generation-canvas-movement", "generation-canvas-composition", "generation-canvas-static-designs", "generation-canvas-design-editor", "generation-canvas-visual-presets", "generation-canvas-photography", "generation-canvas-photography-card", "generation-canvas-director-modal"],

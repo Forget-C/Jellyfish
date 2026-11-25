@@ -269,7 +269,7 @@ try {
   await imageInput.waitFor()
   await page.goBack()
   await page.waitForURL(origin + '/lab')
-  await textInput.waitFor()
+  await page.getByRole('textbox', {name: '聊天消息'}).waitFor()
   hideHistory = false
 
   failHistory = true

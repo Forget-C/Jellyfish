@@ -13,6 +13,7 @@ from app.api.v1.routes.studio import (
     home,
     generation_tasks,
     lab_generation_tasks,
+    lab_chat,
     generation_prompts,
     projects,
     prompts,
@@ -24,6 +25,7 @@ router = APIRouter()
 
 router.include_router(directing.router)
 router.include_router(lab_generation_tasks.chat_router, prefix="/chat/sessions", tags=["chat"])
+router.include_router(lab_chat.router, prefix="/chat/sessions/lab", tags=["chat"])
 router.include_router(chat_sessions.router, prefix="/chat/sessions", tags=["chat"])
 
 router.include_router(projects.router, prefix="/projects", tags=["studio/projects"])
