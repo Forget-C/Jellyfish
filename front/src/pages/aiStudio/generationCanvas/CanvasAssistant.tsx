@@ -5,7 +5,7 @@ import { XMarkdown } from '@ant-design/x-markdown'
 import { Sender, Suggestion, Think, ThoughtChain } from '@ant-design/x'
 import { WorkbenchConversation } from '../../../components/workbench/WorkbenchConversation'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
-import { canvasChat } from '../../../services/chatSession'
+import { canvasChat, draftChat } from '../../../services/chatSession'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasDocument, CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantFieldRevision, CanvasAssistantGroupReference, CanvasAssistantHistory, CanvasAssistantInstruction, CanvasAssistantLayout, CanvasAssistantMessage, CanvasAssistantProgress, CanvasAssistantQuestion, FileRead, ModelRead } from '../../../services/generated'
 import { AssistantEditGroups, AssistantProposal, groupIsPending } from './AssistantProposal'
@@ -344,54 +344,58 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   useEffect(() => {
     if (!open || !localDraft || !draftStreamId) return
     let active = true
-    let loading = false
+    const abort = new AbortController()
     let missingSince = 0
-    const poll = async () => {
-      if (loading) return
-      loading = true
-      try {
-        const { data } = await Canvases.canvasDraftAssistantReply({ canvasId, sourceId: draftStreamId })
-        const saved = readDraftAssistant(canvasId)
-        if (!active || !data || saved.live?.id !== draftStreamId) return
-        missingSince = 0
-        if (data.state === 'running') {
-          writeDraftAssistant(canvasId, { live: { ...saved.live, turn: data.turn } })
-          setLiveRequest(data.turn)
-          setProgress({
-            ...data.turn.progress, request_id: data.turn.request_id, model_id: data.turn.model_id,
-            reply: data.turn.reply, streaming: true,
-          })
-        } else {
-          const updated = data.state === 'interrupted' ? saved.turns : appendExchange(saved.turns, data.turn)
-          writeDraftAssistant(canvasId, { turns: updated, live: undefined })
-          setTurns(updated)
-          if (data.state === 'interrupted') setSendError(assistantSendError(data.turn.error_code))
-          setProgress(undefined)
-          setDraftStreamId(undefined)
-          draftingAssistantReply.delete(canvasId)
+    const watch = async () => {
+      let cursor = 0
+      while (active) {
+        try {
+          for await (const event of draftChat.events(canvasId, draftStreamId, cursor, abort.signal)) {
+            cursor = event.cursor
+            const data = {state: event.type === 'turn.failed' ? 'interrupted' :
+              event.type === 'turn.completed' ? 'completed' : event.type === 'turn.stopped' ? 'stopped' : 'running', turn: event.canvas}
+            const saved = readDraftAssistant(canvasId)
+            if (!active || !data || saved.live?.id !== draftStreamId) return
+            missingSince = 0
+            if (data.state === 'running') {
+              writeDraftAssistant(canvasId, { live: { ...saved.live, turn: data.turn } })
+              setLiveRequest(data.turn)
+              setProgress({
+                ...data.turn.progress, request_id: data.turn.request_id, model_id: data.turn.model_id,
+                reply: data.turn.reply, streaming: true,
+              })
+            } else {
+              const updated = data.state === 'interrupted' ? saved.turns : appendExchange(saved.turns, data.turn)
+              writeDraftAssistant(canvasId, { turns: updated, live: undefined })
+              setTurns(updated)
+              if (data.state === 'interrupted') setSendError(assistantSendError(data.turn.error_code))
+              setProgress(undefined)
+              setDraftStreamId(undefined)
+              draftingAssistantReply.delete(canvasId)
+              return
+            }
+          }
+        } catch (error) {
+          const live = readDraftAssistant(canvasId).live
+          if (!(error instanceof ApiError) || error.status !== 404) missingSince = 0
+          else if (!missingSince) missingSince = Date.now()
+          if (active && live?.id === draftStreamId && missingSince && Date.now() - missingSince > 15000) {
+            const saved = readDraftAssistant(canvasId)
+            const updated = live.turn?.reply ? appendExchange(saved.turns, live.turn) : saved.turns
+            writeDraftAssistant(canvasId, { live: undefined, turns: updated })
+            setTurns(updated)
+            setSendError('reply')
+            setProgress(undefined)
+            setDraftStreamId(undefined)
+            draftingAssistantReply.delete(canvasId)
+          }
         }
-      } catch (error) {
-        const live = readDraftAssistant(canvasId).live
-        if (!(error instanceof ApiError) || error.status !== 404) missingSince = 0
-        else if (!missingSince) missingSince = Date.now()
-        if (active && live?.id === draftStreamId && missingSince && Date.now() - missingSince > 15000) {
-          const saved = readDraftAssistant(canvasId)
-          const updated = live.turn?.reply ? appendExchange(saved.turns, live.turn) : saved.turns
-          writeDraftAssistant(canvasId, { live: undefined, turns: updated })
-          setTurns(updated)
-          setSendError('reply')
-          setProgress(undefined)
-          setDraftStreamId(undefined)
-          draftingAssistantReply.delete(canvasId)
-        }
-      } finally {
-        loading = false
+        if (active) await new Promise(resolve => setTimeout(resolve, 300))
       }
     }
     draftingAssistantReply.add(canvasId)
-    void poll()
-    const timer = window.setInterval(() => void poll(), 300)
-    return () => { active = false; window.clearInterval(timer) }
+    void watch()
+    return () => { active = false; abort.abort() }
   }, [open, localDraft, canvasId, draftStreamId, setTurns])
 
   useEffect(() => {
@@ -450,7 +454,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     setStopError(false)
     try {
       if (localDraft) {
-        const { data } = await Canvases.canvasDraftAssistantStop({ canvasId, sourceId })
+        const { data } = await draftChat.stop({ canvasId, sourceId })
         if (!data) throw new Error('missing draft stop receipt')
         const updated = appendExchange(readDraftAssistant(canvasId).turns, data.turn)
         writeDraftAssistant(canvasId, { live: undefined, turns: updated })
@@ -649,7 +653,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     }
     try {
       const request = localDraft
-        ? Canvases.canvasDraftAssistantSend({ canvasId, requestBody: {
+        ? draftChat.send({ canvasId, requestBody: {
           ...requestBody, turns: readDraftAssistant(canvasId).turns, model_id: modelId,
         } })
         : canvasChat.send({ canvasId, projectId, requestBody })
@@ -662,7 +666,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         const { request_id: sourceId } = requestBody
         if (stoppedRequest.current === sourceId) return undefined
         if (localDraft) {
-          const receipt = await Canvases.canvasDraftAssistantReply({ canvasId, sourceId }).catch(() => undefined)
+          const receipt = await draftChat.snapshot({ canvasId, sourceId }).catch(() => undefined)
           if (receipt?.data?.state === 'completed') return receipt.data.turn
           if (receipt?.data?.state === 'running' || receipt?.data?.state === 'stopped') return undefined
         } else {

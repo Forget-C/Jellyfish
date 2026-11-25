@@ -64,7 +64,7 @@
 - [画布能力协议与独立审批](adr/0018-canvas-capabilities-and-approval.md)
 - [通过 MCP 暴露统一画布协议](adr/0019-unified-canvas-mcp.md)
 - [模型供应商协议与能力声明](adr/0020-model-provider-protocol.md)
-- [实验室多模态聊天与单模态试模（已决策，待实施）](adr/0021-experiment-chat-and-model-trials.md)
+- [实验室多模态聊天与单模态试模](adr/0021-experiment-chat-and-model-trials.md)
 
 ## 开发与维护指南
 

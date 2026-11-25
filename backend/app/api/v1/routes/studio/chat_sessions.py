@@ -1,5 +1,6 @@
 """Public session operations for the canvas chat profile."""
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -7,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.api.v1.routes.studio import generation_canvases as canvas_routes
 from app.dependencies import get_db
 from app.schemas.canvas_assistant import CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage
+from app.schemas.canvas_assistant_draft import DraftAssistantReply
+from app.services.generation_canvas.assistant_draft import draft_reply_events
 from app.schemas.common import ApiResponse, success_response
 from app.services.chat.stream import session_event_stream
 from app.services.generation_canvas.assistant import CanvasAssistant
@@ -53,3 +56,20 @@ router.add_api_route('/canvas/{canvas_id}/layout/{source_id}', canvas_routes.dec
                      methods=['POST'], response_model=ApiResponse[canvas_routes.CanvasAssistantLayout], operation_id='chat_canvas_layout')
 router.add_api_route('/canvas/{canvas_id}/generations/{source_id}/approval', canvas_routes.reapprove_canvas_generation,
                      methods=['POST'], response_model=ApiResponse[canvas_routes.CanvasAssistantGenerationRead], operation_id='chat_canvas_generation')
+
+router.add_api_route('/draft/{canvas_id}/turns', canvas_routes.send_draft_assistant_message, methods=['POST'],
+                     response_model=ApiResponse[CanvasAssistantExchange], operation_id='chat_draft_send')
+router.add_api_route('/draft/{canvas_id}/turns/{source_id}', canvas_routes.read_draft_reply, methods=['GET'],
+                     response_model=ApiResponse[DraftAssistantReply], operation_id='chat_draft_snapshot')
+router.add_api_route('/draft/{canvas_id}/turns/{source_id}/stop', canvas_routes.stop_draft_reply, methods=['POST'],
+                     response_model=ApiResponse[DraftAssistantReply], operation_id='chat_draft_stop')
+
+
+@router.get('/draft/{canvas_id}/turns/{source_id}/events', operation_id='chat_draft_events',
+            responses={200: {'content': {'text/event-stream': {}}}})
+async def draft_events(canvas_id: UUID, source_id: str, after: Annotated[int, Query(ge=0)] = 0, follow: bool = True,
+                       last_event_id: Annotated[int, Header(ge=0)] = 0):
+    """Subscribe to an unsaved draft without creating a canvas."""
+    async def read_page(cursor):
+        return draft_reply_events(str(canvas_id), source_id, cursor)
+    return await session_event_stream(read_page, max(after, last_event_id), follow=follow)

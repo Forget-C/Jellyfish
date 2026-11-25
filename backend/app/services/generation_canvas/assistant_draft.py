@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.models.canvas_assistant import CanvasAssistantSession, CanvasAssistantTurn
 from app.models.generation_canvas import GenerationCanvas
+from app.schemas.interaction import InteractionEvent
 from app.schemas.canvas_assistant import CanvasAssistantExchange, CanvasAssistantProgress
 from app.schemas.canvas_assistant_draft import CanvasDraftSave, DraftAssistantMessage, DraftAssistantReply
 from app.schemas.generation_canvas import CanvasDocument
@@ -42,12 +43,25 @@ def draft_reply_snapshot(canvas_id, request_id, *, stop=False):
     record = _draft_replies.get((canvas_id, request_id))
     if record is None:
         raise HTTPException(404, 'Draft reply unavailable')
-    snapshot, task, _ = record
+    snapshot, task, _, _ = record
     if stop and snapshot.state == 'running':
         snapshot.turn.stopped = True
         snapshot.state = 'stopped'
+        record[3] += 1
         task.cancel()
     return snapshot
+
+
+def draft_reply_events(canvas_id, request_id, after):
+    """A draft's latest complete prefix replaces earlier prefixes on reconnect."""
+    snapshot = draft_reply_snapshot(canvas_id, request_id)
+    cursor = _draft_replies[(canvas_id, request_id)][3]
+    if after >= cursor:
+        return []
+    kind = {'running': 'message.updated', 'completed': 'turn.completed',
+            'stopped': 'turn.stopped', 'interrupted': 'turn.failed'}[snapshot.state]
+    return [InteractionEvent(session_id=canvas_id, turn_id=request_id, cursor=cursor, type=kind,
+                             payload=snapshot.turn)]
 
 
 class DraftCanvasAssistant(CanvasAssistant):
@@ -133,7 +147,7 @@ class DraftCanvasAssistant(CanvasAssistant):
         key = canvas_id, command.request_id
         digest = sha256(command.model_dump_json().encode()).digest()
         if existing := _draft_replies.get(key):
-            snapshot, _, original = existing
+            snapshot, _, original, _ = existing
             if digest != original or snapshot.state == 'running':
                 raise HTTPException(409, 'Draft assistant request already active or changed')
             if snapshot.state != 'interrupted':
@@ -143,6 +157,8 @@ class DraftCanvasAssistant(CanvasAssistant):
                     content + '\n\n' + PROPOSAL_RETRY_GUIDANCE if isinstance(content, str)
                     else [*content, {'type': 'text', 'text': PROPOSAL_RETRY_GUIDANCE}]
                 ))
+        if any(record[0].state == 'running' for (draft_id, _), record in _draft_replies.items() if draft_id == canvas_id):
+            raise HTTPException(409, 'Draft turn active')
         snapshot = DraftAssistantReply(state='running', turn=CanvasAssistantExchange(
             request_id=command.request_id, text=command.text, model_id=model_id, sequence=len(turns) + 1, reply='',
             progress=CanvasAssistantProgress(request_id=command.request_id, model_id=model_id, streaming=True),
@@ -150,14 +166,17 @@ class DraftCanvasAssistant(CanvasAssistant):
 
         async def publish(text):
             snapshot.turn.reply = text
+            snapshot.turn.progress.reply = text
+            record[3] += 1
 
         async def publish_phase(phase):
             progress = snapshot.turn.progress
+            record[3] += 1
             progress.phase = phase
             progress.phase_started_at[phase] = datetime.now(UTC)
 
         task = asyncio.create_task(complete(publish, publish_phase, lambda: snapshot.turn.reply))
-        record = snapshot, task, digest
+        record = [snapshot, task, digest, 1]
         _draft_replies[key] = record
 
         def expire():
@@ -179,6 +198,7 @@ class DraftCanvasAssistant(CanvasAssistant):
             snapshot.turn.error_code = MODEL_FAILED
             raise
         finally:
+            record[3] += 1
             asyncio.get_running_loop().call_later(900, expire)
         return snapshot.turn
 

@@ -15,8 +15,8 @@ from app.models.experiment_sessions import ExperimentSessionEvent, ExperimentMes
 from app.models.llm import ModelCategoryKey, ModelSettings
 from app.schemas.studio.lab_chat import LabChatCommand, LabChatSnapshot, LabModels
 from app.services.chat import turn_recovery
-from app.services.chat.artifact_revisions import ArtifactQuestionPending, historical_artifacts, revision_tool, user_turn
-from app.services.chat.media_tools import ChatTurnStopped, LaboratoryMediaTools
+from app.services.chat.artifact_revisions import ArtifactQuestionPending, historical_artifacts, revision_tool, user_turn, record_answer
+from app.services.chat.media_tools import ChatTurnStopped, LaboratoryMediaTools, observe_rejected_tool
 from app.services.chat.harness import build_chat_agent
 from app.services.generation_canvas.assistant_media import resolve_assistant_media, describe_assistant_media
 from app.services.llm.model_capabilities import effective_chat_capabilities
@@ -237,7 +237,7 @@ async def send(db, session_id, body, *, recovering=None):
                 prompt += f'用户已指定使用 generate_{shortcut}。要求充分时执行，关键信息不清时向用户提问。'
             if reference_only:
                 prompt += '附件仅提供文件引用。可以把引用传给生成工具。若请求需要理解文件内容，请说明当前模型无法查看素材。'
-            agent = build_chat_agent(client, tools=tools, middleware=[laboratory_tools(tools, media, reference_only and not shortcut)],
+            agent = build_chat_agent(client, tools=tools, middleware=[laboratory_tools(tools, media, reference_only and not shortcut), observe_rejected_tool(media)],
                                      system_prompt=prompt)
             if streaming:
                 async with aclosing(agent.astream({'messages': conversation}, stream_mode='messages')) as stream:
@@ -274,4 +274,32 @@ async def send(db, session_id, body, *, recovering=None):
         await db.rollback()
         await finish(db, session_id, body.request_id, 'failed', text, owner)
         raise
+    return await snapshot(db, session_id)
+
+
+async def save_models(db, session_id, body):
+    session = await session_for(db, session_id, lock=True)
+    choices = body.model_dump(exclude_unset=True)
+    for kind, model_id in choices.items():
+        if model_id is not None:
+            await get_model_by_category(db, ModelCategoryKey(kind), model_or_id=model_id)
+    session.chat_models = {**(session.chat_models or {}), **choices}
+    await db.flush()
+    return await model_choices(db, session)
+
+
+async def answer_turn(db, session_id, turn_id, body):
+    session = await session_for(db, session_id, lock=True)
+    row, changed = await record_answer(db, session, turn_id, body)
+    if not changed:
+        return await snapshot(db, session_id)
+    command = LabChatCommand(request_id=turn_id, text=row.content, file_ids=row.payload.get('file_ids', []))
+    await db.flush()
+    return await resume_turn(db, session_id, command)
+
+
+async def stop_turn(db, session_id, turn_id):
+    state = await snapshot(db, session_id)
+    if state.active_turn == turn_id:
+        await finish(db, session_id, turn_id, 'stopped', state.partial_reply)
     return await snapshot(db, session_id)

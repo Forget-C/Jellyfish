@@ -40,7 +40,8 @@ class LaboratoryMediaTools:
         return session
 
     async def execute(self, call_id, name, modality, request, submit_only, *, source_file_id=None):
-        identity = {'turn_id': self.turn_id, 'tool_call_id': call_id, 'tool': name}
+        identity = {'turn_id': self.turn_id, 'tool_call_id': call_id, 'tool': name, 'model_id': request.model_id,
+                    'parameters': request.operation_input.model_dump(mode='json', exclude_none=True)}
         if source_file_id:
             identity['source_file_id'] = source_file_id
         async with self.sessions.begin() as db:
@@ -132,3 +133,41 @@ class LaboratoryMediaTools:
             return await self.execute(runtime.tool_call_id, 'generate_video', GenerationModality.video, request, submit_only)
 
         return generate_video
+
+
+def observe_rejected_tool(media):
+    """Record tool validation failures even when no generation task was accepted."""
+    from langchain.agents.middleware import wrap_tool_call
+
+    async def record(call, detail):
+        async with media.sessions.begin() as db:
+            await media.require_active(db)
+            prior = await db.scalar(select(ExperimentSessionEvent).where(
+                ExperimentSessionEvent.session_id == media.session_id, ExperimentSessionEvent.turn_id == media.turn_id,
+                ExperimentSessionEvent.payload['tool_call_id'].as_string() == call['id'],
+            ).limit(1))
+            if prior:
+                return
+            name = call['name']
+            model_id = {'generate_image': media.models.image, 'generate_video': media.models.video}.get(name)
+            identity = {'tool_call_id': call['id'], 'tool': name, 'model_id': model_id, 'parameters': call.get('args', {})}
+            await append_session_event(db, media.session_id, media.turn_id, 'tool.started', identity)
+            await append_session_event(db, media.session_id, media.turn_id, 'tool.failed', {**identity, 'error': detail})
+            await append_experiment_messages(db, session_id=media.session_id, drafts=[ExperimentMessageDraft(
+                role='assistant', content=detail, status='failed',
+                payload={**identity, 'turn_id': media.turn_id, 'tool_error': True})])
+
+    @wrap_tool_call
+    async def observe(request, handler):
+        try:
+            message = await handler(request)
+        except HTTPException as exc:
+            await record(request.tool_call, exc.detail if isinstance(exc.detail, str) else 'Tool request failed')
+            raise
+        except ValueError:
+            await record(request.tool_call, 'Invalid tool arguments')
+            raise
+        if getattr(message, 'status', None) == 'error':
+            await record(request.tool_call, 'Invalid tool arguments')
+        return message
+    return observe

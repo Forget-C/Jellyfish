@@ -497,7 +497,7 @@ try {
     assert.ok(await afterSaving.isDisabled())
     await draftApproval.press('Escape')
     await afterSaving.waitFor({ state: 'hidden' })
-    const draftUrl = /\/generation-canvases\/drafts\/[^/]+\/assistant(?:\?|$)/
+    const draftUrl = /\/chat\/sessions\/draft\/[^/]+\/turns(?:\?|$)/
     await page.route(draftUrl, lostReceipt)
     await ask('草稿完成回执丢失')
     await panel.getByRole('button', { name: '发送消息' }).waitFor()

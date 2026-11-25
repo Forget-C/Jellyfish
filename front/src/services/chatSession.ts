@@ -1,6 +1,39 @@
-import { ChatService, OpenAPI } from './generated'
-import { getHeaders } from './generated/core/request'
+import { ChatService, type CancelablePromise, type CanvasAssistantExchange } from './generated'
 import type { InteractionEvent_Union_CanvasAssistantExchange__CanvasAssistantQueueItem__ as CanvasEvent } from './generated'
+
+export type ReplyUpdate = { text: string; mode: 'append' | 'replace' }
+type ToolUpdate = { tool_call_id: string; tool: string; state: 'started' | 'completed' | 'failed';
+  parameters: Record<string, string | number>; error: string | null; model_id: string | null }
+type TurnUpdate = { text: string; error: string | null; reason: string | null }
+
+export function applyReply(previous: string, update: ReplyUpdate) {
+  return update.mode === 'append' ? previous + update.text : update.text
+}
+
+type CanvasWireEvent = Omit<CanvasEvent, 'payload'> & {
+  payload: CanvasEvent['payload'] | ReplyUpdate | ToolUpdate | TurnUpdate
+  canvas?: CanvasAssistantExchange
+}
+
+function canvasPayload(event: CanvasWireEvent): CanvasEvent['payload'] {
+  const scene = event.canvas
+  const fact = event.payload
+  if (scene) {
+    if ('mode' in fact) {
+      const reply = applyReply(scene.reply, fact)
+      return {...scene, reply, progress: scene.progress ? {...scene.progress, reply} : scene.progress}
+    }
+    if ('tool_call_id' in fact && scene.progress) {
+      return {...scene, progress: {...scene.progress, tool_call: {
+        id: fact.tool_call_id, name: fact.tool, state: fact.state, parameters: fact.parameters,
+      }}}
+    }
+    if ('reason' in fact) return {...scene, reply: fact.text || scene.reply, error_code: fact.error ?? scene.error_code}
+    return scene
+  }
+  if ('request_id' in fact) return fact
+  throw new Error('Missing canvas event details')
+}
 
 /** Share session transport while each profile owns its snapshot and command payload types. */
 export const canvasChat = {
@@ -12,8 +45,11 @@ export const canvasChat = {
   layout: ChatService.chatCanvasLayout,
   generation: ChatService.chatCanvasGeneration,
 
-  events(canvasId: string, projectId: string | undefined, after: number, signal: AbortSignal) {
-    return sessionEvents<CanvasEvent>('canvas', canvasId, after, signal, projectId)
+  async *events(canvasId: string, projectId: string | undefined, after: number, signal: AbortSignal) {
+    for await (const event of sessionEvents<CanvasWireEvent>(
+      ChatService.chatCanvasEvents({canvasId, projectId, after}), canvasId, after, signal)) {
+      yield {...event, payload: canvasPayload(event)}
+    }
   },
 }
 
@@ -21,19 +57,20 @@ type SessionEvent = { type: string; cursor: number; session_id: string }
 
 /** Consume committed SSE records with the same authentication as generated requests. */
 export async function* sessionEvents<E extends SessionEvent>(
-  profile: string, sessionId: string, after: number, signal: AbortSignal, projectId?: string,
+  request: CancelablePromise<Response>, sessionId: string, after: number, signal: AbortSignal,
 ): AsyncGenerator<E> {
-  const path = '/api/v1/studio/chat/sessions/' + encodeURIComponent(profile) + '/' + encodeURIComponent(sessionId) + '/events'
-  const query = new URLSearchParams({ after: String(after) })
-  if (projectId) query.set('project_id', projectId)
-  const headers = await getHeaders(OpenAPI, { method: 'GET', url: path, headers: { Accept: 'text/event-stream' } })
-  const response = await fetch(OpenAPI.BASE.replace(/\/$/, '') + path + '?' + query, {
-    headers, signal, credentials: OpenAPI.WITH_CREDENTIALS ? OpenAPI.CREDENTIALS : undefined,
-  })
-  if (!response.ok || !response.body || !response.headers.get('content-type')?.startsWith('text/event-stream')) {
+  const cancel = () => request.cancel()
+  signal.addEventListener('abort', cancel, {once: true})
+  if (signal.aborted) cancel()
+  let response: Response
+  try { response = await request } finally { signal.removeEventListener('abort', cancel) }
+  if (!response?.body || !response.headers.get('content-type')?.startsWith('text/event-stream')) {
     throw new Error('Session event stream unavailable')
   }
   const reader = response.body.getReader()
+  const close = () => { void reader.cancel().catch(() => {}) }
+  signal.addEventListener('abort', close, {once: true})
+  if (signal.aborted) close()
   const decoder = new TextDecoder()
   let buffer = ''
   try {
@@ -59,6 +96,7 @@ export async function* sessionEvents<E extends SessionEvent>(
       }
     }
   } finally {
+    signal.removeEventListener('abort', close)
     await reader.cancel().catch(() => {})
     reader.releaseLock()
   }
@@ -71,6 +109,19 @@ export const laboratoryChat = {
   models: ChatService.chatLabModels,
   stop: ChatService.chatLabStop,
   events(sessionId: string, after: number, signal: AbortSignal) {
-    return sessionEvents<SessionEvent & {turn_id: string; payload: {text?: string}}>('lab', sessionId, after, signal)
+    return sessionEvents<SessionEvent & {turn_id: string; payload: ReplyUpdate}>(ChatService.chatLabEvents({sessionId, after}), sessionId, after, signal)
+  },
+}
+
+export const draftChat = {
+  send: ChatService.chatDraftSend,
+  snapshot: ChatService.chatDraftSnapshot,
+  stop: ChatService.chatDraftStop,
+  async *events(canvasId: string, sourceId: string, after: number, signal: AbortSignal) {
+    for await (const event of sessionEvents<CanvasWireEvent>(
+      ChatService.chatDraftEvents({canvasId, sourceId, after}), canvasId, after, signal)) {
+      const turn = canvasPayload(event)
+      if ('reply' in turn) yield {...event, canvas: turn}
+    }
   },
 }

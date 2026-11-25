@@ -10,6 +10,7 @@ from app.models.llm import Model, ModelSettings
 from app.task_worker import TaskWorker
 from tests.test_generation_canvas_runs import runtime  # pylint: disable=unused-import
 from tests.test_generation_canvas_images import image_storage  # pylint: disable=unused-import
+from tests.isolated_mysql import isolated_storage_environment
 from tests.test_canvas_assistant_edit_api import _live_mysql_app
 
 
@@ -91,7 +92,7 @@ async def test_stop_keeps_accepted_run_across_worker_restart(runtime, monkeypatc
                 await task
 
     if action == 'stop' and request.node.callspec.params['runtime'] == 'mysql':
-        async with _live_mysql_app(tmp_path) as restarted:
+        async with _live_mysql_app(tmp_path, isolated_storage_environment()) as restarted:
             await asyncio.sleep(1.1)
             path = assistant.replace('/canvases/', '/api/v1/studio/generation-canvases/', 1)
             live_history = (await restarted.get(path)).json()['data']['turns']

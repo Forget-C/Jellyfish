@@ -7,6 +7,7 @@ import type { ApiResponse_CanvasAssistantGenerationRead_ } from '../models/ApiRe
 import type { ApiResponse_CanvasAssistantHistory_ } from '../models/ApiResponse_CanvasAssistantHistory_';
 import type { ApiResponse_CanvasAssistantLayout_ } from '../models/ApiResponse_CanvasAssistantLayout_';
 import type { ApiResponse_CanvasAssistantProposalResult_ } from '../models/ApiResponse_CanvasAssistantProposalResult_';
+import type { ApiResponse_DraftAssistantReply_ } from '../models/ApiResponse_DraftAssistantReply_';
 import type { ApiResponse_ExperimentTaskCreated_ } from '../models/ApiResponse_ExperimentTaskCreated_';
 import type { ApiResponse_LabChatSnapshot_ } from '../models/ApiResponse_LabChatSnapshot_';
 import type { ApiResponse_LabModels_ } from '../models/ApiResponse_LabModels_';
@@ -19,6 +20,7 @@ import type { CanvasAssistantLayoutDecision } from '../models/CanvasAssistantLay
 import type { CanvasAssistantMessage } from '../models/CanvasAssistantMessage';
 import type { CanvasAssistantProposalDecision } from '../models/CanvasAssistantProposalDecision';
 import type { CanvasAssistantQuestionAnswer } from '../models/CanvasAssistantQuestionAnswer';
+import type { DraftAssistantMessage } from '../models/DraftAssistantMessage';
 import type { GenerationSubmitRequest } from '../models/GenerationSubmitRequest';
 import type { LabChatCommand } from '../models/LabChatCommand';
 import type { LabModels } from '../models/LabModels';
@@ -664,6 +666,120 @@ export class ChatService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Send Draft Assistant Message
+     * Reply to a browser-owned free canvas conversation without saving it.
+     * @returns ApiResponse_CanvasAssistantExchange_ Successful Response
+     * @throws ApiError
+     */
+    public static chatDraftSend({
+        canvasId,
+        requestBody,
+    }: {
+        canvasId: string,
+        requestBody: DraftAssistantMessage,
+    }): CancelablePromise<ApiResponse_CanvasAssistantExchange_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/draft/{canvas_id}/turns',
+            path: {
+                'canvas_id': canvasId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Read Draft Reply
+     * Reconnect to one in-flight browser-owned reply.
+     * @returns ApiResponse_DraftAssistantReply_ Successful Response
+     * @throws ApiError
+     */
+    public static chatDraftSnapshot({
+        canvasId,
+        sourceId,
+    }: {
+        canvasId: string,
+        sourceId: string,
+    }): CancelablePromise<ApiResponse_DraftAssistantReply_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/chat/sessions/draft/{canvas_id}/turns/{source_id}',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Stop Draft Reply
+     * Stop an unsaved draft's active reply and return its visible prefix.
+     * @returns ApiResponse_DraftAssistantReply_ Successful Response
+     * @throws ApiError
+     */
+    public static chatDraftStop({
+        canvasId,
+        sourceId,
+    }: {
+        canvasId: string,
+        sourceId: string,
+    }): CancelablePromise<ApiResponse_DraftAssistantReply_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/draft/{canvas_id}/turns/{source_id}/stop',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Draft Events
+     * Subscribe to an unsaved draft without creating a canvas.
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static chatDraftEvents({
+        canvasId,
+        sourceId,
+        after,
+        follow = true,
+        lastEventId,
+    }: {
+        canvasId: string,
+        sourceId: string,
+        after?: number,
+        follow?: boolean,
+        lastEventId?: number,
+    }): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/chat/sessions/draft/{canvas_id}/turns/{source_id}/events',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            headers: {
+                'last-event-id': lastEventId,
+            },
+            query: {
+                'after': after,
+                'follow': follow,
+            },
             errors: {
                 422: `Validation Error`,
             },

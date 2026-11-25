@@ -41,6 +41,7 @@ async def test_canvas_turn_can_be_replayed_through_session_events(canvas_client,
     events = [json.loads(line[6:]) for line in stream.text.splitlines() if line.startswith('data: ')]
     assert events[0]['type'] == 'turn.accepted'
     assert events[-1]['type'] == 'turn.completed'
+    assert events[-1]['payload'] == {'text': '雨夜街景', 'error': None, 'reason': None}
     assert all(event['turn_id'] == 'test-turn' for event in events)
     assert len(calls) == 1
     replay = await canvas_client.get(url + '/events', params={'follow': 'false'}, headers={'Last-Event-ID': str(events[-2]['cursor'])})
@@ -87,7 +88,7 @@ async def test_read_card_tool_is_identified_before_reply(canvas_client, monkeypa
     stream = await canvas_client.get(url + '/events', params={'follow': 'false'})
     events = [json.loads(line[6:]) for line in stream.text.splitlines() if line.startswith('data: ')]
     tool_events = [e for e in events if e['type'].startswith('tool.')]
-    assert [(e['type'], e['payload']['progress']['tool_call']['id']) for e in tool_events] == [
+    assert [(e['type'], e['payload']['tool_call_id']) for e in tool_events] == [
         ('tool.started', 'read-note'), ('tool.completed', 'read-note')]
     assert tool_events[-1]['cursor'] < events[-1]['cursor']
     snapshot = (await canvas_client.get(url)).json()['data']

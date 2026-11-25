@@ -1,7 +1,10 @@
 """Replay committed session events in order using short read transactions."""
 import asyncio
+import json
 
 from fastapi.responses import StreamingResponse
+
+from app.services.chat.public_events import public_event
 
 
 async def session_event_stream(read_page, after, *, follow):
@@ -15,7 +18,8 @@ async def session_event_stream(read_page, after, *, follow):
         while True:
             for event in page:
                 cursor = event.cursor
-                yield f'id: {cursor}\nevent: {event.type}\ndata: {event.model_dump_json()}\n\n'
+                data = json.dumps(public_event(event), ensure_ascii=False, separators=(',', ':'))
+                yield f'id: {cursor}\nevent: {event.type}\ndata: {data}\n\n'
             if not page:
                 if not follow:
                     return

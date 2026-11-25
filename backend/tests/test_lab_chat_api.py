@@ -48,7 +48,7 @@ async def test_lab_chat_replays_messages_and_uses_previous_turn(canvas_client, m
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('canvas_client', ['app-handler'], indirect=True)
+@pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
 async def test_chat_admission_stop_and_independent_session(canvas_client, monkeypatch):
     import asyncio
     async with canvas_client.canvas_sessions.begin() as db:
@@ -138,12 +138,14 @@ async def test_native_text_stream_publishes_real_model_chunks(canvas_client, mon
     assert reply.json()['data']['messages'][-1]['content'] == 'rainfall'
     stream = await canvas_client.get(url + '/events', params={'follow': 'false'})
     events = [json.loads(line[6:]) for line in stream.text.splitlines() if line.startswith('data: ')]
-    assert [e['payload']['text'] for e in events if e['type'] == 'message.updated'] == ['rain', 'rainfall']
+    assert [e['payload'] for e in events if e['type'] == 'message.updated'] == [
+        {'mode': 'replace', 'text': 'rain'}, {'mode': 'replace', 'text': 'rainfall'}]
+    assert events[-1]['payload'] == {'text': 'rainfall', 'error': None, 'reason': None}
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('canvas_client', ['app-handler'], indirect=True)
-@pytest.mark.parametrize('action', ['submit', 'wait', 'fail', 'stop'])
+@pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
+@pytest.mark.parametrize('action', ['submit', 'wait', 'fail', 'stop', 'invalid'])
 async def test_chat_model_submits_requested_image_and_receives_task_receipt(canvas_client, monkeypatch, action):
     import asyncio
     from app.task_worker import TaskWorker
@@ -166,7 +168,7 @@ async def test_chat_model_submits_requested_image_and_receives_task_receipt(canv
             answer = {'role': 'assistant', 'content': '已提交'}
         else:
             answer = {'role': 'assistant', 'tool_calls': [{'id': 'rain-one', 'type': 'function',
-                'function': {'name': 'generate_image', 'arguments': json.dumps({'prompt': 'rain', 'submit_only': action == 'submit'})}}]}
+                'function': {'name': 'generate_image', 'arguments': json.dumps({'prompt': 'rain', 'reference_file_ids': ['missing'] if action == 'invalid' else [], 'submit_only': action == 'submit'})}}]}
         return httpx.Response(200, request=request, json={'choices': [{'index': 0,
             'finish_reason': 'tool_calls' if 'tool_calls' in answer else 'stop', 'message': answer}]})
 
@@ -175,6 +177,18 @@ async def test_chat_model_submits_requested_image_and_receives_task_receipt(canv
     url = '/api/v1/studio/chat/sessions/lab/' + created.json()['data']['id']
     body = {'request_id': 'illustrate', 'text': '给雨夜街景配幅插画，只提交任务'}
     sending = asyncio.create_task(canvas_client.post(url + '/turns', json=body))
+    if action == 'invalid':
+        result = await sending
+        assert result.status_code == 422, result.text
+        stream = await canvas_client.get(url + '/events', params={'follow': False})
+        tool_events = [json.loads(line[6:]) for line in stream.text.splitlines() if line.startswith('data: ')]
+        assert [(e['type'], e['payload']['tool_call_id']) for e in tool_events if e['type'].startswith('tool.')] == [
+            ('tool.started', 'rain-one'), ('tool.failed', 'rain-one')]
+        snapshot = (await canvas_client.get(url)).json()['data']
+        failed, = [m for m in snapshot['messages'] if m['payload'].get('tool_error')]
+        assert failed['content'] == 'Unknown image reference'
+        assert failed['payload']['tool_call_id'] == 'rain-one'
+        return
     if action != 'submit':
         async with asyncio.timeout(8):
             while True:
@@ -245,7 +259,7 @@ async def test_image_command_requires_selected_models_before_admission(canvas_cl
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('canvas_client', ['app-handler'], indirect=True)
+@pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
 @pytest.mark.parametrize('action', ['wait', 'submit', 'stop', 'fail', 'cancel', 'analyze'])
 async def test_chat_video_uses_attached_first_frame(canvas_client, monkeypatch, action):
     import asyncio

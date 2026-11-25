@@ -239,6 +239,9 @@ export const getResponseBody = async (response: Response): Promise<any> => {
                 return await response.blob();
             }
             const contentType = response.headers.get('Content-Type');
+            if (response.ok && contentType?.startsWith('text/event-stream')) {
+                return response;
+            }
             if (contentType) {
                 const jsonTypes = ['application/json', 'application/problem+json']
                 const isJSON = jsonTypes.some(type => contentType.toLowerCase().startsWith(type));

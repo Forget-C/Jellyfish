@@ -28,6 +28,7 @@ import { useExperimentHistory } from '../hooks/useExperimentHistory'
 import { useExperimentModels } from '../hooks/useExperimentModels'
 import { useExperimentTemplates } from '../hooks/useExperimentTemplates'
 import { focusExperimentPromptEditor, readExperimentInputSnapshot, type ExperimentInputSnapshot } from '../experimentInputSnapshot'
+import { applyReply } from '../../../../services/chatSession'
 import { textTrial } from '../../../../services/textTrialSession'
 import { useTrialModelPreference } from '../hooks/useTrialModelPreference'
 
@@ -229,7 +230,7 @@ export function TextExperimentMode({
         }
         if (event.type === 'message.updated') {
           setLocalMessages(current => current.map(item => (
-            item.id === assistantId ? { ...item, content: `${item.content}${event.payload.text_delta}` } : item
+            item.id === assistantId ? { ...item, content: applyReply(item.content, event.payload) } : item
           )))
         } else if (event.type === 'turn.completed') {
           if (event.payload.assistant_message.session_id !== session.id) throw new Error(uiText("文本结果与本轮会话不符"))

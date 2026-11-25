@@ -85,7 +85,7 @@ async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, res
                 events = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
                 assert events[0]['type'] == 'turn.accepted'
                 assert {e['turn_id'] for e in events} == {receipt['turn_id']}
-                assert len([e for e in events if e['type'] == 'message.updated']) == 2
+                assert [(e['payload']['mode'], e['payload']['text']) for e in events if e['type'] == 'message.updated'] == [('append', '第一段'), ('append', '第二段')]
                 replay = await client.get(base + "/events", params={"after": events[-2]['cursor'], "follow": False})
                 assert replay.text.count("data: ") == 1
                 snapshot = await client.get(base)

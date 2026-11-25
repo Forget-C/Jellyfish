@@ -19,6 +19,8 @@ try {
   const existing = {id: 'chat', lab_type: 'chat', title: '会话历史', updated_at: '2026-01-01', created_at: '2026-01-01'}
   let hasHistory = false
   let question
+  const requests = []
+  let failedTurn
   let selected
   await page.route('**/api/**', route => {
     const url = new URL(route.request().url())
@@ -28,8 +30,16 @@ try {
       question = undefined
       active = false
     }
+    if (url.pathname.endsWith('/turns') && route.request().method() === 'POST') {
+      const command = route.request().postDataJSON()
+      requests.push(command.request_id)
+      if (requests.length === 1) {
+        failedTurn = command.request_id
+        return route.fulfill({status:422,json:{message:'测试失败'}})
+      }
+    }
     if (url.pathname.endsWith('/stop')) active = false
-    const snapshot = {question, session_id: existing.id, cursor: 1, models: {text: 'T', image: 'I'}, messages: [], capabilities: [], active_turn: active ? 'active' : null}
+    const snapshot = {question, session_id: existing.id, cursor: 1, models: {text: 'T', image: 'I'}, messages: failedTurn ? [{id:'failed', role:'assistant', content:'失败', status:'failed', payload:{turn_id:failedTurn}}] : [], capabilities: [], active_turn: active ? 'active' : null}
     const data = url.pathname.endsWith('/experiment-sessions') ? (hasHistory && url.searchParams.get('lab_type') === 'chat' ? [existing] : [])
       : url.pathname.includes('/chat/sessions/lab/chat') ? snapshot
       : url.pathname.endsWith('/model-settings') ? {default_text_model_id: 'T', default_image_model_id: 'I'}
@@ -38,10 +48,13 @@ try {
   })
   await page.goto('http://127.0.0.1:4917/lab')
   await page.getByRole('region', {name: '实验室 · 多模态聊天'}).waitFor()
-  assert.equal(await page.getByLabel('主聊天模型').inputValue(), 'T')
-  assert.equal(await page.getByLabel('图片模型', {exact: true}).isVisible(), false)
+  await page.getByText('主聊天模型', {exact: false}).first().waitFor()
+  await page.getByLabel(/主聊天模型/).click()
+  await page.getByRole('menuitemradio', {name:'主模型T'}).click()
+  assert.equal(await page.getByLabel(/图片模型/).first().isVisible(), false)
   await page.getByText('模态配置', {exact: true}).click()
-  assert.equal(await page.getByLabel('图片模型', {exact: true}).inputValue(), 'I')
+  await page.getByLabel(/图片模型/).first().click()
+  await page.getByRole('menu', {name:'图片模型', exact:true}).getByRole('menuitemradio', {name:'图片模型I'}).click()
   hasHistory = true
   await page.goto('http://127.0.0.1:4917/lab?session=chat')
   const stop = page.getByRole('button', {name: '停止回复'})
@@ -58,6 +71,13 @@ try {
   assert.equal((await composer.inputValue()).trim(), '/videogen')
   await composer.fill('/videogen 雨夜')
   assert.equal(await page.getByRole('button', {name: '发送', exact: true}).isEnabled(), true)
+  await page.getByRole('button', {name:'发送', exact:true}).click()
+  await page.getByText('测试失败', {exact:true}).waitFor()
+  assert.equal(await composer.inputValue(), '/videogen 雨夜')
+  await page.getByRole('button', {name:'发送', exact:true}).click()
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="聊天消息"]')?.value === '')
+  assert.equal(requests.length, 2)
+  assert.notEqual(requests[0], requests[1])
   question = {id: 'pick', options: [{file_id: 'v1', name: '雨夜一', prompt: '前进', sequence: 1, ordinal: 0},
     {file_id: 'v2', name: '雨夜二', prompt: '后退', sequence: 2, ordinal: 0}]}
   active = true

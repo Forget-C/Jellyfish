@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Suggestion } from '@ant-design/x'
 import { Alert, Button, Input, Upload } from 'antd'
 import { WorkbenchConversation } from '../../../../components/workbench/WorkbenchConversation'
-import { laboratoryChat } from '../../../../services/chatSession'
+import { applyReply, laboratoryChat } from '../../../../services/chatSession'
 import { ApiError, FilmService, LlmService, type ExperimentSessionRead, type LabChatSnapshot, type LabModels, type FileRead } from '../../../../services/generated'
 import { useUiText } from '../../../../uiText'
 import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
@@ -10,24 +10,38 @@ import { MediaTaskDetails } from '../components/MediaTaskDetails'
 import { ExperimentResultMedia } from '../components/ExperimentResultMedia'
 import { ExperimentTaskStatus } from '../components/ExperimentTaskStatus'
 import { buildFileDownloadUrl } from '../../assets/utils'
+import { useExperimentModels } from '../hooks/useExperimentModels'
+import { ExperimentOptionBar } from '../components/ExperimentOptionBar'
 import { ExperimentComposer } from '../components/ExperimentComposer'
 import { useExperimentReferenceUpload } from '../hooks/useExperimentReferenceUpload'
 
 type ModelKind = 'text' | 'image' | 'video'
-const kinds: ModelKind[] = ['text', 'image', 'video']
 const labels = { text: '主聊天模型', image: '图片模型', video: '视频模型' }
-type Option = { id: string; name: string }
 type Props = {
   sessionId?: string
   ensureSession: (kind: 'chat') => Promise<ExperimentSessionRead>
   render: (parts: { history: ReactNode; composer: ReactNode }) => ReactNode
 }
 
+function ChatModelChoice({kind, value, disabled, onChange}: {
+  kind: ModelKind; value?: string | null; disabled: boolean; onChange: (id: string) => void
+}) {
+  const uiText = useUiText()
+  const {models, modelsFailed, modelsLoading, loadModels} = useExperimentModels(kind, () => {})
+  return <label>{uiText(labels[kind])}{' '}
+    <ExperimentOptionBar models={models} modelId={value ?? undefined} disabled={disabled}
+      modelsFailed={modelsFailed} modelsLoading={modelsLoading} modelLabel={labels[kind]}
+      onRefreshModels={() => void loadModels(true)} onModelOpenChange={open => { if (open) void loadModels() }}
+      onModelChange={id => { if (id) onChange(id) }} templates={[]} onTemplateChange={() => {}}>
+      {({modelControl}) => modelControl}
+    </ExperimentOptionBar>
+  </label>
+}
+
 /** One composer for the lab chat profile. Server snapshots own admission and history. */
 export function LabChatMode({ sessionId, ensureSession, render }: Props) {
   const uiText = useUiText()
   const [models, setModels] = useState<LabModels>({})
-  const [options, setOptions] = useState<Record<ModelKind, Option[]>>({ text: [], image: [], video: [] })
   const [snapshot, setSnapshot] = useState<LabChatSnapshot>()
   const [text, setText] = useState('')
   const [files, setFiles] = useState<FileRead[]>([])
@@ -50,12 +64,8 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
   useEffect(() => {
     let current = true
     const load = async () => {
-      const [settings, ...lists] = await Promise.all([
-        LlmService.getModelSettingsApiV1LlmModelSettingsGet(),
-        ...kinds.map(category => LlmService.listModelsApiV1LlmModelsGet({ category, pageSize: 100 })),
-      ] as const)
+      const settings = await LlmService.getModelSettingsApiV1LlmModelSettingsGet()
       if (!current) return
-      setOptions({ text: lists[0].data?.items ?? [], image: lists[1].data?.items ?? [], video: lists[2].data?.items ?? [] })
       if (!initialized.current) setModels({ text: settings.data?.default_text_model_id, image: settings.data?.default_image_model_id, video: settings.data?.default_video_model_id })
     }
     void load().catch(e => { if (current) report(e) })
@@ -82,7 +92,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
             if (event.cursor <= cursor) continue
             cursor = event.cursor
             if (event.type === 'message.updated') {
-              setSnapshot(previous => previous ? { ...previous, cursor, partial_reply: event.payload.text } : previous)
+              setSnapshot(previous => previous ? { ...previous, cursor, partial_reply: applyReply(previous.partial_reply ?? '', event.payload) } : previous)
             } else await refresh()
           }
         } catch (e) {
@@ -107,13 +117,8 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     } catch (e) { report(e) } finally { setSaving(false) }
   }
   const busy = sending || Boolean(snapshot?.active_turn)
-  const modelSelect = (kind: ModelKind) => <label key={kind}>{uiText(labels[kind])}{' '}
-    <select aria-label={uiText(labels[kind])} value={models[kind] ?? ''} disabled={busy || saving}
-      onChange={event => void selectModel(kind, event.target.value)}>
-      <option value="" disabled>{uiText('选择模型')}</option>
-      {options[kind].map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
-    </select>
-  </label>
+  const modelSelect = (kind: ModelKind) => <ChatModelChoice key={kind} kind={kind} value={models[kind]}
+    disabled={busy || saving} onChange={id => void selectModel(kind, id)} />
   const send = async () => {
     if (!text.trim() || busy || inFlight.current) return
     inFlight.current = true
@@ -122,17 +127,34 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     const fileIds = files.map(file => file.id)
     const key = JSON.stringify([text, fileIds, models])
     if (pending.current?.key !== key) pending.current = { key, id: crypto.randomUUID() }
+    let acceptedSession = sessionId
     try {
       const session = await ensureSession('chat')
+      acceptedSession = session.id
       if (!sessionId) await laboratoryChat.models({sessionId: session.id, requestBody: models})
       const result = await laboratoryChat.send({ sessionId: session.id, requestBody: {
         request_id: pending.current.id, text, file_ids: fileIds,
       } })
       if (result.data) setSnapshot(result.data)
+      if (result.data?.messages?.some(row => row.status === 'failed' && !row.payload?.tool_error && row.payload?.turn_id === pending.current?.id)) {
+        pending.current = undefined
+        setError(uiText('生成失败'))
+        return
+      }
       setText('')
       setFiles([])
       pending.current = undefined
-    } catch (e) { report(e) } finally { inFlight.current = false; setSending(false) }
+    } catch (e) {
+      report(e)
+      if (acceptedSession && pending.current) {
+        const id = pending.current.id
+        const recovered = await laboratoryChat.snapshot({sessionId: acceptedSession}).catch(() => undefined)
+        if (recovered?.data) {
+          setSnapshot(recovered.data)
+          if (recovered.data.messages?.some(row => row.status === 'failed' && !row.payload?.tool_error && row.payload?.turn_id === id)) pending.current = undefined
+        }
+      }
+    } finally { inFlight.current = false; setSending(false) }
   }
   const stop = async () => {
     if (!sessionId || !snapshot?.active_turn) return
@@ -167,7 +189,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
           }).catch(report)}>{uiText('取消生成')}</Button>}
       </>
     }} : {}),
-    key: row.id, role: row.role, content: row.content || (row.status === 'failed' ? uiText('生成失败') : ''), placement: row.role === 'user' ? 'end' as const : 'start' as const,
+    key: row.id, role: row.role, content: row.payload?.tool_error ? [row.payload.tool, row.payload.tool_call_id, row.content].join(' · ') : row.content || (row.status === 'failed' ? uiText('生成失败') : ''), placement: row.role === 'user' ? 'end' as const : 'start' as const,
   }))
   if (question) items.push({key: 'question-' + question.id, role: 'assistant', placement: 'start', content: '',
     contentRender: () => <section aria-label={uiText('选择要修订的产物')}>
