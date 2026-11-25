@@ -98,9 +98,7 @@ try {
   await page.getByRole('button', { name: '预览参考图：参考图片 2', exact: true }).waitFor()
   assert.equal(await page.getByRole('button', { name: '预览参考图：参考图片 3', exact: true }).count(), 0)
 
-  await page.getByRole('button', { name: /选择模型/ }).click()
-  await page.getByRole('button', { name: /验收图片模型/ }).waitFor()
-  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: '验收图片模型', exact: true }).waitFor()
   await page.getByRole('textbox', { name: '图片提示词', exact: true }).fill('参考图次序验证')
   await Promise.all([
     page.waitForResponse(response => response.url().endsWith('/media/image-a/turns')),
@@ -234,9 +232,7 @@ try {
   await panel.getByText('上传图片 5 已上传，尚未应用', { exact: true }).waitFor()
   await panel.getByRole('button', { name: '应用参考图', exact: true }).click()
   await panel.waitFor({ state: 'hidden' })
-  await page.getByRole('button', { name: /选择模型/ }).click()
-  await page.getByRole('button', { name: /验收图片模型/ }).waitFor()
-  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: '验收图片模型', exact: true }).waitFor()
   await page.getByRole('textbox', { name: '图片提示词', exact: true }).fill('应用已上传的参考图')
   await page.getByRole('button', { name: '用户与语言设置' }).click()
   await page.getByRole('menuitem', { name: 'English', exact: true }).click()

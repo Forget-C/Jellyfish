@@ -28,11 +28,10 @@ from app.dependencies import get_db
 from app.models.experiment_sessions import ExperimentSession, ExperimentSessionEvent
 from app.services.chat.stream import session_event_stream
 from app.services.studio.media_receipts import publish_media_fact
-from app.schemas.common import ApiResponse, created_response
+from app.schemas.common import ApiResponse, created_response, success_response
 from app.schemas.interaction import InteractionRequestHeader
 from app.services.studio.experiment_interaction import find_media_receipt, interaction_request_payload
 from app.schemas.studio.experiment_sessions import ExperimentMessageRead, ExperimentTaskCreated
-from app.api.v1.routes.studio.experiment_sessions import experiment_history_page
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.submission import GenerationSubmitter
 from app.services.studio.experiment_messages import (
@@ -40,6 +39,7 @@ from app.services.studio.experiment_messages import (
     append_experiment_messages,
     experiment_user_message,
     read_experiment_messages,
+    read_experiment_page,
     task_message_display_payload,
 )
 
@@ -194,12 +194,12 @@ async def _media_session(db, session_id):
 async def media_snapshot(session_id: str, page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=100),
                          db: AsyncSession = Depends(get_db)):
     """Restore submitted parameters, references and current task receipts."""
-    session = await _media_session(db, session_id)
+    await _media_session(db, session_id)
     cursor = await db.scalar(select(func.max(ExperimentSessionEvent.cursor))
                              .where(ExperimentSessionEvent.session_id == session_id))
-    response = await experiment_history_page(db, session, page, page_size)
-    response.meta = dict(response.meta, cursor=cursor or 0, capabilities=('snapshot', 'send', 'events', 'task_receipt'))
-    return response
+    return success_response(await read_experiment_page(db, session_id, page, page_size), meta={
+        'session_id': session_id, 'cursor': cursor or 0, 'capabilities': ('snapshot', 'send', 'events', 'task_receipt'),
+    })
 
 
 @chat_router.get('/media/{session_id}/events', operation_id='chat_media_events',

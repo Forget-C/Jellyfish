@@ -90,6 +90,14 @@ async def read_experiment_messages(
     return result
 
 
+async def read_experiment_page(db: AsyncSession, session_id: str, page: int, page_size: int):
+    """Return the selected page of history in display order, including task projections."""
+    rows = (await db.scalars(select(ExperimentMessage).where(
+        ExperimentMessage.session_id == session_id,
+    ).order_by(ExperimentMessage.sequence.desc()).offset((page - 1) * page_size).limit(page_size))).all()
+    return await read_experiment_messages(db, list(reversed(rows)))
+
+
 async def has_active_experiment_tasks(db: AsyncSession, session_id: str) -> bool:
     """直接按任务唯一来源查询活动状态，不依赖展示消息是否存在。"""
     return await db.scalar(select(Task.id).where(

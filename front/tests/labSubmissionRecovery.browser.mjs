@@ -1,3 +1,4 @@
+import { textTrialFrame } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -58,7 +59,17 @@ try {
       variables: ['主体'], variable_defaults: { 主体: '雪松' }, category: 'video_prompt',
       created_at: timestamp, updated_at: timestamp,
     }] : [] })
-    if (/\/chat\/sessions\/media\/[^/]+\/turns$/.test(url.pathname) || /\/labs\/(text|image|video)\/sessions\/[^/]+\/(stream|tasks)$/.test(url.pathname)) {
+    if (url.pathname.endsWith('/chat/sessions/text/text-session/turns')) {
+      writes.push(request.postDataJSON())
+      requestHeaders.push(request.headers())
+      return respond({ turn_id: writes.at(-1).content.includes('断开') ? 'disconnect-run' : 'text-run', cursor: 0 })
+    }
+    if (url.pathname.endsWith('/text-session/events')) return submission(route)
+    if (url.pathname.endsWith('/chat/sessions/text/text-session')) {
+      historyReads += 1
+      return respond(histories.get('text-session') ?? [])
+    }
+    if (/\/chat\/sessions\/media\/[^/]+\/turns$/.test(url.pathname)) {
       writes.push(request.postDataJSON())
       requestHeaders.push(request.headers())
       return submission(route)
@@ -75,7 +86,7 @@ try {
   async function openLab(mode) {
     await page.goto(origin + '/lab?session=' + mode + '-session')
     await page.getByRole('heading', { name: '实验室 · ' + labels[mode] + ' · ' + labels[mode] + '恢复会话' }).waitFor()
-    await page.getByRole('button', { name: '选择模型' }).click()
+    await page.locator('.experiment-model-trigger').click()
     await page.getByRole('button', { name: labels[mode] + '恢复模型' }).waitFor()
     await page.keyboard.press('Escape')
   }
@@ -152,7 +163,8 @@ try {
   const textInput = page.getByRole('textbox', { name: '文本提示词' })
   const textSubmit = page.getByRole('button', { name: /^发\s*送$/ })
   const textPrompt = '\n原样保留这轮文本\n'
-  const frame = (event, sequence, data) => `id: ${sequence}\nevent: ${event}\ndata: ${JSON.stringify({ version: 1, event, sequence, created_at: timestamp, data })}\n\n`
+  const frame = (event, cursor, data) => textTrialFrame('text-session', data.task_id, cursor,
+    { accepted: 'turn.accepted', delta: 'message.updated', error: 'turn.failed' }[event], data)
   let textEntered
   const textRequest = new Promise(resolve => { textEntered = resolve })
   let releaseText
@@ -182,7 +194,7 @@ try {
   await page.goto(origin + '/lab?session=image-session')
   await page.getByRole('heading', { name: '实验室 · 图片 · 图片恢复会话' }).waitFor()
   modelsState = 'failed'
-  await page.getByRole('button', { name: '选择模型' }).click()
+  await page.locator('.experiment-model-trigger').click()
   await page.getByText('加载模型失败', { exact: true }).waitFor()
   assert.equal(await page.getByText('暂无可选模型', { exact: true }).count(), 0)
   modelsState = 'empty'
@@ -295,7 +307,7 @@ try {
   const writesBeforeDisconnect = writes.length
   const readsBeforeDisconnect = historyReads
   submission = route => {
-    if (route.request().headers()['last-event-id'] === '2') {
+    if (new URL(route.request().url()).searchParams.get('after') === '2') {
       return route.fulfill({ contentType: 'text/event-stream', body: '' })
     }
     histories.set('text-session', [...(histories.get('text-session') ?? []), disconnectUser])
@@ -313,12 +325,8 @@ try {
   await page.getByRole('button', { name: '重试读取历史', exact: true }).click()
   await page.getByText('状态暂不可用', { exact: true }).waitFor()
   assert.ok(historyReads >= readsBeforeDisconnect + 2)
-  assert.equal(writes.length, writesBeforeDisconnect + 2)
-  const initialStream = requestHeaders.at(-2)
-  const resumedStream = requestHeaders.at(-1)
-  assert.ok(initialStream['idempotency-key'])
-  assert.equal(resumedStream['idempotency-key'], initialStream['idempotency-key'])
-  assert.equal(resumedStream['last-event-id'], '2')
+  assert.equal(writes.length, writesBeforeDisconnect + 1)
+  assert.ok(requestHeaders.at(-1)['idempotency-key'])
 
   console.log('Lab submission recovery browser checks passed', output)
 } catch (error) {
