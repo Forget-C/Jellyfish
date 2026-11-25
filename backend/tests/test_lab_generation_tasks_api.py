@@ -21,9 +21,9 @@ from app.schemas.studio.experiment_sessions import ExperimentMessageRead
 @pytest.fixture
 def isolate_message_projection(monkeypatch):
     """这里验证路由编排；消息状态投影另由真实数据库测试覆盖。"""
-    async def read(db, messages):
+    async def read(db, messages, *, include_media_receipts):
         """投影只能在提交完成后执行。"""
-        assert db.commits == 1
+        assert db.commits == 1 and include_media_receipts
         return [ExperimentMessageRead.model_validate(message) for message in messages]
     async def publish(*_args):
         pass

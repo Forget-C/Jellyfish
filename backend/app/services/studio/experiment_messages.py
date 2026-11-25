@@ -51,7 +51,7 @@ def task_message_display_payload(*, modality: str) -> dict[str, Any]:
 
 
 async def read_experiment_messages(
-    db: AsyncSession, messages: Sequence[ExperimentMessage],
+    db: AsyncSession, messages: Sequence[ExperimentMessage], *, include_media_receipts: bool = False,
 ) -> list["ExperimentMessageRead"]:
     """读时批量合成任务状态与结果，消息行不保存异步生命周期副本。"""
     from app.schemas.studio.experiment_sessions import ExperimentMessageRead
@@ -64,7 +64,7 @@ async def read_experiment_messages(
     task_ids = {message.task_id for message in messages if owners.get(message.task_id) == message.session_id}
     tasks = await TaskQueries(db).results(list(task_ids))
     from app.services.studio.media_receipts import media_task_receipts
-    receipts = await media_task_receipts(db, tasks)
+    receipts = await media_task_receipts(db, tasks) if include_media_receipts else {}
     result = []
     for message in messages:
         view = ExperimentMessageRead.model_validate(message)
@@ -90,12 +90,12 @@ async def read_experiment_messages(
     return result
 
 
-async def read_experiment_page(db: AsyncSession, session_id: str, page: int, page_size: int):
+async def read_experiment_page(db: AsyncSession, session_id: str, page: int, page_size: int, *, include_media_receipts: bool = False):
     """Return the selected page of history in display order, including task projections."""
     rows = (await db.scalars(select(ExperimentMessage).where(
         ExperimentMessage.session_id == session_id,
     ).order_by(ExperimentMessage.sequence.desc()).offset((page - 1) * page_size).limit(page_size))).all()
-    return await read_experiment_messages(db, list(reversed(rows)))
+    return await read_experiment_messages(db, list(reversed(rows)), include_media_receipts=include_media_receipts)
 
 
 async def has_active_experiment_tasks(db: AsyncSession, session_id: str) -> bool:

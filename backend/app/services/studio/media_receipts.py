@@ -14,7 +14,11 @@ async def media_task_receipts(db, results):
     """Batch-load public inputs and routing identity for media task history."""
     if not results:
         return {}
-    rows = (await db.execute(select(Task.id, Task.input_snapshot).where(
+    # Extract only the public fields in SQL. The full snapshot includes execution credentials.
+    rows = (await db.execute(select(
+        Task.id, Task.input_snapshot['model_id'].as_string(), Task.input_snapshot['model_name'].as_string(),
+        Task.input_snapshot['operation_input'],
+    ).where(
         Task.id.in_(results), Task.kind.in_(('image_generation', 'video_generation')),
     ))).all()
     if not rows:
@@ -25,11 +29,11 @@ async def media_task_receipts(db, results):
     for item in inputs:
         references[item.task_id].append(MediaReferenceRead(role=item.role_path, ordinal=item.ordinal, file_id=item.file_id))
     receipts = {}
-    for task_id, snapshot in rows:
+    for task_id, model_id, model_name, parameters in rows:
         result = results[task_id]
         receipts[task_id] = MediaTaskReceipt(
-            task_id=task_id, model_id=snapshot.get('model_id'), model_name=snapshot.get('model_name'),
-            parameters=snapshot.get('operation_input') or {}, references=references[task_id],
+            task_id=task_id, model_id=model_id, model_name=model_name,
+            parameters=parameters or {}, references=references[task_id],
             artifacts=[MediaArtifactRead(**item.model_dump()) for item in result.outputs
                        if item.media_type in ('image', 'video', 'audio')],
             status=result.status, progress=result.progress, stage=result.stage, error=result.error,

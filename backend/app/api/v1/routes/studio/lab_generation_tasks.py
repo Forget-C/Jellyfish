@@ -129,7 +129,7 @@ async def _submit_lab_task(
     return created_response(
         ExperimentTaskCreated(
             task_id=accepted.task_id,
-            messages=await read_experiment_messages(db, [user_message, task_message]),
+            messages=await read_experiment_messages(db, [user_message, task_message], include_media_receipts=True),
         )
     )
 
@@ -197,7 +197,7 @@ async def media_snapshot(session_id: str, page: int = Query(1, ge=1), page_size:
     await _media_session(db, session_id)
     cursor = await db.scalar(select(func.max(ExperimentSessionEvent.cursor))
                              .where(ExperimentSessionEvent.session_id == session_id))
-    return success_response(await read_experiment_page(db, session_id, page, page_size), meta={
+    return success_response(await read_experiment_page(db, session_id, page, page_size, include_media_receipts=True), meta={
         'session_id': session_id, 'cursor': cursor or 0, 'capabilities': ('snapshot', 'send', 'events', 'task_receipt'),
     })
 
