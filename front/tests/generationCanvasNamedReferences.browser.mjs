@@ -51,13 +51,15 @@ try {
     {id:'picture',type:'content.image',file_id:image},{id:'free',type:'content.image',file_id:secondImage},{id:'third',type:'content.image'},
     {id:'uploading',type:'content.image',file_id:image,uploading:true},
     {id:'named',type:'reference.character',name:'已有对象',image_binding:{file_id:secondImage,source:imageSource('free')}},
+    {id:'auto',type:'reference.character',name:'键盘连线参考',angle:'背面'},
     {id:'consumer',type:'model.image',model_id:'canvas-image-model',input_bindings:[{id:'keep-adoption',input_port:'image',source:imageSource('named')}]},
     {id:'model',type:'model.image',model_id:'canvas-image-model',prompt:{segments:[{id:'p',kind:'text',text:'生成参考图'}]},config:{count:3}}]
   const edges=[{id:'linked',source_card:'picture',source_port:'image',target_card:'character',target_port:'image_source'},
     {id:'name',source_card:'person',source_port:'object',target_card:'character',target_port:'name'},
+    {id:'auto-name',source_card:'person',source_port:'object',target_card:'auto',target_port:'name'},
     {id:'named-source',source_card:'free',source_port:'image',target_card:'named',target_port:'image_source'},
     {id:'consumer',source_card:'named',source_port:'image',target_card:'consumer',target_port:'image'}]
-  const initialDocument={...canvas.document,cards,edges,input_order:{character:{image_source:['linked'],name:['name']},named:{image_source:['named-source']},consumer:{image:['consumer']}}}
+  const initialDocument={...canvas.document,cards,edges,input_order:{character:{image_source:['linked'],name:['name']},auto:{name:['auto-name']},named:{image_source:['named-source']},consumer:{image:['consumer']}}}
   await json(endpoint,'PUT',{request_id:'seed',expected_revision:0,document:initialDocument})
   const preview=await json(endpoint+'/precheck','POST',{card_id:'model'})
   assert.ok(preview.can_run,JSON.stringify(preview.diagnostics))
@@ -81,10 +83,45 @@ try {
   assert.equal(state.document.cards.find(card=>card.id==='named').image_binding.file_id,secondImage)
   assert.equal(state.document.cards.find(card=>card.id==='consumer').input_bindings[0].source.card_id,'named')
   assert.ok((await json(endpoint+'/cards/consumer/compile')).can_run,'saved downstream adoption remains usable')
+  const linkImage = async (sourceId, targetId) => {
+    await page.getByRole('button',{name:'适应全部',exact:true}).click()
+    const point = (id, side) => page.locator(`[data-card-id="${id}"] [data-connection-side="${side}"]`).boundingBox()
+    const from = await point(sourceId, 'right'), to = await point(targetId, 'left')
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, {steps: 12})
+    await page.mouse.up()
+    return poll(state => state.document.edges.some(edge => edge.source_card === sourceId && edge.target_card === targetId && edge.target_port === 'image_source'))
+  }
+  const binding = (state, id) => state.document.cards.find(card => card.id === id).image_binding
+  state = await linkImage('picture', 'place')
+  assert.equal(binding(state, 'place')?.file_id, image, 'the first connection immediately fixes its current image')
+  state = await linkImage('free', 'place')
+  assert.equal(binding(state, 'place')?.file_id, image, 'a later connection only adds a candidate')
+  await page.getByRole('button',{name:'撤销操作',exact:true}).click()
+  await poll(state => !state.document.edges.some(edge => edge.source_card === 'free' && edge.target_card === 'place'))
+  await page.getByRole('button',{name:'撤销操作',exact:true}).click()
+  state = await poll(state => !state.document.edges.some(edge => edge.target_card === 'place'))
+  assert.ok(!binding(state, 'place'), 'one undo removes the first connection and its adoption')
+  await page.getByRole('button',{name:'重做操作',exact:true}).click()
+  await poll(state => binding(state, 'place')?.file_id === image && state.document.edges.some(edge => edge.target_card === 'place'))
+  await page.reload()
+  assert.equal(binding(await read(), 'place')?.file_id, image, 'the adopted image survives reopening')
+  await linkImage('third', 'prop')
+  state = await linkImage('picture', 'prop')
+  assert.ok(!binding(state, 'prop'), 'an empty first source still occupies the first connection')
+  await page.getByRole('button',{name:'撤销操作',exact:true}).click()
+  await poll(state => !state.document.edges.some(edge => edge.target_card === 'prop' && edge.source_card === 'picture'))
+  await page.getByRole('button',{name:'撤销操作',exact:true}).click()
+  await poll(state => !state.document.edges.some(edge => edge.target_card === 'prop'))
+  await page.locator('[data-card-id="picture"]').getByRole('button',{name:'右侧连接点',exact:true}).press('Enter')
+  await page.getByRole('button',{name:/^连接到键盘连线参考 · 卡片 /}).press('Enter')
+  state = await poll(state => state.document.edges.some(edge => edge.target_card === 'auto' && edge.target_port === 'image_source'))
+  assert.equal(binding(state, 'auto')?.file_id, image, 'a name candidate does not consume the first image connection')
   await open('character')
   assert.deepEqual(await editor.locator('.generation-attribute-label').allTextContents(),['参考名称 *','角度','关联图片'])
   assert.equal(await editor.locator('.generation-attribute-hint[role=alert]').first().textContent(),'请填写参考名称')
-  assert.equal(await editor.locator('.generation-attribute .ant-select').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(27, 27, 27)')
+  assert.equal(await editor.locator('.generation-attribute .ant-select').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(32, 36, 39)')
   assert.doesNotMatch(await editor.locator('.generation-material-footer').innerText(),/请填写参考名称/)
   await page.screenshot({path:join(output,'reference-attributes-desktop.png')})
   assert.equal(await editor.locator('input[type=file]').count(),0)
@@ -141,7 +178,8 @@ try {
     kindBeingEdited=kind;await open(kind)
     assert.equal(await editor.locator('input[type=file]').count(),0)
     assert.equal(await editor.getByRole('combobox',{name:'关联图片',exact:true}).getAttribute('readonly'),'')
-    await setName('名称-'+kind);await choose('picture')
+    await setName('名称-'+kind)
+    if(kind!=='place')await choose('picture')
     await poll(state=>state.document.cards.find(card=>card.id===kind).image_binding?.source?.card_id==='picture')
     assert.equal(await editor.locator('.generation-reference-name .ant-select-suffix').count(),1)
   }

@@ -1072,7 +1072,25 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       return
     }
     if (sourceSide) connectionLayout.setSides(previous => ({ ...previous, [edge.id]: { source: sourceSide, target: targetSide } }))
-    if (connectDocument(latest.current, edge, target && capability(target))) setReason(uiText(connectionPolicy(latest.current, option)?.message || "来源已连接"))
+    const before = latest.current
+    const added = operations.connect(before, edge, target && capability(target))
+    if (!added.document) { setReason(added.reason); return }
+    const source = before.cards?.find(card => card.id === edge.source_card)
+    const reference = target?.type?.startsWith('reference.') ? target as NamedImageReferenceCard : undefined
+    const savedSource = savedDocument?.cards?.find(card => card.id === edge.source_card)
+    // Only an explicit first image connection may adopt a picture. Keep the edge and binding in one edit.
+    if (edge.target_port === 'image_source' && reference && !reference.image_binding && !reference.scene_object_source
+      && source?.type === 'content.image' && 'file_id' in source && source.file_id && !source.uploading
+      && !runtime?.outputs[source.id]?.some(output => output.available === false && (output.file_id === source.file_id
+        || !output.file_id && savedSource && 'file_id' in savedSource && savedSource.file_id === source.file_id))
+      && !before.edges?.some(item => item.target_card === reference.id && item.target_port === 'image_source')) {
+      edit({ ...added.document, cards: added.document.cards?.map(card => card.id === reference.id
+        ? { ...reference, image_binding: storyboardImageBinding(before, source) } : card) })
+      setReason(uiText("已关联参考图"))
+      return
+    }
+    edit(added.document)
+    setReason(uiText(connectionPolicy(before, option)?.message || "来源已连接"))
   }
   const finishDrag = (event: PointerEvent) => {
     if (!drag) return

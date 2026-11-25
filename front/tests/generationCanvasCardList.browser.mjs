@@ -42,12 +42,25 @@ try {
   await page.goto(`http://127.0.0.1:4477${storyboardCanvasPath(canvas)}`)
   const list = page.getByRole('navigation', { name: '添加卡片', exact: true })
   const categories = page.getByRole('toolbar', { name: '卡片分类', exact: true })
+  const assertAlignedEntries = async () => {
+    const entries = await list.locator('button[draggable]').evaluateAll(buttons => buttons.map(button => ({
+      icon: button.querySelector('.ant-btn-icon').getBoundingClientRect().left,
+      label: button.lastElementChild.getBoundingClientRect().left,
+    })))
+    assert.ok(entries.length > 1)
+    for (const { icon, label } of entries) {
+      assert.ok(Math.abs(icon - entries[0].icon) < 1, 'card icons share a left edge')
+      assert.ok(Math.abs(label - entries[0].label) < 1, 'card names share a left edge')
+    }
+  }
   await categories.waitFor()
   assert.equal(await categories.getByRole('button').count(), 9)
   assert.equal(await list.isVisible(), false)
   const before = await page.locator('.generation-world').evaluate(node => node.style.transform)
   await categories.getByRole('button', { name: '基础卡', exact: true }).click()
   await list.getByRole('heading', { name: '基础卡', exact: true }).waitFor()
+  await page.screenshot({ path: join(output, 'basic-card-menu-desktop.png') })
+  await assertAlignedEntries()
   const catalog = (await (await fetch(storyboardCanvasApi(base, id, `/catalog`))).json()).data
   const represented = new Set()
   const menuWidths = []
@@ -121,6 +134,7 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
   const panel = await list.boundingBox()
   assert.ok(panel.x >= 0 && panel.x + panel.width <= 390 && panel.y >= 0 && panel.y + panel.height <= 844)
+  await assertAlignedEntries()
   await page.screenshot({ path: join(output, 'two-level-mobile.png') })
   const other = await page.context().newPage()
   await other.goto(page.url())

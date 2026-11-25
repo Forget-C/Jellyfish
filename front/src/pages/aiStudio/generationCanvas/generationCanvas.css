@@ -100,7 +100,7 @@
 .generation-card-list h2 { margin: 0; font-size: 16px; }
 .generation-card-list h3 { font-size: 12px; color: var(--wb-muted); margin: 16px 0 8px; }
 .generation-card-list section { display: flex; flex-direction: column; }
-.generation-card-list section .wb-action { width: 100%; margin-bottom: 4px; text-align: left; }
+.generation-card-list section .wb-action { width: 100%; justify-content: flex-start; margin-bottom: 4px; text-align: left; }
 .generation-card-list small { display: block; color: var(--wb-muted); margin-block: 4px; }
 @media(max-width: 600px) {
   .generation-card-list-host { top: 280px; }
