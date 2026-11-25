@@ -148,10 +148,13 @@ try {
   const independent = card
   await independent.getByRole('button', { name: '从素材中选择', exact: true }).click()
   let modal = page.getByRole('dialog', { name: '项目文件库', exact: true })
-  let cleanupRow = modal.getByText('cleanup', { exact: true }).locator('../..')
-  await cleanupRow.getByRole('button', { name: '释放上传保留', exact: true }).click()
+  const releaseCleanup = async () => {
+    await modal.getByRole('button', { name: 'cleanup更多操作', exact: true }).click()
+    await page.getByRole('menuitem', { name: '释放上传保留', exact: true }).click()
+  }
+  await releaseCleanup()
   await modal.getByRole('alert').filter({ hasText: '素材仍被业务使用' }).waitFor()
-  await modal.getByRole('button', { name: 'Close', exact: true }).click()
+  await modal.locator('button.ant-modal-close').click()
   await modal.waitFor({ state: 'hidden' })
   await openSummaryMenu(uploadedSummary)
   await uploadedSummary.getByRole('button', { name: '删除卡片', exact: true }).press('Enter')
@@ -161,17 +164,16 @@ try {
   await openCanvasCard(page, pickerCard)
   await independent.getByRole('button', { name: '从素材中选择', exact: true }).click()
   modal = page.getByRole('dialog', { name: '项目文件库', exact: true })
-  cleanupRow = modal.getByText('cleanup', { exact: true }).locator('../..')
   const owners = api + '/api/v1/studio/entities/scene'
   const owner = await fetch(owners, { method: 'POST', headers: json, body: JSON.stringify({
     id: 'retention-owner', name: '参考场所', references: [{ file_id: uploadedId, role: 'design' }],
   }) })
   assert.equal(owner.status, 201, await owner.text())
-  await cleanupRow.getByRole('button', { name: '释放上传保留', exact: true }).click()
+  await releaseCleanup()
   await modal.getByRole('alert').filter({ hasText: '共享库 › 场所「参考场所」' }).waitFor()
   assert.equal((await fetch(owners + '/retention-owner', { method: 'DELETE' })).status, 200)
   await page.route('**/files/' + uploadedId + '/upload-retention?*', async route => { await route.fetch(); await route.abort('failed') }, { times: 1 })
-  await cleanupRow.getByRole('button', { name: '释放上传保留', exact: true }).click()
+  await releaseCleanup()
   await modal.getByRole('alert').filter({ hasText: '清理结果未确认' }).waitFor()
   await modal.getByRole('button', { name: '刷新项目文件', exact: true }).click()
   await modal.getByText('cleanup', { exact: true }).waitFor({ state: 'detached' })

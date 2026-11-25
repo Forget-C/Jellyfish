@@ -2,4 +2,23 @@
 .file-library-image-picker-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .file-library-image-picker-grid .ant-btn { display: grid; gap: 4px; height: auto; min-width: 0; padding: 4px; }
 .file-library-image-picker-grid img { width: 100%; aspect-ratio: 2 / 1; object-fit: cover; border-radius: 4px; }
-.file-library-image-picker-grid .ant-btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-library-image-picker-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-library-image-picker-item { min-width: 0; position: relative; }
+.file-library-image-picker-item > .ant-btn:first-child { width: 100%; }
+.file-library-image-picker[data-canvas] { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+.file-library-image-picker[data-canvas] .file-library-image-picker-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+.file-library-image-picker[data-canvas] .ant-input-search { flex: 1 1 220px; min-width: 0; }
+.file-library-image-picker[data-canvas] .file-library-image-picker-content { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
+.canvas-image-file-dialog .ant-modal-container { height: min(720px, calc(100dvh - 48px)); }
+.file-library-image-picker[data-canvas] .file-library-image-picker-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 2px; }
+.file-library-image-picker[data-canvas] .file-library-image-picker-item > .ant-btn:first-child { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 8px; }
+.file-library-image-picker[data-canvas] img { object-fit: contain; background: var(--wb-inset); }
+.file-library-image-picker-unavailable { display: grid; align-content: center; justify-items: center; gap: 8px; aspect-ratio: 2 / 1; color: var(--wb-muted); background: var(--wb-inset); }
+.file-library-image-picker[data-canvas] .file-library-image-picker-name { text-align: start; }
+.file-library-image-picker[data-canvas] .file-library-image-picker-item > .ant-btn[aria-pressed="true"] { border-color: var(--wb-focus); }
+.file-library-image-picker-selected { position: absolute; inset-block-start: 12px; inset-inline-start: 12px; padding: 4px; border-radius: 4px; background: var(--wb-selected); }
+.file-library-image-picker-more { position: absolute; inset-block-start: 12px; inset-inline-end: 12px; }
+@media (max-width: 575px) {
+  .file-library-image-picker[data-canvas] .file-library-image-picker-grid { grid-template-columns: minmax(0, 1fr); }
+  .file-library-image-picker[data-canvas] .file-library-image-picker-toolbar :is(.ant-input, .ant-btn) { min-height: 36px; }
+}
