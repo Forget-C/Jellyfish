@@ -190,8 +190,11 @@ async def test_approved_first_card_and_reference_are_promoted_once(canvas_client
 @pytest.mark.asyncio
 @pytest.mark.usefixtures('assistant_edit_model')
 @pytest.mark.parametrize('canvas_client', [None, 'mysql'], indirect=True)
-async def test_first_save_applies_only_selected_batch_and_replays(canvas_client, monkeypatch):
+@pytest.mark.parametrize('group_ids', [('1',), ('1', '2')])
+async def test_first_save_applies_only_selected_batch_and_replays(canvas_client, monkeypatch, group_ids):
     from copy import deepcopy
+
+    canvas_client.canvas_sessions.configure(autoflush=False)
 
     groups = [
         {'title': '分镜结构', 'changes': [
@@ -238,7 +241,7 @@ async def test_first_save_applies_only_selected_batch_and_replays(canvas_client,
     turn = exchange.json()['data']
     assert [len(group['edits']) for group in turn['proposal']['groups']] == [3, 1]
     command = {'request_id': 'approve-batch', 'expected_revision': 0, 'document': document,
-               'assistant': {'turns': [turn]}, 'assistant_approval': {'source_id': 'draft-batch', 'group_ids': ['1']}}
+               'assistant': {'turns': [turn]}, 'assistant_approval': {'source_id': 'draft-batch', 'group_ids': list(group_ids)}}
     invalid = deepcopy(command)
     invalid['assistant']['turns'][0]['proposal']['groups'][0]['edits'][2]['target']['target_port'] = 'invalid'
     response = await canvas_client.put(url, json=invalid)
@@ -249,12 +252,22 @@ async def test_first_save_applies_only_selected_batch_and_replays(canvas_client,
     assert saved.status_code == 200, saved.text
     assert (await canvas_client.put(url, json=command)).json() == saved.json()
     result = saved.json()['data']['document']
-    assert [card['type'] for card in result['cards']] == ['content.text', 'model.text']
+    card_types = ['content.text', 'model.text']
+    if '2' in group_ids:
+        card_types.append('content.text')
+    assert [card['type'] for card in result['cards']] == card_types
     assert len(result['edges']) == 1
     assert (result['edges'][0]['source_card'], result['edges'][0]['target_card']) == tuple(
-        card['id'] for card in result['cards']
+        card['id'] for card in result['cards'][:2]
     )
     history = (await canvas_client.get(f'/canvases/{draft_id}/assistant')).json()['data']['turns']
     assert len(history) == 1
-    assert [group['state'] for group in history[0]['proposal']['groups']] == ['applied', 'pending']
-    assert [row['group_ids'] for row in history[0]['approval_audit']] == [['1']]
+    assert [group['state'] for group in history[0]['proposal']['groups']] == [
+        'applied', 'applied' if '2' in group_ids else 'pending',
+    ]
+    assert [row['group_ids'] for row in history[0]['approval_audit']] == [[item] for item in group_ids]
+    events = (await canvas_client.get(f'/canvases/{draft_id}/assistant/events')).json()['data']
+    assert [event['cursor'] for event in events] == list(range(1, len(events) + 1))
+    assert [event['group_ids'] for event in events if event['type'] == 'execution.succeeded'] == [
+        [item] for item in group_ids
+    ]

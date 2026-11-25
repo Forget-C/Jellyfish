@@ -199,3 +199,5 @@ async def publish_assistant_edit_execution(
     exchange.generation = await read_generation(db, turn.canvas_id, turn.request_id)
     publish_events(db, session, exchange, 'execution.succeeded' if success else (
         'execution.failed' if receipt.state == 'failed' else 'execution.blocked'), subject='edit', group_ids=[outcome.id])
+    # The next receipt may refresh this session under lock with autoflush disabled.
+    await db.flush()
