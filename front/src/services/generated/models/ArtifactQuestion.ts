@@ -7,4 +7,3 @@ export type ArtifactQuestion = {
     id: string;
     options: Array<ArtifactOption>;
 };
-

@@ -6,4 +6,3 @@ export type ArtifactAnswer = {
     question_id: string;
     file_id: string;
 };
-

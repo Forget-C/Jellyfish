@@ -11,4 +11,3 @@ export type ArtifactOption = {
     sequence: number;
     ordinal: number;
 };
-

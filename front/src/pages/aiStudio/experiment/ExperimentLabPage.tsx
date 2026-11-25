@@ -136,6 +136,14 @@ export default function ExperimentLabPage() {
     />
   )
 
+  const requestedSession = searchParams.get('session')
+  if (loading && requestedSession && selectedSessionId !== requestedSession) {
+    return renderLayout(uiText("实验室"))({
+      history: <span role="status">{uiText("加载中")}</span>,
+      composer: null,
+    })
+  }
+
   return <ExperimentLeaveStatusContext.Provider value={register}>
     {selectedLabType === 'chat'
       ? <LabChatMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} render={renderLayout(uiText("实验室 · 多模态聊天"))} />
