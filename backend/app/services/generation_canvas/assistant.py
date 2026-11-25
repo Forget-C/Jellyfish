@@ -881,6 +881,8 @@ class CanvasAssistant:
         opening_request = request_text.split('\n\n', 1)[0].strip().rstrip('。！!')
         write_plan = opening_request == '写入画布'
         continue_plan = opening_request == '按此方案继续'
+        if edit_draft:
+            edit_draft.writing_shot_plan = write_plan or continue_plan
         cards = prioritize_context_cards(context, request_text) if context else []
         page_size = CANVAS_PAGE_SIZE if max_input_tokens is None else max(1, min(CANVAS_PAGE_SIZE, max_input_tokens // 512))
 
@@ -919,7 +921,10 @@ class CanvasAssistant:
             professional += ('单镜头完整描述直接写视频卡；复用文本卡用 use_video_text(source_card,target_card,可选replace_segment_id)，'
                              '只保留镜头补充。角色图用 use_video_character(source_card,target_card,subject_name)，'
                              '两个操作均可用 before_segment_id 在镜头补充前插入引用。缺图时将独立文案另组送审。'
-                             '按镜头指定覆盖图优先并尊重人工改绑。上述 kind 与参数同级，使用真实卡 ID 或新卡 reference。')
+                             '按镜头指定覆盖图优先并尊重人工改绑。上述 kind 与参数同级，使用真实卡 ID 或新卡 reference。'
+                             '修复已有改写稿时，用镜号标识审批组，保留两份正文中独有且已确认的细节。'
+                             '将清理后的源正文、视频旧片段对齐到源正文、用 use_video_text 替换该片段、'
+                             '设置视频时长放在同一审批组。')
         if planning:
             professional += ('\n当前轮仅给出只读方案。说明镜头取舍、各段时长和合计、实施步骤与涉及的卡片。'
                              '基于实际读取的资料，明确缺失依据。等待用户要求按此方案继续。')
@@ -927,7 +932,13 @@ class CanvasAssistant:
             professional += ('将当前对话中最近一份创作方案转换为可审批的修改提案。'
                              '逐项核对方案与现有卡，优先复用，并按当前画布目录选择专用卡、填写有效字段。'
                              '明确交代原方案镜头数、可独立编辑的镜头数、复用或新增内容、已表达的依赖和未能表达的差异。'
-                             '需要逐镜制作时保留各镜头标识，不擅自合并为总表。无法完整表达时在提案说明中列出差异。'
+                             '逐镜制作时用镜号开头命名审批组，例如 S04 · 金箍棒落点。'
+                             '已有关联的正式镜头按真实卡 ID 修改，保留原镜头身份。'
+                             '整镜秒数通过 video_duration 设置，两张卡的正文保留动作和镜内节奏，例如定格半帧。'
+                             '时长超出所选模型限制时报告差异，等待用户决定。'
+                             '同一镜头若创建或沿用文本内容卡保存完整描述，视频卡通过 use_video_text 写入结构化 @引用，'
+                             '初始正文留空。有明确的独立补充时，才在该片段前插入引用；新卡的初始片段可用该卡的 reference 定位。'
+                             '无法完整表达时在提案说明中列出差异。'
                              '只有真实输入依赖才建立候选连线，按目录端口匹配；缺素材时明确指出，禁止把候选当作已采用。'
                              '没有足够的方案内容时请说明缺失内容。')
         if context is not None and not supports_tools:

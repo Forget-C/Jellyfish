@@ -27,6 +27,94 @@ def group(title, card_id, text):
 
 
 @pytest.mark.asyncio
+async def test_shot_preview_uses_one_description_and_separate_duration(tmp_path):
+    from app.services.generation_canvas.generation_inputs import canvas_generation_inputs
+    from app.services.generation_canvas.planning_tools import CanvasPlanningTools
+
+    description = '孙悟空腾空跃起，金箍棒向下猛砸。仰拍上摇，落点前定格半帧。'
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            canvas = await free_canvas_lifecycle(db).create_free(CanvasCreate(name='分镜'))
+        scope = CanvasAssistantReadContext(revision=canvas.revision, scope='canvas', target_card_ids=[], cards=[])
+        tools = CanvasPlanningTools(sessions, None, canvas.id, scope, CanvasAssistantEditDraft(scope, canvas.document))
+        source = {'kind': 'add_card', 'reference': 'description',
+                  'card': {'kind': 'add_text_card', 'text': description}}
+        video = {'kind': 'add_card', 'reference': 'video',
+                 'card': {'kind': 'add_model_card', 'modality': 'video', 'prompt': ''}}
+        duration = {'kind': 'edit_field', 'change': {'card_id': 'video',
+                    'target': {'kind': 'video_duration'}, 'text': '10'}}
+        use = {'kind': 'use_video_text', 'source_card': 'description', 'target_card': 'video'}
+        candidate = {'kind': 'connect_cards', 'source_card': 'description', 'source_port': 'text',
+                     'target_card': 'video', 'target_port': 'text'}
+        changes = [source, video, duration, candidate]
+
+        async def preview():
+            return await tools.preview([{'title': 'S04 · 金箍棒落点', 'changes': changes}])
+
+        rejected = await preview()
+        assert not rejected.plan and any('@引用' in issue.message for issue in rejected.issues)
+        changes[-1] = use
+        source['card']['text'] = 'S04 / 10 秒。' + description
+        rejected = await preview()
+        assert not rejected.plan and rejected.issues
+        source['card']['text'] = description
+        video['card']['prompt'] = '镜头随后拉远，10 秒'
+        changes[-1] = {**use, 'before_segment_id': 'video'}
+        rejected = await preview()
+        assert not rejected.plan and any('整镜秒数' in issue.message for issue in rejected.issues)
+        changes[-1] = use
+        video['card']['prompt'] = '孙悟空跳起挥棒下砸，镜头跟随上摇，砸落前短暂停格。'
+        rejected = await preview()
+        assert not rejected.plan and rejected.issues
+        video['card']['prompt'] = ''
+        accepted = await preview()
+        assert accepted.plan, accepted.issues
+        assert accepted.proposal.groups[0].title.startswith('S04')
+        ids = {edit.origin_reference: edit.card_id for edit in accepted.proposal.groups[0].edits if edit.origin_reference}
+        video_id = ids['video']
+        assert (await tools.inspect_inputs(video_id, group_id='1')).text == description
+        async with sessions.begin() as db:
+            await canvas_edits(db, None).submit(accepted.plan, request_id='s04')
+            document = (await free_canvas_lifecycle(db).read(canvas.id)).document
+            saved_video = next(card for card in document.cards if card.id == video_id)
+            assert saved_video.config.seconds == 10
+            assert [segment.kind for segment in saved_video.prompt.segments] == ['reference']
+            updated = description.replace('仰拍上摇', '低机位固定')
+            edits = canvas_edits(db, None)
+            revised = await edits.preview(canvas.id, [CanvasEditGroup(id='source', cards=[
+                TextContentCard(id=ids['description'], text=updated),
+            ])])
+            await edits.submit(revised, request_id='change-s04-source')
+            compiled = await canvas_generation_inputs(db, None).compile_input(canvas.id, video_id)
+            assert compiled.text == updated
+            reopened = (await free_canvas_lifecycle(db).read(canvas.id)).document
+            assert next(card for card in reopened.cards if card.id == video_id).config.seconds == 10
+            legacy = await edits.preview(canvas.id, [CanvasEditGroup(id='legacy', cards=[
+                TextContentCard(id='old-source', text='S04 / 10 秒。' + description),
+                VideoModelCard(id='old-video', prompt=video_prompt('孙悟空跳起挥棒下砸，上摇跟随，落点定格，10 秒')),
+            ])])
+            await edits.submit(legacy, request_id='legacy-s04')
+            current = await free_canvas_lifecycle(db).read(canvas.id)
+
+        scope = CanvasAssistantReadContext(revision=current.revision, scope='selection',
+            target_card_ids=['old-source', 'old-video'],
+            cards=[card.model_dump(mode='json') for card in current.document.cards if card.id.startswith('old-')])
+        repair = CanvasPlanningTools(sessions, None, canvas.id, scope, CanvasAssistantEditDraft(scope, current.document))
+        repaired = await repair.preview([{'title': '修复 S04', 'changes': [
+            {'kind': 'edit_field', 'change': {'card_id': 'old-source', 'target': {'kind': 'card_text'}, 'text': description}},
+            *group('对齐旧片段', 'old-video', description)['changes'],
+            {**use, 'source_card': 'old-source', 'target_card': 'old-video', 'replace_segment_id': 'body'},
+            {**duration, 'change': {**duration['change'], 'card_id': 'old-video'}},
+        ]}])
+        assert repaired.plan, repaired.issues
+        assert len(repaired.plan.groups) == 1
+        async with sessions.begin() as db:
+            await canvas_edits(db, None).submit(repaired.plan, request_id='repair-s04')
+            compiled = await canvas_generation_inputs(db, None).compile_input(canvas.id, 'old-video')
+            assert compiled.text == description
+
+
+@pytest.mark.asyncio
 async def test_tool_preview_matches_protocol_and_keeps_valid_independent_group(tmp_path):
     from app.services.generation_canvas.planning_tools import CanvasPlanningTools
 
