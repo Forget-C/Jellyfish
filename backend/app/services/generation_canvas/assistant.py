@@ -26,7 +26,7 @@ from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.models.llm import ModelCategoryKey
 from app.schemas.interaction import InteractionEvent
 from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantInstruction, CanvasAssistantMessage,
-                                          CanvasAssistantModelSelection, CanvasAssistantQuestion, CanvasAssistantQuestionAnswer,
+                                          CanvasAssistantModelSelection, CanvasAssistantProgress, CanvasAssistantQuestion, CanvasAssistantQuestionAnswer,
                                           CanvasAssistantReadContext, CanvasAssistantSkillUse, CanvasAssistantEventPayload,
                                           CanvasAssistantQueueItem)
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposal, CanvasAssistantProposalIssue
@@ -575,7 +575,9 @@ class CanvasAssistant:
             session.pending_checkpoint = None
             publish_events(self.db, session, CanvasAssistantExchange(
                 request_id=command.request_id, text=command.text, sequence=session.sequence + 1,
-                model_id=model_id, reply='',
+                model_id=model_id, reply='', progress=CanvasAssistantProgress(
+                    request_id=command.request_id, model_id=model_id, revision=(context or {}).get('revision'),
+                ),
             ), 'turn.accepted')
         snapshot = session.pending_checkpoint
         # Keep database locks away from provider I/O. The short lease serializes
