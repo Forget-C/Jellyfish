@@ -12,6 +12,8 @@
     "credential": "MCP 临时凭据",
     "bearer": "在 MCP 客户端中将此凭据配置为 Bearer 令牌。",
     "expiresAt": "连接有效至 {{date}}",
+    "retryStatus": "重试读取连接状态",
+    "statusError": "无法读取 MCP 连接状态。",
     "error": "操作 MCP 连接失败，请重试。"
   },
   "roleOptions": {

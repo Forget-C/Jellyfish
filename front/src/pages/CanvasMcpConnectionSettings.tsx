@@ -6,7 +6,8 @@ import type { CanvasMcpConnection } from '../services/generated'
 
 export function CanvasMcpConnectionSettings() {
   const { t, i18n } = useTranslation('settings')
-  const [expiresAt, setExpiresAt] = useState<string | null>(null)
+  const [expiresAt, setExpiresAt] = useState<string | null>()
+  const [statusAttempt, setStatusAttempt] = useState(0)
   const [connection, setConnection] = useState<CanvasMcpConnection | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -15,7 +16,8 @@ export function CanvasMcpConnectionSettings() {
     const request = CanvasMcpService.canvasMcpConnectionStatus()
     let active = true
     void request.then(result => {
-      if (active) setExpiresAt(result.data?.expires_at ?? null)
+      if (!result.data) throw new Error('Missing MCP connection status')
+      if (active) setExpiresAt(result.data.expires_at)
     }).catch(() => {
       if (active) setError(true)
     }).finally(() => {
@@ -25,7 +27,7 @@ export function CanvasMcpConnectionSettings() {
       active = false
       request.cancel()
     }
-  }, [])
+  }, [statusAttempt])
 
   useEffect(() => {
     if (!expiresAt) return
@@ -57,8 +59,18 @@ export function CanvasMcpConnectionSettings() {
     }
   }
 
+  const retryStatus = () => {
+    setLoading(true)
+    setError(false)
+    setStatusAttempt(attempt => attempt + 1)
+  }
+
+  const statusUnknown = expiresAt === undefined
   const address = connection
-    ? new URL(connection.path ?? '/mcp', new URL(OpenAPI.BASE || '/', window.location.origin)).href
+    ? new URL(
+      OpenAPI.BASE.replace(/\/+$/, '') + (connection.path ?? '/mcp'),
+      window.location.origin,
+    ).href
     : ''
   return (
     <section aria-labelledby="canvas-mcp-heading" className="app-settings-form">
@@ -69,7 +81,7 @@ export function CanvasMcpConnectionSettings() {
             {t('mcp.expiresAt', { date: new Date(expiresAt).toLocaleString(i18n.resolvedLanguage) })}
           </p>
         )}
-        {error && <Alert type="error" message={t('mcp.error')} />}
+        {error && <Alert type="error" message={t(statusUnknown ? 'mcp.statusError' : 'mcp.error')} />}
         {connection && (
           <Form layout="vertical">
             <Form.Item label={t('mcp.address')} htmlFor="canvas-mcp-address">
@@ -81,9 +93,13 @@ export function CanvasMcpConnectionSettings() {
             </Form.Item>
           </Form>
         )}
-        <Button type={expiresAt ? 'default' : 'primary'} loading={loading} onClick={() => void updateConnection()}>
-          {t(expiresAt ? 'mcp.close' : 'mcp.open')}
-        </Button>
+        {statusUnknown
+          ? <Button loading={loading} onClick={retryStatus}>{t('mcp.retryStatus')}</Button>
+          : (
+            <Button type={expiresAt ? 'default' : 'primary'} loading={loading} onClick={() => void updateConnection()}>
+              {t(expiresAt ? 'mcp.close' : 'mcp.open')}
+            </Button>
+          )}
       </Space>
     </section>
   )

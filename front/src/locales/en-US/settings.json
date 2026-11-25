@@ -12,6 +12,8 @@
     "credential": "Temporary MCP credential",
     "bearer": "Use this credential as a bearer token in your MCP client.",
     "expiresAt": "Connection expires at {{date}}",
+    "retryStatus": "Retry loading connection status",
+    "statusError": "Unable to load the MCP connection status.",
     "error": "The MCP connection could not be updated. Try again."
   },
   "roleOptions": {

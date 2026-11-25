@@ -12,7 +12,7 @@ from app.api.v1 import router as api_v1_router
 from app.bootstrap import bootstrap_all_registries
 from app.config import settings
 from app.canvas_mcp.connection import MCP_PATH
-from app.canvas_mcp.server import CanvasMcpEndpoint, create_server as create_canvas_mcp_server
+from app.canvas_mcp.server import CanvasMcpEndpoint, run_transport
 from app.core.dev_runtime import process_identity
 from app.schemas.common import ApiResponse
 
@@ -67,9 +67,8 @@ async def lifespan(app: FastAPI):
     # 启动时幂等注册供应商能力；任务由独立 Worker 执行。
     with process_identity('api'):
         bootstrap_all_registries()
-        canvas_mcp_server = create_canvas_mcp_server()
-        app.state.canvas_mcp_transport = canvas_mcp_server.streamable_http_app()
-        async with canvas_mcp_server.session_manager.run():
+        async with run_transport() as transport:
+            app.state.canvas_mcp_transport = transport
             yield
 
 
