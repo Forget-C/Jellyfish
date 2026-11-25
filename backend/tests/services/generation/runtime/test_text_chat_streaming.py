@@ -20,8 +20,9 @@ from app.services.generation.runtime import text_chat_streaming
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("unified", [False, True])
 @pytest.mark.parametrize("responses", [False, True, "failed", "disabled"])
-async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, responses) -> None:
+async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, responses, unified) -> None:
     from app.dependencies import get_db
     from app.main import app
 
@@ -67,16 +68,36 @@ async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, res
                          provider_id="custom", capability_profile={"native_streaming": {"declaration": "unsupported"}} if responses == "disabled" else {}, params={"temperature": 0.4, "use_responses_api": bool(responses)}))
             db.add(ExperimentSession(id="gateway-session", lab_type="text"))
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.post("/api/v1/studio/labs/text/sessions/gateway-session/stream",
-                                         json={"model_id": "custom-text", "content": "你好"})
+            base = "/api/v1/studio/chat/sessions/text/gateway-session"
+            url = base + "/turns" if unified else "/api/v1/studio/labs/text/sessions/gateway-session/stream"
+            body = {"model_id": "custom-text", "content": "你好"}
+            response = await client.post(url, json=body, headers={"Idempotency-Key": "gateway-trial"})
+            if unified and responses != "disabled":
+                assert response.status_code == 200, response.text
+                receipt = response.json()['data']
+                retry = await client.post(url, json=body, headers={"Idempotency-Key": "gateway-trial"})
+                assert retry.json()['data'] == receipt
+                for _ in range(100):
+                    response = await client.get(base + "/events", params={"after": receipt['cursor'], "follow": False})
+                    if "event: turn.completed" in response.text or "event: turn.failed" in response.text:
+                        break
+                    await asyncio.sleep(.02)
+                events = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
+                assert events[0]['type'] == 'turn.accepted'
+                assert {e['turn_id'] for e in events} == {receipt['turn_id']}
+                assert len([e for e in events if e['type'] == 'message.updated']) == 2
+                replay = await client.get(base + "/events", params={"after": events[-2]['cursor'], "follow": False})
+                assert replay.text.count("data: ") == 1
+                snapshot = await client.get(base)
+                assert snapshot.json()['data'][0]['content'] == '你好'
         if responses == "disabled":
             assert response.status_code == 422 and not requests
             return
         assert response.status_code == 200
         if responses == "failed":
-            assert "event: error" in response.text
+            assert ("event: turn.failed" if unified else "event: error") in response.text
             return
-        assert "event: completed" in response.text
+        assert ("event: turn.completed" if unified else "event: completed") in response.text
         assert "第一段" in response.text and "第二段" in response.text
         [(url, auth, payload)] = requests
         assert (url, auth) == ("https://gateway.test/v1/" + ("responses" if responses else "chat/completions"), "Bearer gateway-key")

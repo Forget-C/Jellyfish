@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.api.v1.routes.studio import (
     chapters,
     chat_sessions,
+    text_trials,
     generation_canvases,
     directing,
     entities,
@@ -23,6 +24,7 @@ from app.api.v1.routes.studio import (
 router = APIRouter()
 
 router.include_router(directing.router)
+router.include_router(text_trials.router, prefix="/chat/sessions/text", tags=["chat"])
 router.include_router(chat_sessions.router, prefix="/chat/sessions", tags=["chat"])
 
 router.include_router(projects.router, prefix="/projects", tags=["studio/projects"])

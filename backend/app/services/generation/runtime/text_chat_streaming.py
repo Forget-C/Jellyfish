@@ -41,6 +41,7 @@ from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.runtime.text_streaming import TextStreamRunNotFoundError, TextStreamingRuntime
 from app.services.generation.submission import GenerationAccepted, GenerationSubmitter
 from app.services.llm.resolver import build_laboratory_chat
+from app.services.studio.session_events import append_session_event
 from app.schemas.studio.text_lab import TextLabRunRequest
 from app.services.studio.experiment_interaction import (
     find_text_request, interaction_request_payload, text_stream_origin, text_stream_result,
@@ -61,6 +62,7 @@ class _TextStreamInput:
     content: str
     request_id: str | None = None
     user_message_id: str | None = None
+    publish_events: bool = False
 
 
 def _as_message_data(message: ExperimentMessage) -> StreamMessageData:
@@ -79,6 +81,7 @@ def _as_message_data(message: ExperimentMessage) -> StreamMessageData:
 
 async def create_text_stream_run(
     db: AsyncSession, *, session_id: str, model_id: str, content: str, request_id: str | None = None,
+    publish_events: bool = False,
 ) -> tuple[str, GenerationStreamEvent]:
     """持久化用户消息并创建内存 SSE run，不写入异步任务表。"""
     session = await _require_text_session(db, session_id=session_id)
@@ -93,8 +96,10 @@ async def create_text_stream_run(
     await db.flush()
     await db.refresh(user_message)
     async with _stream_inputs_lock:
-        _stream_inputs[run_id] = _TextStreamInput(session_id=session_id, model_id=model_id, content=content, request_id=request_id, user_message_id=user_message.id)
+        _stream_inputs[run_id] = _TextStreamInput(session_id=session_id, model_id=model_id, content=content, request_id=request_id, user_message_id=user_message.id, publish_events=publish_events)
     accepted = await _runtime.create_run(StreamAcceptedData(task_id=run_id, user_message=_as_message_data(user_message)))
+    if publish_events:
+        await append_session_event(db, session_id, run_id, "turn.accepted", accepted.data.model_dump(mode="json"))
     return run_id, accepted
 
 
@@ -107,7 +112,7 @@ class TextInteractionAdmission:
     saved_events: tuple[GenerationStreamEvent, ...] | None = None
 
 
-async def admit_text_interaction(db, session_id, body: TextLabRunRequest, request_id: str | None) -> TextInteractionAdmission:
+async def admit_text_interaction(db, session_id, body: TextLabRunRequest, request_id: str | None, *, publish_events=False) -> TextInteractionAdmission:
     """Resume an existing text stream by identity without starting the model again."""
     if request_id is not None:
         await _lock_text_interaction(db, session_id)
@@ -126,7 +131,7 @@ async def admit_text_interaction(db, session_id, body: TextLabRunRequest, reques
                 return TextInteractionAdmission(task_id, False, _recovered_text_events(previous, result, task_id))
             return TextInteractionAdmission(task_id, False)
     task_id, _ = await create_text_stream_run(
-        db, session_id=session_id, model_id=body.model_id, content=body.content, request_id=request_id,
+        db, session_id=session_id, model_id=body.model_id, content=body.content, request_id=request_id, publish_events=publish_events,
     )
     return TextInteractionAdmission(task_id, True)
 
@@ -344,6 +349,9 @@ async def _checkpoint_text(stream_input, deltas):
         message = await db.get(ExperimentMessage, stream_input.user_message_id)
         if message is None:
             raise TextStreamRunNotFoundError('The originating message was removed')
+        if stream_input.publish_events:
+            await append_session_event(db, stream_input.session_id, message.payload["interaction_run_id"],
+                                       "message.updated", {"text_delta": deltas[-1][1]})
         message.payload = {**message.payload, '_stream_partial': deltas}
         await db.commit()
 
@@ -365,6 +373,13 @@ async def _persist_stream_message(run_id, stream_input, events, body, state, det
         message, = await append_experiment_messages(db, session_id=stream_input.session_id, drafts=[
             ExperimentMessageDraft(role='assistant', content=body, status=state, payload=payload),
         ])
+        if stream_input.publish_events:
+            await db.flush()
+            await db.refresh(message)
+            data = ({"assistant_message": _as_message_data(message).model_dump(mode="json")}
+                    if state == "succeeded" else details or {})
+            kind = {"succeeded": "turn.completed", "cancelled": "turn.stopped", "failed": "turn.failed"}[state]
+            await append_session_event(db, stream_input.session_id, run_id, kind, data)
         await db.commit()
         await db.refresh(message)
     return message

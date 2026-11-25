@@ -21,7 +21,7 @@ from app.schemas.studio.experiment_sessions import (
     LabType,
 )
 from app.services.studio.experiment_interaction import read_experiment_receipt
-from app.services.studio.experiment_messages import read_experiment_messages, has_active_experiment_tasks
+from app.services.studio.experiment_messages import read_experiment_page, has_active_experiment_tasks
 
 router = APIRouter()
 
@@ -83,11 +83,9 @@ async def list_experiment_messages(session_id: str, db: AsyncSession = Depends(g
     session = await db.get(ExperimentSession, session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Experiment session not found")
-    rows = (await db.execute(select(ExperimentMessage).where(ExperimentMessage.session_id == session_id).order_by(ExperimentMessage.sequence.desc()).offset((page - 1) * page_size).limit(page_size))).scalars().all()
-    rows.reverse()
     capabilities = ('snapshot', 'send', 'events', 'stop') if session.lab_type == 'text' else ('snapshot', 'send', 'task_receipt')
     snapshot = InteractionSnapshot(session_id=session.id, cursor=session.message_sequence, capabilities=capabilities)
-    return success_response(await read_experiment_messages(db, rows), meta=snapshot.model_dump(mode='json'))
+    return success_response(await read_experiment_page(db, session_id, page, page_size), meta=snapshot.model_dump(mode='json'))
 
 
 @router.get('/{session_id}/interaction/requests/{request_id}', response_model=ApiResponse[ExperimentTaskCreated],
