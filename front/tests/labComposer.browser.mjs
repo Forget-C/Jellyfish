@@ -31,6 +31,7 @@ try {
       const mode = url.searchParams.get('lab_type')
       return respond([{ id: mode, lab_type: mode, title: modes[mode] + '输入验收', created_at: timestamp, updated_at: timestamp }])
     }
+    if (url.pathname.endsWith('/model-settings')) return respond({ default_text_model_id: 'model-2' })
     if (url.pathname.endsWith('/models')) { await modelGate; return respond({ items: Array.from({ length: 10 }, (_, i) => ({ id: 'model-' + i, name: longModels ? '很长的模型名称'.repeat(8) + i : '模型 ' + i, category: url.searchParams.get('category') })) }) }
     if (url.pathname.endsWith('/video-generation-options')) return respond({ model_id: url.searchParams.get('model_id'), allowed_ratios: ['16:9', '9:16'] })
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
@@ -41,9 +42,10 @@ try {
   })
   for (const mode of Object.keys(modes)) {
     await page.goto(origin + '/lab?session=' + mode)
-    await page.getByRole('button', { name: '选择模型', exact: true }).click()
+    await page.getByRole('button', { name: mode === 'text' ? '已选模型' : '选择模型', exact: true }).click()
     const option = page.getByRole('menuitemradio', { name: '模型 0', exact: true })
     await option.waitFor()
+    if (mode === 'text') assert.equal(await page.getByRole('menuitemradio', { name: '模型 2', exact: true }).getAttribute('aria-checked'), 'true')
     await page.getByRole('textbox', { name: '搜索模型', exact: true }).fill('模型 9')
     await page.getByRole('menuitemradio', { name: '模型 9', exact: true }).click()
     await page.getByRole('button', { name: '模型 9', exact: true }).and(page.locator(':focus')).waitFor()
@@ -59,7 +61,7 @@ try {
   let releaseModels
   modelGate = new Promise(resolve => { releaseModels = resolve })
   await page.goto(origin + '/lab?session=text')
-  const loadingTrigger = page.getByRole('button', { name: '选择模型', exact: true })
+  const loadingTrigger = page.getByRole('button', { name: '已选模型', exact: true })
   await loadingTrigger.click()
   await page.getByText('正在加载模型…', { exact: true }).waitFor()
   await loadingTrigger.press('Escape')
@@ -123,7 +125,7 @@ try {
       await page.setViewportSize({ width: 1440, height: 900 })
       await page.evaluate(value => localStorage.setItem('jellyfish_appearance', value), theme)
       await page.goto(origin + '/lab?session=' + mode)
-      await page.getByRole('button', { name: '选择模型', exact: true }).click()
+      await page.locator('.experiment-model-trigger').click()
       await page.getByRole('menuitemradio').first().click()
       if (mode === 'image') {
         await openLabAddition(page, '添加参考图')

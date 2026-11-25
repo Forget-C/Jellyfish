@@ -1,3 +1,4 @@
+import { textTrialFrame } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -35,9 +36,8 @@ const message = (session_id, id, role, content, sequence, fields = {}) => ({
 const saveMessages = (sessionId, ...items) => histories.set(sessionId, [...(histories.get(sessionId) ?? []), ...items])
 const writeFrame = (run, event, data) => {
   const sequence = ++run.sequence
-  run.response.write(`id: ${sequence}\nevent: ${event}\ndata: ${JSON.stringify({
-    version: 1, event, sequence, created_at: timestamp, data: { task_id: run.taskId, ...data },
-  })}\n\n`)
+  const kind = { accepted: 'turn.accepted', completed: 'turn.completed', cancelled: 'turn.stopped' }[event]
+  run.response.write(textTrialFrame(run.sessionId, run.taskId, sequence, kind, data))
 }
 const accept = run => {
   const user = message(run.sessionId, run.taskId + '-user', 'user', run.prompt, run.historySequence + 1)
@@ -54,19 +54,25 @@ const finish = (run, event) => {
 }
 async function liveTextFixture(request, response, next) {
   const path = request.url?.split('?')[0] ?? ''
-  const stream = path.match(/\/labs\/text\/sessions\/([^/]+)\/stream$/)
-  const stop = path.match(/\/labs\/text\/sessions\/([^/]+)\/runs\/([^/]+)\/cancel$/)
-  if (!stream && !stop) return next()
+  const send = path.match(/\/chat\/sessions\/text\/([^/]+)\/turns$/)
+  const stream = path.match(/\/chat\/sessions\/text\/([^/]+)\/events$/)
+  const stop = path.match(/\/chat\/sessions\/text\/([^/]+)\/turns\/([^/]+)\/stop$/)
+  if (!send && !stream && !stop) return next()
   let body = ''
   for await (const chunk of request) body += chunk
+  if (send) {
+    const input = JSON.parse(body)
+    generationRequests.push(input)
+    live = { sessionId: send[1], taskId: 'run-' + generationRequests.length, sequence: 0,
+      prompt: input.content, historySequence: (histories.get(send[1]) ?? []).at(-1)?.sequence ?? 0 }
+    response.writeHead(200, { 'Content-Type': 'application/json' })
+    response.end(JSON.stringify({ data: { turn_id: live.taskId, cursor: 0 } }))
+    return
+  }
   if (stream) {
-    generationRequests.push(JSON.parse(body))
+    live.response = response
     response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' })
     response.flushHeaders()
-    live = {
-      sessionId: stream[1], taskId: 'run-' + generationRequests.length, response, sequence: 0,
-      prompt: JSON.parse(body).content, historySequence: (histories.get(stream[1]) ?? []).at(-1)?.sequence ?? 0,
-    }
     streams.add(response)
     response.once('close', () => streams.delete(response))
     if (!holdAcceptance) accept(live)
@@ -108,7 +114,8 @@ try {
     const request = route.request()
     const url = new URL(request.url())
     const respond = data => route.fulfill({ json: { success: true, data } })
-    if (/\/labs\/text\/sessions\/[^/]+\/(stream|runs\/[^/]+\/cancel)$/.test(url.pathname)) return route.continue()
+    if (/\/chat\/sessions\/text\/[^/]+\/(events|turns|turns\/[^/]+\/stop)$/.test(url.pathname)) return route.continue()
+    if (url.pathname.includes('/chat/sessions/text/')) return respond(histories.get(url.pathname.split('/').at(-1)) ?? [])
     if (url.pathname.endsWith('/experiment-sessions')) {
       if (request.method() === 'POST') {
         const body = request.postDataJSON()
@@ -180,7 +187,7 @@ try {
   } })
   const discard = () => leave.getByRole('button', { name: '放弃未发送内容并离开' }).click()
   const selectModel = async label => {
-    await page.getByRole('button', { name: '选择模型', exact: true }).click()
+    await page.locator('.experiment-model-trigger').click()
     await page.getByRole('button', { name: label + '测试模型', exact: true }).waitFor()
     await page.keyboard.press('Escape')
   }
@@ -222,7 +229,7 @@ try {
   await activeLeave.getByText('等待服务端接收后可请求停止。').waitFor()
   assert.equal(await stopAndLeave.isDisabled(), true)
   assert.equal(stopRequests.length, 0)
-  const streamStarted = page.waitForResponse(response => response.url().endsWith('/first-draft/stream'))
+  const streamStarted = page.waitForResponse(response => response.url().includes('/first-draft/events?'))
   releaseCreation()
   await page.getByRole('heading', { name: '实验室 · 文本 · 新文本会话' }).waitFor()
   assert.equal(await activeLeave.isVisible(), true)

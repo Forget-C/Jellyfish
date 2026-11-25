@@ -9,6 +9,7 @@ import {
 export interface UseExperimentHistoryOptions {
   /** 单页消息数量；服务端允许的范围为 1 到 100。 */
   pageSize?: number
+  readPage?: typeof StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet
 }
 
 /** 共享历史 Hook 暴露给实验室模态组件的状态和操作。 */
@@ -27,6 +28,7 @@ export interface ExperimentHistoryState {
   error: Error | null
   /** 是否已经成功读取过本会话，包括成功返回空列表。 */
   hasLoadedHistory: boolean
+  eventCursor?: number
   /** 分页错误重试原页，避免重试时重置已经加载的历史。 */
   errorOnLoadMore: boolean
   /** 从第一页重新读取当前会话历史。 */
@@ -71,7 +73,7 @@ function releaseAdoptedMessages(sessionId: string, persistedItems: ExperimentMes
  */
 export function useExperimentHistory(
   sessionId?: string,
-  { pageSize = 50 }: UseExperimentHistoryOptions = {},
+  { pageSize = 50, readPage = StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet }: UseExperimentHistoryOptions = {},
 ): ExperimentHistoryState {
   const uiText = useUiText()
   const [messages, setMessages] = useState<ExperimentMessageRead[]>([])
@@ -80,6 +82,7 @@ export function useExperimentHistory(
   const [loading, setLoading] = useState(Boolean(sessionId))
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const [eventCursor, setEventCursor] = useState<number>()
   const [hasLoadedHistory, setHasLoadedHistory] = useState(false)
   const [errorOnLoadMore, setErrorOnLoadMore] = useState(false)
   const requestVersionRef = useRef(0)
@@ -104,6 +107,7 @@ export function useExperimentHistory(
     if (currentSessionId) adoptedMessagesBySession.delete(currentSessionId)
     requestVersionRef.current += 1
     setMessages([])
+    setEventCursor(undefined)
     setHasLoadedHistory(false)
     historyPageRef.current = 1
     setHistoryPage(1)
@@ -130,7 +134,7 @@ export function useExperimentHistory(
     setError(null)
 
     try {
-      const response = await StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet({
+      const response = await readPage({
         sessionId,
         page: 1,
         pageSize,
@@ -138,6 +142,7 @@ export function useExperimentHistory(
       if (sessionId !== currentSessionIdRef.current || requestVersion !== requestVersionRef.current) return
 
       const items = response.data ?? []
+      setEventCursor(typeof response.meta?.cursor === 'number' ? response.meta.cursor : 0)
       const adopted = adoptedMessagesBySession.get(sessionId) ?? []
       // 刷新第一页时保留已分页读取的更早消息，避免读者失去当前位置。
       const preserveEarlier = items.length === pageSize && historyPageRef.current > 1
@@ -160,7 +165,7 @@ export function useExperimentHistory(
     } finally {
       if (sessionId === currentSessionIdRef.current && requestVersion === requestVersionRef.current) setLoading(false)
     }
-  }, [uiText, clearLocalHistory, pageSize, sessionId])
+  }, [uiText, clearLocalHistory, pageSize, readPage, sessionId])
 
   /** 读取当前会话更早的一页消息，并按服务端序号合并到本地历史。 */
   const loadMore = useCallback(async () => {
@@ -173,7 +178,7 @@ export function useExperimentHistory(
     setError(null)
 
     try {
-      const response = await StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet({
+      const response = await readPage({
         sessionId,
         page: nextPage,
         pageSize,
@@ -192,12 +197,13 @@ export function useExperimentHistory(
     } finally {
       if (sessionId === currentSessionIdRef.current && requestVersion === requestVersionRef.current) setLoadingMore(false)
     }
-  }, [uiText, hasMoreHistory, historyPage, loading, loadingMore, pageSize, sessionId])
+  }, [uiText, hasMoreHistory, historyPage, loading, loadingMore, pageSize, readPage, sessionId])
 
   useEffect(() => {
     historySessionIdRef.current = sessionId
     historyPageRef.current = 1
     setMessages(sessionId ? adoptedMessagesBySession.get(sessionId) ?? [] : [])
+    setEventCursor(undefined)
     setHasLoadedHistory(false)
     setHistoryPage(1)
     setHasMoreHistory(false)
@@ -208,6 +214,7 @@ export function useExperimentHistory(
   return {
     messages: isCurrentHistory ? messages : emptyHistory,
     historyPage,
+    eventCursor: isCurrentHistory ? eventCursor : undefined,
     hasMoreHistory: isCurrentHistory && hasMoreHistory,
     loading: isCurrentHistory ? loading : Boolean(sessionId),
     loadingMore: isCurrentHistory && loadingMore,

@@ -6,9 +6,14 @@ import type { ApiResponse_CanvasAssistantExchange_ } from '../models/ApiResponse
 import type { ApiResponse_CanvasAssistantHistory_ } from '../models/ApiResponse_CanvasAssistantHistory_';
 import type { ApiResponse_LabChatSnapshot_ } from '../models/ApiResponse_LabChatSnapshot_';
 import type { ApiResponse_LabModels_ } from '../models/ApiResponse_LabModels_';
+import type { ApiResponse_list_ExperimentMessageRead__ } from '../models/ApiResponse_list_ExperimentMessageRead__';
+import type { ApiResponse_TextLabRunStatus_ } from '../models/ApiResponse_TextLabRunStatus_';
+import type { ApiResponse_TextTrialReceipt_ } from '../models/ApiResponse_TextTrialReceipt_';
 import type { CanvasAssistantMessage } from '../models/CanvasAssistantMessage';
 import type { LabChatCommand } from '../models/LabChatCommand';
 import type { LabModels } from '../models/LabModels';
+import type { TextLabCancelRequest } from '../models/TextLabCancelRequest';
+import type { TextLabRunRequest } from '../models/TextLabRunRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -137,6 +142,131 @@ export class ChatService {
                 'after': after,
                 'follow': follow,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Text Snapshot
+     * Read existing or newly accepted trial messages in their original session.
+     * @returns ApiResponse_list_ExperimentMessageRead__ Successful Response
+     * @throws ApiError
+     */
+    public static chatTextSnapshot({
+        sessionId,
+        page = 1,
+        pageSize = 50,
+    }: {
+        sessionId: string,
+        page?: number,
+        pageSize?: number,
+    }): CancelablePromise<ApiResponse_list_ExperimentMessageRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/chat/sessions/text/{session_id}',
+            path: {
+                'session_id': sessionId,
+            },
+            query: {
+                'page': page,
+                'page_size': pageSize,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Text Send
+     * Enroll a direct provider call; SSE subscribers do not own its lifetime.
+     * @returns ApiResponse_TextTrialReceipt_ Successful Response
+     * @throws ApiError
+     */
+    public static chatTextSend({
+        sessionId,
+        idempotencyKey,
+        requestBody,
+    }: {
+        sessionId: string,
+        idempotencyKey: string,
+        requestBody: TextLabRunRequest,
+    }): CancelablePromise<ApiResponse_TextTrialReceipt_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/text/{session_id}/turns',
+            path: {
+                'session_id': sessionId,
+            },
+            headers: {
+                'idempotency-key': idempotencyKey,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Text Events
+     * Replay committed text trial events in session cursor order.
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static chatTextEvents({
+        sessionId,
+        after,
+        follow = true,
+        lastEventId,
+    }: {
+        sessionId: string,
+        after?: number,
+        follow?: boolean,
+        lastEventId?: number,
+    }): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/chat/sessions/text/{session_id}/events',
+            path: {
+                'session_id': sessionId,
+            },
+            headers: {
+                'last-event-id': lastEventId,
+            },
+            query: {
+                'after': after,
+                'follow': follow,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Cancel Text Lab Stream
+     * 会话绑定取消入口不复用任务中心取消 API，避免 hidden run 越权展示。
+     * @returns ApiResponse_TextLabRunStatus_ Successful Response
+     * @throws ApiError
+     */
+    public static chatTextStop({
+        sessionId,
+        taskId,
+        requestBody,
+    }: {
+        sessionId: string,
+        taskId: string,
+        requestBody: TextLabCancelRequest,
+    }): CancelablePromise<ApiResponse_TextLabRunStatus_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/text/{session_id}/turns/{task_id}/stop',
+            path: {
+                'session_id': sessionId,
+                'task_id': taskId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

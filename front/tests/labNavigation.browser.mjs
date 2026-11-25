@@ -1,3 +1,4 @@
+import { successfulTextTrial } from './text-trial-events.mjs'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -30,9 +31,6 @@ let lookupImage
 let imageLookupPending = false
 const prematureImageMessages = []
 const message = (id, session_id, role, content, sequence) => ({ id, session_id, role, content, sequence, created_at: timestamp, updated_at: timestamp })
-const frame = (event, sequence, data) =>
-  'id: ' + sequence + '\nevent: ' + event + '\ndata: ' + JSON.stringify({ version: 1, event, sequence, created_at: timestamp, data }) + '\n\n'
-
 const server = await createServer({ root, cacheDir: output + '/vite-cache', server: { host: '127.0.0.1', port: 4197, strictPort: true, open: false } })
 let browser
 const cleanup = browserCleanup(() => ({ browser, server }))
@@ -89,19 +87,17 @@ try {
       persisted.set(sessionId, messages)
       return respond({ task_id: mode + '-task', messages })
     }
-    if (url.pathname.endsWith('/new-text/stream')) {
+    if (url.pathname.endsWith('/chat/sessions/text/new-text/turns')) {
       const user = message('user-1', 'new-text', 'user', request.postDataJSON().content, 1)
       const assistant = message('assistant-1', 'new-text', 'assistant', '验收回复', 2)
       persisted.set('new-text', [user, assistant])
-      return route.fulfill({
-        contentType: 'text/event-stream',
-        body: frame('accepted', 1, { task_id: 'lab-run', user_message: user }) +
-          frame('completed', 2, {
-            task_id: 'lab-run', assistant_message: assistant,
-            result: { text: assistant.content, model_id: 'model-1', provider_request_id: null, input_tokens: null, output_tokens: null },
-          }),
-      })
+      return respond({ turn_id: 'lab-run', cursor: 0 })
     }
+    if (url.pathname.endsWith('/new-text/events')) {
+      const [user, assistant] = persisted.get('new-text')
+      return route.fulfill({ contentType: 'text/event-stream', body: successfulTextTrial('new-text', 'lab-run', user, assistant) })
+    }
+    if (url.pathname.includes('/chat/sessions/text/')) return respond(persisted.get(url.pathname.split('/').at(-1)) ?? [])
     if (url.pathname.endsWith('/image-1/messages') && imageLookupPending) prematureImageMessages.push(url.pathname)
     if (url.pathname.endsWith('/messages')) return respond(persisted.get(url.pathname.split('/').at(-2)) ?? [])
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })

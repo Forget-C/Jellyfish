@@ -146,6 +146,7 @@ export type { ApiResponse_TaskPageRead_ } from './models/ApiResponse_TaskPageRea
 export type { ApiResponse_TaskResultRead_ } from './models/ApiResponse_TaskResultRead_';
 export type { ApiResponse_TaskStatusRead_ } from './models/ApiResponse_TaskStatusRead_';
 export type { ApiResponse_TextLabRunStatus_ } from './models/ApiResponse_TextLabRunStatus_';
+export type { ApiResponse_TextTrialReceipt_ } from './models/ApiResponse_TextTrialReceipt_';
 export type { ApiResponse_Union_ActorImageParametersRead__NoneType__ } from './models/ApiResponse_Union_ActorImageParametersRead__NoneType__';
 export type { ApiResponse_Union_CanvasAssistantExchange__NoneType__ } from './models/ApiResponse_Union_CanvasAssistantExchange__NoneType__';
 export type { ApiResponse_Union_DivisionSaved__NoneType__ } from './models/ApiResponse_Union_DivisionSaved__NoneType__';
@@ -739,6 +740,7 @@ export type { TextLabRunStatus } from './models/TextLabRunStatus';
 export type { TextModelCard } from './models/TextModelCard';
 export type { TextModelConfig } from './models/TextModelConfig';
 export type { TextOutputPayload } from './models/TextOutputPayload';
+export type { TextTrialReceipt } from './models/TextTrialReceipt';
 export type { UnitContinuityRead } from './models/UnitContinuityRead';
 export type { UnitDependency } from './models/UnitDependency';
 export type { UploadedAssetImage } from './models/UploadedAssetImage';

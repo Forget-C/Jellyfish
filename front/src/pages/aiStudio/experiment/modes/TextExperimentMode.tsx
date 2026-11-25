@@ -9,7 +9,6 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button, message } from 'antd'
 import { StopOutlined } from '@ant-design/icons'
 import {
-  StudioTextLabService,
   type ExperimentMessageRead,
   type ExperimentSessionRead,
 } from '../../../../services/generated'
@@ -29,7 +28,8 @@ import { useExperimentHistory } from '../hooks/useExperimentHistory'
 import { useExperimentModels } from '../hooks/useExperimentModels'
 import { useExperimentTemplates } from '../hooks/useExperimentTemplates'
 import { focusExperimentPromptEditor, readExperimentInputSnapshot, type ExperimentInputSnapshot } from '../experimentInputSnapshot'
-import { resumeTextLab } from '../../../../services/textLabStream'
+import { textTrial } from '../../../../services/textTrialSession'
+import { useTrialModelPreference } from '../hooks/useTrialModelPreference'
 
 /** 文本实验室可使用的提示词模板类别。 */
 const textPromptCategories = [
@@ -114,14 +114,14 @@ export function TextExperimentMode({
   render,
 }: TextExperimentModeProps) {
   const uiText = useUiText()
-  const [modelId, setModelId] = useState<string>()
+  const [modelId, setModelId, setSoleModel] = useTrialModelPreference('text', sessionId)
   const [draft, setDraft] = useState('')
   const {
     templates, selectedTemplate, templateValues, setTemplateValues, templatesLoading, templatesFailed,
     loadTemplates, selectTemplate, confirmReplacement, applyFreeInput, replacementDialog,
   } = useExperimentTemplates(textPromptCategories, draft, setDraft)
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([])
-  const historyState = useExperimentHistory(sessionId)
+  const historyState = useExperimentHistory(sessionId, { readPage: textTrial.snapshot })
   const inputSignature = (prompt: string) => JSON.stringify([prompt, selectedTemplate?.id, selectedTemplate?.version, templateValues])
   const submission = useExperimentSubmission(sessionId, historyState, inputSignature(draft))
   const { submitting } = submission
@@ -163,9 +163,7 @@ export function TextExperimentMode({
     onSubmittingChange?.(submitting)
   }, [onSubmittingChange, submitting])
 
-  const { models, modelsLoading, modelsFailed, loadModels } = useExperimentModels('text', id => {
-    setModelId(current => current ?? id)
-  })
+  const { models, modelsLoading, modelsFailed, loadModels } = useExperimentModels('text', setSoleModel)
 
   const currentPrompt = selectedTemplate
     ? renderPromptTemplate(selectedTemplate.content, templateValues).trim()
@@ -208,48 +206,40 @@ export function TextExperimentMode({
       controller = new AbortController()
       streamAbortRef.current = controller
       streamSessionIdRef.current = session.id
-      for await (const event of resumeTextLab({
-        sessionId: session.id,
-        body: { model_id: modelId, content: currentPrompt },
-        requestId: attempt.requestId,
-        signal: controller.signal,
-      })) {
+      for await (const event of textTrial.send(session.id, { model_id: modelId, content: currentPrompt },
+        attempt.requestId, controller.signal)) {
         if (!submission.isCurrent(attempt)) {
           controller.abort()
           break
         }
-        if (event.event === 'accepted') {
-          if (acceptedTaskId || event.data.user_message.session_id !== session.id) {
+        if (event.type === 'turn.accepted') {
+          if (acceptedTaskId || event.payload.user_message.session_id !== session.id) {
             throw new Error(uiText("文本接收回执与本轮会话不符"))
           }
-          acceptedTaskId = event.data.task_id
+          acceptedTaskId = event.turn_id
           streamTaskIdRef.current = acceptedTaskId
           const unchanged = submission.acceptInput(attempt, session.id, inputSignature(''))
           if (unchanged && !selectedTemplate) setDraft(current => current === draft ? '' : current)
-          historyState.adoptCanonicalMessages(session.id, [event.data.user_message])
+          historyState.adoptCanonicalMessages(session.id, [event.payload.user_message])
           setLocalMessages(current => [...current, { id: assistantId, role: 'assistant', content: '', status: 'running' }])
           continue
         }
-        if (!acceptedTaskId || event.data.task_id !== acceptedTaskId) {
+        if (!acceptedTaskId || event.turn_id !== acceptedTaskId) {
           throw new Error(uiText("文本流未返回可核对的任务身份"))
         }
-        if (event.event === 'delta') {
+        if (event.type === 'message.updated') {
           setLocalMessages(current => current.map(item => (
-            item.id === assistantId ? { ...item, content: `${item.content}${event.data.text_delta}` } : item
+            item.id === assistantId ? { ...item, content: `${item.content}${event.payload.text_delta}` } : item
           )))
-        } else if (event.event === 'progress') {
-          setLocalMessages(current => current.map(item => (
-            item.id === assistantId ? { ...item, progress: event.data.progress } : item
-          )))
-        } else if (event.event === 'completed') {
-          if (event.data.assistant_message.session_id !== session.id) throw new Error(uiText("文本结果与本轮会话不符"))
+        } else if (event.type === 'turn.completed') {
+          if (event.payload.assistant_message.session_id !== session.id) throw new Error(uiText("文本结果与本轮会话不符"))
           terminal = true
           terminalRunRef.current = acceptedTaskId
-          historyState.adoptCanonicalMessages(session.id, [event.data.assistant_message])
+          historyState.adoptCanonicalMessages(session.id, [event.payload.assistant_message])
           setLocalMessages(current => current.filter(item => item.id !== assistantId))
           void historyState.refresh()
-        } else if (event.event === 'error') {
-          if (event.data.error.code === 'stream_result_unknown') {
+        } else if (event.type === 'turn.failed') {
+          if (event.payload.error.code === 'stream_result_unknown') {
             setLocalMessages(current => current.filter(item => item.id !== assistantId))
             await historyState.refresh()
             break
@@ -257,10 +247,10 @@ export function TextExperimentMode({
           terminal = true
           terminalRunRef.current = acceptedTaskId
           setLocalMessages(current => current.map(item => (
-            item.id === assistantId ? { ...item, status: 'failed', error: event.data.error.message } : item
+            item.id === assistantId ? { ...item, status: 'failed', error: event.payload.error.message } : item
           )))
           restoreInput()
-        } else if (event.event === 'cancelled') {
+        } else if (event.type === 'turn.stopped') {
           terminal = true
           terminalRunRef.current = acceptedTaskId
           setLocalMessages(current => current.map(item => (
@@ -307,7 +297,7 @@ export function TextExperimentMode({
     stopPending.current = true
     setStopState('requesting')
     try {
-      const response = await StudioTextLabService.cancelTextLabStreamApiV1StudioLabsTextSessionsSessionIdRunsTaskIdCancelPost({
+      const response = await textTrial.stop({
         sessionId: activeSessionId,
         taskId,
         requestBody: { reason: 'user_cancelled' },
