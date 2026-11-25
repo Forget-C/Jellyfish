@@ -12,10 +12,11 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-canvas-mcp-')
 const api = 'http://127.0.0.1:8470'
 const origin = 'http://127.0.0.1:4470'
-const python = process.env.CANVAS_TEST_PYTHON || 'python3'
+const python = process.env.CANVAS_TEST_PYTHON || 'uv'
+const pythonArgs = process.env.CANVAS_TEST_PYTHON ? [] : ['run', '--no-sync', 'python']
 const cwd = join(root, '../backend')
 const database = join(output, 'browser.sqlite')
-const backend = spawn(python, ['-m', 'tests.generation_canvas_browser_server'], {
+const backend = spawn(python, [...pythonArgs, '-m', 'tests.generation_canvas_browser_server'], {
   cwd,
   env: { ...process.env, DATABASE_URL: 'sqlite+aiosqlite:///' + database, CORS_ORIGINS: origin,
     CANVAS_BROWSER_DATABASE: database, CANVAS_BROWSER_PORT: '8470' },
@@ -41,7 +42,7 @@ try {
     host: '127.0.0.1', port: 4470, strictPort: true, open: false,
   } })
   await server.listen()
-  browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome' })
+  browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   const page = await browser.newPage({ locale: 'zh-CN' })
   page.setDefaultTimeout(12000)
   await page.addInitScript(backendUrl => { window.__ENV = { BACKEND_URL: backendUrl } }, api)
@@ -52,7 +53,9 @@ try {
   const url = await address.inputValue()
   const credential = await page.getByRole('textbox', { name: 'MCP 临时凭据' }).inputValue()
   assert.equal(url, api + '/mcp')
-  const client = spawn(python, ['-m', 'tests.canvas_mcp_browser_client'], { cwd, stdio: ['pipe', 'inherit', 'inherit'] })
+  const client = spawn(python, [...pythonArgs, '-m', 'tests.canvas_mcp_browser_client'], {
+    cwd, stdio: ['pipe', 'inherit', 'inherit'],
+  })
   client.stdin.end(JSON.stringify({ credential, url }))
   assert.deepEqual(await once(client, 'exit'), [0, null])
   await page.reload()
