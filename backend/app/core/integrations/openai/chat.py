@@ -21,6 +21,8 @@ from app.core.contracts.model_provider import (
 class OpenAICompatibleChat:
     """绑定文本模型与配置，并在每次异步调用期间管理 HTTP 连接。"""
 
+    endpoint = "chat/completions"
+
     def __init__(
         self,
         config: ModelProviderConfig,
@@ -30,7 +32,7 @@ class OpenAICompatibleChat:
     ) -> None:
         if not config.base_url:
             raise ModelProviderConfigurationError(f"Provider {config.provider} has no chat base URL")
-        self._url = f"{config.base_url.rstrip('/')}/chat/completions"
+        self._url = f"{config.base_url.rstrip('/')}/{self.endpoint}"
         self._model = model
         self._client_factory = client_factory
         self._headers = {**(params.get("default_headers") or {}), "Authorization": f"Bearer {config.api_key}"}
@@ -55,7 +57,8 @@ class OpenAICompatibleChat:
         self, messages: list[ProviderChatMessage], options: dict[str, Any] | None, *, stream: bool,
     ) -> dict[str, Any]:
         body = {
-            **self._body, **(options or {}), "model": self._model, "messages": messages, "stream": stream,
+            **self._body, **(options or {}), "model": self._model, "messages": [{k: v for k, v in message.items() if k != "response_id"}
+                         for message in messages], "stream": stream,
         }
         if stream and self._stream_usage:
             body.setdefault("stream_options", {"include_usage": True})

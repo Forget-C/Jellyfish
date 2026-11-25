@@ -9,8 +9,6 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -77,16 +75,6 @@ def _as_message_data(message: ExperimentMessage) -> StreamMessageData:
         created_at=message.created_at,
         updated_at=message.updated_at,
     )
-
-
-def _chunk_text(chunk: object) -> str:
-    """归一化 LangChain 文本 chunk，忽略空增量。"""
-    content = getattr(chunk, "content", chunk)
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "".join(str(part.get("text", "")) if isinstance(part, dict) else str(part) for part in content)
-    return str(content or "")
 
 
 async def create_text_stream_run(
@@ -253,13 +241,8 @@ def _snapshot_messages(messages: list[dict[str, object]]) -> list[ProviderChatMe
 
 
 async def _stream_chat(
-    model: TextModelProvider | BaseChatModel, content: str,
+    model: TextModelProvider, content: str,
 ) -> AsyncGenerator[str, None]:
-    if isinstance(model, BaseChatModel):
-        async for chunk in model.astream([HumanMessage(content=content)]):
-            if text := _chunk_text(chunk):
-                yield text
-        return
     async with aclosing(model.stream([{"role": "user", "content": content}])) as events:
         async for event in events:
             if event.kind == "error":
@@ -278,17 +261,8 @@ async def _invoke_text_snapshot(db: AsyncSession, *, snapshot_payload: dict[str,
         raise RuntimeError("text chat snapshot model is unavailable")
     model = await build_laboratory_chat(db, model_id=model_id)
     messages = _snapshot_messages(list(operation_input.get("messages") or []))
-    if isinstance(model, BaseChatModel):
-        response = await model.ainvoke([
-            {"user": HumanMessage, "assistant": AIMessage, "system": SystemMessage}[message["role"]](
-                content=str(message["content"] or "")
-            )
-            for message in messages
-        ])
-        text = _chunk_text(response).strip()
-    else:
-        result = await model.invoke(messages)
-        text = next((choice.text.strip() for choice in result.choices if choice.choice == 0), "")
+    result = await model.invoke(messages)
+    text = next((choice.text.strip() for choice in result.choices if choice.choice == 0), "")
     if not text:
         raise RuntimeError("text model returned an empty response")
     return text

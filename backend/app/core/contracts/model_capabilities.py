@@ -147,3 +147,14 @@ class ModelCapabilityVerificationRead(BaseModel):
     reason: VerificationReason
     tested_at: datetime
     current: bool
+
+
+ModelOperation = Literal["chat", "storyboard_inspection", "image_generation", "video_generation"]
+
+
+class ModelOperationCapabilities(BaseModel):
+    """指定连接、模型及操作可用的执行方式和参数范围。"""
+
+    features: EffectiveModelCapabilities = Field(default_factory=EffectiveModelCapabilities)
+    image_modes: dict[ImageOperationMode, ImageModeDeclaration] = Field(default_factory=dict)
+    video_modes: dict[VideoOperationMode, VideoModeDeclaration] = Field(default_factory=dict)

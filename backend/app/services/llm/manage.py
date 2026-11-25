@@ -16,13 +16,10 @@ from app.api.utils import apply_keyword_filter, apply_order, paginate
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider
 from app.core.integrations.image_capabilities import (
     DEFAULT_VIDEO_REFERENCE_RATIO_SIZE_MAP,
-    describe_image_modes,
     resolve_image_capability,
 )
-from app.core.integrations.video_capabilities import describe_video_modes, resolve_default_ratio, resolve_video_capability
-from app.core.integrations.media_provider import supports_remote_cancel
+from app.core.integrations.video_capabilities import resolve_default_ratio, resolve_video_capability
 from app.core.contracts.model_catalog import ProviderModelCandidate
-from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.core.contracts.model_provider import ModelProviderConfig, ModelProviderConfigurationError
 from app.core.integrations.model_provider_registry import has_remote_model_catalog, list_provider_models
 from app.schemas.common import ApiResponse, PaginatedData, paginated_response
@@ -45,10 +42,7 @@ from app.services.llm.provider_registry import (
     is_provider_category_supported,
     list_registered_providers,
 )
-from app.services.llm.model_capabilities import (
-    effective_chat_capabilities,
-    effective_storyboard_inspection_capabilities,
-)
+from app.services.llm.model_capabilities import model_operation_capabilities
 from app.bootstrap import bootstrap_all_registries
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.common import (
@@ -327,26 +321,14 @@ async def read_model(db: AsyncSession, model: Model) -> ModelRead:
 
 def _model_read(model: Model, provider: Provider) -> ModelRead:
     data = ModelRead.model_validate(model)
-    data.effective_capabilities = effective_chat_capabilities(model, provider, data.capability_profile)
-    data.storyboard_inspection_capabilities = effective_storyboard_inspection_capabilities(
-        model, provider, data.capability_profile,
-    )
-    if model.category == ModelCategoryKey.image:
-        data.effective_image_modes = describe_image_modes(
-            provider.provider_key, model.name, data.capability_profile.image_modes,
-        )
-    if model.category == ModelCategoryKey.video:
-        data.effective_video_modes = describe_video_modes(
-            provider.provider_key, model.name, data.capability_profile.video_modes,
-        )
-    if model.category in (ModelCategoryKey.image, ModelCategoryKey.video) and provider.status != "disabled":
-        remote = model.category == ModelCategoryKey.video or provider.provider_key in {"vidu", "kling"}
-        data.effective_capabilities.direct_result = not remote
-        data.effective_capabilities.remote_task = remote
-        data.effective_capabilities.remote_cancel = (
-            remote and supports_remote_cancel(provider.provider_key, f"{data.category.value}_generation")
-            and data.capability_profile.remote_cancel.declaration != "unsupported"
-        )
+    operation = {"image": "image_generation", "video": "video_generation"}.get(model.category, "chat")
+    effective = model_operation_capabilities(model, provider, operation, data.capability_profile)
+    data.effective_capabilities = effective.features
+    data.effective_image_modes = effective.image_modes
+    data.effective_video_modes = effective.video_modes
+    data.storyboard_inspection_capabilities = model_operation_capabilities(
+        model, provider, "storyboard_inspection", data.capability_profile,
+    ).features
     return data
 
 
@@ -457,9 +439,7 @@ async def get_video_generation_options(
         model_name=model.name,
         allowed_ratios=allowed_ratios,
         default_ratio=default_ratio,
-        video_modes=describe_video_modes(
-            provider_key, model.name, ModelCapabilityProfile.model_validate(model.capability_profile or {}).video_modes,
-        ),
+        video_modes=model_operation_capabilities(model, provider, "video_generation").video_modes,
         supports_subject_image_reference=capability.supports_subject_image_reference,
         supports_subject_video_reference=capability.supports_subject_video_reference,
         supports_subject_reference_with_frame_reference=capability.supports_subject_reference_with_frame_reference,

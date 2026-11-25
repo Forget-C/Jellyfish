@@ -21,8 +21,18 @@ from app.task_worker import TaskWorker
 
 
 @pytest.mark.asyncio
-async def test_worker_restart_polls_original_id_without_new_submission(monkeypatch):
+@pytest.mark.parametrize("discrete", [False, True])
+async def test_worker_restart_polls_original_id_without_new_submission(monkeypatch, discrete):
     """模拟重启后只 GET 原 ID，下载完成才将本地任务置为成功。"""
+    from dataclasses import replace
+    from app.core.integrations.vidu import video_capabilities
+    from app.services.generation_canvas.capabilities import model_capability
+    from app.services.llm.manage import read_model
+
+    if discrete:
+        base = video_capabilities.resolve_vidu_video_capability("viduq3-turbo")
+        monkeypatch.setitem(video_capabilities._VIDU_MODEL_OVERRIDES, "viduq3-turbo",
+                            replace(base, seconds_by_resolution={"720p": (5, 10)}))
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
@@ -36,7 +46,7 @@ async def test_worker_restart_polls_original_id_without_new_submission(monkeypat
             assert len(requests) == 1
             assert request.url.path == "/ent/v2/text2video"
             assert json.loads(request.content)["resolution"] == "720p"
-            assert json.loads(request.content)["duration"] == 8
+            assert json.loads(request.content)["duration"] == (10 if discrete else 8)
             return httpx.Response(200, json={"task_id": "original-id"})
         if request.url.host == "media.invalid":
             return httpx.Response(200, content=b"video", headers={"content-type": "video/mp4"})
@@ -75,9 +85,17 @@ async def test_worker_restart_polls_original_id_without_new_submission(monkeypat
                 }},
             }
             submitter = GenerationSubmitter(entity_gate=GenerationEntityGate())
-            with pytest.raises(HTTPException, match="seconds are outside"):
+            with pytest.raises(HTTPException, match="seconds are outside|resolution is outside"):
                 await submitter.submit_async(db, GenerationCommand.model_validate(payload))
             payload["request"]["operation_input"]["resolution"] = "720p"
+            if discrete:
+                managed = await read_model(db, await db.get(Model, "model"))
+                canvas = await model_capability(db, "model")
+                for modes in (managed.effective_video_modes, canvas.video_modes):
+                    assert modes["text_to_video"].duration_by_resolution == {"720p": [5, 10]}
+                with pytest.raises(HTTPException, match="seconds are outside|resolution is outside"):
+                    await submitter.submit_async(db, GenerationCommand.model_validate(payload))
+                payload["request"]["operation_input"]["seconds"] = 10
             accepted = await submitter.submit_async(db, GenerationCommand.model_validate(payload))
             task_id = accepted.task_id
             await db.commit()

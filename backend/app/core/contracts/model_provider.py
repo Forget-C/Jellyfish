@@ -35,6 +35,7 @@ class ProviderChatMessage(TypedDict):
     role: Literal["system", "developer", "user", "assistant", "tool"]
     content: str | list[dict[str, Any]] | None
     tool_calls: NotRequired[list[dict[str, Any]]]
+    response_id: NotRequired[str]
     tool_call_id: NotRequired[str]
     name: NotRequired[str]
 
@@ -58,6 +59,7 @@ class ProviderChatEvent:
     finish_reason: str | None = None
     usage: dict[str, Any] | None = None
     error: str | None = None
+    response_id: str | None = None
 
 
 @runtime_checkable

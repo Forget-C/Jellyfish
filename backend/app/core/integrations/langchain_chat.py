@@ -76,6 +76,7 @@ class LangChainChatModelAdapter(BaseChatModel):
                 ChatGeneration(
                     message=AIMessage(
                         content=choice.text,
+                        response_metadata={"id": choice.response_id} if choice.response_id else {},
                         additional_kwargs={"tool_calls": choice.tool_calls} if choice.tool_calls else {},
                         usage_metadata=_usage(result.usage),
                     ),
@@ -124,11 +125,7 @@ class LangChainChatModelAdapter(BaseChatModel):
 
 
 def build_langchain_chat(*, provider_key: str, tools_available: bool = False, **params: Any) -> BaseChatModel:
-    """适配已解析的配置，显式选择 Responses API 时保留该协议的兼容客户端。"""
-    if params.get("use_responses_api"):
-        from langchain_openai import ChatOpenAI
-        return ChatOpenAI(**params)
-
+    """为已绑定的供应商文本操作提供 LangChain 接口。"""
     model_name = params["model"]
     config = ModelProviderConfig(provider_key, params["api_key"], params.get("base_url"))
     shared_client = params.get("http_async_client")
@@ -148,7 +145,8 @@ def build_langchain_chat(*, provider_key: str, tools_available: bool = False, **
 
 def _messages(messages: list[BaseMessage]) -> list[ProviderChatMessage]:
     return [
-        cast(ProviderChatMessage, converted)
+        cast(ProviderChatMessage, {**converted, "response_id": message.response_metadata["id"]})
+        if isinstance(message, AIMessage) and message.response_metadata.get("id") else cast(ProviderChatMessage, converted)
         for message in messages
         for converted in convert_to_openai_messages(
             [message], text_format="block" if isinstance(message.content, list) else "string",
@@ -176,6 +174,7 @@ def _usage(value: dict[str, Any] | None) -> UsageMetadata | None:
 def _chunk(event: ProviderChatEvent) -> ChatGenerationChunk:
     return ChatGenerationChunk(
         message=AIMessageChunk(
+            response_metadata={"id": event.response_id} if event.response_id else {},
             content=event.text, usage_metadata=_usage(event.usage),
             tool_call_chunks=[
                 {

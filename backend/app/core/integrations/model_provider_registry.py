@@ -20,6 +20,7 @@ from app.core.integrations.model_catalog import (
     OpenAICompatibleModelCatalog,
 )
 from app.core.integrations.openai.chat import OpenAICompatibleChat
+from app.core.integrations.openai.responses import OpenAIResponses
 
 _TEXT_ADAPTERS = {"openai": OpenAICompatibleChat, "aliyun_bailian": OpenAICompatibleChat}
 _REMOTE_CATALOGS = {
@@ -46,6 +47,8 @@ def bind_text_provider(
     adapter = _TEXT_ADAPTERS.get(config.provider)
     if adapter is None:
         raise ModelProviderConfigurationError(f"Unsupported provider chat: {config.provider!r}")
+    if params.get("use_responses_api"):
+        adapter = OpenAIResponses
     return adapter(config, model, params, client_factory)
 
 

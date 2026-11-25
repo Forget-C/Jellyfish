@@ -66,7 +66,8 @@ def test_consistency_format_output_accepts_model_call_style() -> None:
 
 
 @pytest.mark.asyncio
-async def test_agent_returns_interleaved_tool_results_to_gateway(monkeypatch) -> None:
+@pytest.mark.parametrize("responses", [False, True])
+async def test_agent_returns_interleaved_tool_results_to_gateway(monkeypatch, responses) -> None:
     import json
 
     import httpx
@@ -91,6 +92,20 @@ async def test_agent_returns_interleaved_tool_results_to_gateway(monkeypatch) ->
     def reply(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
         requests.append(payload)
+        if responses:
+            assert request.url.path.endswith("/responses")
+            events = []
+            if len(requests) == 1:
+                for index, call_id in enumerate(("call-a", "call-b")):
+                    events.append({"type": "response.output_item.added", "output_index": index,
+                                   "item": {"type": "function_call", "name": "lookup", "call_id": call_id}})
+                for index, delta in ((1, '{"record":"be'), (0, '{"record":"al'), (0, 'pha"}'), (1, 'ta"}')):
+                    events.append({"type": "response.function_call_arguments.delta", "output_index": index, "delta": delta})
+            else:
+                events.append({"type": "response.output_text.delta", "delta": "两个记录已找到"})
+            events.append({"type": "response.completed", "response": {"id": "resp_test", "status": "completed"}})
+            return httpx.Response(200, headers={"Content-Type": "text/event-stream"},
+                                  text="".join("data: " + json.dumps(event) + "\n\n" for event in events))
         if len(requests) == 1:
             parts = [
                 ({"tool_calls": [tool(0, '{"record":"al', "call-a")]}, None),
@@ -116,13 +131,20 @@ async def test_agent_returns_interleaved_tool_results_to_gateway(monkeypatch) ->
     monkeypatch.setattr(httpx.AsyncClient, "__init__", init_client)
     provider = Provider(id="test", name="Test", provider_key="openai", api_key="test-key")
     model = Model(id="test-chat", name="test-chat", category=ModelCategoryKey.text,
-                 provider_id=provider.id, params={"streaming": True},
+                 provider_id=provider.id, params={"streaming": True, "use_responses_api": responses, **({"use_previous_response_id": True} if responses else {})},
                  capability_profile={"tool_calling": {"declaration": "supported"}})
     agent = create_agent(build_provider_agent_model(provider=provider, model=model, thinking=True), tools=[lookup])
     output = await agent.ainvoke({"messages": [{"role": "user", "content": "查询两个记录"}]})
 
     assert output["messages"][-1].content == "两个记录已找到"
     assert len(requests) == 2
+    if responses:
+        assert requests[1]["previous_response_id"] == "resp_test"
+        assert all(item["type"] == "function_call_output" for item in requests[1]["input"])
+        assert requests[0]["tools"][0]["name"] == "lookup"
+        assert {item["call_id"]: item["output"] for item in requests[1]["input"]
+                if item.get("type") == "function_call_output"} == {"call-a": "found alpha", "call-b": "found beta"}
+        return
     assert requests[0]["tools"][0]["function"]["name"] == "lookup"
     assert {message["tool_call_id"]: message["content"] for message in requests[1]["messages"]
             if message["role"] == "tool"} == {"call-a": "found alpha", "call-b": "found beta"}

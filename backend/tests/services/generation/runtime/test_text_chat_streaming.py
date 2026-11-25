@@ -20,7 +20,8 @@ from app.services.generation.runtime import text_chat_streaming
 
 
 @pytest.mark.asyncio
-async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize("responses", [False, True, "failed"])
+async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, responses) -> None:
     from app.dependencies import get_db
     from app.main import app
 
@@ -31,6 +32,12 @@ async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch) -> 
 
     def reply(request: httpx.Request) -> httpx.Response:
         requests.append((str(request.url), request.headers["authorization"], json.loads(request.content)))
+        if responses:
+            events = [{"type": "response.output_text.delta", "delta": text} for text in ("第一段", "第二段")]
+            events.append({"type": "response.failed" if responses == "failed" else "response.completed",
+                           "response": {"status": "failed" if responses == "failed" else "completed"}})
+            return httpx.Response(200, headers={"Content-Type": "text/event-stream"},
+                                  text="".join("data: " + json.dumps(event) + "\n\n" for event in events))
         return httpx.Response(200, headers={"Content-Type": "text/event-stream"}, text=(
             'data: {"choices":[{"index":0,"delta":{"content":"第一段"},"finish_reason":null}]}\n\n'
             'data: {"choices":[{"index":0,"delta":{"content":"第二段"},"finish_reason":"stop"}]}\n\n'
@@ -57,18 +64,21 @@ async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch) -> 
             db.add(Provider(id="custom", name="Custom", provider_key="openai",
                             base_url="https://gateway.test/v1", api_key="gateway-key"))
             db.add(Model(id="custom-text", name="compatible-chat", category=ModelCategoryKey.text,
-                         provider_id="custom", params={"temperature": 0.4, "use_responses_api": False}))
+                         provider_id="custom", params={"temperature": 0.4, "use_responses_api": bool(responses)}))
             db.add(ExperimentSession(id="gateway-session", lab_type="text"))
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post("/api/v1/studio/labs/text/sessions/gateway-session/stream",
                                          json={"model_id": "custom-text", "content": "你好"})
         assert response.status_code == 200
+        if responses == "failed":
+            assert "event: error" in response.text
+            return
         assert "event: completed" in response.text
         assert "第一段" in response.text and "第二段" in response.text
         [(url, auth, payload)] = requests
-        assert (url, auth) == ("https://gateway.test/v1/chat/completions", "Bearer gateway-key")
+        assert (url, auth) == ("https://gateway.test/v1/" + ("responses" if responses else "chat/completions"), "Bearer gateway-key")
         assert payload["model"] == "compatible-chat"
-        assert payload["messages"] == [{"role": "user", "content": "你好"}]
+        assert payload["input" if responses else "messages"] == [{"role": "user", "content": "你好"}]
         assert payload["temperature"] == 0.4
         assert payload["stream"] is True
     finally:

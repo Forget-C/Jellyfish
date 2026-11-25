@@ -160,13 +160,11 @@ async def build_laboratory_chat(
     db: AsyncSession,
     *,
     model_id: str,
-) -> TextModelProvider | BaseChatModel:
+) -> TextModelProvider:
     """为实验室绑定文本操作，并保留显式选择的 Responses API。"""
     model = await get_model_by_category(db, ModelCategoryKey.text, model_or_id=model_id)
     provider = await get_provider_by_model_or_id(db, model)
     provider_key, params = _chat_config(provider, model, thinking=False)
-    if params.get("use_responses_api"):
-        return build_langchain_chat(provider_key=provider_key, **params)
     timeout = params.get("timeout", params.get("request_timeout", 30.0))
     try:
         return bind_text_provider(

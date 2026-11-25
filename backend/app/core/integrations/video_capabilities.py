@@ -39,12 +39,23 @@ def describe_video_modes(
     if usage.subject_media_kinds and (capability.supports_subject_image_reference or capability.supports_subject_video_reference):
         supported_modes.add("subject_reference")
     audio = provider == "vidu" and model.startswith("viduq3")
+    declarations = dict(declarations)
+    if capability.seconds_by_resolution:
+        for mode in supported_modes:
+            declarations.setdefault(mode, VideoModeDeclaration())
     low, high = capability.min_seconds or 1, capability.max_seconds
     options = {}
     for mode, rule in declarations.items():
         duration_options = {}
         if provider == "vidu":
-            for resolution, duration in rule.duration_by_resolution.items():
+            durations = rule.duration_by_resolution or capability.seconds_by_resolution
+            for resolution, duration in durations.items():
+                if capability.seconds_by_resolution:
+                    values = capability.seconds_by_resolution.get(resolution, ())
+                    if isinstance(duration, VideoDurationRange):
+                        duration = [v for v in values if duration.min_seconds <= v <= duration.max_seconds]
+                    else:
+                        duration = sorted(set(values).intersection(duration))
                 if isinstance(duration, VideoDurationRange):
                     minimum = max(low, duration.min_seconds)
                     maximum = min(high, duration.max_seconds) if high is not None else duration.max_seconds
@@ -99,7 +110,7 @@ def validate_video_declaration(
         mode = "first_last_frames"
     elif frame_count:
         mode = "first_frame"
-    rule = modes.get(mode)
+    rule = describe_video_modes(provider, input_.model or "", modes).get(mode)
     if rule is None:
         return
     if rule.supported is False:
@@ -174,6 +185,7 @@ class VideoModelCapability:
     native_audio_output: AudioCapability = field(default_factory=AudioCapability)
     audio_switch: AudioCapability = field(default_factory=AudioCapability)
     audio_reference_input: AudioCapability = field(default_factory=AudioCapability)
+    seconds_by_resolution: dict[str, tuple[int, ...]] = field(default_factory=dict)
 
 
 def register_video_model_capability(
