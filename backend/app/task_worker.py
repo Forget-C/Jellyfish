@@ -19,6 +19,8 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from openai import APIStatusError, APITimeoutError
 from sqlalchemy import func, or_, select
 
+from app.services.chat.turn_recovery import abandoned
+from app.services.chat.laboratory import recover_turn
 from app.core.db import async_session_maker, close_db
 from app.core.dev_runtime import process_identity
 from app.core.contracts.provider_media import RemoteTaskReference
@@ -101,6 +103,7 @@ class TaskWorker:
         self.limits = limits or WorkerLimits()
         self.worker_id = uuid4().hex
         self.client = client
+        self.chat_jobs: dict[tuple[str, str], asyncio.Task] = {}
         self.jobs: dict[str, asyncio.Task] = {}
         self.phases: dict[str, str] = {}
         self.download_slots = asyncio.Semaphore(self.limits.download)
@@ -134,9 +137,9 @@ class TaskWorker:
                 except TimeoutError:
                     pass
         finally:
-            for job in self.jobs.values():
+            for job in (*self.chat_jobs.values(), *self.jobs.values()):
                 job.cancel()
-            await asyncio.gather(*list(self.jobs.values()), return_exceptions=True)
+            await asyncio.gather(*self.chat_jobs.values(), *self.jobs.values(), return_exceptions=True)
             if self.maintenance is not None:
                 self.maintenance.cancel()
                 await asyncio.gather(self.maintenance, return_exceptions=True)
@@ -178,6 +181,11 @@ class TaskWorker:
 
     async def tick(self) -> None:
         """只在资源有空位时领取任务；远端任务只读取状态，不重新入队。"""
+        for key in await abandoned(self.sessions):
+            key = tuple(key)
+            if key not in self.chat_jobs:
+                job = asyncio.create_task(self._recover_chat(*key))
+                self.chat_jobs[key] = job
         try:
             await advance_approved_canvas_edits(self.sessions)
         except Exception as error:
@@ -227,6 +235,14 @@ class TaskWorker:
             await db.commit()
         for task_id in due:
             self._start(task_id, "poll", self._poll(task_id))
+
+    async def _recover_chat(self, session_id, turn_id):
+        try:
+            await recover_turn(self.sessions, session_id, turn_id)
+        except Exception as error:
+            logger.warning("laboratory turn recovery failed: %s", type(error).__name__)
+        finally:
+            self.chat_jobs.pop((session_id, turn_id), None)
 
     def _start(self, task_id: str, phase: str, operation) -> None:
         """同进程每个任务最多一个活动操作；结束时释放调度名额。"""

@@ -10,7 +10,7 @@ from app.core.contracts.generation import (
     GenerationSubmitRequest, GenerationTarget, GenerationTargetKind, ImageGenerationOperationInput, VideoGenerationOperationInput,
 )
 from app.core.contracts.media import ImageMediaInput, MediaReference, VideoFrameMediaReferences, VideoMediaInput
-from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
+from app.models.experiment_sessions import ExperimentMessage, ExperimentSession, ExperimentSessionEvent
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.submission import GenerationSubmitter
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
@@ -25,17 +25,19 @@ class ChatTurnStopped(Exception):
 class LaboratoryMediaTools:
     """Keep tool call identity, accepted task and user-visible receipt in the same transaction."""
 
-    def __init__(self, sessions, session_id, turn_id, models, file_ids):
+    def __init__(self, sessions, session_id, turn_id, models, file_ids, owner):
         self.sessions = sessions
         self.session_id = session_id
         self.turn_id = turn_id
+        self.owner = owner
         self.models = models
         self.file_ids = set(file_ids)
 
     async def require_active(self, db):
         session = await db.get(ExperimentSession, self.session_id, with_for_update=True, populate_existing=True)
-        if not session or session.active_turn != self.turn_id:
+        if not session or session.active_turn != self.turn_id or (session.chat_execution or {}).get('owner') != self.owner:
             raise ChatTurnStopped()
+        return session
 
     async def execute(self, call_id, name, modality, request, submit_only, *, source_file_id=None):
         identity = {'turn_id': self.turn_id, 'tool_call_id': call_id, 'tool': name}
@@ -63,6 +65,14 @@ class LaboratoryMediaTools:
                 await publish_media_fact(db, task_id, self.session_id)
             else:
                 task_id = row.task_id
+                completed = await db.scalar(select(ExperimentSessionEvent).where(
+                    ExperimentSessionEvent.session_id == self.session_id, ExperimentSessionEvent.turn_id == self.turn_id,
+                    ExperimentSessionEvent.kind.in_(['tool.completed', 'tool.failed']),
+                    ExperimentSessionEvent.payload['tool_call_id'].as_string() == call_id))
+                if completed:
+                    self.file_ids.update(a['file_id'] for a in completed.payload['artifacts']
+                                         if a['media_type'] == 'image' and not a['deleted'])
+                    return completed.payload
         while True:
             async with self.sessions.begin() as db:
                 await self.require_active(db)
@@ -73,6 +83,7 @@ class LaboratoryMediaTools:
                     failed = receipt.status in ('failed', 'cancelled')
                     await append_session_event(db, self.session_id, self.turn_id,
                                                'tool.failed' if failed else 'tool.completed', public)
+                    self.file_ids.update(item.file_id for item in receipt.artifacts if item.media_type == 'image' and not item.deleted)
                     return public
             await asyncio.sleep(0.3)
 

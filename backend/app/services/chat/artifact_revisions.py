@@ -49,9 +49,8 @@ def revision_tool(media):
                               submit_only: bool = False):
         """Revise a previous output using its original model, prompt and references. Supply only changed generation parameters.
         Specify source_file_id only for an unambiguous reference; omit it for the user to choose among possible outputs."""
-        question = None
         async with media.sessions.begin() as db:
-            await media.require_active(db)
+            session = await media.require_active(db)
             options = [o for o in await historical_artifacts(db, media.session_id, media.turn_id) if o.modality == modality]
             user = await user_turn(db, media.session_id, media.turn_id)
             selected = (user.payload.get('artifact_answers') or {}).get(runtime.tool_call_id) or source_file_id
@@ -61,23 +60,26 @@ def revision_tool(media):
                 raise HTTPException(422, 'CHAT_ARTIFACT_UNAVAILABLE')
             if len(options) > 1:
                 question = ArtifactQuestion(id=runtime.tool_call_id, options=options)
+                # Persist the question and release the worker lease atomically. A late
+                # heartbeat or tool result from the old owner must not reclaim this turn.
+                session.chat_lease_until = None
+                session.chat_execution = {**session.chat_execution, 'owner': None}
                 if user.payload.get('artifact_question') != question.model_dump():
                     user.payload = {**user.payload, 'artifact_question': question.model_dump()}
                     await append_session_event(db, media.session_id, media.turn_id, 'question.asked', question.model_dump())
-            else:
-                source = options[0]
-                task = await db.get(Task, source.task_id)
-                refs = (await db.execute(select(TaskInput, FileItem).join(FileItem, FileItem.id == TaskInput.file_id)
-                                        .where(TaskInput.task_id == task.id))).all()
-                basis = restore_snapshot(task, refs)
-                original = basis.operation_input
-                if any(k not in type(original).model_fields or k == 'kind' for k in changes):
-                    raise HTTPException(422, 'Invalid revision parameters')
-                request = GenerationSubmitRequest(model_id=basis.model_id,
-                    execution_prompt=basis.execution_prompt if prompt is None else prompt, media=basis.media,
-                    operation_input={**original.model_dump(), **changes})
-        if question:
-            raise ArtifactQuestionPending()
+                await db.commit()
+                raise ArtifactQuestionPending()
+            source = options[0]
+            task = await db.get(Task, source.task_id)
+            refs = (await db.execute(select(TaskInput, FileItem).join(FileItem, FileItem.id == TaskInput.file_id)
+                                    .where(TaskInput.task_id == task.id))).all()
+            basis = restore_snapshot(task, refs)
+            original = basis.operation_input
+            if any(k not in type(original).model_fields or k == 'kind' for k in changes):
+                raise HTTPException(422, 'Invalid revision parameters')
+            request = GenerationSubmitRequest(model_id=basis.model_id,
+                execution_prompt=basis.execution_prompt if prompt is None else prompt, media=basis.media,
+                operation_input={**original.model_dump(), **changes})
         return await media.execute(runtime.tool_call_id, 'revise_artifact', GenerationModality(modality),
                                    request, submit_only, source_file_id=source.file_id)
     return revise_artifact

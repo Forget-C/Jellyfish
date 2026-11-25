@@ -48,7 +48,7 @@ async def lab_answer(session_id: str, turn_id: str, body: ArtifactAnswer, db: Da
     if not changed:
         return success_response(await laboratory.snapshot(db, session_id))
     command = LabChatCommand(request_id=turn_id, text=row.content, file_ids=row.payload.get('file_ids', []))
-    await db.commit()
+    await db.flush()
     return success_response(await laboratory.resume_turn(db, session_id, command))
 
 

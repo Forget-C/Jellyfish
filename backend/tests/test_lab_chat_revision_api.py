@@ -6,7 +6,6 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from app.models.experiment_sessions import ExperimentSession
 from app.models.llm import Model, ModelSettings, Provider
 from app.models.studio_prompts_files_timeline import FileItem
 from app.models.task import Task, TaskOutput
@@ -82,15 +81,26 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
     receipt, = responses
     assert receipt['model_id'] == 'canvas-video' and receipt['parameters']['ratio'] == '16:9'
     assert receipt['parameters']['seconds'] == 4 and receipt['source_file_id'] == originals[-1]
+    from botocore.exceptions import ClientError
+
+    async def no_prior_object(**_):
+        raise ClientError({'Error': {'Code': 'NoSuchKey'}}, 'HeadObject')
+    async def upload(**_):
+        return None
+    monkeypatch.setattr('app.core.storage.get_file_info', no_prior_object)
+    monkeypatch.setattr('app.core.storage.upload_file', upload)
     submissions = []
     def video_api(request):
+        if request.method == 'GET':
+            return httpx.Response(200, json={'state': 'success', 'creations': [{'b64_json': 'dg=='}]})
         submissions.append(json.loads(request.content))
         return httpx.Response(200, json={'task_id': 'new-video'})
     async with httpx.AsyncClient(transport=httpx.MockTransport(video_api)) as http:
         worker = TaskWorker(canvas_client.canvas_sessions, client=http)
         try:
-            await worker.tick()
-            await asyncio.gather(*list(worker.jobs.values()))
+            for _ in range(2):
+                await worker.tick()
+                await asyncio.gather(*list(worker.jobs.values()))
         finally:
             worker.text_pool.shutdown(wait=True)
     new, = submissions
@@ -100,6 +110,7 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
     task_rows = [m for m in history if m['role'] == 'task']
     assert [m['media_receipt']['artifacts'][0]['file_id'] for m in task_rows[:-1]] == originals
     assert task_rows[-1]['payload']['source_file_id'] == originals[-1]
+    assert task_rows[-1]['media_receipt']['artifacts'][0]['file_id'] not in originals
 
 
 @pytest.mark.asyncio

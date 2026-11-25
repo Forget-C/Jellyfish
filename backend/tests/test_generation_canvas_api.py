@@ -19,12 +19,14 @@ def canvas_file_store():
 
 
 @pytest_asyncio.fixture
-async def canvas_client(request, monkeypatch, canvas_file_store):
+async def canvas_client(request, monkeypatch, canvas_file_store, tmp_path):
     from app.api.v1.routes.studio.generation_canvases import router
     mysql = getattr(request, 'param', None) == 'mysql'
     if mysql:
         from tests.services.test_task_mysql import isolated_database_url
         url = isolated_database_url()
+    elif getattr(request, 'param', None) == 'app-handler-file':
+        url = f'sqlite+aiosqlite:///{tmp_path / "canvas.db"}'
     else:
         url = 'sqlite+aiosqlite:///:memory:'
     engine = create_async_engine(url, isolation_level='READ COMMITTED' if mysql else None)
@@ -54,7 +56,7 @@ async def canvas_client(request, monkeypatch, canvas_file_store):
             except Exception:
                 await db.rollback()
                 raise
-    real_app = getattr(request, 'param', None) == 'app-handler'
+    real_app = getattr(request, 'param', None) in ('app-handler', 'app-handler-file')
     if real_app:
         from app.main import app
     else:

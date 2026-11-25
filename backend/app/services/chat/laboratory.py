@@ -13,7 +13,8 @@ from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.core.contracts.model_provider import UnsupportedModelInput
 from app.models.experiment_sessions import ExperimentSessionEvent, ExperimentMessage, ExperimentSession
 from app.models.llm import ModelCategoryKey, ModelSettings
-from app.schemas.studio.lab_chat import LabChatSnapshot, LabModels
+from app.schemas.studio.lab_chat import LabChatCommand, LabChatSnapshot, LabModels
+from app.services.chat import turn_recovery
 from app.services.chat.artifact_revisions import ArtifactQuestionPending, historical_artifacts, revision_tool, user_turn
 from app.services.chat.media_tools import ChatTurnStopped, LaboratoryMediaTools
 from app.services.chat.harness import build_chat_agent
@@ -27,13 +28,14 @@ from app.services.studio.experiment_messages import ExperimentMessageDraft, appe
 def laboratory_tools(tools, media, reference_only=False):
     """Offer only the profile tools and honor a stop before each model request."""
     allowed = {tool.name for tool in tools}
+    checkpoint = turn_recovery.ModelSteps()
 
     @wrap_model_call
     async def select_tools(request, handler):
         async with media.sessions.begin() as db:
             await media.require_active(db)
         exposed = [entry for entry in request.tools if getattr(entry, 'name', '') in allowed]
-        response = await handler(request.override(tools=exposed, tool_choice=None))
+        response = await checkpoint.invoke(media, request.override(tools=exposed, tool_choice=None), handler)
         if any(call['name'] not in allowed for message in response.result for call in message.tool_calls):
             raise HTTPException(422, 'CHAT_TOOL_MODEL_REQUIRED')
         if reference_only and isinstance(request.messages[-1], HumanMessage):
@@ -118,10 +120,35 @@ async def prepare(db, model_id, body):
     return client, content, streaming, caps.tool_results, shortcut, reference_only
 
 
-async def finish(db, session_id, turn_id, status, text=''):
+def inspection_tool(media, artifacts):
+    """Let the selected model read a historical file only through its effective media capabilities."""
+    from langchain.tools import tool
+
+    @tool
+    async def inspect_artifact(file_id: str, question: str):
+        """Inspect visible content of a named historical output using the current chat model."""
+        if file_id not in {artifact.file_id for artifact in artifacts}:
+            raise HTTPException(422, 'CHAT_ARTIFACT_UNAVAILABLE')
+        body = LabChatCommand(request_id=media.turn_id, text=question, file_ids=[file_id])
+        async with media.sessions.begin() as reader:
+            await media.require_active(reader)
+            model, content, streaming, _, _, reference_only = await prepare(reader, media.models.text, body)
+        if reference_only:
+            raise HTTPException(422, 'ASSISTANT_MODEL_INPUT_UNSUPPORTED')
+        messages = [HumanMessage(content=content)]
+        if streaming:
+            return ''.join([chunk.text async for chunk in model.astream(messages)])
+        return (await model.ainvoke(messages)).text
+    return inspect_artifact
+
+
+async def finish(db, session_id, turn_id, status, text='', owner=None):
     """A late model response cannot overwrite a stopped or superseded turn."""
-    released = await db.execute(update(ExperimentSession).where(
-        ExperimentSession.id == session_id, ExperimentSession.active_turn == turn_id).values(active_turn=None))
+    matching = [ExperimentSession.id == session_id, ExperimentSession.active_turn == turn_id]
+    if owner is not None:
+        matching.append(ExperimentSession.chat_execution['owner'].as_string() == owner)
+    released = await db.execute(update(ExperimentSession).where(*matching).values(
+        active_turn=None, chat_execution=None, chat_lease_until=None))
     if released.rowcount:
         await append_experiment_messages(db, session_id=session_id, drafts=[
             ExperimentMessageDraft(role='assistant', content=text, status=status, payload={'turn_id': turn_id})])
@@ -129,16 +156,39 @@ async def finish(db, session_id, turn_id, status, text=''):
     await db.commit()
 
 
-async def send(db, session_id, body):
+async def resume_turn(db, session_id, body, *, paused=True):
+    owner = await turn_recovery.claim(db, session_id, body.request_id, paused=paused)
+    if owner:
+        return await send(db, session_id, body, recovering=owner)
+    return await snapshot(db, session_id)
+
+
+async def recover_turn(sessions, session_id, turn_id):
+    async with sessions() as db:
+        owner = await turn_recovery.claim(db, session_id, turn_id)
+        if owner:
+            try:
+                original = await db.scalar(select(ExperimentMessage).where(
+                    ExperimentMessage.session_id == session_id, ExperimentMessage.role == 'user',
+                    ExperimentMessage.payload['turn_id'].as_string() == turn_id))
+                command = LabChatCommand(request_id=turn_id, text=original.content, file_ids=original.payload['file_ids'])
+                await send(db, session_id, command, recovering=owner)
+            except Exception:
+                await db.rollback()
+                await finish(db, session_id, turn_id, 'failed', owner=owner)
+                raise
+
+
+async def send(db, session_id, body, *, recovering=None):
     session = await session_for(db, session_id, lock=True)
     history = await messages_for(db, session_id)
     prior = next((m for m in history if m.role == 'user' and m.payload.get('turn_id') == body.request_id), None)
-    if prior:
+    if prior and not recovering:
         if prior.content != body.text or prior.payload.get('file_ids', []) != body.file_ids:
             raise HTTPException(409, 'Conflicting retry')
         return await snapshot(db, session_id)
-    choices = await model_choices(db, session)
-    if session.active_turn:
+    choices = LabModels(**prior.payload['models']) if recovering else await model_choices(db, session)
+    if session.active_turn and not recovering:
         raise HTTPException(409, 'Chat turn active')
     client, content, streaming, supports_tools, shortcut, reference_only = await prepare(db, choices.text, body)
     if shortcut and not getattr(choices, shortcut):
@@ -147,11 +197,23 @@ async def send(db, session_id, body):
         references = 'Attachment file IDs: ' + ', '.join(body.file_ids)
         content = ([{'type': 'text', 'text': content}] if isinstance(content, str) else list(content)) + [
             {'type': 'text', 'text': references}]
-    acquired = await db.execute(update(ExperimentSession).where(
-        ExperimentSession.id == session_id, ExperimentSession.active_turn.is_(None)
-    ).values(active_turn=body.request_id))
-    if not acquired.rowcount:
-        raise HTTPException(409, 'Chat turn active')
+    if recovering:
+        history = [message for message in history if message.sequence < prior.sequence]
+        owner = recovering
+        await db.commit()
+    else:
+        execution = turn_recovery.new_execution()
+        owner = execution['owner']
+        acquired = await db.execute(update(ExperimentSession).where(
+            ExperimentSession.id == session_id, ExperimentSession.active_turn.is_(None)
+        ).values(active_turn=body.request_id, chat_execution=execution, chat_lease_until=turn_recovery.lease_end()))
+        if not acquired.rowcount:
+            raise HTTPException(409, 'Chat turn active')
+        await append_experiment_messages(db, session_id=session_id, drafts=[ExperimentMessageDraft(
+            role='user', content=body.text, payload={'turn_id': body.request_id, 'file_ids': body.file_ids,
+                                                    'models': choices.model_dump()})])
+        await append_session_event(db, session_id, body.request_id, 'turn.accepted', {})
+        await db.commit()
     conversation = [(HumanMessage if m.role == 'user' else AIMessage)(content=m.content)
                     for m in history if m.role in ('user', 'assistant') and m.content]
     artifacts = await historical_artifacts(db, session_id, body.request_id)
@@ -159,55 +221,57 @@ async def send(db, session_id, body):
         catalog = json.dumps([a.model_dump() for a in artifacts], ensure_ascii=False)
         conversation.append(HumanMessage(content='本会话此前归档的产物（仅元数据）：' + catalog))
     conversation.append(HumanMessage(content=content))
-    await append_experiment_messages(db, session_id=session_id, drafts=[ExperimentMessageDraft(
-        role='user', content=body.text, payload={'turn_id': body.request_id, 'file_ids': body.file_ids,
-                                                'models': choices.model_dump()})])
-    await append_session_event(db, session_id, body.request_id, 'turn.accepted', {})
-    await db.commit()
     text = ''
+    sessions = async_sessionmaker(db.bind, expire_on_commit=False)
     try:
-        media = LaboratoryMediaTools(async_sessionmaker(db.bind, expire_on_commit=False),
-                                    session_id, body.request_id, choices, body.file_ids)
-        tools = [media.image(), media.video()] if supports_tools else []
-        if supports_tools and artifacts:
-            tools.append(revision_tool(media))
-        prompt = '你是综合聊天助手。'
-        if artifacts:
-            prompt += '用户要求修改此前产物时使用 revise_artifact，只传需改动的参数。指代有歧义时省略文件标识，由用户选择。历史元数据仅说明生成依据；解读画面需要读取素材。'
-        if shortcut:
-            prompt += f'用户已指定使用 generate_{shortcut}。要求充分时执行，关键信息不清时向用户提问。'
-        if reference_only:
-            prompt += '附件仅提供文件引用。可以把引用传给生成工具。若请求需要理解文件内容，请说明当前模型无法查看素材。'
-        agent = build_chat_agent(client, tools=tools, middleware=[laboratory_tools(tools, media, reference_only and not shortcut)],
-                                 system_prompt=prompt)
-        if streaming:
-            async with aclosing(agent.astream({'messages': conversation}, stream_mode='messages')) as stream:
-                # Opaque file references can be forwarded to tools but cannot support
-                # visual claims. Publish prose only after the model has used a tool.
-                can_publish_text = not reference_only or bool(shortcut)
-                async for chunk, meta in stream:
-                    if isinstance(chunk, ToolMessage):
-                        can_publish_text = True
-                    if can_publish_text and isinstance(chunk, AIMessageChunk) and meta.get('langgraph_node') == 'model' and chunk.text:
-                        if (await session_for(db, session_id, lock=True)).active_turn != body.request_id:
-                            break
-                        text += chunk.text
-                        await append_session_event(db, session_id, body.request_id, 'message.updated', {'text': text})
-                        await db.commit()
-        else:
-            state = await agent.ainvoke({'messages': conversation})
-            text = state['messages'][-1].text
-        await finish(db, session_id, body.request_id, 'completed', text)
-    except ArtifactQuestionPending:
-        await db.rollback()
-    except ChatTurnStopped:
+        async with turn_recovery.heartbeat(sessions, session_id, body.request_id, owner):
+            media = LaboratoryMediaTools(sessions,
+                                        session_id, body.request_id, choices, [*body.file_ids, *(a.file_id for a in artifacts)], owner)
+            tools = [media.image(), media.video()] if supports_tools else []
+            prompt = '你是综合聊天助手。'
+            if supports_tools and artifacts:
+                tools.extend([revision_tool(media), inspection_tool(media, artifacts)])
+                prompt += ('用户要求修改此前产物时使用 revise_artifact，只传需改动的参数。指代有歧义时省略文件标识，由用户选择。'
+                           '历史元数据仅说明生成依据，解读历史画面须通过 inspect_artifact 读取文件。')
+            if shortcut:
+                prompt += f'用户已指定使用 generate_{shortcut}。要求充分时执行，关键信息不清时向用户提问。'
+            if reference_only:
+                prompt += '附件仅提供文件引用。可以把引用传给生成工具。若请求需要理解文件内容，请说明当前模型无法查看素材。'
+            agent = build_chat_agent(client, tools=tools, middleware=[laboratory_tools(tools, media, reference_only and not shortcut)],
+                                     system_prompt=prompt)
+            if streaming:
+                async with aclosing(agent.astream({'messages': conversation}, stream_mode='messages')) as stream:
+                    # Opaque file references can be forwarded to tools but cannot support
+                    # visual claims. Publish prose only after the model has used a tool.
+                    can_publish_text = not reference_only or bool(shortcut)
+                    async for chunk, meta in stream:
+                        if isinstance(chunk, ToolMessage):
+                            can_publish_text = True
+                        if can_publish_text and isinstance(chunk, AIMessageChunk) and meta.get('langgraph_node') == 'model' and chunk.text:
+                            await media.require_active(db)
+                            text += chunk.text
+                            await append_session_event(db, session_id, body.request_id, 'message.updated', {'text': text})
+                            await db.commit()
+            else:
+                state = await agent.ainvoke({'messages': conversation})
+                text = state['messages'][-1].text
+            await finish(db, session_id, body.request_id, 'completed', text, owner)
+    except (ArtifactQuestionPending, ChatTurnStopped):
         await db.rollback()
     except UnsupportedModelInput as error:
         await db.rollback()
-        await finish(db, session_id, body.request_id, 'failed', text)
+        await finish(db, session_id, body.request_id, 'failed', text, owner)
         raise HTTPException(422, 'ASSISTANT_MODEL_INPUT_UNSUPPORTED') from error
-    except (Exception, asyncio.CancelledError):
+    except asyncio.CancelledError:
         await db.rollback()
-        await finish(db, session_id, body.request_id, 'failed', text)
+        await db.execute(update(ExperimentSession).where(
+            ExperimentSession.id == session_id, ExperimentSession.active_turn == body.request_id,
+            ExperimentSession.chat_execution['owner'].as_string() == owner,
+        ).values(chat_lease_until=turn_recovery.now()))
+        await db.commit()
+        raise
+    except Exception:
+        await db.rollback()
+        await finish(db, session_id, body.request_id, 'failed', text, owner)
         raise
     return await snapshot(db, session_id)
