@@ -21,6 +21,8 @@ class ExperimentSession(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="会话 ID")
     lab_type: Mapped[str] = mapped_column(String(16), nullable=False, index=True, comment="实验室类型：text/image/video")
     title: Mapped[str] = mapped_column(String(255), nullable=False, default="新会话", comment="用户可见会话标题")
+    chat_models: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    active_turn: Mapped[str | None] = mapped_column(String(64), nullable=True)
     message_sequence: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -53,6 +55,18 @@ class ExperimentMessage(Base, TimestampMixin):
         Index("ix_experiment_messages_session_created", "session_id", "created_at"),
         Index("ux_experiment_messages_session_sequence", "session_id", "sequence", unique=True),
     )
+
+
+class ExperimentChatEvent(Base):
+    """Committed client-visible updates, ordered independently of message history."""
+
+    __tablename__ = "experiment_chat_events"
+
+    cursor: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("experiment_sessions.id", ondelete="CASCADE"), index=True)
+    turn_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    type: Mapped[str] = mapped_column(String(48), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
 
 
 __all__ = ["ExperimentSession", "ExperimentMessage"]

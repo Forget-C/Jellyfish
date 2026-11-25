@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-LabType = Literal["text", "image", "video"]
+LabType = Literal["chat", "text", "image", "video"]
 MessageRole = Literal["user", "assistant", "task"]
 
 
