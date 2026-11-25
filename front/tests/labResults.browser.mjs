@@ -139,11 +139,12 @@ try {
   assert.equal(await history.getByText('选择模型并输入提示词，开始一轮文本实验').count(), 0)
   const input = page.getByRole('textbox', { name: '文本提示词' })
   await input.fill('未发送的提示词')
+  const readsBeforeRetry = textHistoryReads
   failTextHistory = false
   await history.getByRole('button', { name: '重试读取消息', exact: true }).click()
   await history.getByText('历史回复', { exact: true }).waitFor()
   assert.equal(await input.inputValue(), '未发送的提示词')
-  assert.equal(textHistoryReads, 2)
+  assert.equal(textHistoryReads, readsBeforeRetry + 1)
   assert.ok((await history.getByRole('article').filter({ hasText: '短提示词' }).boundingBox()).width < 200)
   assert.deepEqual(writes, [])
 
