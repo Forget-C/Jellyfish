@@ -76,7 +76,6 @@
 - [运行与排查异步任务](guides/task-operations.md)
 - [数据库升级与回退](guides/database-upgrade.md)
 - [旧版身份参考存量整理（历史参考）](guides/identity-reference-cleanup.md)
-- [开发与站点维护 FAQ](guides/developer-faq.md)
 - [站点维护](../../site/README.md)
 
 ## 技术参考
