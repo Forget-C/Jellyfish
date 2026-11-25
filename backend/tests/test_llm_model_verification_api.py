@@ -181,3 +181,27 @@ async def test_omni_uses_streamed_text_for_the_audio_observation(model_http):
     with patch.object(httpx.AsyncHTTPTransport, "handle_async_request", upstream):
         result = await model_http.post("models/model1/capability-verifications", json={"capability": "audio_inputs"})
     assert result.json()["data"]["outcome"] == "passed", result.text
+
+
+@pytest.mark.asyncio
+async def test_responses_only_gateway_verifies_tool_results(model_http):
+    assert (await model_http.patch("models/model1", json={"params": {"use_responses_api": True}})).is_success
+    requests = []
+
+    async def upstream(_transport, request):
+        assert request.url.path == "/v1/responses"
+        payload = json.loads(request.content)
+        requests.append(payload)
+        if len(requests) == 1:
+            output = [{"type": "function_call", "call_id": "c1", "name": payload["tools"][0]["name"], "arguments": "{}"}]
+        else:
+            result = payload["input"][-1]
+            assert result["type"] == "function_call_output" and result["call_id"] == "c1"
+            output = [{"type": "message", "content": [{"type": "output_text", "text": result["output"]}]}]
+        return httpx.Response(200, json={"status": "completed", "output": output})
+
+    with patch.object(httpx.AsyncHTTPTransport, "handle_async_request", upstream):
+        result = await model_http.post("models/model1/capability-verifications", json={"capability": "tool_calling"})
+    assert result.json()["data"]["reason"] == "verified"
+    assert result.json()["data"]["endpoint"].endswith("/responses")
+    assert len(requests) == 2

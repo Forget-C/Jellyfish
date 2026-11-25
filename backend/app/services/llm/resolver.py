@@ -13,7 +13,7 @@ from app.core.contracts.model_provider import ModelProviderConfig, ModelProvider
 from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.core.integrations.langchain_chat import build_langchain_chat
 from app.core.integrations.model_provider_registry import bind_text_provider
-from app.core.integrations.text_capabilities import describe_model
+from app.core.integrations.model_capabilities import describe_operation
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider
 from app.services.common import entity_not_found
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
@@ -186,9 +186,9 @@ def build_provider_agent_model(
     provider_key, params = _chat_config(provider, model, thinking=thinking)
     if configure:
         configure(params)
-    capability = describe_model(
+    capability = describe_operation(
         provider_key, model.name, ModelCapabilityProfile.model_validate(model.capability_profile or {}), operation="chat",
-    )
+    ).features
     try:
         return build_langchain_chat(provider_key=provider_key, tools_available=capability.tool_results, **params)
     except ModelProviderConfigurationError as exc:

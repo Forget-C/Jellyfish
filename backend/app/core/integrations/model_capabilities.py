@@ -1,5 +1,7 @@
 """按具体操作解析当前适配器与模型声明共同允许的能力。"""
 
+from typing import Literal
+
 from app.core.contracts.model_capabilities import ModelCapabilityProfile, ModelOperation, ModelOperationCapabilities
 from app.core.integrations.image_capabilities import describe_image_modes
 from app.core.integrations.media_provider import supports_remote_cancel
@@ -22,8 +24,17 @@ def describe_operation(provider: str, model: str, profile: ModelCapabilityProfil
         if not result.image_modes:
             return result
         remote = provider in {"vidu", "kling"}
-    result.features.remote_task = remote
-    result.features.direct_result = not remote
+    result.features.remote_task = remote and profile.remote_task.declaration != "unsupported"
+    result.features.direct_result = not remote and profile.direct_result.declaration != "unsupported"
     result.features.remote_cancel = (result.features.remote_task and supports_remote_cancel(provider, operation)
                                      and profile.remote_cancel.declaration != "unsupported")
     return result
+
+
+def require_media_operation(provider: str, model: str, profile: ModelCapabilityProfile,
+                            operation: Literal["image_generation", "video_generation"]) -> ModelOperationCapabilities:
+    """只向供应商发送已登记模型允许其执行方式的媒体请求。"""
+    effective = describe_operation(provider, model, profile, operation)
+    if not (effective.features.remote_task or effective.features.direct_result):
+        raise ValueError(f"Unsupported media delivery for {operation}")
+    return effective

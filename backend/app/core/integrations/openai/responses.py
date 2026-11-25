@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
+
 import httpx
-from httpx_sse import SSEError, aconnect_sse
+from httpx_sse import EventSource, SSEError
 
 from app.core.contracts.model_provider import ProviderChatEvent, ProviderChatResult
-from app.core.integrations.openai.chat import OpenAICompatibleChat
+from app.core.integrations.openai.chat import OpenAIConnection
 
 
 def _inputs(messages):
@@ -50,21 +53,27 @@ def _call(item):
             "function": {"name": item["name"], "arguments": item.get("arguments", "")}}
 
 
-class OpenAIResponses(OpenAICompatibleChat):
+def _finish_reason(response, has_calls):
+    if response.get("status") == "incomplete":
+        reason = (response.get("incomplete_details") or {}).get("reason")
+        return "length" if reason == "max_output_tokens" else reason or "incomplete"
+    return "tool_calls" if has_calls else "stop"
+
+
+class OpenAIResponses(OpenAIConnection):
     """共享连接配置，使用 Responses 的消息格式与终止事件。"""
 
     endpoint = "responses"
 
     def _payload(self, messages, options, *, stream):
-        body = super()._payload(messages, options, stream=stream)
+        body = self._request_body(options, stream)
         if body.pop("use_previous_response_id", False):
             for index in range(len(messages) - 1, -1, -1):
                 message = messages[index]
-                if message["role"] == "assistant" and (response_id := message.get("response_id")):
+                if message["role"] == "assistant" and (response_id := message.get("response_id", "")).startswith("resp_"):
                     body["previous_response_id"] = response_id
                     messages = messages[index + 1:]
                     break
-        del body["messages"]
         body["input"] = list(_inputs(messages))
         body.pop("stream_options", None)
         body.pop("output_version", None)
@@ -84,18 +93,39 @@ class OpenAIResponses(OpenAICompatibleChat):
             body["tool_choice"] = _tool(body["tool_choice"])
         return body
 
-    async def invoke(self, messages, *, options=None):
+    @asynccontextmanager
+    async def _request(self, body):
+        """仅在收到成功响应头之前重试，已消费的流不会重放。"""
         async with self._client_factory() as client:
-            raw = await client.post(self._url, headers=self._headers, params=self._query,
-                                    json=self._payload(messages, options, stream=False))
-            raw.raise_for_status()
+            for attempt in range(self._max_retries + 1):
+                try:
+                    request = client.build_request("POST", self._url, headers=self._headers, params=self._query, json=body)
+                    response = await client.send(request, stream=True)
+                except httpx.TransportError:
+                    if attempt >= self._max_retries:
+                        raise
+                else:
+                    retry = response.status_code in (408, 409, 429) or response.status_code >= 500
+                    if not retry or attempt >= self._max_retries:
+                        break
+                    await response.aclose()
+                await asyncio.sleep(min(0.5 * 2 ** min(attempt, 4), 8))
+            try:
+                response.raise_for_status()
+                yield response
+            finally:
+                await response.aclose()
+
+    async def invoke(self, messages, *, options=None):
+        async with self._request(self._payload(messages, options, stream=False)) as raw:
+            await raw.aread()
             response = raw.json()
         if response.get("status") not in ("completed", "incomplete"):
             raise ValueError("Responses request did not produce a result")
         calls = [_call(item) for item in response["output"] if item["type"] == "function_call"]
         content = "".join(block.get("text") or block.get("refusal", "") for item in response["output"]
                           if item["type"] == "message" for block in item["content"])
-        reason = "length" if response["status"] == "incomplete" else "tool_calls" if calls else "stop"
+        reason = _finish_reason(response, bool(calls))
         return ProviderChatResult([ProviderChatEvent("completed", text=content, tool_calls=calls, finish_reason=reason,
                                                      response_id=response.get("id"))],
                                   _usage(response))
@@ -103,12 +133,8 @@ class OpenAIResponses(OpenAICompatibleChat):
     async def stream(self, messages, *, options=None):
         has_calls = False
         try:
-            async with self._client_factory() as client, aconnect_sse(
-                client, "POST", self._url, headers=self._headers, params=self._query,
-                json=self._payload(messages, options, stream=True),
-            ) as source:
-                source.response.raise_for_status()
-                async for frame in source.aiter_sse():
+            async with self._request(self._payload(messages, options, stream=True)) as response:
+                async for frame in EventSource(response).aiter_sse():
                     event = frame.json()
                     kind = event["type"]
                     if kind in ("response.output_text.delta", "response.refusal.delta"):
@@ -120,7 +146,7 @@ class OpenAIResponses(OpenAICompatibleChat):
                         yield ProviderChatEvent("delta", tool_calls=[{"index": event["output_index"],
                                                                      "function": {"arguments": event["delta"]}}])
                     elif kind in ("response.completed", "response.incomplete"):
-                        reason = "length" if kind == "response.incomplete" else "tool_calls" if has_calls else "stop"
+                        reason = _finish_reason(event["response"], has_calls)
                         yield ProviderChatEvent("completed", finish_reason=reason, usage=_usage(event["response"]),
                                                 response_id=event["response"].get("id"))
                         return

@@ -24,11 +24,11 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def get_llm(db: AsyncSession = Depends(get_db)) -> BaseChatModel:
-    """提供默认文本 LLM（ChatOpenAI）。"""
+    """提供默认文本 模型的 LangChain 适配器。"""
     return await build_default_text_llm(db, thinking=True)
 
 async def get_nothinking_llm(db: AsyncSession = Depends(get_db)) -> BaseChatModel:
-    """提供默认文本 LLM（ChatOpenAI，禁用 thinking）。"""
+    """提供默认文本 模型的 LangChain 适配器，禁用 thinking。"""
     return await build_default_text_llm(db, thinking=False)
 
 

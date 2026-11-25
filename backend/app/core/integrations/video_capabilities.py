@@ -110,7 +110,7 @@ def validate_video_declaration(
         mode = "first_last_frames"
     elif frame_count:
         mode = "first_frame"
-    rule = describe_video_modes(provider, input_.model or "", modes).get(mode)
+    rule = modes.get(mode)
     if rule is None:
         return
     if rule.supported is False:

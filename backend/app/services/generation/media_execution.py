@@ -22,6 +22,7 @@ from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.core.contracts.provider import ProviderConfig, ProviderKey
 from app.core.contracts.provider_media import MediaResult, ProviderImageInput, ProviderImageReference, ProviderVideoFrames, ProviderVideoInput, ProviderVideoSubject
 from app.core.integrations.media_provider import ProviderDataError
+from app.core.integrations.model_capabilities import require_media_operation
 from app.core.integrations.image_capabilities import prepare_image_options
 from app.core.integrations.video_capabilities import validate_video_declaration
 from app.models.task import Task, TaskInput, TaskOutput
@@ -86,9 +87,11 @@ async def build_media_input(task: Task, snapshot: ResolvedGenerationSnapshot, fi
             purpose="asset_image" if snapshot.canonical_target.kind == GenerationTargetKind.asset_image_slot else "video_reference",
             images=[ProviderImageReference(image_url=urls[ref.file_id]) for ref in sorted(media.references, key=lambda ref: ref.ordinal)] if media else [],
         )
-        if snapshot.execution_config and snapshot.execution_config.provider_key in {"openai", "volcengine"}:
+        if snapshot.execution_config:
             profile = ModelCapabilityProfile.model_validate(snapshot.execution_config.capability_profile or {})
-            return prepare_image_options(snapshot.execution_config.provider_key, image, profile.image_modes)
+            key = snapshot.execution_config.provider_key
+            effective = require_media_operation(key, model_name, profile, "image_generation")
+            return prepare_image_options(key, image, effective.image_modes)
         return image
     media = snapshot.media
     if media is not None and not isinstance(media, VideoMediaInput):
@@ -113,7 +116,8 @@ async def build_media_input(task: Task, snapshot: ResolvedGenerationSnapshot, fi
     config = snapshot.execution_config
     if config:
         profile = ModelCapabilityProfile.model_validate(config.capability_profile or {})
-        validate_video_declaration(config.provider_key, video, profile.video_modes)
+        effective = require_media_operation(config.provider_key, model_name, profile, "video_generation")
+        validate_video_declaration(config.provider_key, video, effective.video_modes)
     return video
 
 

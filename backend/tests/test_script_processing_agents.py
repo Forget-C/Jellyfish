@@ -187,3 +187,41 @@ async def test_langchain_adapter_requests_native_json_schema(monkeypatch) -> Non
     result = await adapter.with_structured_output(Answer, method="json_schema", include_raw=True).ainvoke("批准")
     assert result["parsed"] == Answer(approved=True)
     assert result["parsing_error"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stream", [False, True])
+async def test_responses_agent_preserves_finish_reason_and_retries_before_output(stream):
+    import json
+    import httpx
+    from langchain_core.messages import AIMessage, HumanMessage
+    from app.models.llm import Model, ModelCategoryKey, Provider
+    from app.services.llm.resolver import build_provider_agent_model
+
+    requests = []
+
+    def reply(request):
+        requests.append(json.loads(request.content))
+        if len(requests) == 1:
+            return httpx.Response(429)
+        response = {"status": "incomplete", "incomplete_details": {"reason": "content_filter"}, "output": []}
+        if not stream:
+            return httpx.Response(200, json=response)
+        data = json.dumps({"type": "response.incomplete", "response": response})
+        return httpx.Response(200, headers={"Content-Type": "text/event-stream"}, text=f"data: {data}\n\n")
+
+    provider = Provider(id="p", name="gateway", provider_key="openai", api_key="fixture")
+    model = Model(name="test", category=ModelCategoryKey.text, provider_id="p",
+                  params={"use_responses_api": True, "use_previous_response_id": True, "max_retries": 1})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as client:
+        agent = build_provider_agent_model(provider=provider, model=model, thinking=True,
+                                           configure=lambda params: params.update(http_async_client=client))
+        history = [AIMessage(content="prior", response_metadata={"id": "chatcmpl-other"}), HumanMessage("continue")]
+        if stream:
+            chunks = [chunk async for chunk in agent.astream(history)]
+            assert any(chunk.response_metadata.get("finish_reason") == "content_filter" for chunk in chunks)
+        else:
+            assert (await agent.ainvoke(history)).response_metadata["finish_reason"] == "content_filter"
+    assert len(requests) == 2 and requests[0] == requests[1]
+    assert "previous_response_id" not in requests[1]
+    assert [message["content"] for message in requests[1]["input"]] == ["prior", "continue"]

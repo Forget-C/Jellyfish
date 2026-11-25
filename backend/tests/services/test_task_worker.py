@@ -97,6 +97,13 @@ async def test_worker_restart_polls_original_id_without_new_submission(monkeypat
                     await submitter.submit_async(db, GenerationCommand.model_validate(payload))
                 payload["request"]["operation_input"]["seconds"] = 10
             accepted = await submitter.submit_async(db, GenerationCommand.model_validate(payload))
+            if discrete:
+                model = await db.get(Model, "model")
+                model.capability_profile = {**model.capability_profile, "remote_task": {"declaration": "unsupported"}}
+                await db.flush()
+                assert not (await read_model(db, model)).effective_capabilities.remote_task
+                with pytest.raises(HTTPException, match="Unsupported media delivery"):
+                    await submitter.submit_async(db, GenerationCommand.model_validate(payload))
             task_id = accepted.task_id
             await db.commit()
         async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:

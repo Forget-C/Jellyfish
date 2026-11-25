@@ -24,7 +24,7 @@ from app.core.dev_runtime import process_identity
 from app.core.contracts.provider_media import RemoteTaskReference
 from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.core.integrations.langchain_chat import build_langchain_chat
-from app.core.integrations.text_capabilities import describe_model
+from app.core.integrations.model_capabilities import describe_operation
 from app.core.integrations.media_provider import bind_media_provider, ProviderDataError
 from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardApplication, StoryboardOrganization, StoryboardReviewReport
 from app.core.contracts.task import TaskStatus
@@ -426,9 +426,9 @@ class TaskWorker:
                 params["streaming"] = True
             if directing or task.kind == "text_chat":
                 params["extra_body"] = {**params.get("extra_body", {}), "enable_thinking": False}
-            capability = describe_model(cfg.provider_key, model.name, ModelCapabilityProfile.model_validate(
+            capability = describe_operation(cfg.provider_key, model.name, ModelCapabilityProfile.model_validate(
                 model.capability_profile or {},
-            ), operation="chat")
+            ), operation="chat").features
             llm = build_langchain_chat(provider_key=cfg.provider_key, tools_available=capability.tool_results, **params)
             stage = {"directing_storyboard": "extracting_storyboard", STORYBOARD_CHECK_KIND: 'reviewing_storyboard',
                      "directing_object_extract": "extracting_objects"}.get(task.kind)
@@ -820,9 +820,9 @@ class TaskWorker:
                 params['use_responses_api'] = False
         params.update(model=frozen.model_name, api_key=frozen.api_key, base_url=frozen.base_url,
                       max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
-        capability = describe_model(frozen.provider_key, frozen.model_name, ModelCapabilityProfile.model_validate(
+        capability = describe_operation(frozen.provider_key, frozen.model_name, ModelCapabilityProfile.model_validate(
             frozen.capability_profile or {},
-        ), operation="chat")
+        ), operation="chat").features
         return build_langchain_chat(provider_key=frozen.provider_key, tools_available=capability.tool_results, **params)
 
     async def _canvas_check(self, task: Task) -> None:

@@ -2,19 +2,26 @@
 from typing import Any
 
 from app.core.contracts.generation import FrozenGenerationConfig
+from app.core.contracts.model_capabilities import ModelCapabilityProfile
+from app.core.integrations.model_capabilities import describe_operation
 
 
-from app.core.integrations.text_capabilities import BAILIAN_OMNI_MODEL, check_media_support
+from app.core.integrations.text_capabilities import BAILIAN_OMNI_MODEL
+
+
+def _check_capabilities(model: FrozenGenerationConfig):
+    profile = ModelCapabilityProfile.model_validate(model.capability_profile or {})
+    return describe_operation(model.provider_key, model.model_name, profile, "storyboard_inspection").features
 
 
 def supports_check_image(model: FrozenGenerationConfig | None) -> bool:
     """Only the explicit Bailian Chat Completions image routes are connected."""
-    return bool(model and check_media_support(model.provider_key, model.model_name)[0])
+    return bool(model and _check_capabilities(model).image_inputs)
 
 
 def supports_check_video(model: FrozenGenerationConfig | None) -> bool:
     """Only the connected Bailian video-file routes may inspect continuous video."""
-    return bool(model and check_media_support(model.provider_key, model.model_name)[1])
+    return bool(model and _check_capabilities(model).video_inputs)
 
 
 def check_model_parameters(model: FrozenGenerationConfig, *, multimodal: bool = False) -> dict[str, Any]:

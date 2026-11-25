@@ -1,5 +1,6 @@
 """Verify a model using the stored route and retain the exact configuration tested."""
 
+from contextlib import aclosing, nullcontext
 from dataclasses import dataclass
 import asyncio
 from datetime import UTC
@@ -21,6 +22,8 @@ from app.core.contracts.model_capabilities import (
     VerificationReason,
     VerifiedModelCapability,
 )
+from app.core.contracts.model_provider import ModelProviderConfig
+from app.core.integrations.model_provider_registry import bind_text_provider
 from app.models.llm import Model, ModelCapabilityVerification, ModelCategoryKey, Provider
 from app.services.llm.capability_verification_media import make_media_probe
 from app.services.llm.provider_resolver import resolve_effective_base_url, resolve_provider_config_from_provider
@@ -31,6 +34,8 @@ class VerificationRoute:
     """Resolve runtime details and a redacted identifier for user-visible history."""
 
     provider: Provider
+    base_url: str
+    params: dict
     endpoint: str
     endpoint_label: str
     configuration_hash: str
@@ -38,12 +43,13 @@ class VerificationRoute:
 
 def _verification_route(model: Model, provider: Provider) -> VerificationRoute:
     params = model.params or {}
-    base_url = params.get("base_url") or resolve_effective_base_url(provider=provider, category=model.category) or ""
+    base_url = resolve_effective_base_url(provider=provider, category=model.category) or ""
     try:
         url = urlsplit(base_url) if isinstance(base_url, str) else urlsplit("")
     except ValueError:
         url = urlsplit("")
-    path = f"{url.path.rstrip('/')}/chat/completions"
+    operation = "responses" if params.get("use_responses_api") else "chat/completions"
+    path = f"{url.path.rstrip('/')}/{operation}"
     valid = url.scheme in ("https", "http") and url.netloc
     endpoint = urlunsplit((url.scheme, url.netloc, path, url.query, "")) if valid else ""
     # Effective endpoints may include query credentials or userinfo.
@@ -53,54 +59,41 @@ def _verification_route(model: Model, provider: Provider) -> VerificationRoute:
         sort_keys=True,
         ensure_ascii=False,
     )
-    return VerificationRoute(provider, endpoint, label, hashlib.sha256(key.encode()).hexdigest())
+    return VerificationRoute(provider, base_url, params, endpoint, label, hashlib.sha256(key.encode()).hexdigest())
 
 
 async def _request(
     client: httpx.AsyncClient, route: VerificationRoute, payload: dict,
 ) -> dict:
-    if route.provider.provider_key == "aliyun_bailian" and "omni" in payload["model"].lower():
-        body = {**payload, "stream": True, "modalities": ["text"]}
-        if payload["model"] == "qwen3.8-omni-flash":
-            body["reasoning_effort"] = "none"
-        async with client.stream("POST", route.endpoint, json=body) as response:
-            response.raise_for_status()
-            return await _read_streamed_message(response)
-    response = await client.post(route.endpoint, json=payload)
-    response.raise_for_status()
-    message = response.json()["choices"][0]["message"]
-    if not isinstance(message, dict):
-        raise ValueError("Invalid completion message")
-    return message
-
-
-async def _read_streamed_message(response: httpx.Response) -> dict:
-    """Accumulate the streamed text and tool deltas returned by the Omni endpoint."""
-    content = []
-    calls = {}
-    async for line in response.aiter_lines():
-        if not line.startswith("data:"):
-            continue
-        data = line.removeprefix("data:").strip()
-        if data == "[DONE]":
-            break
-        event = json.loads(data)
-        if "error" in event:
-            raise ValueError("Provider stream error")
-        choices = event.get("choices")
-        if not choices:
-            continue
-        delta = choices[0].get("delta") or {}
-        content.append(delta.get("content") or "")
-        for fragment in delta.get("tool_calls") or []:
-            call = calls.setdefault(fragment["index"], {
-                "id": "", "type": "function", "function": {"name": "", "arguments": ""},
-            })
-            if fragment.get("id"):
-                call["id"] = fragment["id"]
-            function = fragment.get("function") or {}
-            for key in ("name", "arguments"):
-                call["function"][key] += function.get(key) or ""
+    model_name = payload["model"]
+    messages = payload["messages"]
+    adapter = bind_text_provider(
+        ModelProviderConfig(route.provider.provider_key, route.provider.api_key, route.base_url), model_name,
+        {**route.params, "max_retries": 0}, client_factory=lambda: nullcontext(client),
+    )
+    options = {key: value for key, value in payload.items() if key not in ("model", "messages")}
+    if route.provider.provider_key != "aliyun_bailian" or "omni" not in model_name.lower():
+        result = await adapter.invoke(messages, options=options)
+        choice = result.choices[0]
+        return {"content": choice.text, "tool_calls": choice.tool_calls}
+    options["modalities"] = ["text"]
+    if model_name == "qwen3.8-omni-flash":
+        options["reasoning_effort"] = "none"
+    content, calls = [], {}
+    async with aclosing(adapter.stream(messages, options=options)) as events:
+        async for event in events:
+            if event.kind == "error":
+                raise ValueError("Provider stream error")
+            content.append(event.text)
+            for fragment in event.tool_calls:
+                call = calls.setdefault(fragment["index"], {
+                    "id": "", "type": "function", "function": {"name": "", "arguments": ""},
+                })
+                if fragment.get("id"):
+                    call["id"] = fragment["id"]
+                function = fragment.get("function") or {}
+                for key in ("name", "arguments"):
+                    call["function"][key] += function.get(key) or ""
     return {"content": "".join(content), "tool_calls": list(calls.values())}
 
 
@@ -127,7 +120,7 @@ async def _verify_tool(client: httpx.AsyncClient, route: VerificationRoute, mode
         return "tool_not_called"
     token = secrets.token_hex(6)
     messages.extend([
-        {"role": "assistant", "tool_calls": [call]},
+        {"role": "assistant", "content": None, "tool_calls": [call]},
         {"role": "tool", "tool_call_id": call_id, "content": token},
     ])
     continued = await _request(client, route, payload)

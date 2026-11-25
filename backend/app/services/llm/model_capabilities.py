@@ -1,7 +1,7 @@
 """Resolve model declarations against the capabilities of each integrated operation."""
 
 from app.core.contracts.model_capabilities import EffectiveModelCapabilities, ModelCapabilityProfile, ModelOperation, ModelOperationCapabilities
-from app.models.llm import Model, ModelCategoryKey, Provider, ProviderStatus
+from app.models.llm import Model, Provider, ProviderStatus
 from app.core.integrations.model_capabilities import describe_operation
 
 
