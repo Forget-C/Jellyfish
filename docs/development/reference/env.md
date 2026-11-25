@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | 后端 | `DATABASE_URL` | MySQL 异步连接，迁移和运行需指向预期数据库 |
 | 后端 | `CORS_ORIGINS` | 允许访问 API 的前端来源，逗号分隔 |
+| 画布 MCP | `MCP_ENABLED`、`MCP_SECRET_KEY` | 开关默认开启。配置非空密钥后注册 `/mcp`，客户端以 Bearer 密钥访问全部画布。 |
 | 对象存储 | `S3_ENDPOINT_URL`、`S3_REGION_NAME`、`S3_BUCKET_NAME`、`S3_BASE_PATH` | S3 兼容服务地址、区域、桶和对象前缀 |
 | 孤儿对象扫描 | `S3_ORPHAN_CLEANUP_SCOPE` | 默认为空。仅当授权值与当前 Worker 的数据库和存储命名空间一致时才扫描。 |
 | 对象存储 | `S3_ACCESS_KEY_ID`、`S3_SECRET_ACCESS_KEY` | 存储认证；本地与 Compose 配置保持一致 |

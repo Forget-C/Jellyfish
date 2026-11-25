@@ -50,7 +50,7 @@
 - [声音设计与生成职责](adr/0004-sound-design-and-generation-responsibilities.md)
 - [场次工作台与自由生成共享画布基础](adr/0005-shared-canvas-foundation.md)
 - [项目角色身份与共享资产复用](adr/0006-project-character-and-shared-assets.md)
-- [项目专属资源与独立入库副本（完整方案已最终确认，尚未实施）](adr/0007-project-resource-ownership-and-library-copies.md)
+- [项目专属资源与独立入库副本（已实施，部分规则由 ADR 0008 调整）](adr/0007-project-resource-ownership-and-library-copies.md)
 - [图片来源资源与独立项目导入](adr/0008-image-source-resources-and-project-imports.md)
 - [场次对象身份引用与生产用图分离](adr/0009-scene-object-resource-references.md)
 - [生成画布独立归属与场次隔离](adr/0010-independent-canvas-ownership.md)
@@ -75,7 +75,7 @@
 - [旧场次版本 graph 契约与接入参考](guides/canvas-graph.md)
 - [运行与排查异步任务](guides/task-operations.md)
 - [数据库升级与回退](guides/database-upgrade.md)
-- [身份参考存量整理](guides/identity-reference-cleanup.md)
+- [旧版身份参考存量整理（历史参考）](guides/identity-reference-cleanup.md)
 - [开发与站点维护 FAQ](guides/developer-faq.md)
 - [站点维护](../../site/README.md)
 

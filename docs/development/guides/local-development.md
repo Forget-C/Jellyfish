@@ -13,10 +13,10 @@ cp deploy/compose/.env.example deploy/compose/.env
 cp backend/.env.example backend/.env
 cp front/.env.example front/.env
 docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml \
-  up --build -d mysql rustfs backend-migrate backend-seed-system-data
+  up --build -d mysql rustfs backend-init-storage backend-migrate backend-seed-system-data
 ```
 
-用同一 Compose 命令的 `ps -a` 查看状态。等 MySQL 和 RustFS 就绪，迁移和系统种子任务成功退出后，再启动宿主机上的 API 和 Worker。若已自行提供 MySQL 与 S3 兼容存储，配置连接后按[后端维护说明](../../../backend/README.md)运行迁移与系统种子。
+用同一 Compose 命令的 `ps -a` 查看状态。等 MySQL 和 RustFS 就绪，存储桶初始化（`backend-init-storage`）、数据库迁移和系统种子任务均以状态码 0 退出后，再启动宿主机上的 API 和 Worker。若已自行提供 MySQL 与 S3 兼容存储，先确认目标存储桶已创建，配置连接后按[后端维护说明](../../../backend/README.md)运行迁移与系统种子。
 
 更新代码后重跑 Compose 初始化命令时保留 `--build`。若迁移报 `Can't locate revision identified by ...`，检查当前代码是否包含对应 revision，并核对初始化镜像的代码版本。若数据库仍使用旧 revision，请保留其卷及版本标记，使用与其匹配的代码。新版本初次启动应另选空库，见[数据库升级与回退](database-upgrade.md)。
 
