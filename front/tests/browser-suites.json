@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "canvas-mcp-connection": { "file": "canvasMcpConnection.browser.mjs", "ports": [4470, 8470], "timeoutMs": 90000 },
     "canvas-assistant-journey": { "file": "canvasAssistant.browser.mjs", "ports": [4462, 8462], "timeoutMs": 240000 },
     "canvas-assistant-media": { "file": "canvasAssistantMedia.browser.mjs", "ports": [4464, 8464], "timeoutMs": 180000 },
     "canvas-locale": { "file": "canvasLocale.browser.mjs", "ports": [4689, 8689], "timeoutMs": 180000 },

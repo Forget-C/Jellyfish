@@ -43,6 +43,8 @@ export type { ApiResponse_CanvasCheckPreview_ } from './models/ApiResponse_Canva
 export type { ApiResponse_CanvasCheckReportRead_ } from './models/ApiResponse_CanvasCheckReportRead_';
 export type { ApiResponse_CanvasCompiledInput_ } from './models/ApiResponse_CanvasCompiledInput_';
 export type { ApiResponse_CanvasDraftSaved_ } from './models/ApiResponse_CanvasDraftSaved_';
+export type { ApiResponse_CanvasMcpConnection_ } from './models/ApiResponse_CanvasMcpConnection_';
+export type { ApiResponse_CanvasMcpConnectionStatus_ } from './models/ApiResponse_CanvasMcpConnectionStatus_';
 export type { ApiResponse_CanvasModelCapability_ } from './models/ApiResponse_CanvasModelCapability_';
 export type { ApiResponse_CanvasPostCheckPreview_ } from './models/ApiResponse_CanvasPostCheckPreview_';
 export type { ApiResponse_CanvasPrecheck_ } from './models/ApiResponse_CanvasPrecheck_';
@@ -260,6 +262,8 @@ export type { CanvasDraftSaved } from './models/CanvasDraftSaved';
 export type { CanvasError } from './models/CanvasError';
 export type { CanvasFixedSource } from './models/CanvasFixedSource';
 export type { CanvasInputPortDefinition } from './models/CanvasInputPortDefinition';
+export type { CanvasMcpConnection } from './models/CanvasMcpConnection';
+export type { CanvasMcpConnectionStatus } from './models/CanvasMcpConnectionStatus';
 export type { CanvasModelCapability } from './models/CanvasModelCapability';
 export type { CanvasNodeRead } from './models/CanvasNodeRead';
 export type { CanvasOutputPortDefinition } from './models/CanvasOutputPortDefinition';
@@ -757,6 +761,7 @@ export type { WorkbenchSceneSummary } from './models/WorkbenchSceneSummary';
 export type { WorkbenchTaskSummary } from './models/WorkbenchTaskSummary';
 export type { WorkspaceRead } from './models/WorkspaceRead';
 
+export { CanvasMcpService } from './services/CanvasMcpService';
 export { DefaultService } from './services/DefaultService';
 export { FilmService } from './services/FilmService';
 export { HealthService } from './services/HealthService';

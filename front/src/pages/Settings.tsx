@@ -4,6 +4,7 @@ import { appearances, useAppStore } from '../store/useAppStore'
 import { CanvasAppearancePicker } from '../components/workbench/CanvasAppearancePicker'
 import { AppearancePreview } from '../layouts/AppearancePreview'
 import { useTranslation } from 'react-i18next'
+import { CanvasMcpConnectionSettings } from './CanvasMcpConnectionSettings'
 
 const Settings: React.FC = () => {
   const { t } = useTranslation(['settings', 'common', 'layout'])
@@ -77,6 +78,7 @@ const Settings: React.FC = () => {
         </Form.Item>
       </Form>
       </div>
+      <CanvasMcpConnectionSettings />
       </WorkspaceScrollPanel>
     </WorkspaceLayout>
   )

@@ -50,3 +50,11 @@ url: "/docs/guide/generation-canvas/"
 <span id="按需使用检查卡"></span>自由画布保留「基础卡」「参考卡」「模型生成」三类。设计与检查六类卡片属于分镜画布，需从项目的场次工作台使用；两类画布通过文件管理复用媒体，不提供整图转换或跨画布动态引用。
 
 技术契约见[生成画布架构与执行边界](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/architecture/generation-canvas.md)，已确认设计范围见[首版检查项目录](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/design/generation-canvas-check-catalog.md)。
+
+## 从 MCP 客户端连接画布
+
+在 Jellyfish 的「系统设置 → 画布 MCP」中点击「开启 MCP 连接」。在客户端选择 Streamable HTTP，填入显示的服务地址，并将临时凭据配置为 Bearer 令牌。连接后，客户端可以发现画布工具，并用列表返回的画布引用读取自由画布或场次分镜画布。
+
+凭据有效期为八小时，期间可用于断线重连。关闭连接、开启新的连接或重启后端会使原凭据失效。已受理的画布任务由任务中心继续跟踪。刷新页面后仍可关闭连接，若需要重新取得凭据，可关闭后再开启。
+
+自托管时，画布 MCP 沿用现有单用户部署的访问边界。连接由单个 API 进程维护，管理连接的接口跟随 Jellyfish 设置入口置于同一个可信网络。将前端来源加入后端的 `CORS_ORIGINS`，并让 MCP 客户端能够访问设置中显示的后端地址。
