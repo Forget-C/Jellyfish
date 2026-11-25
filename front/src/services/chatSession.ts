@@ -67,6 +67,7 @@ export async function* sessionEvents<E extends SessionEvent>(
 export const laboratoryChat = {
   snapshot: ChatService.chatLabSnapshot,
   send: ChatService.chatLabSend,
+  answer: ChatService.chatLabAnswer,
   models: ChatService.chatLabModels,
   stop: ChatService.chatLabStop,
   events(sessionId: string, after: number, signal: AbortSignal) {

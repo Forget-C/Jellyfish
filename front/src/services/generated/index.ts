@@ -156,6 +156,9 @@ export type { ApiResponse_WorkspaceRead_ } from './models/ApiResponse_WorkspaceR
 export type { ApplyDesignRequest } from './models/ApplyDesignRequest';
 export type { ApplyReviewRevisionRequest } from './models/ApplyReviewRevisionRequest';
 export type { ArrangeCanvasCards } from './models/ArrangeCanvasCards';
+export type { ArtifactAnswer } from './models/ArtifactAnswer';
+export type { ArtifactOption } from './models/ArtifactOption';
+export type { ArtifactQuestion } from './models/ArtifactQuestion';
 export type { AssetCreateRequest } from './models/AssetCreateRequest';
 export type { AssetImagePromptRenderBody } from './models/AssetImagePromptRenderBody';
 export type { AssetOrigin } from './models/AssetOrigin';

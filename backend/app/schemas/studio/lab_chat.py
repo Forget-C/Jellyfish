@@ -1,4 +1,6 @@
 """Commands and snapshot served by the laboratory chat profile."""
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.schemas.interaction import InteractionSnapshot
@@ -17,8 +19,29 @@ class LabChatCommand(BaseModel):
     file_ids: list[str] = Field(default_factory=list)
 
 
+class ArtifactOption(BaseModel):
+    task_id: str
+    file_id: str
+    modality: Literal['image', 'video']
+    name: str
+    prompt: str
+    sequence: int
+    ordinal: int
+
+
+class ArtifactQuestion(BaseModel):
+    id: str
+    options: list[ArtifactOption]
+
+
+class ArtifactAnswer(BaseModel):
+    question_id: str
+    file_id: str
+
+
 class LabChatSnapshot(InteractionSnapshot):
     active_turn: str | None
     models: LabModels
     messages: list[ExperimentMessageRead]
     partial_reply: str = ''
+    question: ArtifactQuestion | None = None

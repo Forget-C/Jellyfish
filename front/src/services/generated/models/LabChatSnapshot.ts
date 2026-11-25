@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ArtifactQuestion } from './ArtifactQuestion';
 import type { ExperimentMessageRead } from './ExperimentMessageRead';
 import type { LabModels } from './LabModels';
 export type LabChatSnapshot = {
@@ -12,4 +13,5 @@ export type LabChatSnapshot = {
     models: LabModels;
     messages: Array<ExperimentMessageRead>;
     partial_reply?: string;
+    question?: (ArtifactQuestion | null);
 };

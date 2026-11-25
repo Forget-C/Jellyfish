@@ -141,12 +141,24 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
       if (response.data) setSnapshot(response.data)
     } catch (e) { report(e) }
   }
+  const question = snapshot?.question
+  const answer = async (fileId: string) => {
+    if (!sessionId || !snapshot?.active_turn || !question || inFlight.current) return
+    inFlight.current = true
+    setSending(true)
+    try {
+      const result = await laboratoryChat.answer({sessionId, turnId: snapshot.active_turn,
+        requestBody: {question_id: question.id, file_id: fileId}})
+      if (result.data) setSnapshot(result.data)
+    } catch (e) { report(e) } finally { inFlight.current = false; setSending(false) }
+  }
   const items = (snapshot?.messages ?? []).map(row => ({
     ...(row.media_receipt ? { contentRender: () => {
       const receipt = row.media_receipt!
       const urls = receipt.artifacts?.filter(file => !file.deleted).flatMap(file => buildFileDownloadUrl(file.file_id) ?? []) ?? []
       return <><ExperimentTaskStatus status={receipt.status} progress={receipt.progress} />
         <MediaTaskDetails receipt={receipt} />
+        {row.payload?.source_file_id && <a href={buildFileDownloadUrl(row.payload.source_file_id)}>{uiText('原版产物')}</a>}
         {receipt.error && <Alert type="error" message={receipt.error} />}
         {urls.length > 0 && <ExperimentResultMedia kind={row.payload?.modality === 'video' ? 'video' : 'image'} urls={urls} />}
         {['queued', 'running'].includes(receipt.status) && !receipt.cancel_requested &&
@@ -157,6 +169,12 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     }} : {}),
     key: row.id, role: row.role, content: row.content || (row.status === 'failed' ? uiText('生成失败') : ''), placement: row.role === 'user' ? 'end' as const : 'start' as const,
   }))
+  if (question) items.push({key: 'question-' + question.id, role: 'assistant', placement: 'start', content: '',
+    contentRender: () => <section aria-label={uiText('选择要修订的产物')}>
+      <p>{uiText('选择要修订的产物')}</p>
+      {question.options.map(option => <Button key={option.file_id} disabled={sending}
+        onClick={() => void answer(option.file_id)}>#{option.sequence}.{option.ordinal + 1} {option.name} {option.prompt}</Button>)}
+    </section>})
   if (snapshot?.partial_reply) items.push({ key: 'pending', role: 'assistant', content: snapshot.partial_reply, placement: 'start' })
   return render({
     history: <WorkbenchConversation items={items} />,

@@ -75,6 +75,8 @@ async def read_experiment_messages(
             task = tasks.get(message.task_id) if owners.get(message.task_id) == message.session_id else None
             payload = task_message_display_payload(modality=str((message.payload or {}).get("modality") or "generation"))
             if task is not None:
+                if source_file_id := (message.payload or {}).get('source_file_id'):
+                    payload['source_file_id'] = source_file_id
                 payload.update(progress=task.progress, outputs=[item.model_dump() for item in task.outputs])
                 if task.generation_delivery is not None:
                     payload["result"] = task.generation_delivery.model_dump(mode="json")

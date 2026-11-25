@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.dependencies import get_db
 from app.models.llm import ModelCategoryKey
 from app.schemas.common import ApiResponse, success_response
-from app.schemas.studio.lab_chat import LabChatCommand, LabChatSnapshot, LabModels
+from app.schemas.studio.lab_chat import ArtifactAnswer, LabChatCommand, LabChatSnapshot, LabModels
 from app.services.chat import laboratory
+from app.services.chat.artifact_revisions import record_answer
 from app.services.chat.stream import session_event_stream
 from app.services.llm.resolver import get_model_by_category
 
@@ -36,6 +37,19 @@ async def lab_models(session_id: str, body: LabModels, db: Database):
 @router.post('/{session_id}/turns', response_model=ApiResponse[LabChatSnapshot], operation_id='chat_lab_send')
 async def lab_send(session_id: str, body: LabChatCommand, db: Database):
     return success_response(await laboratory.send(db, session_id, body))
+
+
+@router.post('/{session_id}/turns/{turn_id}/answer', response_model=ApiResponse[LabChatSnapshot],
+             operation_id='chat_lab_answer')
+async def lab_answer(session_id: str, turn_id: str, body: ArtifactAnswer, db: Database):
+    """Resume the original turn with the selected archived output."""
+    session = await laboratory.session_for(db, session_id, lock=True)
+    row, changed = await record_answer(db, session, turn_id, body)
+    if not changed:
+        return success_response(await laboratory.snapshot(db, session_id))
+    command = LabChatCommand(request_id=turn_id, text=row.content, file_ids=row.payload.get('file_ids', []))
+    await db.commit()
+    return success_response(await laboratory.resume_turn(db, session_id, command))
 
 
 @router.post('/{session_id}/turns/{turn_id}/stop', response_model=ApiResponse[LabChatSnapshot], operation_id='chat_lab_stop')

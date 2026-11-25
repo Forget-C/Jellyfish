@@ -13,6 +13,7 @@ import type { ApiResponse_LabModels_ } from '../models/ApiResponse_LabModels_';
 import type { ApiResponse_list_ExperimentMessageRead__ } from '../models/ApiResponse_list_ExperimentMessageRead__';
 import type { ApiResponse_TextLabRunStatus_ } from '../models/ApiResponse_TextLabRunStatus_';
 import type { ApiResponse_TextTrialReceipt_ } from '../models/ApiResponse_TextTrialReceipt_';
+import type { ArtifactAnswer } from '../models/ArtifactAnswer';
 import type { CanvasAssistantGenerationApproval } from '../models/CanvasAssistantGenerationApproval';
 import type { CanvasAssistantLayoutDecision } from '../models/CanvasAssistantLayoutDecision';
 import type { CanvasAssistantMessage } from '../models/CanvasAssistantMessage';
@@ -186,6 +187,35 @@ export class ChatService {
             url: '/api/v1/studio/chat/sessions/lab/{session_id}/turns',
             path: {
                 'session_id': sessionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Lab Answer
+     * Resume the original turn with the selected archived output.
+     * @returns ApiResponse_LabChatSnapshot_ Successful Response
+     * @throws ApiError
+     */
+    public static chatLabAnswer({
+        sessionId,
+        turnId,
+        requestBody,
+    }: {
+        sessionId: string,
+        turnId: string,
+        requestBody: ArtifactAnswer,
+    }): CancelablePromise<ApiResponse_LabChatSnapshot_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/lab/{session_id}/turns/{turn_id}/answer',
+            path: {
+                'session_id': sessionId,
+                'turn_id': turnId,
             },
             body: requestBody,
             mediaType: 'application/json',

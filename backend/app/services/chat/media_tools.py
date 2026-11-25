@@ -37,8 +37,10 @@ class LaboratoryMediaTools:
         if not session or session.active_turn != self.turn_id:
             raise ChatTurnStopped()
 
-    async def execute(self, call_id, name, modality, request, submit_only):
+    async def execute(self, call_id, name, modality, request, submit_only, *, source_file_id=None):
         identity = {'turn_id': self.turn_id, 'tool_call_id': call_id, 'tool': name}
+        if source_file_id:
+            identity['source_file_id'] = source_file_id
         async with self.sessions.begin() as db:
             await self.require_active(db)
             row = await db.scalar(select(ExperimentMessage).where(

@@ -1,5 +1,6 @@
 """Laboratory chat profile: persisted conversation, turn admission and model execution."""
 import asyncio
+import json
 from contextlib import aclosing
 
 from fastapi import HTTPException
@@ -13,6 +14,7 @@ from app.core.contracts.model_provider import UnsupportedModelInput
 from app.models.experiment_sessions import ExperimentSessionEvent, ExperimentMessage, ExperimentSession
 from app.models.llm import ModelCategoryKey, ModelSettings
 from app.schemas.studio.lab_chat import LabChatSnapshot, LabModels
+from app.services.chat.artifact_revisions import ArtifactQuestionPending, historical_artifacts, revision_tool, user_turn
 from app.services.chat.media_tools import ChatTurnStopped, LaboratoryMediaTools
 from app.services.chat.harness import build_chat_agent
 from app.services.generation_canvas.assistant_media import resolve_assistant_media, describe_assistant_media
@@ -72,7 +74,8 @@ async def snapshot(db, session_id):
             ExperimentSessionEvent.kind == 'message.updated').order_by(ExperimentSessionEvent.cursor.desc()).limit(1))
         if update_event:
             partial = update_event.payload['text']
-    return LabChatSnapshot(session_id=session_id, cursor=latest.cursor if latest else 0,
+    active = await user_turn(db, session_id, session.active_turn) if session.active_turn else None
+    return LabChatSnapshot(question=active.payload.get('artifact_question') if active else None, session_id=session_id, cursor=latest.cursor if latest else 0,
                            capabilities=('snapshot', 'events', 'send', 'stop'), active_turn=session.active_turn,
                            partial_reply=partial, models=await model_choices(db, session),
                            messages=await read_experiment_messages(db, await messages_for(db, session_id),
@@ -151,6 +154,10 @@ async def send(db, session_id, body):
         raise HTTPException(409, 'Chat turn active')
     conversation = [(HumanMessage if m.role == 'user' else AIMessage)(content=m.content)
                     for m in history if m.role in ('user', 'assistant') and m.content]
+    artifacts = await historical_artifacts(db, session_id, body.request_id)
+    if artifacts:
+        catalog = json.dumps([a.model_dump() for a in artifacts], ensure_ascii=False)
+        conversation.append(HumanMessage(content='本会话此前归档的产物（仅元数据）：' + catalog))
     conversation.append(HumanMessage(content=content))
     await append_experiment_messages(db, session_id=session_id, drafts=[ExperimentMessageDraft(
         role='user', content=body.text, payload={'turn_id': body.request_id, 'file_ids': body.file_ids,
@@ -162,7 +169,11 @@ async def send(db, session_id, body):
         media = LaboratoryMediaTools(async_sessionmaker(db.bind, expire_on_commit=False),
                                     session_id, body.request_id, choices, body.file_ids)
         tools = [media.image(), media.video()] if supports_tools else []
+        if supports_tools and artifacts:
+            tools.append(revision_tool(media))
         prompt = '你是综合聊天助手。'
+        if artifacts:
+            prompt += '用户要求修改此前产物时使用 revise_artifact，只传需改动的参数。指代有歧义时省略文件标识，由用户选择。历史元数据仅说明生成依据；解读画面需要读取素材。'
         if shortcut:
             prompt += f'用户已指定使用 generate_{shortcut}。要求充分时执行，关键信息不清时向用户提问。'
         if reference_only:
@@ -187,6 +198,8 @@ async def send(db, session_id, body):
             state = await agent.ainvoke({'messages': conversation})
             text = state['messages'][-1].text
         await finish(db, session_id, body.request_id, 'completed', text)
+    except ArtifactQuestionPending:
+        await db.rollback()
     except ChatTurnStopped:
         await db.rollback()
     except UnsupportedModelInput as error:

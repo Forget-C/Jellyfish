@@ -18,11 +18,18 @@ try {
   let active = true
   const existing = {id: 'chat', lab_type: 'chat', title: '会话历史', updated_at: '2026-01-01', created_at: '2026-01-01'}
   let hasHistory = false
+  let question
+  let selected
   await page.route('**/api/**', route => {
     const url = new URL(route.request().url())
     if (url.pathname.endsWith('/events')) return route.fulfill({contentType: 'text/event-stream', body: ': keep-alive\n\n'})
+    if (url.pathname.endsWith('/answer')) {
+      selected = route.request().postDataJSON()
+      question = undefined
+      active = false
+    }
     if (url.pathname.endsWith('/stop')) active = false
-    const snapshot = {session_id: existing.id, cursor: 1, models: {text: 'T', image: 'I'}, messages: [], capabilities: [], active_turn: active ? 'active' : null}
+    const snapshot = {question, session_id: existing.id, cursor: 1, models: {text: 'T', image: 'I'}, messages: [], capabilities: [], active_turn: active ? 'active' : null}
     const data = url.pathname.endsWith('/experiment-sessions') ? (hasHistory && url.searchParams.get('lab_type') === 'chat' ? [existing] : [])
       : url.pathname.includes('/chat/sessions/lab/chat') ? snapshot
       : url.pathname.endsWith('/model-settings') ? {default_text_model_id: 'T', default_image_model_id: 'I'}
@@ -51,6 +58,12 @@ try {
   assert.equal((await composer.inputValue()).trim(), '/videogen')
   await composer.fill('/videogen 雨夜')
   assert.equal(await page.getByRole('button', {name: '发送', exact: true}).isEnabled(), true)
+  question = {id: 'pick', options: [{file_id: 'v1', name: '雨夜一', prompt: '前进', sequence: 1, ordinal: 0},
+    {file_id: 'v2', name: '雨夜二', prompt: '后退', sequence: 2, ordinal: 0}]}
+  active = true
+  await page.reload()
+  await page.getByRole('button', {name: /雨夜二/}).click()
+  assert.deepEqual(selected, {question_id: 'pick', file_id: 'v2'})
 } finally {
   await cleanup()
 }
