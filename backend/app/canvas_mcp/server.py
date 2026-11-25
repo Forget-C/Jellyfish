@@ -5,7 +5,7 @@ from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 from starlette.types import Receive, Scope, Send
 
-from app.canvas_mcp import grouped_edits, layout, lifecycle, tools
+from app.canvas_mcp import generation_inputs, grouped_edits, layout, lifecycle, tools
 from app.canvas_mcp.connection import MCP_PATH, accepts_credential, allows_origin
 
 
@@ -23,6 +23,7 @@ def create_server() -> FastMCP:
     lifecycle.register(server)
     layout.register(server)
     grouped_edits.register(server)
+    generation_inputs.register(server)
     return server
 
 
