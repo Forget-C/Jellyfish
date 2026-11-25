@@ -64,7 +64,7 @@ async def find_media_receipt(db, session_id: str, request_id: str, *, body=None)
     if user_message is None:
         raise HTTPException(409, 'The accepted laboratory request is incomplete')
     return ExperimentTaskCreated(
-        task_id=task_message.task_id, messages=await read_experiment_messages(db, [user_message, task_message]),
+        task_id=task_message.task_id, messages=await read_experiment_messages(db, [user_message, task_message], include_media_receipts=True),
     )
 
 
