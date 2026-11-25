@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider
 from app.services.llm.provider_resolver import resolve_effective_base_url
+from app.services.llm.provider_registry import resolve_provider_key_from_name
 
 
 def _default_model_id(settings_row: ModelSettings | None, category: ModelCategoryKey) -> str | None:
@@ -69,8 +70,13 @@ def build_default_text_llm_sync(
         kwargs.setdefault("base_url", base_url)
 
     if not thinking:
-        extra_body = dict(kwargs.get("extra_body") or {})
-        extra_body["enable_thinking"] = False
-        kwargs["extra_body"] = extra_body
+        provider_key = resolve_provider_key_from_name(provider.name)
+
+        if provider_key == "openai":
+            kwargs.setdefault("reasoning_effort", "none")
+        else:
+            extra_body = dict(kwargs.get("extra_body") or {})
+            extra_body["enable_thinking"] = False
+            kwargs["extra_body"] = extra_body
 
     return ChatOpenAI(**kwargs)
