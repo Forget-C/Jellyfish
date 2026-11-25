@@ -9,7 +9,6 @@ import type { ApiResponse_CanvasAssistantHistory_ } from '../models/ApiResponse_
 import type { ApiResponse_CanvasAssistantLayout_ } from '../models/ApiResponse_CanvasAssistantLayout_';
 import type { ApiResponse_CanvasAssistantModelSelection_ } from '../models/ApiResponse_CanvasAssistantModelSelection_';
 import type { ApiResponse_CanvasAssistantProposalResult_ } from '../models/ApiResponse_CanvasAssistantProposalResult_';
-import type { ApiResponse_CanvasAssistantQueueItem_ } from '../models/ApiResponse_CanvasAssistantQueueItem_';
 import type { ApiResponse_CanvasCardOutputs_ } from '../models/ApiResponse_CanvasCardOutputs_';
 import type { ApiResponse_CanvasCatalog_ } from '../models/ApiResponse_CanvasCatalog_';
 import type { ApiResponse_CanvasCheckPreview_ } from '../models/ApiResponse_CanvasCheckPreview_';
@@ -21,28 +20,25 @@ import type { ApiResponse_CanvasPostCheckPreview_ } from '../models/ApiResponse_
 import type { ApiResponse_CanvasPrecheck_ } from '../models/ApiResponse_CanvasPrecheck_';
 import type { ApiResponse_CanvasRead_ } from '../models/ApiResponse_CanvasRead_';
 import type { ApiResponse_CanvasRunAccepted_ } from '../models/ApiResponse_CanvasRunAccepted_';
-import type { ApiResponse_DraftAssistantReply_ } from '../models/ApiResponse_DraftAssistantReply_';
 import type { ApiResponse_CanvasRunRead_ } from '../models/ApiResponse_CanvasRunRead_';
 import type { ApiResponse_CanvasSaved_ } from '../models/ApiResponse_CanvasSaved_';
 import type { ApiResponse_CanvasSnapshot_ } from '../models/ApiResponse_CanvasSnapshot_';
 import type { ApiResponse_CanvasStreamConnection_ } from '../models/ApiResponse_CanvasStreamConnection_';
+import type { ApiResponse_DraftAssistantReply_ } from '../models/ApiResponse_DraftAssistantReply_';
 import type { ApiResponse_ImageContentCard_ } from '../models/ApiResponse_ImageContentCard_';
 import type { ApiResponse_list_CanvasCheckProduct__ } from '../models/ApiResponse_list_CanvasCheckProduct__';
 import type { ApiResponse_list_CanvasCheckReportRead__ } from '../models/ApiResponse_list_CanvasCheckReportRead__';
 import type { ApiResponse_list_InteractionEvent_Union_CanvasAssistantExchange__CanvasAssistantQueueItem____ } from '../models/ApiResponse_list_InteractionEvent_Union_CanvasAssistantExchange__CanvasAssistantQueueItem____';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_CanvasSummary__ } from '../models/ApiResponse_PaginatedData_CanvasSummary__';
-import type { ApiResponse_Union_CanvasAssistantExchange__NoneType__ } from '../models/ApiResponse_Union_CanvasAssistantExchange__NoneType__';
 import type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from '../models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
 import type { CanvasAssistantApprovalSetting } from '../models/CanvasAssistantApprovalSetting';
 import type { CanvasAssistantGenerationApproval } from '../models/CanvasAssistantGenerationApproval';
-import type { CanvasAssistantInstruction } from '../models/CanvasAssistantInstruction';
 import type { CanvasAssistantLayoutDecision } from '../models/CanvasAssistantLayoutDecision';
 import type { CanvasAssistantMessage } from '../models/CanvasAssistantMessage';
 import type { CanvasAssistantModelSelection } from '../models/CanvasAssistantModelSelection';
 import type { CanvasAssistantProposalDecision } from '../models/CanvasAssistantProposalDecision';
 import type { CanvasAssistantQuestionAnswer } from '../models/CanvasAssistantQuestionAnswer';
-import type { CanvasAssistantQueuedText } from '../models/CanvasAssistantQueuedText';
 import type { CanvasCheckRecheckRequest } from '../models/CanvasCheckRecheckRequest';
 import type { CanvasCheckRequest } from '../models/CanvasCheckRequest';
 import type { CanvasCreate } from '../models/CanvasCreate';
@@ -500,6 +496,40 @@ export class StudioGenerationCanvasesService {
         });
     }
     /**
+     * Answer Assistant Question
+     * Resume a paused creative question on its original canvas assistant turn.
+     * @returns ApiResponse_CanvasAssistantExchange_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantAnswer({
+        canvasId,
+        sourceId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        requestBody: CanvasAssistantQuestionAnswer,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantExchange_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/turns/{source_id}/answer',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Stop Assistant Turn
      * Stop the remaining assistant work without canceling any accepted runs.
      * @returns ApiResponse_CanvasAssistantExchange_ Successful Response
@@ -549,6 +579,40 @@ export class StudioGenerationCanvasesService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/proposals/{source_id}',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Reapprove Canvas Generation
+     * Accept the exact changed generation input without resubmitting earlier versions.
+     * @returns ApiResponse_CanvasAssistantGenerationRead_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantReapproveGeneration({
+        canvasId,
+        sourceId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        requestBody: CanvasAssistantGenerationApproval,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantGenerationRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/generations/{source_id}/approval',
             path: {
                 'canvas_id': canvasId,
                 'source_id': sourceId,
@@ -1304,233 +1368,6 @@ export class StudioGenerationCanvasesService {
             mediaType: 'application/json',
             errors: {
                 422: `Unprocessable Entity`,
-            },
-        });
-    }
-    /**
-     * Answer Assistant Question
-     * Resume a paused creative question on its original canvas assistant turn.
-     * @returns ApiResponse_CanvasAssistantExchange_ Successful Response
-     * @throws ApiError
-     */
-    public static canvasAssistantAnswer({
-        canvasId,
-        sourceId,
-        requestBody,
-        projectId = '',
-    }: {
-        canvasId: string,
-        sourceId: string,
-        requestBody: CanvasAssistantQuestionAnswer,
-        projectId?: string,
-    }): CancelablePromise<ApiResponse_CanvasAssistantExchange_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/turns/{source_id}/answer',
-            path: {
-                'canvas_id': canvasId,
-                'source_id': sourceId,
-            },
-            query: {
-                'project_id': projectId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Enqueue Assistant Message
-     * Save an editable message for a future turn.
-     * @returns ApiResponse_CanvasAssistantQueueItem_ Successful Response
-     * @throws ApiError
-     */
-    public static canvasAssistantEnqueue({
-        canvasId,
-        requestBody,
-        projectId = '',
-    }: {
-        canvasId: string,
-        requestBody: CanvasAssistantMessage,
-        projectId?: string,
-    }): CancelablePromise<ApiResponse_CanvasAssistantQueueItem_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/queue',
-            path: {
-                'canvas_id': canvasId,
-            },
-            query: {
-                'project_id': projectId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Edit Assistant Queue
-     * Change the text of a message before it is admitted.
-     * @returns ApiResponse_CanvasAssistantQueueItem_ Successful Response
-     * @throws ApiError
-     */
-    public static canvasAssistantEditQueue({
-        canvasId,
-        requestId,
-        requestBody,
-        projectId = '',
-    }: {
-        canvasId: string,
-        requestId: string,
-        requestBody: CanvasAssistantQueuedText,
-        projectId?: string,
-    }): CancelablePromise<ApiResponse_CanvasAssistantQueueItem_> {
-        return __request(OpenAPI, {
-            method: 'PATCH',
-            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/queue/{request_id}',
-            path: {
-                'canvas_id': canvasId,
-                'request_id': requestId,
-            },
-            query: {
-                'project_id': projectId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Remove Assistant Queue
-     * Remove an item that has not started.
-     * @returns ApiResponse_CanvasAssistantQueueItem_ Successful Response
-     * @throws ApiError
-     */
-    public static canvasAssistantRemoveQueue({
-        canvasId,
-        requestId,
-        projectId = '',
-    }: {
-        canvasId: string,
-        requestId: string,
-        projectId?: string,
-    }): CancelablePromise<ApiResponse_CanvasAssistantQueueItem_> {
-        return __request(OpenAPI, {
-            method: 'DELETE',
-            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/queue/{request_id}',
-            path: {
-                'canvas_id': canvasId,
-                'request_id': requestId,
-            },
-            query: {
-                'project_id': projectId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Run Assistant Queue
-     * Start the next item once the current turn has finished.
-     * @returns ApiResponse_Union_CanvasAssistantExchange__NoneType__ Successful Response
-     * @throws ApiError
-     */
-    public static canvasAssistantRunQueue({
-        canvasId,
-        requestId,
-        projectId = '',
-    }: {
-        canvasId: string,
-        requestId: string,
-        projectId?: string,
-    }): CancelablePromise<ApiResponse_Union_CanvasAssistantExchange__NoneType__> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/queue/{request_id}/run',
-            path: {
-                'canvas_id': canvasId,
-                'request_id': requestId,
-            },
-            query: {
-                'project_id': projectId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Steer Assistant Turn
-     * Redirect the running assistant turn with a user instruction.
-     * @returns ApiResponse_CanvasAssistantExchange_ Successful Response
-     * @throws ApiError
-     */
-    public static canvasAssistantSteer({
-        canvasId,
-        sourceId,
-        requestBody,
-        projectId = '',
-    }: {
-        canvasId: string,
-        sourceId: string,
-        requestBody: CanvasAssistantInstruction,
-        projectId?: string,
-    }): CancelablePromise<ApiResponse_CanvasAssistantExchange_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/turns/{source_id}/steer',
-            path: {
-                'canvas_id': canvasId,
-                'source_id': sourceId,
-            },
-            query: {
-                'project_id': projectId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Reapprove Canvas Generation
-     * Accept the exact changed generation input without resubmitting earlier versions.
-     * @returns ApiResponse_CanvasAssistantGenerationRead_ Successful Response
-     * @throws ApiError
-     */
-    public static canvasAssistantReapproveGeneration({
-        canvasId,
-        sourceId,
-        requestBody,
-        projectId = '',
-    }: {
-        canvasId: string,
-        sourceId: string,
-        requestBody: CanvasAssistantGenerationApproval,
-        projectId?: string,
-    }): CancelablePromise<ApiResponse_CanvasAssistantGenerationRead_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/generations/{source_id}/approval',
-            path: {
-                'canvas_id': canvasId,
-                'source_id': sourceId,
-            },
-            query: {
-                'project_id': projectId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
             },
         });
     }

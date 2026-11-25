@@ -9,4 +9,5 @@ export type ChatToolCall = {
     id: string;
     name: string;
     state: 'started' | 'completed' | 'failed';
+    parameters?: Record<string, (number | string)>;
 };

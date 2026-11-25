@@ -18,6 +18,7 @@ import type { CanvasAssistantReadContext } from './CanvasAssistantReadContext';
 import type { CanvasAssistantReadOnlyPreview } from './CanvasAssistantReadOnlyPreview';
 import type { CanvasAssistantSkillUse } from './CanvasAssistantSkillUse';
 import type { CanvasAssistantSubtask } from './CanvasAssistantSubtask';
+import type { ChatToolCall } from './ChatToolCall';
 /**
  * A completed turn in the order visible to the user.
  */
@@ -43,6 +44,7 @@ export type CanvasAssistantExchange = {
     approval_audit?: (Array<CanvasAssistantApprovalAudit> | null);
     generation?: (CanvasAssistantGenerationRead | null);
     stopped?: boolean;
+    tool_calls?: Array<ChatToolCall>;
     progress?: (CanvasAssistantProgress | null);
     error_code?: (string | null);
     layout?: (CanvasAssistantLayout | null);

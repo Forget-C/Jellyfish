@@ -6,6 +6,12 @@ import type { InteractionEvent_Union_CanvasAssistantExchange__CanvasAssistantQue
 export const canvasChat = {
   snapshot: ChatService.chatCanvasSnapshot,
   send: ChatService.chatCanvasSend,
+  stop: ChatService.chatCanvasStop,
+  answer: ChatService.chatCanvasAnswer,
+  decide: ChatService.chatCanvasDecide,
+  layout: ChatService.chatCanvasLayout,
+  generation: ChatService.chatCanvasGeneration,
+
   events(canvasId: string, projectId: string | undefined, after: number, signal: AbortSignal) {
     return sessionEvents<CanvasEvent>('canvas', canvasId, after, signal, projectId)
   },

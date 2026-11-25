@@ -536,17 +536,11 @@ try {
   await sceneComposer.fill('分镜准备中')
   await sceneSend.click()
   await Promise.race([sceneSourceStarted, delay(8000).then(() => { throw Error('分镜轮次未进入供应商') })])
-  await sceneComposer.fill('分镜后续只分析第四场')
-  await panel.getByRole('button', { name: '排到下一轮' }).click()
-  const sceneQueue = panel.getByRole('region', { name: '下一轮队列' })
-  await sceneQueue.getByText('分镜后续只分析第四场').waitFor()
-  await sceneComposer.fill('先别生成，先给简洁方案')
-  await panel.getByRole('button', { name: '发送补充', exact: true }).click()
-  await panel.getByText('已采纳补充，先给简洁方案', { exact: true }).waitFor()
+  assert.equal(await sceneComposer.isDisabled(), true)
+  assert.equal(await panel.getByRole('button', { name: '排到下一轮' }).count(), 0)
   releaseSceneSource()
-  await panel.getByText('答复 分镜后续只分析第四场', { exact: true }).waitFor()
-  assert.equal(await panel.getByText('答复 分镜准备中', { exact: true }).count(), 0)
-  assert.equal(await panel.getByText('答复 自由一', { exact: true }).count(), 0)
+  await panel.getByText('答复 分镜准备中', { exact: true }).waitFor()
+  assert.equal(await sceneComposer.isEnabled(), true)
   await page.goto(base + '/canvases/' + free.id)
   await open()
   await panel.getByText('答复 自由一', { exact: true }).waitFor()
@@ -555,54 +549,19 @@ try {
   await Promise.race([slowReplyStarted, askWhileEditing])
   await panel.getByText('等待模型响应', { exact: true }).waitFor()
   assert.equal(await panel.getByText('已接收本轮上下文', { exact: true }).count(), 0)
-  const queuedComposer = panel.getByRole('textbox', { name: '给画布助手发消息' })
-  await queuedComposer.fill('待编辑的后续任务')
-  await panel.getByRole('button', { name: '排到下一轮' }).click()
-  const waitingQueue = panel.getByRole('region', { name: '下一轮队列' })
-  await waitingQueue.getByText('待编辑的后续任务').waitFor()
-  await queuedComposer.fill('等待删除的后续任务')
-  await panel.getByRole('button', { name: '排到下一轮' }).click()
-  await waitingQueue.getByText('等待删除的后续任务').waitFor()
-  await waitingQueue.getByRole('listitem').filter({ hasText: '待编辑的后续任务' }).getByRole('button', { name: '编辑' }).click()
-  await waitingQueue.getByRole('textbox', { name: '修改排队消息' }).fill('实际处理的后续任务')
-  await waitingQueue.getByRole('button', { name: '保存', exact: true }).click()
-  await waitingQueue.getByRole('listitem').filter({ hasText: '等待删除的后续任务' }).getByRole('button', { name: '移除' }).click()
-  await waitingQueue.getByText('等待删除的后续任务').waitFor({ state: 'hidden' })
-  await panel.getByRole('button', { name: '关闭画布助手' }).click()
-  await open()
-  await waitingQueue.getByText('实际处理的后续任务').waitFor()
+  const busyComposer = panel.getByRole('textbox', { name: '给画布助手发消息' })
+  assert.equal(await busyComposer.isDisabled(), true)
+  assert.equal(await panel.getByRole('button', { name: '排到下一轮' }).count(), 0)
   const rename = await fetch(canvasApi + '/' + free.id + '/name', {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: '回复期间仍可保存', expected_revision: free.revision }),
     signal: AbortSignal.timeout(2500),
   })
   assert.ok(rename.ok, await rename.clone().text())
-  await queuedComposer.evaluate((input, canvasId) => {
-    const clipboardData = new DataTransfer()
-    clipboardData.setData('text/plain', 'jellyfish:cards:1:' + JSON.stringify({ canvasId, cardIds: ['next-reference'] }))
-    input.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }))
-  }, scene.id)
-  const nextReference = panel.getByRole('button', { name: /其他画布的只读引用.*next-ref/ })
-  await nextReference.waitFor()
   acceptSlowReply()
   await askWhileEditing
-  await panel.getByText('答复 实际处理的后续任务', { exact: true }).waitFor()
-  await nextReference.click()
-  assert.deepEqual(prompts, [['自由一'], ['分镜一'], ['自由一', '自由二'], ['自由一', '自由二', '实际处理的后续任务']])
-  await queuedComposer.fill('需要补充的一轮')
-  await panel.getByRole('button', { name: '发送消息' }).click()
-  await Promise.race([steerSourceStarted, delay(8000).then(() => { throw Error('原轮次未进入供应商') })])
-  await queuedComposer.fill('先别生成，先给简洁方案')
-  await panel.getByRole('button', { name: '发送补充', exact: true }).click()
-  await panel.getByText('已采纳补充，先给简洁方案', { exact: true }).waitFor()
-  releaseSteerSource()
-  await page.waitForFunction(() => document.querySelector('[aria-label="审批模式"]')?.getAttribute('aria-disabled') !== 'true')
-  assert.equal(await panel.getByText('未收到助手回复，请检查助手模型后重试', { exact: true }).count(), 0)
-  const steeringHistory = (await (await fetch(canvasApi + '/' + free.id + '/assistant')).json()).data
-  const steeredTurn = steeringHistory.turns.find(turn => turn.text === '需要补充的一轮')
-  assert.deepEqual(steeredTurn.instructions.map(value => value.text), ['先别生成，先给简洁方案'])
-  assert.equal(steeredTurn.generation, null)
-  assert.equal(await panel.getByText('答复 需要补充的一轮', { exact: true }).count(), 0)
+  assert.equal(await busyComposer.isEnabled(), true)
+  assert.deepEqual(prompts, [['自由一'], ['分镜一'], ['自由一', '自由二']])
   await page.screenshot({ path: join(output, 'assistant-desktop.png') })
   for (const [theme, expected] of [
     ['经典深色', 'rgb(27, 27, 27)'], ['雾蓝纯色', 'rgb(255, 255, 255)'], ['雾蓝微渐变', 'rgb(255, 255, 255)'],
@@ -776,7 +735,7 @@ try {
     }
     const approvalRequests = []
     const trackApproval = request => {
-      if (request.method() === 'POST' && new URL(request.url()).pathname.includes('/assistant/proposals/')) {
+      if (request.method() === 'POST' && new URL(request.url()).pathname.includes('/proposals/')) {
         approvalRequests.push(request.url())
       }
     }
@@ -978,7 +937,7 @@ try {
   assert.equal((await readLayoutGroups()).length, 0)
   await open()
   const delayed = await requestLayout('把布局卡再向右移')
-  await page.route('**/assistant/layout/**', async route => {
+  await page.route('**/chat/sessions/canvas/*/layout/**', async route => {
     const committed = await route.fetch()
     assert.equal((await committed.json()).data.state, 'waiting')
     await route.abort()
@@ -1006,7 +965,7 @@ try {
   assert.equal(await left(), handMoved)
   const arranged = await requestLayout('把布局卡整理整齐')
   let droppedReceipt = false
-  await page.route('**/assistant/layout/**', async route => {
+  await page.route('**/chat/sessions/canvas/*/layout/**', async route => {
     if (!droppedReceipt && route.request().postDataJSON()?.action === 'applied') {
       const committed = await route.fetch()
       assert.equal((await committed.json()).data.state, 'applied')
@@ -1018,7 +977,7 @@ try {
   await arranged.getByText('布局已执行', { exact: true }).waitFor()
   assert.equal(droppedReceipt, true)
   assert.notEqual(await left(), handMoved)
-  await page.unroute('**/assistant/layout/**')
+  await page.unroute('**/chat/sessions/canvas/*/layout/**')
   const freeUrl = canvasApi + '/' + free.id
   const current = (await (await fetch(freeUrl)).json()).data
   const withVoiceover = {

@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.v1.routes.studio import generation_canvases as canvas_routes
 from app.dependencies import get_db
 from app.schemas.canvas_assistant import CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage
 from app.schemas.common import ApiResponse, success_response
@@ -39,3 +40,16 @@ async def canvas_events(canvas_id: str, after: Annotated[int, Query(ge=0)] = 0, 
             return await CanvasAssistant(session, project_id).events(canvas_id, cursor)
 
     return await session_event_stream(read_page, max(after, last_event_id), follow=follow)
+
+
+# Share the existing canvas authorization, approval and execution receipts.
+router.add_api_route('/canvas/{canvas_id}/turns/{source_id}/answer', canvas_routes.answer_assistant_question,
+                     methods=['POST'], response_model=ApiResponse[CanvasAssistantExchange], operation_id='chat_canvas_answer')
+router.add_api_route('/canvas/{canvas_id}/turns/{source_id}/stop', canvas_routes.stop_assistant_turn,
+                     methods=['POST'], response_model=ApiResponse[CanvasAssistantExchange], operation_id='chat_canvas_stop')
+router.add_api_route('/canvas/{canvas_id}/proposals/{source_id}', canvas_routes.decide_assistant_proposal,
+                     methods=['POST'], response_model=ApiResponse[canvas_routes.CanvasAssistantProposalResult], operation_id='chat_canvas_decide')
+router.add_api_route('/canvas/{canvas_id}/layout/{source_id}', canvas_routes.decide_layout,
+                     methods=['POST'], response_model=ApiResponse[canvas_routes.CanvasAssistantLayout], operation_id='chat_canvas_layout')
+router.add_api_route('/canvas/{canvas_id}/generations/{source_id}/approval', canvas_routes.reapprove_canvas_generation,
+                     methods=['POST'], response_model=ApiResponse[canvas_routes.CanvasAssistantGenerationRead], operation_id='chat_canvas_generation')

@@ -3,10 +3,17 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ApiResponse_CanvasAssistantExchange_ } from '../models/ApiResponse_CanvasAssistantExchange_';
+import type { ApiResponse_CanvasAssistantGenerationRead_ } from '../models/ApiResponse_CanvasAssistantGenerationRead_';
 import type { ApiResponse_CanvasAssistantHistory_ } from '../models/ApiResponse_CanvasAssistantHistory_';
+import type { ApiResponse_CanvasAssistantLayout_ } from '../models/ApiResponse_CanvasAssistantLayout_';
+import type { ApiResponse_CanvasAssistantProposalResult_ } from '../models/ApiResponse_CanvasAssistantProposalResult_';
 import type { ApiResponse_LabChatSnapshot_ } from '../models/ApiResponse_LabChatSnapshot_';
 import type { ApiResponse_LabModels_ } from '../models/ApiResponse_LabModels_';
+import type { CanvasAssistantGenerationApproval } from '../models/CanvasAssistantGenerationApproval';
+import type { CanvasAssistantLayoutDecision } from '../models/CanvasAssistantLayoutDecision';
 import type { CanvasAssistantMessage } from '../models/CanvasAssistantMessage';
+import type { CanvasAssistantProposalDecision } from '../models/CanvasAssistantProposalDecision';
+import type { CanvasAssistantQuestionAnswer } from '../models/CanvasAssistantQuestionAnswer';
 import type { LabChatCommand } from '../models/LabChatCommand';
 import type { LabModels } from '../models/LabModels';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -233,6 +240,172 @@ export class ChatService {
                 'follow': follow,
                 'project_id': projectId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Answer Assistant Question
+     * Resume a paused creative question on its original canvas assistant turn.
+     * @returns ApiResponse_CanvasAssistantExchange_ Successful Response
+     * @throws ApiError
+     */
+    public static chatCanvasAnswer({
+        canvasId,
+        sourceId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        requestBody: CanvasAssistantQuestionAnswer,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantExchange_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/canvas/{canvas_id}/turns/{source_id}/answer',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Stop Assistant Turn
+     * Stop the remaining assistant work without canceling any accepted runs.
+     * @returns ApiResponse_CanvasAssistantExchange_ Successful Response
+     * @throws ApiError
+     */
+    public static chatCanvasStop({
+        canvasId,
+        sourceId,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantExchange_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/canvas/{canvas_id}/turns/{source_id}/stop',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Decide Assistant Proposal
+     * Approve a saved preview through the existing canvas save transaction, or reject it.
+     * @returns ApiResponse_CanvasAssistantProposalResult_ Successful Response
+     * @throws ApiError
+     */
+    public static chatCanvasDecide({
+        canvasId,
+        sourceId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        requestBody: CanvasAssistantProposalDecision,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantProposalResult_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/canvas/{canvas_id}/proposals/{source_id}',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Decide Layout
+     * Approve a local layout or record the editing browser's result.
+     * @returns ApiResponse_CanvasAssistantLayout_ Successful Response
+     * @throws ApiError
+     */
+    public static chatCanvasLayout({
+        canvasId,
+        sourceId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        requestBody: CanvasAssistantLayoutDecision,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantLayout_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/canvas/{canvas_id}/layout/{source_id}',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Reapprove Canvas Generation
+     * Accept the exact changed generation input without resubmitting earlier versions.
+     * @returns ApiResponse_CanvasAssistantGenerationRead_ Successful Response
+     * @throws ApiError
+     */
+    public static chatCanvasGeneration({
+        canvasId,
+        sourceId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        requestBody: CanvasAssistantGenerationApproval,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantGenerationRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/canvas/{canvas_id}/generations/{source_id}/approval',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

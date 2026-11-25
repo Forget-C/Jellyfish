@@ -36,7 +36,6 @@ export type { ApiResponse_CanvasAssistantHistory_ } from './models/ApiResponse_C
 export type { ApiResponse_CanvasAssistantLayout_ } from './models/ApiResponse_CanvasAssistantLayout_';
 export type { ApiResponse_CanvasAssistantModelSelection_ } from './models/ApiResponse_CanvasAssistantModelSelection_';
 export type { ApiResponse_CanvasAssistantProposalResult_ } from './models/ApiResponse_CanvasAssistantProposalResult_';
-export type { ApiResponse_CanvasAssistantQueueItem_ } from './models/ApiResponse_CanvasAssistantQueueItem_';
 export type { ApiResponse_CanvasCardOutputs_ } from './models/ApiResponse_CanvasCardOutputs_';
 export type { ApiResponse_CanvasCatalog_ } from './models/ApiResponse_CanvasCatalog_';
 export type { ApiResponse_CanvasCheckPreview_ } from './models/ApiResponse_CanvasCheckPreview_';
@@ -147,7 +146,6 @@ export type { ApiResponse_TaskResultRead_ } from './models/ApiResponse_TaskResul
 export type { ApiResponse_TaskStatusRead_ } from './models/ApiResponse_TaskStatusRead_';
 export type { ApiResponse_TextLabRunStatus_ } from './models/ApiResponse_TextLabRunStatus_';
 export type { ApiResponse_Union_ActorImageParametersRead__NoneType__ } from './models/ApiResponse_Union_ActorImageParametersRead__NoneType__';
-export type { ApiResponse_Union_CanvasAssistantExchange__NoneType__ } from './models/ApiResponse_Union_CanvasAssistantExchange__NoneType__';
 export type { ApiResponse_Union_DivisionSaved__NoneType__ } from './models/ApiResponse_Union_DivisionSaved__NoneType__';
 export type { ApiResponse_Union_ShootingCheckRead__NoneType__ } from './models/ApiResponse_Union_ShootingCheckRead__NoneType__';
 export type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from './models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
