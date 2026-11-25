@@ -153,6 +153,30 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.y
 
 Once the frontend opens, [create your first project](site/content/docs/guide/first-project.md). Before generating media, [configure a model](site/content/docs/getting-started/model-setup.md).
 
+## Canvas MCP
+
+Generate a key and set `MCP_SECRET_KEY` in `deploy/compose/.env` for Docker Compose or `backend/.env` for local development. `MCP_ENABLED` defaults to `true`. Set it to `false` to disable MCP. The API serves `/mcp` only when MCP is enabled and a key is set.
+
+**macOS / Linux with OpenSSL**
+
+```sh
+openssl rand -hex 32
+```
+
+**Windows PowerShell 5.1 / PowerShell 7**
+
+```powershell
+$bytes = New-Object byte[] 32
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$rng.GetBytes($bytes)
+$rng.Dispose()
+[BitConverter]::ToString($bytes).Replace('-', '').ToLowerInvariant()
+```
+
+Restart the local API or recreate the Compose `backend` service to apply the configuration. In your MCP client, select **Streamable HTTP**, use `http://localhost:8000/mcp` (or your deployed API URL with `/mcp` appended), and set `Authorization: Bearer <key>`. The key grants access to all free canvases and scene storyboard canvases. If you used a temporary token before upgrading, replace it with this key.
+
+Deployment, rotation, and troubleshooting are covered in the [canvas MCP guide](site/content/docs/tools/generation-canvas.md#从-mcp-客户端连接画布).
+
 ## 🧑‍💻 Local Development
 
 Follow the [local development guide](docs/development/guides/local-development.md) to start the API, task worker and Vite frontend. See the [developer documentation](docs/development/README.md) for architecture and standards, or the [site guide](site/README.md) to work on the website.

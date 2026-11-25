@@ -9,9 +9,8 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
 from app import dependencies
-from app.main import app
+from tests.test_canvas_mcp import AUTHORIZATION, create_mcp_app
 from tests.directing.test_store import database
-from tests.test_canvas_mcp import CONNECTION, ORIGIN
 
 
 async def _post(http, path, body):
@@ -22,6 +21,7 @@ async def _post(http, path, body):
 
 @asynccontextmanager
 async def _workspace(tmp_path, monkeypatch, scene):
+    app = create_mcp_app()
     async with database(tmp_path) as sessions:
         monkeypatch.setattr(dependencies, 'async_session_maker', sessions)
         async with app.router.lifespan_context(app), httpx.AsyncClient(
@@ -40,16 +40,12 @@ async def _workspace(tmp_path, monkeypatch, scene):
             else:
                 canvas = await _post(http, '/generation-canvases', {'name': '自由画布'})
             ref['canvas_id'] = canvas['id']
-            credential = (await http.post(CONNECTION, headers={'Origin': ORIGIN})).json()['data']['credential']
-            http.headers['Authorization'] = f'Bearer {credential}'
-            try:
-                async with streamable_http_client(
-                    'http://test/mcp', http_client=http,
-                ) as (reader, writer, _), ClientSession(reader, writer) as client:
-                    await client.initialize()
-                    yield client, http, ref
-            finally:
-                await http.delete(CONNECTION, headers={'Origin': ORIGIN})
+            http.headers.update(AUTHORIZATION)
+            async with streamable_http_client(
+                'http://test/mcp', http_client=http,
+            ) as (reader, writer, _), ClientSession(reader, writer) as client:
+                await client.initialize()
+                yield client, http, ref
 
 
 async def _call(client, name, arguments):

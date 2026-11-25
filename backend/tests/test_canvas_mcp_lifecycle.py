@@ -11,9 +11,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app import dependencies
 from app.core.db import Base
-from app.main import app
 from app.models.llm import Model, Provider
 from app.models.studio import Project
+from tests.test_canvas_mcp import AUTHORIZATION, create_mcp_app
 
 
 @asynccontextmanager
@@ -21,8 +21,6 @@ async def mcp_lifecycle_client(tmp_path, monkeypatch):
     engine = create_async_engine(f'sqlite+aiosqlite:///{tmp_path}/canvas.db')
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr(dependencies, 'async_session_maker', sessions)
-    connection_path = '/api/v1/canvas-mcp/connection'
-    origin = {'Origin': 'http://localhost:7788'}
     async with engine.begin() as db:
         await db.run_sync(Base.metadata.create_all)
     async with sessions.begin() as db:
@@ -31,22 +29,17 @@ async def mcp_lifecycle_client(tmp_path, monkeypatch):
                         api_key='test', base_url='https://unused.test/v1'))
         await db.flush()
         db.add(Model(id='text-model', provider_id='provider', name='test-model', category='text', params={}))
+    app = create_mcp_app()
     try:
         async with app.router.lifespan_context(app), httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url='http://test',
         ) as http:
-            response = await http.post(connection_path, headers=origin)
-            assert response.is_success, response.text
-            credential = response.json()['data']['credential']
-            http.headers['Authorization'] = f'Bearer {credential}'
-            try:
-                async with streamable_http_client(
-                    'http://test/mcp', http_client=http,
-                ) as (reader, writer, _), ClientSession(reader, writer) as client:
-                    await client.initialize()
-                    yield client, http
-            finally:
-                await http.delete(connection_path, headers=origin)
+            http.headers.update(AUTHORIZATION)
+            async with streamable_http_client(
+                'http://test/mcp', http_client=http,
+            ) as (reader, writer, _), ClientSession(reader, writer) as client:
+                await client.initialize()
+                yield client, http
     finally:
         await engine.dispose()
 

@@ -153,6 +153,10 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.y
 
 打开前端后，先[创建第一个项目](../site/content/docs/guide/first-project.md)。生成媒体前，请先[配置模型](../site/content/docs/getting-started/model-setup.md)。
 
+## 画布 MCP
+
+画布 MCP 的开关默认开启，设置 `MCP_SECRET_KEY` 后可通过 Streamable HTTP 连接。客户端将密钥作为 Bearer 令牌，即可访问所有画布。参见[配置步骤和密钥生成命令](../site/content/docs/tools/generation-canvas.md#从-mcp-客户端连接画布)。
+
 ## 🧑‍💻 本地开发
 
 参照[本地开发指南](development/guides/local-development.md)启动 API、任务工作进程和 Vite 前端。架构与规范见[开发文档](development/README.md)，官网维护见[站点指南](../site/README.md)。

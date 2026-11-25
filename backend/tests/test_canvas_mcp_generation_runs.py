@@ -9,31 +9,20 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
 from app import dependencies
-from app.main import app
+from tests.test_canvas_mcp import AUTHORIZATION, create_mcp_app
 from app.task_worker import TaskWorker
 from tests.test_generation_canvas_runs import runtime
 
 
 @asynccontextmanager
-async def mcp_connection(transport=None):
-    origin = {'Origin': 'http://localhost:7788'}
-    path = '/api/v1/canvas-mcp/connection'
+async def mcp_connection(app, transport=None):
     async with httpx.AsyncClient(
-        transport=transport or httpx.ASGITransport(app=app), base_url='http://test',
-    ) as http:
-        opened = await http.post(path, headers=origin)
-        assert opened.is_success, opened.text
-        credential = opened.json()['data']['credential']
-        http.headers['Authorization'] = f'Bearer {credential}'
-        try:
-            async with streamable_http_client(
-                'http://test/mcp', http_client=http,
-            ) as (reader, writer, _), ClientSession(reader, writer) as client:
-                await client.initialize()
-                yield client
-        finally:
-            closed = await http.delete(path, headers=origin)
-            assert closed.is_success, closed.text
+        transport=transport or httpx.ASGITransport(app=app), base_url='http://test', headers=AUTHORIZATION,
+    ) as http, streamable_http_client(
+        'http://test/mcp', http_client=http,
+    ) as (reader, writer, _), ClientSession(reader, writer) as client:
+        await client.initialize()
+        yield client
 
 
 def reference(runtime):
@@ -72,7 +61,8 @@ class DropAdmissionResponse(httpx.ASGITransport):
 @pytest.mark.parametrize('runtime', ['independent', 'app-handler'], indirect=True)
 async def test_mcp_reads_empty_run_snapshot_for_both_canvas_kinds(runtime, monkeypatch):
     monkeypatch.setattr(dependencies, 'async_session_maker', runtime.sessions)
-    async with app.router.lifespan_context(app), mcp_connection() as client:
+    app = create_mcp_app()
+    async with app.router.lifespan_context(app), mcp_connection(app) as client:
         snapshot = await invoke(client, 'canvas_runtime_snapshot', canvas_ref=reference(runtime))
         assert snapshot == {'cursor': 0, 'runs': [], 'current_outputs': {}}
 
@@ -84,12 +74,13 @@ async def test_mcp_replays_run_after_admission_response_is_lost(runtime, monkeyp
     ref = reference(runtime)
     command = await run_command(runtime, 'lost-response')
 
+    app = create_mcp_app()
     async with app.router.lifespan_context(app):
         with pytest.RaisesGroup(httpx.ReadError, flatten_subgroups=True):
-            async with mcp_connection(DropAdmissionResponse(app=app)) as client:
+            async with mcp_connection(app, DropAdmissionResponse(app=app)) as client:
                 await client.call_tool('canvas_submit_run', {'canvas_ref': ref, 'command': command})
 
-        async with mcp_connection() as client:
+        async with mcp_connection(app) as client:
             receipt = (await invoke(client, 'canvas_read_run_receipt', canvas_ref=ref,
                                     request_id=command['request_id']))['result']
             assert receipt['request_id'] == command['request_id']
@@ -120,8 +111,9 @@ async def test_mcp_reconnect_reads_output_completed_while_connection_closed(runt
         return httpx.Response(200, text=f'data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n',
                               headers={'Content-Type': 'text/event-stream'})
 
+    app = create_mcp_app()
     async with app.router.lifespan_context(app):
-        async with mcp_connection() as client:
+        async with mcp_connection(app) as client:
             receipt = await invoke(client, 'canvas_submit_run', canvas_ref=ref, command=command)
             cursor = (await invoke(client, 'canvas_runtime_snapshot', canvas_ref=ref))['cursor']
 
@@ -133,7 +125,7 @@ async def test_mcp_reconnect_reads_output_completed_while_connection_closed(runt
             finally:
                 worker.text_pool.shutdown(wait=False)
 
-        async with mcp_connection() as client:
+        async with mcp_connection(app) as client:
             task_run = (await invoke(client, 'canvas_read_task_run', canvas_ref=ref,
                                      task_id=receipt['task_ids'][0]))['result']
             assert task_run['id'] == receipt['run_id']
@@ -160,7 +152,8 @@ async def test_mcp_explicitly_cancels_queued_run_or_node(runtime, monkeypatch, c
     ref = reference(runtime)
     command = await run_command(runtime, 'cancel-scope')
 
-    async with app.router.lifespan_context(app), mcp_connection() as client:
+    app = create_mcp_app()
+    async with app.router.lifespan_context(app), mcp_connection(app) as client:
         discovered = {tool.name: tool for tool in (await client.list_tools()).tools}
         expected = {
             'canvas_submit_run', 'canvas_read_run_receipt', 'canvas_read_task_run', 'canvas_runtime_snapshot',

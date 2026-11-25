@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,6 +26,10 @@ class Settings(BaseSettings):
 
     # API
     api_v1_prefix: str = "/api/v1"
+
+    # Canvas MCP
+    mcp_enabled: bool = True
+    mcp_secret_key: SecretStr = SecretStr("")
 
     # Database
     database_url: str = "sqlite+aiosqlite:///./jellyfish.db"

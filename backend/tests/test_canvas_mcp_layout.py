@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app import dependencies
 from app.core.db import Base
-from app.main import app
 from app.models.studio import Project
+from tests.test_canvas_mcp import AUTHORIZATION, create_mcp_app
 
 
 @asynccontextmanager
@@ -21,6 +21,7 @@ async def layout_canvas(kind, monkeypatch):
     engine = create_async_engine('sqlite+aiosqlite:///:memory:')
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr(dependencies, 'async_session_maker', sessions)
+    app = create_mcp_app()
     try:
         async with engine.begin() as db:
             await db.run_sync(Base.metadata.create_all)
@@ -58,19 +59,12 @@ async def layout_canvas(kind, monkeypatch):
                 json={'request_id': 'seed-layout', 'expected_revision': 0, 'document': document},
             )
             assert saved.is_success, saved.text
-            origin_headers = {'Origin': 'http://localhost:7788'}
-            connection_url = '/api/v1/canvas-mcp/connection'
-            connection = await http.post(connection_url, headers=origin_headers)
-            assert connection.is_success, connection.text
-            http.headers['Authorization'] = f"Bearer {connection.json()['data']['credential']}"
-            try:
-                async with streamable_http_client(
-                    'http://test/mcp', http_client=http,
-                ) as (reader, writer, _), ClientSession(reader, writer) as client:
-                    await client.initialize()
-                    yield client, canvas_ref
-            finally:
-                await http.delete(connection_url, headers=origin_headers)
+            http.headers.update(AUTHORIZATION)
+            async with streamable_http_client(
+                'http://test/mcp', http_client=http,
+            ) as (reader, writer, _), ClientSession(reader, writer) as client:
+                await client.initialize()
+                yield client, canvas_ref
     finally:
         await engine.dispose()
 

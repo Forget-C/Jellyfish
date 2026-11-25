@@ -11,12 +11,11 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
 from app import dependencies
-from app.main import app
 from app.models.llm import Model, Provider
 from app.task_worker import TaskWorker
 from tests.directing.storyboard_prompt_fixture import video_prompt_response
 from tests.directing.test_store import database
-from tests.test_canvas_mcp import CONNECTION, ORIGIN
+from tests.test_canvas_mcp import AUTHORIZATION, create_mcp_app
 
 
 _EXCERPT = '兄弟在店中交谈'
@@ -45,6 +44,7 @@ async def _data(response):
 @asynccontextmanager
 async def _workspace(tmp_path, monkeypatch):
     monkeypatch.setattr('app.task_worker.ChatOpenAI', _Model)
+    app = create_mcp_app()
     async with database(tmp_path) as sessions:
         monkeypatch.setattr(dependencies, 'async_session_maker', sessions)
         async with sessions.begin() as db:
@@ -62,19 +62,17 @@ async def _workspace(tmp_path, monkeypatch):
                 'title': '店内', 'position': 0, 'source_version': source['source_version'],
                 'span': {'start': 0, 'end': len(_EXCERPT)},
             }))
-            connection = await _data(await http.post(CONNECTION, headers={'Origin': ORIGIN}))
-            http.headers['Authorization'] = f"Bearer {connection['credential']}"
+            http.headers.update(AUTHORIZATION)
             worker = TaskWorker(sessions)
             try:
                 async with streamable_http_client(
-                    f"http://test{connection['path']}", http_client=http,
+                    'http://test/mcp', http_client=http,
                 ) as (reader, writer, _), ClientSession(reader, writer) as client:
                     await client.initialize()
                     yield client, http, worker, {'project_id': 'p1', 'chapter_id': 'ch1', 'sequence_id': scene['id']}
             finally:
                 await asyncio.gather(*worker.jobs.values())
                 worker.text_pool.shutdown(wait=False)
-                await http.delete(CONNECTION, headers={'Origin': ORIGIN})
 
 
 async def _call(client, name, arguments):

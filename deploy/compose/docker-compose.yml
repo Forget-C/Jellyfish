@@ -95,6 +95,8 @@ services:
       <<: *storage-env
       # CORS
       CORS_ORIGINS: http://localhost:7788,http://127.0.0.1:7788
+      MCP_ENABLED: ${MCP_ENABLED:-true}
+      MCP_SECRET_KEY: ${MCP_SECRET_KEY:-}
       # 可选
       OPENAI_API_KEY: ${OPENAI_API_KEY-}
     ports:

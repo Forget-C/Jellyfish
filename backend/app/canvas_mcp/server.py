@@ -2,6 +2,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from hmac import compare_digest
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -12,7 +13,9 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from app.canvas_mcp import (
     canvas_checks, generation_inputs, generation_runs, grouped_edits, layout, lifecycle, storyboards, tools,
 )
-from app.canvas_mcp.connection import MCP_PATH, allows_origin, connection_state
+
+
+MCP_PATH = '/mcp'
 
 
 def create_server() -> FastMCP:
@@ -66,14 +69,18 @@ async def run_transport() -> AsyncIterator[ASGIApp]:
 class CanvasMcpEndpoint:
     """Validate the browser origin and bearer credential for every MCP HTTP request."""
 
+    def __init__(self, secret_key: str, allowed_origins: list[str]):
+        self._secret_key = secret_key.encode()
+        self._allowed_origins = set(allowed_origins) - {'*'}
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         headers = Headers(scope=scope)
         origin = headers.get('origin')
-        if origin is not None and not allows_origin(origin):
+        if origin is not None and origin not in self._allowed_origins:
             await JSONResponse({'error': 'Invalid Origin'}, status_code=403)(scope, receive, send)
             return
         scheme, _, credential = headers.get('authorization', '').partition(' ')
-        if scheme.lower() != 'bearer' or not credential or not connection_state.accepts(credential):
+        if scheme.lower() != 'bearer' or not compare_digest(credential.encode('latin-1'), self._secret_key):
             await JSONResponse(
                 {'error': 'A valid canvas MCP credential is required'},
                 status_code=401,

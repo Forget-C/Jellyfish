@@ -153,6 +153,10 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.y
 
 フロントエンドを開いたら、[最初のプロジェクトを作成](../site/content/docs/guide/first-project.md)します。メディアを生成する前に[モデルを設定](../site/content/docs/getting-started/model-setup.md)してください。
 
+## キャンバス MCP
+
+キャンバス MCP は既定で有効です。`MCP_SECRET_KEY` を設定し、Streamable HTTP で接続します。キーを Bearer トークンとして指定すると、すべてのキャンバスにアクセスできます。[設定手順とキーの生成コマンド](../README.md#canvas-mcp)を参照してください。
+
 ## 🧑‍💻 ローカル開発
 
 API、タスクワーカー、Vite の起動手順は[ローカル開発ガイド](development/guides/local-development.md)を参照してください。設計と規約は[開発ドキュメント](development/README.md)、公式サイトの保守は[サイトガイド](../site/README.md)にまとめています。

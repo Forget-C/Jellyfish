@@ -153,6 +153,10 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.y
 
 Once the frontend opens, [create your first project](../site/content/docs/guide/first-project.md). Before generating media, [configure a model](../site/content/docs/getting-started/model-setup.md).
 
+## Canvas MCP
+
+Canvas MCP is enabled by default and becomes available once you configure `MCP_SECRET_KEY`. Connect over Streamable HTTP with the configured key as a Bearer token. The key grants access to all canvases. See [setup and key generation](../README.md#canvas-mcp).
+
 ## 🧑‍💻 Local Development
 
 Follow the [local development guide](development/guides/local-development.md) to start the API, task worker and Vite frontend. See the [developer documentation](development/README.md) for architecture and standards, or the [site guide](../site/README.md) to work on the website.

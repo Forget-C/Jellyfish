@@ -5,34 +5,29 @@ import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
 from app import dependencies
 from app.task_worker import TaskWorker
-from tests.test_canvas_mcp import CONNECTION, ORIGIN
+from tests.test_canvas_mcp import AUTHORIZATION, create_mcp_app
 from tests.test_generation_canvas_checks import connect_check, duration_canvas, save_canvas
 from tests.test_generation_canvas_runs import accept, runtime  # noqa: F401
 
 
 @asynccontextmanager
 async def _connect(runtime, monkeypatch):
-    http = runtime.client
+    app = create_mcp_app()
     monkeypatch.setattr(dependencies, 'async_session_maker', runtime.sessions)
-    async with runtime.app.router.lifespan_context(runtime.app):
-        issued = await http.post(CONNECTION, headers={'Origin': ORIGIN})
-        assert issued.is_success, issued.text
-        connection = issued.json()['data']
-        http.headers['Authorization'] = f"Bearer {connection['credential']}"
-        try:
-            async with streamable_http_client(
-                f"http://test{connection['path']}", http_client=http,
-            ) as (reader, writer, _), ClientSession(reader, writer) as client:
-                await client.initialize()
-                yield client
-        finally:
-            await http.delete(CONNECTION, headers={'Origin': ORIGIN})
+    async with app.router.lifespan_context(app), httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url='http://test', headers=AUTHORIZATION,
+    ) as http, streamable_http_client(
+        'http://test/mcp', http_client=http,
+    ) as (reader, writer, _), ClientSession(reader, writer) as client:
+        await client.initialize()
+        yield client
 
 
 async def _call(client, name, arguments):

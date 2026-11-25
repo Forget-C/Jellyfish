@@ -11,8 +11,8 @@ from mcp.client.streamable_http import streamable_http_client
 
 from app import dependencies
 from app.core import storage
-from app.main import app
 from app.models.llm import Model, Provider
+from tests.test_canvas_mcp import AUTHORIZATION, create_mcp_app
 from tests.canvas_urls import seed_scene_canvas
 from tests.generation_canvas_reference_fixtures import reference_image_sources
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
@@ -22,22 +22,16 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 async def connect(monkeypatch, canvas_client):
     """Use the fixture's database and the application's real MCP endpoint."""
     monkeypatch.setattr(dependencies, 'async_session_maker', canvas_client.canvas_sessions)
+    app = create_mcp_app()
     async with app.router.lifespan_context(app), httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url='http://test',
     ) as http:
-        origin = {'Origin': 'http://localhost:7788'}
-        url = '/api/v1/canvas-mcp/connection'
-        response = await http.post(url, headers=origin)
-        assert response.is_success, response.text
-        http.headers['Authorization'] = f"Bearer {response.json()['data']['credential']}"
-        try:
-            async with streamable_http_client(
-                'http://test/mcp', http_client=http,
-            ) as (reader, writer, _), ClientSession(reader, writer) as client:
-                await client.initialize()
-                yield client
-        finally:
-            await http.delete(url, headers=origin)
+        http.headers.update(AUTHORIZATION)
+        async with streamable_http_client(
+            'http://test/mcp', http_client=http,
+        ) as (reader, writer, _), ClientSession(reader, writer) as client:
+            await client.initialize()
+            yield client
 
 
 async def call(client, tool, **arguments):
