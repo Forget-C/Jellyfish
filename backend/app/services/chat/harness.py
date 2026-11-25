@@ -10,14 +10,19 @@ def build_chat_agent(model, *, tools, middleware, system_prompt, checkpointer=No
         @wrap_tool_call
         async def observe_tool(request, handler):
             call = request.tool_call
-            await on_tool(id=call['id'], name=call['name'], state='started')
+            # Only publish explicitly user-facing identifiers and paging parameters.
+            parameters = {key: value for key, value in call.get('args', {}).items()
+                          if key in ('card_id', 'offset', 'limit', 'file_id', 'group_id', 'preview_id')
+                          and isinstance(value, (int, str))}
+            identity = {'id': call['id'], 'name': call['name'], 'parameters': parameters}
+            await on_tool(**identity, state='started')
             try:
                 response = await handler(request)
             except Exception:
-                await on_tool(id=call['id'], name=call['name'], state='failed')
+                await on_tool(**identity, state='failed')
                 raise
             state = 'failed' if getattr(response, 'status', None) == 'error' else 'completed'
-            await on_tool(id=call['id'], name=call['name'], state=state)
+            await on_tool(**identity, state=state)
             return response
         layers.append(observe_tool)
     return create_deep_agent(model=model, tools=tools, middleware=layers,

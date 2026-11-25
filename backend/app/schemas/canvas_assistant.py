@@ -197,6 +197,7 @@ class CanvasAssistantExchange(BaseModel):
     approval_audit: list[CanvasAssistantApprovalAudit] | None = None
     generation: CanvasAssistantGenerationRead | None = None
     stopped: bool = False
+    tool_calls: list[ChatToolCall] = Field(default_factory=list, exclude_if=lambda calls: not calls)
     progress: CanvasAssistantProgress | None = None
     error_code: str | None = Field(default=None, exclude_if=lambda value: value is None)
     layout: CanvasAssistantLayout | None = None
