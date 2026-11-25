@@ -873,3 +873,28 @@ async def test_canvas_event_connection_checks_scope_before_starting_stream(canva
                 canvas_client.get(path + suffix, params={'project_id': project_id}), timeout=2,
             )
             assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('storage_code', ['NoSuchKey', 'AccessDenied'])
+async def test_canvas_media_download_distinguishes_missing_object_from_storage_error(canvas_client, monkeypatch, storage_code):
+    from botocore.exceptions import ClientError
+    from app.core import storage
+
+    uploaded = await canvas_client.post('/files/upload', files={'file': ('asset.png', b'image-bytes', 'image/png')})
+    assert uploaded.status_code == 201
+    file_id = uploaded.json()['data']['id']
+    path = f'/files/{file_id}/download'
+
+    async def fail_download(**kwargs):
+        raise ClientError({'Error': {'Code': storage_code}}, 'GetObject')
+
+    monkeypatch.setattr(storage, 'download_file', fail_download)
+    if storage_code == 'AccessDenied':
+        with pytest.raises(ClientError, match='AccessDenied'):
+            await canvas_client.get(path)
+    else:
+        denied = await canvas_client.get(path)
+        assert denied.status_code == 404
+        assert denied.json()['detail'] == 'File content not found'
+    assert (await canvas_client.get(f'/files/{file_id}')).status_code == 200

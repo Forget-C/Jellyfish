@@ -7,6 +7,7 @@ import { ApiError, StudioFilesService } from '../../../services/generated'
 import type { AudioContentCard, FileRead, ImageContentCard, VideoContentCard } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { ImageContentReader } from './ImageContentReader'
+import { ImageCardPreview } from './ImageContentCardSummary'
 
 export type MediaCard = ImageContentCard | VideoContentCard | AudioContentCard
 export type MediaContentEditorProps = {
@@ -23,7 +24,7 @@ export function MediaPreview({ fileId, type, onDuration, onError }: { fileId: st
   const src = buildFileDownloadUrl(fileId)
   if (type === 'audio') return <audio aria-label={uiText("音频预览")} src={src} controls onError={onError} onLoadedMetadata={event => { if (Number.isFinite(event.currentTarget.duration)) onDuration?.(event.currentTarget.duration) }} preload="metadata" style={{ width: '100%' }} />
   if (type === 'video') return <video aria-label={uiText("视频预览")} src={src} controls playsInline onError={onError} onLoadedMetadata={event => { if (Number.isFinite(event.currentTarget.duration)) onDuration?.(event.currentTarget.duration) }} preload="metadata" style={{ width: '100%', maxHeight: 260 }} />
-  return <img alt={uiText("图片预览")} src={src} style={{ maxWidth: '100%', maxHeight: 260 }} />
+  return <ImageCardPreview fileId={fileId} style={{ maxWidth: '100%', maxHeight: 260 }} />
 }
 
 /** 同一文件的播放器随状态刷新保留，调用方按文件身份重建以清除旧播放位置。 */

@@ -1204,7 +1204,7 @@
   "图片提示词": "Image prompt",
   "图片数量": "Image count",
   "图片数量超出模型范围，配置已保留": "Image count is outside the model's range. Settings were retained.",
-  "图片暂不可预览，文件仍保留": "Preview unavailable. The file was retained.",
+  "图片暂不可预览": "Image preview unavailable",
   "图片来源": "Image source",
   "图片模型": "Image model",
   "图片模型卡": "Image model card",
