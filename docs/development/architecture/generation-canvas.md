@@ -141,7 +141,9 @@
 
 ## 接口与文档持久化
 
-HTTP 边界为 `/api/v1/studio/generation-canvases/{project_id}` 的列表／创建，以及 `/{canvas_id}` 的读取／PUT 保存／删除。读取、写入和删除均限定项目归属，沿用现有项目 API 的访问边界。前端普通请求由 OpenAPI generated client 发出。
+前端通过 OpenAPI generated client 访问画布 REST 接口。自由画布列表与创建使用 `/api/v1/studio/generation-canvases`，具体画布使用画布标识定位。涉及场次分镜时，业务入口还核对项目与场次归属。
+
+现有后端在 `/mcp` 提供 Streamable HTTP。具名工具直接调用统一画布协议，按实际归属解释 `canvas_ref`，并将结构化业务诊断返回给客户端。编辑提交引用服务端验证的预演，画布协议核对来源并生成回执。单用户连接凭据在 API 进程内核对，已受理的运行由任务系统继续跟踪。接入决策见[MCP ADR](../adr/0019-unified-canvas-mcp.md)。
 
 编辑协议使用用户可见文档和基准修订重放类型化改动，按组返回经过校验的差异。已保存画布仅核对受影响的卡片、连线和引用来源。未保存自由草稿在内存中预演，首次保存后要求重新读取。助手批量改动、特殊结构改动和待审批字段修订共用该入口。
 
