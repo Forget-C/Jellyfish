@@ -72,7 +72,8 @@ async def snapshot(db, session_id):
     return LabChatSnapshot(session_id=session_id, cursor=latest.cursor if latest else 0,
                            capabilities=('snapshot', 'events', 'send', 'stop'), active_turn=session.active_turn,
                            partial_reply=partial, models=await model_choices(db, session),
-                           messages=await read_experiment_messages(db, await messages_for(db, session_id)))
+                           messages=await read_experiment_messages(db, await messages_for(db, session_id),
+                                                                   include_media_receipts=True))
 
 
 async def events(db, session_id, after):
