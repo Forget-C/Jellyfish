@@ -6,7 +6,7 @@
  * 创建一个实验室会话。
  */
 export type ExperimentSessionCreate = {
-    lab_type: 'text' | 'image' | 'video';
+    lab_type: 'chat' | 'text' | 'image' | 'video';
     title?: string;
 };
 

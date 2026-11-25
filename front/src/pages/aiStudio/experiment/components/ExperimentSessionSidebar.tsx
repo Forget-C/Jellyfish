@@ -45,6 +45,7 @@ export function ExperimentSessionSidebar({ value, currentSessionDirty, currentSe
 
   /** 返回会话模态对应的低干扰图标与名称。 */
   const labMeta: Record<ExperimentLabType, { label: string; icon: ReactNode }> = {
+    chat: { label: uiText("多模态聊天"), icon: <MessageOutlined aria-hidden="true" /> },
     text: { label: uiText("文本"), icon: <MessageOutlined aria-hidden="true" /> },
     image: { label: uiText("图片"), icon: <PictureOutlined aria-hidden="true" /> },
     video: { label: uiText("视频"), icon: <VideoCameraOutlined aria-hidden="true" /> },
@@ -79,7 +80,7 @@ export function ExperimentSessionSidebar({ value, currentSessionDirty, currentSe
       </Dropdown>
     </div>
     {failedTypes.length > 0 && <Alert type="error"
-      message={failedTypes.length === 3 ? uiText("读取会话失败") : uiText("{{value1}}会话读取失败", { value1: failedTypes.map(type => labMeta[type].label).join('、') })}
+      message={failedTypes.length === Object.keys(labMeta).length ? uiText("读取会话失败") : uiText("{{value1}}会话读取失败", { value1: failedTypes.map(type => labMeta[type].label).join('、') })}
       action={<Button type="text" size="small" aria-label={uiText("重试")} onClick={onRetry}>{uiText("重试")}</Button>} />}
     <nav className="experiment-session-list" aria-label={uiText("最近会话")} aria-busy={loading}>
       {!sessions.length && (loading || !failedTypes.length) && <p role="status">{loading ? uiText("正在读取会话…") : uiText("暂无会话，从右上方新建开始")}</p>}

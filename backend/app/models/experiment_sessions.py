@@ -57,18 +57,6 @@ class ExperimentMessage(Base, TimestampMixin):
     )
 
 
-class ExperimentChatEvent(Base):
-    """Committed client-visible updates, ordered independently of message history."""
-
-    __tablename__ = "experiment_chat_events"
-
-    cursor: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    session_id: Mapped[str] = mapped_column(ForeignKey("experiment_sessions.id", ondelete="CASCADE"), index=True)
-    turn_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    type: Mapped[str] = mapped_column(String(48), nullable=False)
-    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
-
-
 __all__ = ["ExperimentSession", "ExperimentMessage"]
 
 

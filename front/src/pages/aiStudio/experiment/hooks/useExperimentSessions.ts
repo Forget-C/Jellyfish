@@ -13,7 +13,7 @@ import {
 
 /** 实验室支持的生成模态。 */
 export type ExperimentLabType = ExperimentSessionRead['lab_type']
-const labTypes: ExperimentLabType[] = ['text', 'image', 'video']
+const labTypes: ExperimentLabType[] = ['chat', 'text', 'image', 'video']
 
 /** Hook 初始化时可选地恢复一个已知会话。 */
 export type UseExperimentSessionsOptions = {
@@ -23,6 +23,7 @@ export type UseExperimentSessionsOptions = {
 
 /** 新会话的默认标题，只有首次有效提交时才会真正写入服务端。 */
 const defaultSessionTitles: Record<ExperimentLabType, string> = {
+  chat: '新聊天会话',
   text: '新文本会话',
   image: '新图片会话',
   video: '新视频会话',
@@ -44,7 +45,7 @@ export function useExperimentSessions(options: UseExperimentSessionsOptions = {}
   const { initialSessionId, initialLabType } = options
   const [sessions, setSessions] = useState<ExperimentSessionRead[]>([])
   const [selectedSessionId, setSelectedSessionId] = useState<string>()
-  const [selectedLabType, setSelectedLabType] = useState<ExperimentLabType>(initialLabType ?? 'text')
+  const [selectedLabType, setSelectedLabType] = useState<ExperimentLabType>(initialLabType ?? 'chat')
   const [loading, setLoading] = useState(true)
   const [failedTypes, setFailedTypes] = useState<ExperimentLabType[]>([])
   const loadRevision = useRef(0)
@@ -91,7 +92,7 @@ export function useExperimentSessions(options: UseExperimentSessionsOptions = {}
       const canRestoreLatest = !target.labType && (!target.sessionId || failures.length === 0)
       const restored = targetSession ?? (canRestoreLatest ? nextSessions[0] : undefined)
       setSelectedSessionId(restored?.id)
-      setSelectedLabType(restored?.lab_type ?? target.labType ?? 'text')
+      setSelectedLabType(restored?.lab_type ?? target.labType ?? 'chat')
     } finally {
       if (request === loadRevision.current) setLoading(false)
     }
@@ -180,7 +181,7 @@ export function useExperimentSessions(options: UseExperimentSessionsOptions = {}
     })
     if (selectedSessionId === sessionId) {
       setSelectedSessionId(undefined)
-      setSelectedLabType('text')
+      setSelectedLabType('chat')
     }
     return nextSession
   }, [selectedSessionId])

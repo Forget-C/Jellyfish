@@ -78,6 +78,8 @@ export type { ApiResponse_FileDetailRead_ } from './models/ApiResponse_FileDetai
 export type { ApiResponse_FileRead_ } from './models/ApiResponse_FileRead_';
 export type { ApiResponse_ImageContentCard_ } from './models/ApiResponse_ImageContentCard_';
 export type { ApiResponse_ImageGenerationOptionsRead_ } from './models/ApiResponse_ImageGenerationOptionsRead_';
+export type { ApiResponse_LabChatSnapshot_ } from './models/ApiResponse_LabChatSnapshot_';
+export type { ApiResponse_LabModels_ } from './models/ApiResponse_LabModels_';
 export type { ApiResponse_LedgerRead_ } from './models/ApiResponse_LedgerRead_';
 export type { ApiResponse_list_AssetSummary__ } from './models/ApiResponse_list_AssetSummary__';
 export type { ApiResponse_list_BatchRead__ } from './models/ApiResponse_list_BatchRead__';
@@ -456,6 +458,9 @@ export type { JsonValue } from './models/JsonValue';
 export type { KnowledgeCandidate_Input } from './models/KnowledgeCandidate_Input';
 export type { KnowledgeCandidate_Output } from './models/KnowledgeCandidate_Output';
 export type { KnowledgeDocument } from './models/KnowledgeDocument';
+export type { LabChatCommand } from './models/LabChatCommand';
+export type { LabChatSnapshot } from './models/LabChatSnapshot';
+export type { LabModels } from './models/LabModels';
 export type { LedgerAction } from './models/LedgerAction';
 export type { LedgerExecution } from './models/LedgerExecution';
 export type { LedgerRead } from './models/LedgerRead';

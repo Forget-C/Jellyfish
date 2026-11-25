@@ -1,4 +1,5 @@
 """Laboratory chat profile: persisted conversation, turn admission and model execution."""
+import asyncio
 from contextlib import aclosing
 
 from fastapi import HTTPException
@@ -7,21 +8,25 @@ from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from sqlalchemy import select, update
 
 from app.core.contracts.model_capabilities import ModelCapabilityProfile
-from app.models.experiment_sessions import ExperimentChatEvent, ExperimentMessage, ExperimentSession
+from app.core.contracts.model_provider import UnsupportedModelInput
+from app.models.experiment_sessions import ExperimentSessionEvent, ExperimentMessage, ExperimentSession
 from app.models.llm import ModelCategoryKey, ModelSettings
-from app.schemas.interaction import InteractionEvent
 from app.schemas.studio.lab_chat import LabChatSnapshot, LabModels
 from app.services.chat.harness import build_chat_agent
 from app.services.generation_canvas.assistant_media import resolve_assistant_media, describe_assistant_media
 from app.services.llm.model_capabilities import effective_chat_capabilities
 from app.services.llm.resolver import build_provider_agent_model, get_model_by_category, get_provider_by_model_or_id
+from app.services.studio.session_events import append_session_event, session_event_page
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, read_experiment_messages
 
 
 @wrap_model_call
 async def plain_conversation(request, handler):
     """Expose only tools registered by this profile (initially plain conversation)."""
-    return await handler(request.override(tools=[]))
+    response = await handler(request.override(tools=[], tool_choice=None))
+    if any(message.tool_calls for message in response.result):
+        raise HTTPException(422, 'Unexpected tool call in plain conversation')
+    return response
 
 
 async def session_for(db, session_id, *, lock=False):
@@ -38,10 +43,6 @@ async def model_choices(db, session):
                         for kind in ('text', 'image', 'video')})
 
 
-def publish(db, session_id, turn_id, kind, **payload):
-    db.add(ExperimentChatEvent(session_id=session_id, turn_id=turn_id, type=kind, payload=payload))
-
-
 async def messages_for(db, session_id):
     return list(await db.scalars(select(ExperimentMessage).where(
         ExperimentMessage.session_id == session_id).order_by(ExperimentMessage.sequence)))
@@ -49,8 +50,8 @@ async def messages_for(db, session_id):
 
 async def snapshot(db, session_id):
     session = await session_for(db, session_id, lock=True)
-    latest = await db.scalar(select(ExperimentChatEvent).where(
-        ExperimentChatEvent.session_id == session_id).order_by(ExperimentChatEvent.cursor.desc()).limit(1))
+    latest = await db.scalar(select(ExperimentSessionEvent).where(
+        ExperimentSessionEvent.session_id == session_id).order_by(ExperimentSessionEvent.cursor.desc()).limit(1))
     partial = latest.payload.get('text', '') if latest and latest.turn_id == session.active_turn else ''
     return LabChatSnapshot(session_id=session_id, cursor=latest.cursor if latest else 0,
                            capabilities=('snapshot', 'events', 'send', 'stop'), active_turn=session.active_turn,
@@ -60,10 +61,7 @@ async def snapshot(db, session_id):
 
 async def events(db, session_id, after):
     await session_for(db, session_id)
-    rows = await db.scalars(select(ExperimentChatEvent).where(
-        ExperimentChatEvent.session_id == session_id, ExperimentChatEvent.cursor > after
-    ).order_by(ExperimentChatEvent.cursor).limit(128))
-    return [InteractionEvent.model_validate(row, from_attributes=True) for row in rows]
+    return await session_event_page(db, session_id, after)
 
 
 async def prepare(db, model_id, body):
@@ -71,7 +69,7 @@ async def prepare(db, model_id, body):
     provider = await get_provider_by_model_or_id(db, model)
     profile = ModelCapabilityProfile.model_validate(model.capability_profile or {})
     caps = effective_chat_capabilities(model, provider, profile)
-    if not (caps.text_inputs and caps.text_outputs):
+    if not (caps.text_inputs and caps.text_outputs and (caps.non_streaming or caps.native_streaming)):
         raise HTTPException(422, 'ASSISTANT_TEXT_CAPABILITY_REQUIRED')
     sources = await resolve_assistant_media(db, None, body.file_ids)
     for file_id in body.file_ids:
@@ -96,7 +94,7 @@ async def finish(db, session_id, turn_id, status, text=''):
     if released.rowcount:
         await append_experiment_messages(db, session_id=session_id, drafts=[
             ExperimentMessageDraft(role='assistant', content=text, status=status, payload={'turn_id': turn_id})])
-        publish(db, session_id, turn_id, 'turn.' + status, text=text)
+        await append_session_event(db, session_id, turn_id, 'turn.' + status, {'text': text})
     await db.commit()
 
 
@@ -123,7 +121,7 @@ async def send(db, session_id, body):
     await append_experiment_messages(db, session_id=session_id, drafts=[ExperimentMessageDraft(
         role='user', content=body.text, payload={'turn_id': body.request_id, 'file_ids': body.file_ids,
                                                 'models': choices.model_dump()})])
-    publish(db, session_id, body.request_id, 'turn.accepted')
+    await append_session_event(db, session_id, body.request_id, 'turn.accepted', {})
     await db.commit()
     text = ''
     try:
@@ -135,13 +133,17 @@ async def send(db, session_id, body):
                         if (await session_for(db, session_id, lock=True)).active_turn != body.request_id:
                             break
                         text += chunk.text
-                        publish(db, session_id, body.request_id, 'message.updated', text=text)
+                        await append_session_event(db, session_id, body.request_id, 'message.updated', {'text': text})
                         await db.commit()
         else:
             state = await agent.ainvoke({'messages': conversation})
             text = state['messages'][-1].text
         await finish(db, session_id, body.request_id, 'completed', text)
-    except Exception:
+    except UnsupportedModelInput as error:
+        await db.rollback()
+        await finish(db, session_id, body.request_id, 'failed', text)
+        raise HTTPException(422, 'ASSISTANT_MODEL_INPUT_UNSUPPORTED') from error
+    except (Exception, asyncio.CancelledError):
         await db.rollback()
         await finish(db, session_id, body.request_id, 'failed', text)
         raise

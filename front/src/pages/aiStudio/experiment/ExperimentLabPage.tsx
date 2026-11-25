@@ -7,12 +7,13 @@ import { ExperimentLeaveStatusContext, useExperimentLeaveGuard } from './Experim
 import { ExperimentLabLayout } from './components/ExperimentLabLayout'
 import { ExperimentSessionSidebar } from './components/ExperimentSessionSidebar'
 import { useExperimentSessions, type ExperimentLabType } from './hooks/useExperimentSessions'
+import { LabChatMode } from './modes/LabChatMode'
 import { TextExperimentMode } from './modes/TextExperimentMode'
 import { ImageExperimentMode } from './modes/ImageExperimentMode'
 import { VideoExperimentMode } from './modes/VideoExperimentMode'
 
 function parseMode(mode: string | null): ExperimentLabType | undefined {
-  if (mode === 'text' || mode === 'image' || mode === 'video') return mode
+  if (mode === 'chat' || mode === 'text' || mode === 'image' || mode === 'video') return mode
   return undefined
 }
 
@@ -97,7 +98,7 @@ export default function ExperimentLabPage() {
     const next = await deleteSession(sessionId)
     if (!deletingCurrent) return
     if (next) handleSelectSession(next)
-    else handleStartDraft('text')
+    else handleStartDraft('chat')
   }
 
   /** 统一装配布局与侧栏，确保不同模态不再拥有独立页面框架。 */
@@ -136,7 +137,9 @@ export default function ExperimentLabPage() {
   )
 
   return <ExperimentLeaveStatusContext.Provider value={register}>
-    {selectedLabType === 'image'
+    {selectedLabType === 'chat'
+      ? <LabChatMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} render={renderLayout(uiText("实验室 · 多模态聊天"))} />
+      : selectedLabType === 'image'
       ? <ImageExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout(uiText("实验室 · 图片"))} />
       : selectedLabType === 'video'
         ? <VideoExperimentMode key={contextRevision} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout(uiText("实验室 · 视频"))} />

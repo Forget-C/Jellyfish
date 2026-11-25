@@ -40,8 +40,9 @@ async def lab_send(session_id: str, body: LabChatCommand, db: Database):
 
 @router.post('/{session_id}/turns/{turn_id}/stop', response_model=ApiResponse[LabChatSnapshot], operation_id='chat_lab_stop')
 async def lab_stop(session_id: str, turn_id: str, db: Database):
-    await laboratory.session_for(db, session_id)
-    await laboratory.finish(db, session_id, turn_id, 'stopped')
+    state = await laboratory.snapshot(db, session_id)
+    if state.active_turn == turn_id:
+        await laboratory.finish(db, session_id, turn_id, 'stopped', state.partial_reply)
     return success_response(await laboratory.snapshot(db, session_id))
 
 

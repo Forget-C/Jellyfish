@@ -57,3 +57,13 @@ export async function* sessionEvents<E extends SessionEvent>(
     reader.releaseLock()
   }
 }
+
+export const laboratoryChat = {
+  snapshot: ChatService.chatLabSnapshot,
+  send: ChatService.chatLabSend,
+  models: ChatService.chatLabModels,
+  stop: ChatService.chatLabStop,
+  events(sessionId: string, after: number, signal: AbortSignal) {
+    return sessionEvents<SessionEvent & {turn_id: string; payload: {text?: string}}>('lab', sessionId, after, signal)
+  },
+}

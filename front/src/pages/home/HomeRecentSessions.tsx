@@ -8,6 +8,7 @@ import { StudioExperimentSessionsService, type ExperimentSessionRead } from '../
 import { HomePlaceholders } from './HomePlaceholders'
 
 const sessionTypes = {
+  chat: { label: '多模态聊天', icon: <MessageOutlined /> },
   text: { label: '文本', icon: <MessageOutlined /> },
   image: { label: '图片', icon: <PictureOutlined /> },
   video: { label: '视频', icon: <VideoCameraOutlined /> },
@@ -19,7 +20,7 @@ type SessionActivity = { sessions: ExperimentSessionRead[]; failedTypes: number 
 
 /** 合并既有会话列表中的近期记录。单一类型读取失败时，其他类型仍可继续。 */
 async function readRecentSessions(): Promise<SessionActivity> {
-  const types: ExperimentSessionRead['lab_type'][] = ['text', 'image', 'video']
+  const types: ExperimentSessionRead['lab_type'][] = ['chat', 'text', 'image', 'video']
   const results = await Promise.allSettled(types.map(labType =>
     StudioExperimentSessionsService.listExperimentSessionsApiV1StudioExperimentSessionsGet({ labType }),
   ))
@@ -51,7 +52,7 @@ export function HomeRecentSessions() {
       <div className="home-activity-scroll">
         <div className="home-slot-frame">
           {activity && activity.failedTypes > 0 && <div className="home-feedback home-feedback-error" role="alert" data-partial={sessions.length > 0 || undefined}>
-            <span>{activity.failedTypes === 3 ? uiText("读取实验室会话失败") : uiText("部分实验室会话读取失败")}</span>
+            <span>{activity.failedTypes === Object.keys(sessionTypes).length ? uiText("读取实验室会话失败") : uiText("部分实验室会话读取失败")}</span>
             <button type="button" className="home-text-action" onClick={() => setRetry(value => value + 1)}>{uiText("重试")}</button>
           </div>}
           <ul className="home-activity-list">
