@@ -1556,6 +1556,7 @@
   "正在校验提案": "Validating proposal",
   "画布提案未通过校验，本轮未修改画布。": "The proposal failed validation. The canvas was not changed.",
   "助手处理超时，请继续或缩小本轮任务。": "The assistant timed out. Continue or narrow this task.",
+  "当前模型协议无法传输本轮媒体输入，请选择支持该输入的模型或调整附件。": "This model protocol cannot send the media in this turn. Choose a model that supports it or change the attachments.",
   "模型处理失败，可以继续本轮或切换模型。": "The model request failed. Continue this turn or switch models.",
   "重新规划提案": "Replan proposal",
   "给画布助手发消息": "Message the canvas assistant",

@@ -102,9 +102,11 @@ async def test_declared_frame_limit_blocks_preparation_and_shoot(tmp_path):
         async with sessions.begin() as db:
             service, seq, plan, prompt, review = await prepare(db)
             (await db.get(Model, 'model1')).capability_profile = {'video_modes': {'first_frame': {'max_references': 0}}}
-            with pytest.raises(ValueError, match="reference count"):
+            capability = await service.reference_capabilities('model1')
+            assert capability.frame_roles == [] and capability.max_frames == 0
+            with pytest.raises(ValueError, match="不支持所选帧位置"):
                 await service.validate_unit(seq, plan, "u1")
-            with pytest.raises(ValueError, match="reference count"):
+            with pytest.raises(ValueError, match="不支持所选帧位置"):
                 await service.shoot(seq, prompt_id=prompt, review_id=review, request_id="blocked")
             assert await db.scalar(select(func.count()).select_from(Task)) == 0
 

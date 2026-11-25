@@ -56,10 +56,11 @@ class MediaProvider:
         cfg = self.config
         scheme = "Token" if cfg.provider == "vidu" else "Bearer"
         base = httpx.URL(cfg.base_url or _DEFAULT_URLS[cfg.provider])
-        endpoint = base.path.rstrip("/") + path
+        root = str(base.copy_with(query=None, fragment=None)).rstrip("/")
+        endpoint = root + path
         if cfg.provider == "volcengine" and path == "/images/generations":
-            endpoint = httpx.URL(build_volcengine_image_generations_url(str(base.copy_with(query=None, fragment=None)))).path
-        url = base.copy_with(path=endpoint, fragment=None)
+            endpoint = build_volcengine_image_generations_url(root)
+        url = httpx.URL(endpoint).copy_with(query=base.query or None)
         return await self.client.request(method, url.copy_merge_params(params or {}), json=body,
                                          headers={"Authorization": f"{scheme} {cfg.api_key}"})
 

@@ -66,7 +66,7 @@ const assistantPhaseLabels = {
   validating_proposal: '正在校验提案',
 } as const
 
-type AssistantSendError = 'text' | 'tools' | 'reply' | 'context-limit' | 'target' | 'proposal' | 'timeout' | 'model' | 'stale-preview'
+type AssistantSendError = 'text' | 'tools' | 'reply' | 'context-limit' | 'target' | 'proposal' | 'timeout' | 'model' | 'media-input' | 'stale-preview'
 
 function assistantSendError(detail: unknown): AssistantSendError {
   switch (detail) {
@@ -76,6 +76,7 @@ function assistantSendError(detail: unknown): AssistantSendError {
     case 'CANVAS_TARGET_UNRESOLVED': return 'target'
     case 'ASSISTANT_PROPOSAL_INVALID': return 'proposal'
     case 'ASSISTANT_MODEL_TIMEOUT': return 'timeout'
+    case 'ASSISTANT_MODEL_INPUT_UNSUPPORTED': return 'media-input'
     case 'ASSISTANT_MODEL_FAILED': return 'model'
     default: return 'reply'
   }
@@ -1309,6 +1310,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           : sendError === 'stale-preview' ? uiText('这份预演无法送审，请核对原审批卡，或基于当前画布重新预演。')
           : sendError === 'proposal' ? uiText('画布提案未通过校验，本轮未修改画布。')
           : sendError === 'timeout' ? uiText('助手处理超时，请继续或缩小本轮任务。')
+          : sendError === 'media-input' ? uiText('当前模型协议无法传输本轮媒体输入，请选择支持该输入的模型或调整附件。')
           : sendError === 'model' ? uiText('模型处理失败，可以继续本轮或切换模型。')
             : uiText("未收到助手回复，请检查助手模型后重试")}
           action={sendError === 'proposal' && (pendingServerRequest || pending.current) && <WorkbenchButton

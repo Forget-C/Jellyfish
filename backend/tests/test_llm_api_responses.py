@@ -400,14 +400,14 @@ def test_provider_call_once(client, monkeypatch, status, payload, outcome):
 
     db = _FakeLlmDB()
     provider = _seed_provider(db)
-    provider.video_base_url = "https://video.invalid/v1"
+    provider.video_base_url = "https://video.invalid/tenant%2Fzone/v1?version=test"
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", send)
     llm_app.dependency_overrides[get_db] = _override_db(db)
     try:
         response = client.post("/api/v1/llm/providers/p-1/test-call", json={"model": "custom", "category": "video"})
         assert response.status_code == 200
         assert response.json()["data"]["outcome"] == outcome
-        assert [str(call.url) for call in calls] == ["https://video.invalid/v1/videos"]
+        assert [str(call.url) for call in calls] == ["https://video.invalid/tenant%2Fzone/v1/videos?version=test"]
         assert calls[0].headers["authorization"] == "Bearer secret"
         assert b'"model":"custom"' in calls[0].content
     finally:

@@ -13,7 +13,7 @@ from app.models.generation_canvas import CanvasResultSet, CanvasRunNode, Generat
 from app.schemas.canvas_assistant_generation import CanvasAssistantReviewResult
 from app.schemas.canvas_assistant_media import CanvasAssistantAttachment
 from app.schemas.generation_canvas import CanvasResolvedOutput
-from app.services.generation_canvas.assistant import CanvasAssistant
+from app.services.generation_canvas.assistant import CanvasAssistant, MODEL_FAILURE_REPLIES, MODEL_INPUT_UNSUPPORTED
 from app.services.generation_canvas.assistant_generation import read_generation
 from app.services.generation_canvas.assistant_media import describe_assistant_media, resolve_assistant_media
 from app.services.task_service import utcnow
@@ -120,8 +120,9 @@ async def _review_version(sessions, identity, item, question, project_id, model_
     try:
         result.reply, result.skills = await CanvasAssistant.review_evidence(
             model, content, supports_tools=capability.tool_results, max_input_tokens=capability.max_input_tokens)
-    except HTTPException:
-        result.reply = '未收到本次生成结果的审看回复。'
+    except HTTPException as error:
+        result.reply = (MODEL_FAILURE_REPLIES[MODEL_INPUT_UNSUPPORTED] if error.detail == MODEL_INPUT_UNSUPPORTED
+                        else '未收到本次生成结果的审看回复。')
     return result
 
 

@@ -33,7 +33,8 @@ class OpenAIConnection:
         if not config.base_url:
             raise ModelProviderConfigurationError(f"Provider {config.provider} has no chat base URL")
         base = httpx.URL(config.base_url)
-        self._url = base.copy_with(path=f"{base.path.rstrip('/')}/{self.endpoint}", fragment=None)
+        root = str(base.copy_with(query=None, fragment=None)).rstrip("/")
+        self._url = httpx.URL(f"{root}/{self.endpoint}").copy_with(query=base.query or None)
         self._model = model
         self._client_factory = client_factory
         self._headers = {**(params.get("default_headers") or {}), "Authorization": f"Bearer {config.api_key}"}
