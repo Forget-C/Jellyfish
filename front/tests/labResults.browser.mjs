@@ -113,7 +113,7 @@ try {
       }
       return route.fulfill({ contentType: 'video/webm', body: portraitVideo })
     }
-    if (url.pathname.endsWith('/events')) {
+    if (url.pathname.includes('/chat/sessions/media/') && url.pathname.endsWith('/events')) {
       const id = url.pathname.split('/').at(-2)
       const stale = id === 'image-stale-poll'
       const image = id === 'image-history'
