@@ -11,4 +11,3 @@ export type MediaArtifactRead = {
     media_type: 'image' | 'video' | 'audio';
     deleted: boolean;
 };
-

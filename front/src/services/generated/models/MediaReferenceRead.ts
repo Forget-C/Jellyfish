@@ -10,4 +10,3 @@ export type MediaReferenceRead = {
     ordinal: number;
     file_id: string;
 };
-

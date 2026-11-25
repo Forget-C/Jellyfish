@@ -22,4 +22,3 @@ export type MediaTaskReceipt = {
     cancel_requested: boolean;
     remote_cancellation: ('requested' | 'unsupported' | 'accepted' | 'confirmed' | 'rejected' | 'unconfirmed' | null);
 };
-

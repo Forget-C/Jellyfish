@@ -2,22 +2,21 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { ApiResponse_ExperimentTaskCreated_ } from '../models/ApiResponse_ExperimentTaskCreated_';
-import type { ApiResponse_list_ExperimentMessageRead__ } from '../models/ApiResponse_list_ExperimentMessageRead__';
-import type { GenerationSubmitRequest } from '../models/GenerationSubmitRequest';
 import type { ApiResponse_CanvasAssistantExchange_ } from '../models/ApiResponse_CanvasAssistantExchange_';
 import type { ApiResponse_CanvasAssistantHistory_ } from '../models/ApiResponse_CanvasAssistantHistory_';
+import type { ApiResponse_ExperimentTaskCreated_ } from '../models/ApiResponse_ExperimentTaskCreated_';
 import type { ApiResponse_LabChatSnapshot_ } from '../models/ApiResponse_LabChatSnapshot_';
 import type { ApiResponse_LabModels_ } from '../models/ApiResponse_LabModels_';
-import type { ApiResponse_list_ExperimentMessageRead__ } from '../models/ApiResponse_list_ExperimentMessageRead__';
 import type { ApiResponse_TextLabRunStatus_ } from '../models/ApiResponse_TextLabRunStatus_';
 import type { ApiResponse_TextTrialReceipt_ } from '../models/ApiResponse_TextTrialReceipt_';
+import type { ApiResponse_list_ExperimentMessageRead__ } from '../models/ApiResponse_list_ExperimentMessageRead__';
+import type { CancelablePromise } from '../core/CancelablePromise';
 import type { CanvasAssistantMessage } from '../models/CanvasAssistantMessage';
+import type { GenerationSubmitRequest } from '../models/GenerationSubmitRequest';
 import type { LabChatCommand } from '../models/LabChatCommand';
 import type { LabModels } from '../models/LabModels';
 import type { TextLabCancelRequest } from '../models/TextLabCancelRequest';
 import type { TextLabRunRequest } from '../models/TextLabRunRequest';
-import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ChatService {
