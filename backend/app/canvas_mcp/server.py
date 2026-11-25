@@ -5,7 +5,7 @@ from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 from starlette.types import Receive, Scope, Send
 
-from app.canvas_mcp import tools
+from app.canvas_mcp import layout, tools
 from app.canvas_mcp.connection import MCP_PATH, accepts_credential, allows_origin
 
 
@@ -20,6 +20,7 @@ def create_server() -> FastMCP:
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
     tools.register(server)
+    layout.register(server)
     return server
 
 
