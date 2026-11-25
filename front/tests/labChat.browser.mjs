@@ -42,7 +42,11 @@ try {
   assert.equal(await page.getByRole('textbox', {name: '聊天消息'}).isDisabled(), true)
   await page.reload()
   await stop.click()
-  await page.getByRole('textbox', {name: '聊天消息'}).fill('下一轮')
+  const composer = page.getByRole('textbox', {name: '聊天消息'})
+  await composer.fill('/')
+  await page.getByText('/imagegen', {exact: true}).click()
+  assert.equal((await composer.inputValue()).trim(), '/imagegen')
+  await composer.fill('/imagegen 雨夜')
   assert.equal(await page.getByRole('button', {name: '发送', exact: true}).isEnabled(), true)
 } finally {
   await cleanup()

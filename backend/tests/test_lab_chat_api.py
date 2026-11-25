@@ -139,3 +139,106 @@ async def test_native_text_stream_publishes_real_model_chunks(canvas_client, mon
     stream = await canvas_client.get(url + '/events', params={'follow': 'false'})
     events = [json.loads(line[6:]) for line in stream.text.splitlines() if line.startswith('data: ')]
     assert [e['payload']['text'] for e in events if e['type'] == 'message.updated'] == ['rain', 'rainfall']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('canvas_client', ['app-handler'], indirect=True)
+@pytest.mark.parametrize('action', ['submit', 'wait', 'fail', 'stop'])
+async def test_chat_model_submits_requested_image_and_receives_task_receipt(canvas_client, monkeypatch, action):
+    import asyncio
+    from app.task_worker import TaskWorker
+    async with canvas_client.canvas_sessions.begin() as db:
+        (await db.get(Provider, 'canvas-provider')).api_key = 'local'
+        (await db.get(Model, 'canvas-text')).capability_profile = {
+            'tool_calling': {'declaration': 'supported'}, 'native_streaming': {'declaration': 'unsupported'}}
+        db.add(ModelSettings(id=1, default_text_model_id='canvas-text', default_image_model_id='canvas-image'))
+    original = httpx.AsyncClient.send
+    calls = []
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test' or 'chat/completions' not in request.url.path:
+            return await original(client, request, **kwargs)
+        body = json.loads(request.content)
+        calls.append(body)
+        assert [tool['function']['name'] for tool in body['tools']] == ['generate_image']
+        if body['messages'][-1]['role'] == 'tool':
+            assert body['messages'][-1]['tool_call_id'] == 'rain-one'
+            answer = {'role': 'assistant', 'content': '已提交'}
+        else:
+            answer = {'role': 'assistant', 'tool_calls': [{'id': 'rain-one', 'type': 'function',
+                'function': {'name': 'generate_image', 'arguments': json.dumps({'prompt': 'rain', 'submit_only': action == 'submit'})}}]}
+        return httpx.Response(200, request=request, json={'choices': [{'index': 0,
+            'finish_reason': 'tool_calls' if 'tool_calls' in answer else 'stop', 'message': answer}]})
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    created = await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})
+    url = '/api/v1/studio/chat/sessions/lab/' + created.json()['data']['id']
+    body = {'request_id': 'illustrate', 'text': '给雨夜街景配幅插画，只提交任务'}
+    sending = asyncio.create_task(canvas_client.post(url + '/turns', json=body))
+    if action != 'submit':
+        async with asyncio.timeout(8):
+            while True:
+                snap = (await canvas_client.get(url)).json()['data']
+                if any(m['role'] == 'task' for m in snap['messages']):
+                    break
+                await asyncio.sleep(.04)
+        assert snap['active_turn'] == 'illustrate'
+        if action == 'stop':
+            await canvas_client.post(url + '/turns/illustrate/stop')
+        else:
+            from botocore.exceptions import ClientError
+
+            async def head(**_):
+                raise ClientError({'Error': {'Code': 'NoSuchKey'}}, 'HeadObject')
+
+            monkeypatch.setattr('app.core.storage.get_file_info', head)
+
+            def generate(request):
+                assert json.loads(request.content)['prompt'] == 'rain'
+                if action == 'fail':
+                    return httpx.Response(400, json={'error': {'message': 'invalid prompt'}})
+                return httpx.Response(200, json={'data': [{'b64_json': 'YQ=='}]})
+            async with httpx.AsyncClient(transport=httpx.MockTransport(generate)) as http:
+                worker = TaskWorker(canvas_client.canvas_sessions, client=http)
+                try:
+                    await worker.tick()
+                    await asyncio.gather(*list(worker.jobs.values()))
+                finally:
+                    worker.text_pool.shutdown(wait=True)
+    result = await asyncio.wait_for(sending, 8)
+    assert result.status_code == 200, result.text
+    snap = (await canvas_client.get(url)).json()['data']
+    assert snap['active_turn'] is None
+    task, = [m for m in snap['messages'] if m['role'] == 'task']
+    receipt = task['media_receipt']
+    assert receipt['model_id'] == 'canvas-image'
+    if action == 'wait':
+        assert receipt['status'] == 'succeeded', receipt['error']
+        artifact, = receipt['artifacts']
+        assert artifact['file_id'] in calls[-1]['messages'][-1]['content']
+    elif action == 'fail':
+        assert receipt['status'] == 'failed'
+    else:
+        assert task['status'] == 'queued'
+    assert (await canvas_client.post(url + '/turns', json=body)).status_code == 200
+    assert len(calls) == (1 if action == 'stop' else 2)
+    events = (await canvas_client.get(url + '/events', params={'follow': False})).text
+    assert 'event: task.accepted' in events
+    if action != 'stop':
+        assert ('event: tool.failed' if action == 'fail' else 'event: tool.completed') in events
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('canvas_client', ['app-handler'], indirect=True)
+@pytest.mark.parametrize('with_tools,error', [(False, 'CHAT_TOOL_MODEL_REQUIRED'), (True, 'CHAT_IMAGE_MODEL_REQUIRED')])
+async def test_image_command_requires_selected_models_before_admission(canvas_client, with_tools, error):
+    async with canvas_client.canvas_sessions.begin() as db:
+        (await db.get(Model, 'canvas-text')).capability_profile = {
+            'tool_calling': {'declaration': 'supported' if with_tools else 'unsupported'}}
+        (await db.get(Provider, 'canvas-provider')).api_key = 'local'
+        db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
+    session = await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})
+    url = '/api/v1/studio/chat/sessions/lab/' + session.json()['data']['id']
+    result = await canvas_client.post(url + '/turns', json={'text': '/imagegen 雨夜', 'request_id': 'request'})
+    assert result.status_code == 422 and error in result.text
+    assert not (await canvas_client.get(url)).json()['data']['messages']

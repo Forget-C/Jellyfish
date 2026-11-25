@@ -1,4 +1,6 @@
 {
+  "请先选择图片模型": "Select an image model first",
+  "请选择支持工具调用的主聊天模型": "Select a chat model that supports tools",
   "主聊天模型": "Main chat model",
   "模态配置": "Modality settings",
   "多模态聊天": "Multimodal chat",

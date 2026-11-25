@@ -45,18 +45,20 @@ async def publish_media_fact(db, task_id, session_id):
     message = await db.scalar(select(ExperimentMessage).join(
         ExperimentSession, ExperimentMessage.session_id == ExperimentSession.id,
     ).where(ExperimentMessage.task_id == task_id, ExperimentMessage.session_id == session_id,
-            ExperimentSession.lab_type.in_(('image', 'video'))))
+            ExperimentSession.lab_type.in_(('image', 'video', 'chat'))))
     if message is None:
         return
     results = await TaskQueries(db).results([task_id])
     receipt = (await media_task_receipts(db, results))[task_id]
-    turn_id = (message.payload or {}).get('_interaction_request') or message.id
+    turn_id = (message.payload or {}).get('turn_id') or (message.payload or {}).get('_interaction_request') or message.id
     kind = {
         TaskStatus.queued: 'task.accepted', TaskStatus.running: 'task.progress',
         TaskStatus.failed: 'task.failed', TaskStatus.cancelled: 'task.cancelled',
         TaskStatus.succeeded: 'task.completed',
     }[receipt.status]
     public = receipt.model_dump(mode='json')
+    if 'tool_call_id' in message.payload:
+        public['tool_call_id'] = message.payload['tool_call_id']
     if receipt.artifacts and receipt.status == TaskStatus.succeeded:
         await append_session_event(db, session_id, turn_id, 'artifact.created', public)
     await append_session_event(db, session_id, turn_id, kind, public)

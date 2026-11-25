@@ -6,12 +6,14 @@ from fastapi import HTTPException
 from langchain.agents.middleware import wrap_model_call
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.core.contracts.model_provider import UnsupportedModelInput
 from app.models.experiment_sessions import ExperimentSessionEvent, ExperimentMessage, ExperimentSession
 from app.models.llm import ModelCategoryKey, ModelSettings
 from app.schemas.studio.lab_chat import LabChatSnapshot, LabModels
+from app.services.chat.media_tools import ChatTurnStopped, LaboratoryMediaTools
 from app.services.chat.harness import build_chat_agent
 from app.services.generation_canvas.assistant_media import resolve_assistant_media, describe_assistant_media
 from app.services.llm.model_capabilities import effective_chat_capabilities
@@ -20,13 +22,21 @@ from app.services.studio.session_events import append_session_event, session_eve
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, read_experiment_messages
 
 
-@wrap_model_call
-async def plain_conversation(request, handler):
-    """Expose only tools registered by this profile (initially plain conversation)."""
-    response = await handler(request.override(tools=[], tool_choice=None))
-    if any(message.tool_calls for message in response.result):
-        raise HTTPException(422, 'Unexpected tool call in plain conversation')
-    return response
+def laboratory_tools(tools, media):
+    """Offer only the profile tools and honor a stop before each model request."""
+    allowed = {tool.name for tool in tools}
+
+    @wrap_model_call
+    async def select_tools(request, handler):
+        async with media.sessions.begin() as db:
+            await media.require_active(db)
+        exposed = [entry for entry in request.tools if getattr(entry, 'name', '') in allowed]
+        response = await handler(request.override(tools=exposed, tool_choice=None))
+        if any(call['name'] not in allowed for message in response.result for call in message.tool_calls):
+            raise HTTPException(422, 'CHAT_TOOL_MODEL_REQUIRED')
+        return response
+
+    return select_tools
 
 
 async def session_for(db, session_id, *, lock=False):
@@ -52,7 +62,13 @@ async def snapshot(db, session_id):
     session = await session_for(db, session_id, lock=True)
     latest = await db.scalar(select(ExperimentSessionEvent).where(
         ExperimentSessionEvent.session_id == session_id).order_by(ExperimentSessionEvent.cursor.desc()).limit(1))
-    partial = latest.payload.get('text', '') if latest and latest.turn_id == session.active_turn else ''
+    partial = ''
+    if session.active_turn:
+        update_event = await db.scalar(select(ExperimentSessionEvent).where(
+            ExperimentSessionEvent.session_id == session_id, ExperimentSessionEvent.turn_id == session.active_turn,
+            ExperimentSessionEvent.kind == 'message.updated').order_by(ExperimentSessionEvent.cursor.desc()).limit(1))
+        if update_event:
+            partial = update_event.payload['text']
     return LabChatSnapshot(session_id=session_id, cursor=latest.cursor if latest else 0,
                            capabilities=('snapshot', 'events', 'send', 'stop'), active_turn=session.active_turn,
                            partial_reply=partial, models=await model_choices(db, session),
@@ -71,20 +87,27 @@ async def prepare(db, model_id, body):
     caps = effective_chat_capabilities(model, provider, profile)
     if not (caps.text_inputs and caps.text_outputs and (caps.non_streaming or caps.native_streaming)):
         raise HTTPException(422, 'ASSISTANT_TEXT_CAPABILITY_REQUIRED')
+    parts = body.text.split(maxsplit=1)
+    if not parts:
+        raise HTTPException(422, 'Empty message')
+    shortcut = parts[0] == '/imagegen'
+    if shortcut and not caps.tool_results:
+        raise HTTPException(422, 'CHAT_TOOL_MODEL_REQUIRED')
     sources = await resolve_assistant_media(db, None, body.file_ids)
-    for file_id in body.file_ids:
-        source = sources.get(file_id)
-        if not source:
-            raise HTTPException(422, 'Attachment unavailable')
-        if not getattr(caps, source.file_type + '_inputs'):
-            raise HTTPException(422, 'ASSISTANT_MODEL_INPUT_UNSUPPORTED')
-    content, evidence = await describe_assistant_media(body.text, body.file_ids, sources, capability=caps)
-    if evidence and any(item['observation'] == 'unavailable' for item in evidence):
+    if set(sources) != set(body.file_ids):
         raise HTTPException(422, 'Attachment unavailable')
+    if shortcut:
+        content = body.text
+    else:
+        if any(not getattr(caps, source.file_type + '_inputs') for source in sources.values()):
+            raise HTTPException(422, 'ASSISTANT_MODEL_INPUT_UNSUPPORTED')
+        content, evidence = await describe_assistant_media(body.text, body.file_ids, sources, capability=caps)
+        if evidence and any(item['observation'] == 'unavailable' for item in evidence):
+            raise HTTPException(422, 'Attachment unavailable')
     streaming = caps.native_streaming and profile.native_streaming.declaration != 'unsupported'
     client = build_provider_agent_model(provider=provider, model=model, thinking=False,
                                        configure=lambda params: params.update(streaming=streaming, disable_streaming=not streaming))
-    return client, content, streaming
+    return client, content, streaming, caps.tool_results, shortcut
 
 
 async def finish(db, session_id, turn_id, status, text=''):
@@ -109,7 +132,13 @@ async def send(db, session_id, body):
     choices = await model_choices(db, session)
     if session.active_turn:
         raise HTTPException(409, 'Chat turn active')
-    client, content, streaming = await prepare(db, choices.text, body)
+    client, content, streaming, supports_tools, shortcut = await prepare(db, choices.text, body)
+    if shortcut and not choices.image:
+        raise HTTPException(422, 'CHAT_IMAGE_MODEL_REQUIRED')
+    if body.file_ids:
+        references = 'Attachment file IDs: ' + ', '.join(body.file_ids)
+        content = ([{'type': 'text', 'text': content}] if isinstance(content, str) else list(content)) + [
+            {'type': 'text', 'text': references}]
     acquired = await db.execute(update(ExperimentSession).where(
         ExperimentSession.id == session_id, ExperimentSession.active_turn.is_(None)
     ).values(active_turn=body.request_id))
@@ -125,7 +154,14 @@ async def send(db, session_id, body):
     await db.commit()
     text = ''
     try:
-        agent = build_chat_agent(client, tools=[], middleware=[plain_conversation], system_prompt='你是综合聊天助手。')
+        media = LaboratoryMediaTools(async_sessionmaker(db.bind, expire_on_commit=False),
+                                    session_id, body.request_id, choices, body.file_ids)
+        tools = [media.image()] if supports_tools else []
+        prompt = '你是综合聊天助手。'
+        if shortcut:
+            prompt += '用户已选择生成图片。要求充分时调用 generate_image，关键信息不清时向用户提问。'
+        agent = build_chat_agent(client, tools=tools, middleware=[laboratory_tools(tools, media)],
+                                 system_prompt=prompt)
         if streaming:
             async with aclosing(agent.astream({'messages': conversation}, stream_mode='messages')) as stream:
                 async for chunk, meta in stream:
@@ -139,6 +175,8 @@ async def send(db, session_id, body):
             state = await agent.ainvoke({'messages': conversation})
             text = state['messages'][-1].text
         await finish(db, session_id, body.request_id, 'completed', text)
+    except ChatTurnStopped:
+        await db.rollback()
     except UnsupportedModelInput as error:
         await db.rollback()
         await finish(db, session_id, body.request_id, 'failed', text)

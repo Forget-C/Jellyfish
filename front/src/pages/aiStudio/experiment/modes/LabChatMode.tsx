@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Suggestion } from '@ant-design/x'
 import { Alert, Button, Input, Upload } from 'antd'
 import { WorkbenchConversation } from '../../../../components/workbench/WorkbenchConversation'
 import { laboratoryChat } from '../../../../services/chatSession'
-import { ApiError, LlmService, type ExperimentSessionRead, type LabChatSnapshot, type LabModels, type FileRead } from '../../../../services/generated'
+import { ApiError, FilmService, LlmService, type ExperimentSessionRead, type LabChatSnapshot, type LabModels, type FileRead } from '../../../../services/generated'
 import { useUiText } from '../../../../uiText'
 import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
+import { MediaTaskDetails } from '../components/MediaTaskDetails'
+import { ExperimentResultMedia } from '../components/ExperimentResultMedia'
+import { ExperimentTaskStatus } from '../components/ExperimentTaskStatus'
+import { buildFileDownloadUrl } from '../../assets/utils'
 import { ExperimentComposer } from '../components/ExperimentComposer'
 import { useExperimentReferenceUpload } from '../hooks/useExperimentReferenceUpload'
 
@@ -36,6 +41,8 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
   const report = (failure: unknown) => {
     const detail = failure instanceof ApiError ? failure.body?.message : undefined
     setError(detail === 'ASSISTANT_MODEL_INPUT_UNSUPPORTED' ? uiText('主聊天模型无法理解此素材，请更换模型后发送') :
+      detail === 'CHAT_TOOL_MODEL_REQUIRED' ? uiText('请选择支持工具调用的主聊天模型') :
+      detail === 'CHAT_IMAGE_MODEL_REQUIRED' ? uiText('请先选择图片模型') :
       detail || (failure instanceof Error ? failure.message : uiText('请求失败')))
   }
 
@@ -134,6 +141,19 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     } catch (e) { report(e) }
   }
   const items = (snapshot?.messages ?? []).map(row => ({
+    ...(row.media_receipt ? { contentRender: () => {
+      const receipt = row.media_receipt!
+      const urls = receipt.artifacts?.filter(file => !file.deleted).flatMap(file => buildFileDownloadUrl(file.file_id) ?? []) ?? []
+      return <><ExperimentTaskStatus status={receipt.status} progress={receipt.progress} />
+        <MediaTaskDetails receipt={receipt} />
+        {receipt.error && <Alert type="error" message={receipt.error} />}
+        {urls.length > 0 && <ExperimentResultMedia kind={row.payload?.modality === 'video' ? 'video' : 'image'} urls={urls} />}
+        {['queued', 'running'].includes(receipt.status) && !receipt.cancel_requested &&
+          <Button onClick={() => void FilmService.cancelTaskApiV1FilmTasksTaskIdCancelPost({
+            taskId: receipt.task_id, requestBody: { reason: 'user_cancelled' },
+          }).catch(report)}>{uiText('取消生成')}</Button>}
+      </>
+    }} : {}),
     key: row.id, role: row.role, content: row.content || (row.status === 'failed' ? uiText('生成失败') : ''), placement: row.role === 'user' ? 'end' as const : 'start' as const,
   }))
   if (snapshot?.partial_reply) items.push({ key: 'pending', role: 'assistant', content: snapshot.partial_reply, placement: 'start' })
@@ -144,8 +164,12 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
       contextActions={<details><summary>{uiText('模态配置')}</summary>{modelSelect('image')} {modelSelect('video')}</details>}
       secondaryAction={snapshot?.active_turn && <Button onClick={() => void stop()}>{uiText('停止回复')}</Button>}
       feedback={(error || upload.uploadError) && <Alert type="error" message={error || upload.uploadError?.message} />}>
-      <Input.TextArea aria-label={uiText('聊天消息')} disabled={busy} value={text} onChange={event => setText(event.target.value)}
-        onPressEnter={event => { if (!event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send() } }} />
+      <Suggestion block items={[{ label: '/imagegen', value: '/imagegen' }]} onSelect={value => setText(value + ' ')}>
+        {({ onTrigger, onKeyDown, open }) => <Input.TextArea aria-label={uiText('聊天消息')} disabled={busy} value={text}
+          onChange={event => { setText(event.target.value); onTrigger(event.target.value === '/' ? undefined : false) }}
+          onKeyDown={event => { if (open) onKeyDown(event) }}
+          onPressEnter={event => { if (!open && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send() } }} />}
+      </Suggestion>
       <Upload accept="image/*,video/*" disabled={busy || upload.uploading} showUploadList={false} beforeUpload={file => {
         void upload.uploadFile(file, 'chat', saved => setFiles(old => [...old, saved]))
         return false

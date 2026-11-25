@@ -122,7 +122,9 @@ class GenerationEntityGate:
         elif target.kind == GenerationTargetKind.experiment_session:
             session = await db.get(ExperimentSession, target.entity_id, with_for_update=True)
             exists = session is not None
-            if session is not None and session.lab_type != command.modality.value:
+            chat_media = session is not None and session.lab_type == 'chat' and command.modality in (
+                GenerationModality.image, GenerationModality.video)
+            if session is not None and session.lab_type != command.modality.value and not chat_media:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="experiment_session_type_invalid")
         elif target.kind == GenerationTargetKind.directing_image:
             revision = await db.get(DirectingRevision, target.entity_id)
