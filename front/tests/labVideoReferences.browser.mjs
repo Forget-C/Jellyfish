@@ -258,7 +258,7 @@ try {
   await panel.getByRole('button', { name: '取消参考配置', exact: true }).click()
   await panel.waitFor({ state: 'hidden' })
   await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/video-a/tasks')),
+    page.waitForResponse(response => response.url().endsWith('/media/video-a/turns')),
     generate.click(),
   ])
   assert.deepEqual(submissions, [{ session: 'video-a', body: {
@@ -280,7 +280,7 @@ try {
   await getCapability('A', 'C')
   await prompt.fill('明确支持的模型提交组合')
   await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/video-a/tasks')),
+    page.waitForResponse(response => response.url().endsWith('/media/video-a/turns')),
     generate.click(),
   ])
   assert.equal(submissions[1].body.model_id, 'a')
@@ -303,7 +303,7 @@ try {
   await apply.click()
   await panel.waitFor({ state: 'hidden' })
   await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/video-a/tasks')),
+    page.waitForResponse(response => response.url().endsWith('/media/video-a/turns')),
     generate.click(),
   ])
   assert.deepEqual(submissions[2], { session: 'video-a', body: {
