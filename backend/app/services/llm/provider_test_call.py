@@ -2,53 +2,29 @@
 
 from base64 import b64decode
 from binascii import Error as Base64Error
+from contextlib import nullcontext
 from io import BytesIO
-from urllib.parse import quote, urlsplit
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import HTTPException
 from PIL import Image
 
-from app.core.integrations.volcengine.images import build_volcengine_image_generations_url
+from app.core.contracts.model_provider import ModelProviderConfig
+from app.core.contracts.provider import ProviderConfig
+from app.core.contracts.provider_media import ProviderImageInput, ProviderVideoInput
+from app.core.integrations.openai.chat import OpenAICompatibleChat
+from app.core.integrations.media_provider import MediaProvider
 from app.models.llm import Provider
 from app.schemas.llm import ProviderTestCall, ProviderTestResult
 from app.services.llm.provider_resolver import ResolvedProviderConfig, resolve_provider_config_from_provider
 
 
 PROMPTS = {"text": "回复 OK", "image": "一个蓝色圆点", "video": "一个蓝色圆点在移动"}
-PATHS = {
-    "openai": {"text": "/chat/completions", "image": "/images/generations", "video": "/videos"},
-    "aliyun_bailian": {"text": "/chat/completions"},
-    "volcengine": {"image": "/images/generations", "video": "/contents/generations/tasks"},
-    "vidu": {"image": "/ent/v2/reference2image", "video": "/ent/v2/text2video"},
-    "kling": {"image": "/v1/images/generations", "video": "/text-to-video/"},
+TEST_CATEGORIES = {
+    "openai": ("text", "image", "video"), "aliyun_bailian": ("text",),
+    "volcengine": ("image", "video"), "vidu": ("image", "video"), "kling": ("image", "video"),
 }
-
-
-def _submission(cfg: ResolvedProviderConfig, call: ProviderTestCall):
-    key, category, model = cfg.provider_key, call.category.value, call.model
-    prompt = PROMPTS[category]
-    base = httpx.URL(cfg.base_url)
-    path = PATHS[key][category]
-    body = {"model": model, "prompt": prompt}
-    if category == "text":
-        body = {"model": model, "messages": [{"role": "user", "content": prompt}]}
-    elif key == "volcengine" and category == "video":
-        body = {"model": model, "content": [{"type": "text", "text": prompt}]}
-    elif key == "vidu" and category == "image":
-        body["images"] = []
-    elif key == "kling":
-        if category == "image":
-            body = {"model_name": model, "prompt": prompt, "n": 1}
-        else:
-            if model in {".", ".."} or any(char in model for char in "/\\?#%"):
-                raise HTTPException(422, "可灵视频模型名称不能包含路径或查询参数")
-            path += quote(model, safe="")
-            body = {"prompt": prompt, "settings": {"aspect_ratio": "16:9"}}
-    endpoint = base.path.rstrip("/") + path
-    if key == "volcengine" and category == "image":
-        endpoint = httpx.URL(build_volcengine_image_generations_url(str(base.copy_with(query=None, fragment=None)))).path
-    return base.copy_with(path=endpoint, fragment=None), body
 
 
 def _upstream_error(status, data):
@@ -120,7 +96,7 @@ def _output_outcome(key, category, data):
 
 def resolve_test_config(provider: Provider, call: ProviderTestCall) -> ResolvedProviderConfig:
     """读取付费提交使用的配置快照，允许在出站前释放数据库连接。"""
-    if call.category not in PATHS.get(provider.provider_key, {}):
+    if call.category not in TEST_CATEGORIES.get(provider.provider_key, {}):
         raise HTTPException(400, "当前供应商不支持该类型的测试调用")
     return resolve_provider_config_from_provider(provider=provider, category=call.category)
 
@@ -128,12 +104,21 @@ def resolve_test_config(provider: Provider, call: ProviderTestCall) -> ResolvedP
 async def submit_test_call(cfg: ResolvedProviderConfig, call: ProviderTestCall) -> ProviderTestResult:
     """发送一个固定文本，不重定向、不重试、不轮询或回显供应商内容。"""
     try:
-        url, body = _submission(cfg, call)
-        scheme = "Token" if cfg.provider_key == "vidu" else "Bearer"
+        prompt = PROMPTS[call.category]
         async with httpx.AsyncClient(timeout=45, follow_redirects=False) as client:
-            response = await client.post(url, headers={"Authorization": f"{scheme} {cfg.api_key}"}, json=body)
+            if call.category == "text":
+                adapter = OpenAICompatibleChat(ModelProviderConfig(cfg.provider_key, cfg.api_key, cfg.base_url),
+                                                call.model, {}, lambda: nullcontext(client))
+                response = await adapter.submit_once([{"role": "user", "content": prompt}])
+            else:
+                media = MediaProvider(ProviderConfig(cfg.provider_key, cfg.api_key, cfg.base_url), client=client)
+                inp = (ProviderImageInput(model=call.model, prompt=prompt) if call.category == "image" else
+                       ProviderVideoInput(model=call.model, prompt=prompt, ratio="16:9"))
+                response = await media.submit_once(inp, connection_test=True)
     except (httpx.RequestError, httpx.InvalidURL):
         return ProviderTestResult(outcome="unknown")
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
     try:
         data = response.json()
     except ValueError:

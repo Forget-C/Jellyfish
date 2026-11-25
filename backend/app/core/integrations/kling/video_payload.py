@@ -9,10 +9,15 @@ from app.core.contracts.video_generation import VideoGenerationInput
 from app.core.integrations.kling.video_capabilities import validate_kling_video_options
 
 
-def build_create_video_request(input_: VideoGenerationInput) -> tuple[str, dict[str, Any]]:
+def build_create_video_request(input_: VideoGenerationInput, *, connection_test: bool = False) -> tuple[str, dict[str, Any]]:
     """根据模型与参考帧构建可灵 3.0 视频创建请求。"""
-    validate_kling_video_options(input_)
-    model = (input_.model or "").strip().lower()
+    model = (input_.model or "").strip()
+    if connection_test:
+        if not model or model in {".", ".."} or any(char in model for char in "/\\?#%"):
+            raise ValueError("可灵视频模型名称不能包含路径或查询参数")
+    else:
+        validate_kling_video_options(input_)
+        model = model.lower()
     references = _frame_contents(input_)
     if references:
         path = "/image-to-video/kling-3.0"

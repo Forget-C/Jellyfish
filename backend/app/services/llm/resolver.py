@@ -160,11 +160,20 @@ async def build_laboratory_chat(
     db: AsyncSession,
     *,
     model_id: str,
+    streaming: bool = False,
 ) -> TextModelProvider:
     """为实验室绑定文本操作，并保留显式选择的 Responses API。"""
     model = await get_model_by_category(db, ModelCategoryKey.text, model_or_id=model_id)
     provider = await get_provider_by_model_or_id(db, model)
     provider_key, params = _chat_config(provider, model, thinking=False)
+    profile = ModelCapabilityProfile.model_validate(model.capability_profile or {})
+    effective = describe_operation(provider_key, model.name, profile, "chat").features
+    if streaming:
+        # 未声明流式的旧连接仍可使用实验室 SSE。
+        if profile.native_streaming.declaration == "unsupported" or not (effective.text_inputs and effective.text_outputs):
+            raise HTTPException(422, "Model does not support streaming text")
+    elif not effective.non_streaming:
+        raise HTTPException(422, "Model does not support non-streaming text")
     timeout = params.get("timeout", params.get("request_timeout", 30.0))
     try:
         return bind_text_provider(
@@ -200,6 +209,6 @@ def _chat_config(provider: Provider, model: Model, *, thinking: bool) -> tuple[s
     params = dict(model.params or {})
     params.update(model=model.name, api_key=config.api_key, base_url=config.base_url)
     params.setdefault("temperature", 0)
-    if not thinking:
+    if not thinking and not params.get("use_responses_api"):
         params["extra_body"] = {**(params.get("extra_body") or {}), "enable_thinking": False}
     return config.provider_key, params

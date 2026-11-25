@@ -20,7 +20,7 @@ from app.services.generation.runtime import text_chat_streaming
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("responses", [False, True, "failed"])
+@pytest.mark.parametrize("responses", [False, True, "failed", "disabled"])
 async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, responses) -> None:
     from app.dependencies import get_db
     from app.main import app
@@ -64,11 +64,14 @@ async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, res
             db.add(Provider(id="custom", name="Custom", provider_key="openai",
                             base_url="https://gateway.test/v1", api_key="gateway-key"))
             db.add(Model(id="custom-text", name="compatible-chat", category=ModelCategoryKey.text,
-                         provider_id="custom", params={"temperature": 0.4, "use_responses_api": bool(responses)}))
+                         provider_id="custom", capability_profile={"native_streaming": {"declaration": "unsupported"}} if responses == "disabled" else {}, params={"temperature": 0.4, "use_responses_api": bool(responses)}))
             db.add(ExperimentSession(id="gateway-session", lab_type="text"))
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post("/api/v1/studio/labs/text/sessions/gateway-session/stream",
                                          json={"model_id": "custom-text", "content": "你好"})
+        if responses == "disabled":
+            assert response.status_code == 422 and not requests
+            return
         assert response.status_code == 200
         if responses == "failed":
             assert "event: error" in response.text

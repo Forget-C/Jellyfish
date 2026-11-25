@@ -92,7 +92,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     if (card.type === 'model.video' && !(card as VideoModelCard).config?.ratio && ratio) onChange({ ...card, config: { ...card.config, ratio } })
   }, [capability, card, defaultModelId, disabled, models, onChange, suppressAutomaticDefaults])
   let parameters: ReactNode = null
-  if (card.type === 'model.image') parameters = <ImageModelParameters card={card as ImageModelCard} capability={capability} disabled={disabled} onChange={onChange} />
+  if (card.type === 'model.image') parameters = <ImageModelParameters hasReference={!!resolved.compiled?.media?.length} card={card as ImageModelCard} capability={capability} disabled={disabled} onChange={onChange} />
   if (card.type === 'model.video') {
     const media = resolved.compiled?.video_media
     const mode = media?.subjects?.length ? 'subject_reference' : media?.frames?.keys?.length ? 'key_frames'

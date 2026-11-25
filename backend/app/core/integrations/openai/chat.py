@@ -74,15 +74,17 @@ class OpenAICompatibleChat(OpenAIConnection):
             body.setdefault("stream_options", {"include_usage": True})
         return body
 
+    async def submit_once(self, messages: list[ProviderChatMessage], *, options=None) -> httpx.Response:
+        """交付首次完整 HTTP 响应，供调用与连接诊断分别解释。"""
+        async with self._client_factory() as client:
+            return await client.post(self._url, headers=self._headers, params=self._query,
+                                     json=self._payload(messages, options, stream=False))
+
     async def invoke(
         self, messages: list[ProviderChatMessage], *, options: dict[str, Any] | None = None,
     ) -> ProviderChatResult:
-        async with self._client_factory() as client:
-            response = await client.post(
-                self._url, headers=self._headers, params=self._query,
-                json=self._payload(messages, options, stream=False),
-            )
-            response.raise_for_status()
+        response = await self.submit_once(messages, options=options)
+        response.raise_for_status()
         payload = response.json()
         return ProviderChatResult(
             choices=[_choice(choice, streaming=False) for choice in payload["choices"]],

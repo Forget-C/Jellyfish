@@ -7,10 +7,12 @@ from app.core.contracts.image_generation import ImageGenerationInput
 _IMAGE_MODEL = "kling-v3"
 
 
-def build_create_image_body(inp: ImageGenerationInput) -> dict[str, Any]:
+def build_create_image_body(inp: ImageGenerationInput, *, connection_test: bool = False) -> dict[str, Any]:
     """将项目通用图片输入映射为可灵 Image 3.0 Omni 请求体。"""
-    model = (inp.model or "").strip().lower()
-    if model != _IMAGE_MODEL:
+    model = (inp.model or "").strip()
+    if not connection_test:
+        model = model.lower()
+    if not connection_test and model != _IMAGE_MODEL:
         raise ValueError("Kling image model must be kling-v3")
     body: dict[str, Any] = {"model_name": model, "prompt": inp.prompt, "n": inp.n}
     if inp.target_ratio:

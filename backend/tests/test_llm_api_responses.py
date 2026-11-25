@@ -443,6 +443,9 @@ def test_provider_call_protocol(client, monkeypatch, key, category, path, payloa
     provider_db = _FakeLlmDB()
     provider = _seed_provider(provider_db)
     provider.provider_key = key
+    if category == "text":
+        provider_db.add(Model(id="registered", provider_id=provider.id, category="text", name="custom",
+                              params={"use_responses_api": True}))
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", send)
     llm_app.dependency_overrides[get_db] = _override_db(provider_db)
     try:

@@ -321,6 +321,37 @@ async def test_new_incompatible_connection_rejected_but_model_switch_keeps_exist
 
 
 @pytest.mark.asyncio
+async def test_canvas_uses_registered_image_output_limit(canvas_client):
+    from app.dependencies import get_db
+    from app.models.llm import Model, Provider
+    async for db in canvas_client._transport.app.dependency_overrides[get_db]():
+        model = await db.get(Model, 'canvas-image')
+        (await db.get(Provider, model.provider_id)).api_key = "fixture"
+        model.capability_profile = {'image_modes': {'text_to_image': {'max_outputs': 1}}}
+        await db.commit()
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}") + '/models/canvas-image/capability'
+    assert (await canvas_client.get(url)).json()['data']['max_count'] == 1
+    from fastapi import HTTPException
+    from app.core.contracts.generation import GenerationCommand
+    from app.models.experiment_sessions import ExperimentSession
+    from app.services.generation.gate import GenerationEntityGate
+    from app.services.generation.submission import GenerationSubmitter
+    async for db in canvas_client._transport.app.dependency_overrides[get_db]():
+        db.add(ExperimentSession(id="count-check", lab_type="image"))
+        await db.flush()
+        command = GenerationCommand.model_validate({
+            "modality": "image", "operation": "image_generation", "delivery": "async_polling",
+            "target": {"kind": "experiment_session", "entity_id": "count-check"},
+            "request": {"model_id": "canvas-image", "execution_prompt": "test",
+                        "operation_input": {"kind": "image_generation", "count": 2}},
+        })
+        with pytest.raises(HTTPException, match="count exceeds"):
+            await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(db, command)
+
+
+
+@pytest.mark.asyncio
 async def test_capability_declarations_match_real_dtos_and_video_adapter(canvas_client):
     from app.core.integrations.video_capabilities import VideoModelCapability, register_video_model_capability, clear_video_model_capability_overrides
     register_video_model_capability(provider='vidu', model_prefix='canvas-video', capability=VideoModelCapability(

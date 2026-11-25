@@ -100,11 +100,12 @@ async def accept(runtime, request_id='run'):
 
 
 @pytest.mark.asyncio
-async def test_ordinary_omni_text_generation_keeps_its_frozen_request_without_check_options(runtime):
+@pytest.mark.parametrize("responses", [False, True])
+async def test_ordinary_omni_text_generation_keeps_its_frozen_request_without_check_options(runtime, responses):
     async with runtime.sessions.begin() as db:
         model = await db.get(Model, runtime.model_id)
         model.name = 'qwen3.8-omni-flash'
-        model.params = {'temperature': 0.3, 'extra_body': {'enable_thinking': True}}
+        model.params = {'temperature': 0.3, 'use_responses_api': responses}
         provider = await db.get(Provider, runtime.provider_id)
         provider.provider_key = 'aliyun_bailian'
     await accept(runtime)
@@ -116,6 +117,13 @@ async def test_ordinary_omni_text_generation_keeps_its_frozen_request_without_ch
     def provider_reply(request):
         body = json.loads(request.content)
         requests.append(body)
+        if responses:
+            assert request.url.path == '/v1/responses'
+            assert 'enable_thinking' not in body
+            events = [{'type': 'response.output_text.delta', 'delta': 'Ordinary text'},
+                      {'type': 'response.completed', 'response': {'status': 'completed'}}]
+            return httpx.Response(200, headers={'content-type': 'text/event-stream'},
+                                  text=''.join(f'data: {json.dumps(event)}\n\n' for event in events))
         assert request.url.path == '/v1/chat/completions'
         assert body['model'] == 'qwen3.8-omni-flash' and body['temperature'] == 0.3
         assert body['stream'] is True and body['enable_thinking'] is False

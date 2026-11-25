@@ -25,6 +25,7 @@ from app.core.contracts.provider_media import RemoteTaskReference
 from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.core.integrations.langchain_chat import build_langchain_chat
 from app.core.integrations.model_capabilities import describe_operation
+from app.core.contracts.model_provider import UnsupportedModelInput
 from app.core.integrations.media_provider import bind_media_provider, ProviderDataError
 from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardApplication, StoryboardOrganization, StoryboardReviewReport
 from app.core.contracts.task import TaskStatus
@@ -424,7 +425,7 @@ class TaskWorker:
             if directing:
                 # 长工作单持续接收分片，避免非流式等待完整响应触发读取超时。
                 params["streaming"] = True
-            if directing or task.kind == "text_chat":
+            if (directing or task.kind == "text_chat") and not params.get("use_responses_api"):
                 params["extra_body"] = {**params.get("extra_body", {}), "enable_thinking": False}
             capability = describe_operation(cfg.provider_key, model.name, ModelCapabilityProfile.model_validate(
                 model.capability_profile or {},
@@ -806,18 +807,17 @@ class TaskWorker:
         checkpoint = await self._write_storyboard_prompts(task, llm, stopped, checkpoint, prior_prompts)
         return checkpoint, await self._review_storyboard_checkpoint(task, llm, stopped, checkpoint)
 
-    def _frozen_text_model(self, task: Task, *, multimodal: bool = False) -> BaseChatModel:
+    def _frozen_text_model(self, task: Task) -> BaseChatModel:
         """Use only the provider and model configuration captured at admission."""
         from app.core.contracts.generation import FrozenGenerationConfig
         from app.services.generation_canvas.check_models import check_model_parameters
         frozen = FrozenGenerationConfig.model_validate(task.input_snapshot.get('execution_config'))
         if task.kind == 'canvas_check':
-            params = check_model_parameters(frozen, multimodal=multimodal)
+            params = check_model_parameters(frozen)
         else:
             params = dict(frozen.model_params)
-            params['extra_body'] = {**params.get('extra_body', {}), 'enable_thinking': False}
-            if multimodal:
-                params['use_responses_api'] = False
+            if not params.get('use_responses_api'):
+                params['extra_body'] = {**params.get('extra_body', {}), 'enable_thinking': False}
         params.update(model=frozen.model_name, api_key=frozen.api_key, base_url=frozen.base_url,
                       max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
         capability = describe_operation(frozen.provider_key, frozen.model_name, ModelCapabilityProfile.model_validate(
@@ -883,7 +883,7 @@ class TaskWorker:
             {'type': 'text', 'text': json.dumps(context, ensure_ascii=False)},
             {'type': 'image_url', 'image_url': {'url': image_url}},
         ])]
-        reply = await self._frozen_text_model(task, multimodal=True).ainvoke(messages)
+        reply = await self._frozen_text_model(task).ainvoke(messages)
         return parse_reference_reply(item_id, observation, reply.content)
 
     async def _canvas_product_visual(self, task: Task, observation: dict):
@@ -920,7 +920,7 @@ class TaskWorker:
         content = [{'type': 'text', 'text': json.dumps(context, ensure_ascii=False)}]
         content += [{'type': 'image_url', 'image_url': {'url': value}} for value in images]
         messages = [SystemMessage(content=instructions), HumanMessage(content=content)]
-        reply = await self._frozen_text_model(task, multimodal=True).ainvoke(messages)
+        reply = await self._frozen_text_model(task).ainvoke(messages)
         return parse_product_visual(observation, reply.content, at_ms)
 
     async def _canvas_product_video(self, task: Task, observation: dict):
@@ -948,7 +948,7 @@ class TaskWorker:
             {'type': 'video_url', 'video_url': {'url': sequence.data_url}, 'fps': observation['sampling_fps']},
         ]
         messages = [SystemMessage(content=instructions), HumanMessage(content=content)]
-        reply = await self._frozen_text_model(task, multimodal=True).ainvoke(messages)
+        reply = await self._frozen_text_model(task).ainvoke(messages)
         return parse_product_video(observation, reply.content, sequence)
 
     async def _canvas_text(self, task: Task) -> None:
@@ -1023,7 +1023,7 @@ class TaskWorker:
     @staticmethod
     def _error_message(error: Exception) -> str:
         """保存稳定且不含上游正文、URL 或凭据的错误摘要。"""
-        if isinstance(error, (ProviderDataError, DirectingOutputError)):
+        if isinstance(error, (ProviderDataError, DirectingOutputError, UnsupportedModelInput)):
             return str(error)
         if isinstance(error, APIStatusError):
             if error.code == "AllocationQuota.FreeTierOnly":

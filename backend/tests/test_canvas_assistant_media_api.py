@@ -225,4 +225,13 @@ async def test_review_reports_only_the_interval_and_tracks_sent_to_the_provider(
             assert observation['start_ms'] <= observation['audio_start_ms'] < observation['audio_end_ms'] <= observation['end_ms']
         else:
             assert observation.get('audio_start_ms') is None
+    async with canvas_client.canvas_sessions.begin() as db:
+        (await db.get(Model, 'canvas-text')).params = {'use_responses_api': True}
+    sent = len(requests)
+    incompatible = await canvas_client.post(url + '/assistant', json={
+        'request_id': 'responses-video', 'text': '审看连续视频', 'attachment_file_ids': [file_id],
+    })
+    assert incompatible.status_code == 422, incompatible.text
+    assert 'ASSISTANT_MODEL_INPUT_UNSUPPORTED' in incompatible.text
+    assert len(requests) == sent
     assert (await canvas_client.get(url + '/runtime')).json()['data']['runs'] == []

@@ -82,7 +82,7 @@ async def create_text_stream_run(
 ) -> tuple[str, GenerationStreamEvent]:
     """持久化用户消息并创建内存 SSE run，不写入异步任务表。"""
     session = await _require_text_session(db, session_id=session_id)
-    await build_laboratory_chat(db, model_id=model_id)
+    await build_laboratory_chat(db, model_id=model_id, streaming=True)
     run_id = uuid4().hex
     draft = experiment_user_message(prompt=content, model_id=model_id)
     if request_id:
@@ -273,7 +273,7 @@ async def stream_text_run(run_id: str) -> None:
     try:
         stream_input = await _get_stream_input(run_id)
         async with async_session_maker() as db:
-            model = await build_laboratory_chat(db, model_id=stream_input.model_id)
+            model = await build_laboratory_chat(db, model_id=stream_input.model_id, streaming=True)
         deltas = []
         async with aclosing(_stream_chat(model, stream_input.content)) as chunks:
             async for text in chunks:

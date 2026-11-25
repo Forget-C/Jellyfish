@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 import httpx
 from httpx_sse import EventSource, SSEError
 
-from app.core.contracts.model_provider import ProviderChatEvent, ProviderChatResult
+from app.core.contracts.model_provider import UnsupportedModelInput, ProviderChatEvent, ProviderChatResult
 from app.core.integrations.openai.chat import OpenAIConnection
 
 
@@ -28,6 +28,8 @@ def _inputs(messages):
                 elif block["type"] == "image_url":
                     image = block["image_url"]
                     parts.append({"type": "input_image", "image_url": image["url"], "detail": image.get("detail", "auto")})
+                elif block["type"] in {"video_url", "audio_url", "input_audio"}:
+                    raise UnsupportedModelInput(f"Input {block['type']} requires the Chat Completions adapter")
                 else:
                     parts.append(block)
             content = parts
@@ -131,9 +133,10 @@ class OpenAIResponses(OpenAIConnection):
                                   _usage(response))
 
     async def stream(self, messages, *, options=None):
+        body = self._payload(messages, options, stream=True)
         has_calls = False
         try:
-            async with self._request(self._payload(messages, options, stream=True)) as response:
+            async with self._request(body) as response:
                 async for frame in EventSource(response).aiter_sse():
                     event = frame.json()
                     kind = event["type"]

@@ -290,6 +290,7 @@ class CanvasModelCapability(BaseModel):
     resolution_profiles: dict[str, dict[str, str]] = Field(default_factory=dict)
     min_count: int = 1
     max_count: int = 10
+    reference_max_count: int | None = None
     max_reference_images: int | None = None
     supports_duplicate_reference_images: bool = True
     min_seconds: int | None = None

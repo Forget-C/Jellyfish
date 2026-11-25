@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.media import MediaReference, VideoFrameMediaReferences, VideoMediaInput, VideoSubjectMediaReference
 from app.core.contracts.video_generation import VideoGenerationInput, VideoFrameReferences, VideoSubjectReference, VideoReferenceCapabilities
-from app.core.integrations.video_capabilities import validate_video_options, resolve_video_capability
+from app.core.contracts.model_capabilities import VideoModeDeclaration, VideoOperationMode
+from app.services.llm.model_capabilities import model_operation_capabilities
+from app.core.integrations.video_capabilities import validate_video_declaration, resolve_video_capability
 from app.core.integrations.openai.video_capabilities import validate_openai_video_options
 from app.core.integrations.vidu.video_capabilities import validate_vidu_video_options
 from app.core.integrations.kling.video_capabilities import validate_kling_video_options
@@ -26,6 +28,7 @@ class VideoUnitModel:
     name: str
     provider_key: str
     reference_capabilities: VideoReferenceCapabilities
+    modes: dict[VideoOperationMode, VideoModeDeclaration]
 
 
 class UnitVideoInputError(ValueError):
@@ -59,16 +62,20 @@ async def read_video_unit_model(db: AsyncSession, project_id: str, model_or_id: 
         max_frames = len(roles)
     # 只有 Vidu 的现有请求适配器会传递命名主体，不能仅凭覆盖配置宣称可用。
     subjects = config.provider_key == "vidu"
+    modes = model_operation_capabilities(model, provider, "video_generation").video_modes
+    subject_rule = modes.get("subject_reference")
+    kinds = subject_rule.reference_kinds if subject_rule else None
+    subjects = subjects and (not subject_rule or subject_rule.supported is not False)
     capability = VideoReferenceCapabilities(model_id=model.id, frame_roles=roles, max_frames=max_frames,
-        subject_images=subjects and cap.supports_subject_image_reference,
-        subject_videos=subjects and cap.supports_subject_video_reference,
+        subject_images=subjects and cap.supports_subject_image_reference and (kinds is None or "image" in kinds),
+        subject_videos=subjects and cap.supports_subject_video_reference and (kinds is None or "video" in kinds),
         combine_subjects_and_frames=False,
         max_subjects=cap.max_subjects, max_images_per_subject=cap.max_images_per_subject,
         max_videos_per_subject=cap.max_videos_per_subject, max_media_per_subject=cap.max_media_per_subject,
         max_total_subject_videos=cap.max_total_subject_videos,
         limits_status="partial" if max_frames is None else "known")
 
-    return VideoUnitModel(model.id, model.name, config.provider_key, capability)
+    return VideoUnitModel(model.id, model.name, config.provider_key, capability, modes)
 
 
 def validated_video_media(unit, model: VideoUnitModel, text: str = '准备检查') -> VideoMediaInput:
@@ -120,7 +127,7 @@ def validated_video_media(unit, model: VideoUnitModel, text: str = '准备检查
             seconds=unit.duration_ms // 1000, seed=unit.parameters.get("seed"),
             frame_references=VideoFrameReferences(first_frame=frame_media.first, last_frame=frame_media.last, key_frames=frame_media.keys),
             subject_references=[VideoSubjectReference(name=s.name, media=s.media) for s in subjects.values()])
-        validate_video_options(provider=model.provider_key, model=model.name, input_=options)
+        validate_video_declaration(model.provider_key, options, model.modes)
         validators = {"openai": validate_openai_video_options, "vidu": validate_vidu_video_options,
                       "kling": validate_kling_video_options, "volcengine": validate_volcengine_video_options}
         validators[model.provider_key](options)

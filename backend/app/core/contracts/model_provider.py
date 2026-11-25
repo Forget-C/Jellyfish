@@ -22,6 +22,10 @@ class ModelProviderConfigurationError(ValueError):
     """供应商配置无法用于选定的操作。"""
 
 
+class UnsupportedModelInput(ModelProviderConfigurationError):
+    """所选供应商协议无法传输本次输入。"""
+
+
 class ModelProvider(Protocol):
     """模型供应商面向调用方提供的异步操作。"""
 

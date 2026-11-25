@@ -52,17 +52,21 @@ class MediaProvider:
         self.config = config
         self.client = client
 
-    async def _request(self, method: str, path: str, *, body: dict | None = None, params: dict | None = None) -> dict:
-        """发送一次请求，保留 HTTP 错误类型供轮询退避，拒绝非对象响应。"""
+    async def _send(self, method: str, path: str, *, body=None, params=None) -> httpx.Response:
         cfg = self.config
         scheme = "Token" if cfg.provider == "vidu" else "Bearer"
-        url = f"{(cfg.base_url or _DEFAULT_URLS[cfg.provider]).rstrip('/')}{path}"
+        base = httpx.URL(cfg.base_url or _DEFAULT_URLS[cfg.provider])
+        endpoint = base.path.rstrip("/") + path
         if cfg.provider == "volcengine" and path == "/images/generations":
-            url = build_volcengine_image_generations_url(cfg.base_url)
-        response = await self.client.request(
-            method, url,
-            headers={"Authorization": f"{scheme} {cfg.api_key}"}, json=body, params=params,
-        )
+            endpoint = httpx.URL(build_volcengine_image_generations_url(str(base.copy_with(query=None, fragment=None)))).path
+        url = base.copy_with(path=endpoint, fragment=None)
+        return await self.client.request(method, url.copy_merge_params(params or {}), json=body,
+                                         headers={"Authorization": f"{scheme} {cfg.api_key}"})
+
+    async def _request(self, method: str, path: str, *, body=None, params=None) -> dict:
+        return self._decode(await self._send(method, path, body=body, params=params))
+
+    def _decode(self, response: httpx.Response) -> dict:
         response.raise_for_status()
         try:
             data = response.json()
@@ -70,36 +74,42 @@ class MediaProvider:
             raise ProviderDataError("provider response is not JSON") from error
         if not isinstance(data, dict):
             raise ProviderDataError("provider response is not an object")
-        if cfg.provider == "kling" and data.get("code") not in (None, 0, "0", 200, "200"):
+        if self.config.provider == "kling" and data.get("code") not in (None, 0, "0", 200, "200"):
             raise ProviderDataError("provider returned a non-success business code")
         return data
 
     async def invoke(self, input_: ProviderImageInput | ProviderVideoInput) -> RemoteTaskReference | tuple[MediaResult, ...]:
         """异步接口返回远端 ID，同步图片返回结果；任何失败都不重试提交。"""
+        data = self._decode(await self.submit_once(input_))
+        if isinstance(input_, ProviderVideoInput):
+            return RemoteTaskReference("video_generation", self._task_id(data))
+        if self.config.provider in {"vidu", "kling"}:
+            return RemoteTaskReference("image_generation", self._task_id(data))
+        return self._outputs(data.get("data"))
+
+    async def submit_once(self, input_: ProviderImageInput | ProviderVideoInput, *, connection_test=False) -> httpx.Response:
+        """连接测试与生成共享首次提交。连接测试允许输入目录以外的可灵型号。"""
         cfg = self.config
         if isinstance(input_, ProviderImageInput):
-            result = await self._submit_image(input_)
-            return RemoteTaskReference("image_generation", result) if isinstance(result, str) else result
-        if cfg.provider == "openai":
+            path, body = self._image_request(input_, connection_test)
+        elif cfg.provider == "openai":
             path, body = "/videos", openai_video_body(input_)
         elif cfg.provider == "volcengine":
             path, body = "/contents/generations/tasks", volcengine_video_body(input_)
         elif cfg.provider == "vidu":
             path, body = vidu_video_request(input_)
         elif cfg.provider == "kling":
-            path, body = kling_video_request(input_)
+            path, body = kling_video_request(input_, connection_test=connection_test)
         else:
             raise ModelProviderConfigurationError(f"Unsupported video provider: {cfg.provider!r}")
-        data = await self._request("POST", path, body=body)
-        return RemoteTaskReference("video_generation", self._task_id(data))
+        return await self._send("POST", path, body=body)
 
-    async def _submit_image(self, inp: ProviderImageInput) -> str | tuple[MediaResult, ...]:
-        """按已支持图片接口构造请求，直接与异步接口均只调用一次。"""
+    def _image_request(self, inp: ProviderImageInput, connection_test: bool) -> tuple[str, dict]:
         cfg = self.config
         if cfg.provider == "vidu":
-            return self._task_id(await self._request("POST", "/ent/v2/reference2image", body=vidu_image_body(inp)))
+            return "/ent/v2/reference2image", vidu_image_body(inp)
         if cfg.provider == "kling":
-            return self._task_id(await self._request("POST", "/v1/images/generations", body=kling_image_body(inp)))
+            return "/v1/images/generations", kling_image_body(inp, connection_test=connection_test)
         inp = prepare_image_options(cfg.provider, inp)
         body: dict[str, Any] = {"prompt": inp.prompt, "model": inp.model}
         if inp.size:
@@ -121,8 +131,7 @@ class MediaProvider:
                 body["seed"] = inp.seed
             if inp.images:
                 body["image"] = [ref.image_url for ref in inp.images]
-        data = await self._request("POST", path, body=body)
-        return self._outputs(data.get("data"))
+        return path, body
 
     async def poll(self, reference: RemoteTaskReference) -> PollObservation:
         """仅查询已有 ID；成功但无结果、缺状态或未知状态均作为数据缺失处理。"""

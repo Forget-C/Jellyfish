@@ -68,6 +68,7 @@ from app.services.generation_canvas.assistant_preview_submission import claim_pr
 from app.services.generation_canvas.model_adapter import CanvasModelAdapter, CanvasModelApprovalScope, INVALID_COMMAND, PREVIEW_TOOL
 from app.services.generation_canvas.planning_tools import CanvasPlanningPreview, CanvasPlanningTools
 from app.services.generation_canvas.catalog import canvas_catalog
+from app.core.contracts.model_provider import UnsupportedModelInput
 from app.core.integrations.text_capabilities import supports_synchronized_video_audio
 from app.services.generation_canvas.store import CanvasStore
 from app.services.llm.model_capabilities import effective_chat_capabilities
@@ -79,7 +80,9 @@ TURN_LEASE_SECONDS = 120
 PROPOSAL_INVALID = 'ASSISTANT_PROPOSAL_INVALID'
 MODEL_TIMEOUT = 'ASSISTANT_MODEL_TIMEOUT'
 MODEL_FAILED = 'ASSISTANT_MODEL_FAILED'
+MODEL_INPUT_UNSUPPORTED = 'ASSISTANT_MODEL_INPUT_UNSUPPORTED'
 MODEL_FAILURE_REPLIES = {
+    MODEL_INPUT_UNSUPPORTED: '当前模型协议无法传输本轮媒体输入，请选择支持该输入的模型或调整附件。',
     MODEL_TIMEOUT: '助手处理超时，可以发送新消息继续本轮未完成的工作。',
     MODEL_FAILED: '模型未能完成回复，可以发送新消息继续。',
 }
@@ -304,13 +307,11 @@ class CanvasAssistant:
         def configure(params):
             if stream_reply:
                 params['streaming'] = True
-            if supports_synchronized_video_audio(provider.provider_key, model.name):
+            if not params.get("use_responses_api") and supports_synchronized_video_audio(provider.provider_key, model.name):
                 extra_body = dict(params.get('extra_body') or {})
                 extra_body.pop('enable_thinking', None)
                 extra_body.update(modalities=['text'], reasoning_effort='none')
-                params.update(streaming=True, use_responses_api=False, extra_body=extra_body)
-            elif capability.video_inputs:
-                params['use_responses_api'] = False
+                params.update(streaming=True, extra_body=extra_body)
 
         return await build_text_chat_model(self.db, model_id=model.id, thinking=False, configure=configure)
 
@@ -793,7 +794,7 @@ class CanvasAssistant:
             if error.detail == PROPOSAL_INVALID:
                 failed_session.pending_checkpoint = None
             error_code = error.detail if error.detail in (
-                PROPOSAL_INVALID, MODEL_TIMEOUT, MODEL_FAILED, CONTEXT_LIMIT_ERROR,
+                PROPOSAL_INVALID, MODEL_TIMEOUT, MODEL_FAILED, MODEL_INPUT_UNSUPPORTED, CONTEXT_LIMIT_ERROR,
                 'CANVAS_TARGET_UNRESOLVED',
             ) else MODEL_FAILED
             progress = pending.get('progress') or {'request_id': command.request_id, 'model_id': model_id}
@@ -1012,6 +1013,8 @@ class CanvasAssistant:
                     state = await CanvasAssistant._resume_reply(
                         agent, checkpoint, messages, used_skills, layout_draft, question_answers or [], on_reply, on_phase=on_phase,
                     )
+        except UnsupportedModelInput as error:
+            raise HTTPException(422, MODEL_INPUT_UNSUPPORTED) from error
         except (HTTPException, CreativeQuestionPending):
             raise
         except Exception as exc:
@@ -1063,6 +1066,8 @@ class CanvasAssistant:
                             synthesis = await invoke_with_reply(agent, {'messages': [*messages, HumanMessage(content=follow_up)]}, None, on_reply, on_phase=on_phase)
                 except HTTPException:
                     raise
+                except UnsupportedModelInput as error:
+                    raise HTTPException(422, MODEL_INPUT_UNSUPPORTED) from error
                 except Exception as exc:
                     logger.warning('Canvas assistant synthesis failed: %s', type(exc).__name__)
                     if isinstance(exc, (TimeoutError, APITimeoutError)):

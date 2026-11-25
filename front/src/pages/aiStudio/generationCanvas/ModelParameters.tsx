@@ -6,19 +6,20 @@ type Props<T> = { card: T; capability?: CanvasModelCapability; disabled?: boolea
 const options = (values: string[] = []) => values.map(value => ({ value, label: value }))
 
 /** 已核实的能力决定控件可见性；隐藏不支持参数时保留原配置供预检诊断。 */
-export function ImageModelParameters({ card, capability, disabled, onChange }: Props<ImageModelCard>) {
+export function ImageModelParameters({ card, capability, disabled, onChange, hasReference }: Props<ImageModelCard> & { hasReference: boolean }) {
   const uiText = useUiText()
   const config = card.config || {}
   const ratios = capability?.ratios || []
   const profiles = capability?.resolution_profiles || {}
   const resolutions = Object.keys(profiles[config.target_ratio || ''] || {})
   const supportsResolution = Object.values(profiles).some(values => Object.keys(values).length > 0)
+  const maxCount = (hasReference && capability?.reference_max_count != null) ? capability.reference_max_count : capability?.max_count
   return <>
     {ratios.length > 0 && <Select size="small" bordered={false} disabled={disabled} aria-label={uiText("图片画幅")} data-diagnostic-control="target_ratio" value={config.target_ratio || 'default'}
       options={[{ value: 'default', label: uiText("默认画幅") }, ...options(ratios)]} onChange={value => onChange({ ...card, config: { ...config, target_ratio: value === 'default' ? null : value } })} />}
     {supportsResolution && <Select size="small" bordered={false} disabled={disabled || !resolutions.length} aria-label={uiText("图片分辨率")} data-diagnostic-control="resolution_profile" placeholder={uiText("分辨率")} title={!resolutions.length ? uiText("先选择支持的画幅") : undefined} value={config.resolution_profile || 'default'}
       options={[{ value: 'default', label: uiText("默认分辨率") }, ...options(resolutions)]} onChange={value => onChange({ ...card, config: { ...config, resolution_profile: value === 'default' ? null : value } })} />}
-    {typeof capability?.min_count === 'number' && typeof capability?.max_count === 'number' && <InputNumber size="small" bordered={false} disabled={disabled} aria-label={uiText("图片数量")} data-diagnostic-control="count" value={config.count ?? 1} min={capability.min_count} max={capability.max_count}
+    {typeof capability?.min_count === 'number' && typeof maxCount === 'number' && <InputNumber size="small" bordered={false} disabled={disabled} aria-label={uiText("图片数量")} data-diagnostic-control="count" value={config.count ?? 1} min={capability.min_count} max={maxCount}
       formatter={value => Number(value) === 1 ? uiText("1 张") : uiText("{{value}} 张", { value: value ?? '' })} parser={value => Number(value?.replace(/[^\d]/g, ''))}
       onChange={value => onChange({ ...card, config: { ...config, count: value ?? 1 } })} />}
   </>
