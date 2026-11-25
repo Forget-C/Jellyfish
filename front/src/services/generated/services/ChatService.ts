@@ -4,11 +4,110 @@
 /* eslint-disable */
 import type { ApiResponse_CanvasAssistantExchange_ } from '../models/ApiResponse_CanvasAssistantExchange_';
 import type { ApiResponse_CanvasAssistantHistory_ } from '../models/ApiResponse_CanvasAssistantHistory_';
+import type { ApiResponse_ExperimentTaskCreated_ } from '../models/ApiResponse_ExperimentTaskCreated_';
+import type { ApiResponse_list_ExperimentMessageRead__ } from '../models/ApiResponse_list_ExperimentMessageRead__';
 import type { CanvasAssistantMessage } from '../models/CanvasAssistantMessage';
+import type { GenerationSubmitRequest } from '../models/GenerationSubmitRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ChatService {
+    /**
+     * Send Media Turn
+     * Submit one direct trial; the bound session must match the operation and media.
+     * @returns ApiResponse_ExperimentTaskCreated_ Successful Response
+     * @throws ApiError
+     */
+    public static chatMediaSend({
+        sessionId,
+        requestBody,
+        idempotencyKey,
+    }: {
+        sessionId: string,
+        requestBody: GenerationSubmitRequest,
+        idempotencyKey?: (string | null),
+    }): CancelablePromise<ApiResponse_ExperimentTaskCreated_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/media/{session_id}/turns',
+            path: {
+                'session_id': sessionId,
+            },
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Media Snapshot
+     * Restore submitted parameters, references and current task receipts.
+     * @returns ApiResponse_list_ExperimentMessageRead__ Successful Response
+     * @throws ApiError
+     */
+    public static chatMediaSnapshot({
+        sessionId,
+        page = 1,
+        pageSize = 50,
+    }: {
+        sessionId: string,
+        page?: number,
+        pageSize?: number,
+    }): CancelablePromise<ApiResponse_list_ExperimentMessageRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/chat/sessions/media/{session_id}',
+            path: {
+                'session_id': sessionId,
+            },
+            query: {
+                'page': page,
+                'page_size': pageSize,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Media Events
+     * Replay task facts committed after the client's cursor, then follow new events.
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static chatMediaEvents({
+        sessionId,
+        after,
+        follow = true,
+        lastEventId,
+    }: {
+        sessionId: string,
+        after?: number,
+        follow?: boolean,
+        lastEventId?: number,
+    }): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/chat/sessions/media/{session_id}/events',
+            path: {
+                'session_id': sessionId,
+            },
+            headers: {
+                'last-event-id': lastEventId,
+            },
+            query: {
+                'after': after,
+                'follow': follow,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * Canvas Snapshot
      * Open the canvas conversation at its latest committed cursor.

@@ -123,6 +123,7 @@ try {
       deleteRequests.push(url.pathname)
       return respond(null)
     }
+    if (/\/chat\/sessions\/media\/[^/]+$/.test(url.pathname)) return respond(histories.get(url.pathname.split('/').at(-1)) ?? [])
     if (url.pathname.endsWith('/messages')) return respond(histories.get(url.pathname.split('/').at(-2)) ?? [])
     if (url.pathname.endsWith('/models')) {
       const category = url.searchParams.get('category')
@@ -134,12 +135,12 @@ try {
     }] : [] })
     if (url.pathname.endsWith('/files')) return respond({ items: [{ id: 'file-a', name: '测试参考图', type: 'image' }] })
     if (url.pathname.endsWith('/video-generation-options')) return respond({ model_id: 'video-model', allowed_ratios: ['16:9'] })
-    const media = url.pathname.match(/\/labs\/(image|video)\/sessions\/([^/]+)\/tasks$/)
+    const media = url.pathname.match(/\/chat\/sessions\/media\/([^/]+)\/turns$/)
     if (media && request.method() === 'POST') {
       const input = request.postDataJSON()
       generationRequests.push(input)
-      const sessionId = media[2]
-      const taskId = media[1] + '-' + generationRequests.length
+      const sessionId = media[1]
+      const taskId = input.operation_input.kind + '-' + generationRequests.length
       const status = sessionId === 'image-template' ? 'succeeded' : 'queued'
       const items = [
         message(sessionId, taskId + '-user', 'user', input.execution_prompt, 1),

@@ -58,15 +58,15 @@ try {
       variables: ['主体'], variable_defaults: { 主体: '雪松' }, category: 'video_prompt',
       created_at: timestamp, updated_at: timestamp,
     }] : [] })
-    if (/\/labs\/(text|image|video)\/sessions\/[^/]+\/(stream|tasks)$/.test(url.pathname)) {
+    if (/\/chat\/sessions\/media\/[^/]+\/turns$/.test(url.pathname) || /\/labs\/(text|image|video)\/sessions\/[^/]+\/(stream|tasks)$/.test(url.pathname)) {
       writes.push(request.postDataJSON())
       requestHeaders.push(request.headers())
       return submission(route)
     }
-    if (url.pathname.endsWith('/messages')) {
+    if (/\/chat\/sessions\/media\/[^/]+$/.test(url.pathname) || url.pathname.endsWith('/messages')) {
       historyReads += 1
       if (failHistory) return route.fulfill({ status: 503, json: { detail: '历史暂不可用' } })
-      return respond(histories.get(url.pathname.split('/').at(-2)) ?? [])
+      return respond(histories.get(url.pathname.split('/').at(url.pathname.endsWith('/messages') ? -2 : -1)) ?? [])
     }
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])
@@ -247,7 +247,7 @@ try {
   await page.waitForURL(url => url.searchParams.get('session') === 'image-other')
   await imageInput.fill('新会话继续写作')
   await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/image-session/tasks')),
+    page.waitForResponse(response => response.url().endsWith('/image-session/turns')),
     releaseLate(),
   ])
   assert.equal(await imageInput.inputValue(), '新会话继续写作')

@@ -1,4 +1,7 @@
 import { useUiText } from '../../../../uiText'
+import { mediaTrial } from '../../../../services/mediaTrial'
+import { useTrialModelPreference } from '../hooks/useTrialModelPreference'
+import { MediaTaskDetails } from '../components/MediaTaskDetails'
 import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
 /**
  * 图片实验室模态。
@@ -9,7 +12,7 @@ import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
 import { useRef, useState, type ReactNode } from 'react'
 import { message } from 'antd'
 import {
-  StudioGenerationTasksService,
+  type MediaTaskReceipt,
   type ExperimentMessageRead,
   type ExperimentSessionRead,
   type TaskOutputRead,
@@ -49,6 +52,7 @@ type ImageLabMessage = {
   id: string
   role: 'user' | 'assistant'
   content: string
+  receipt?: MediaTaskReceipt
   taskId?: string
   status?: string
   progress?: number | null
@@ -101,7 +105,7 @@ function toImageLabMessage(item: ExperimentMessageRead): ImageLabMessage {
   const inputSnapshot = readExperimentInputSnapshot(item)
   return {
     id: item.id, role: item.role === 'user' ? 'user' : 'assistant', content: item.content ?? '',
-    taskId: item.task_id ?? undefined, status: item.status ?? undefined,
+    receipt: item.media_receipt ?? undefined, taskId: item.task_id ?? undefined, status: item.status ?? undefined,
     progress: typeof payload.progress === 'number' ? payload.progress : undefined,
     resultUrls: extractImageUrls(payload.result, Array.isArray(payload.outputs) ? payload.outputs : undefined),
     error: typeof payload.error === 'string' ? payload.error : undefined,
@@ -118,29 +122,28 @@ function toImageLabMessage(item: ExperimentMessageRead): ImageLabMessage {
 export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMessages, render }: ImageExperimentModeProps) {
   const uiText = useUiText()
   const { files, libraryState, loadLibrary, onUploaded } = useExperimentLibrary('image')
-  const [modelId, setModelId] = useState<string>()
+  const [modelId, setModelId, setSoleModel] = useTrialModelPreference('image', sessionId)
   const [draft, setDraft] = useState('')
   const {
     templates, selectedTemplate, templateValues, setTemplateValues, templatesLoading, templatesFailed,
     loadTemplates, selectTemplate, confirmReplacement, applyFreeInput, replacementDialog,
   } = useExperimentTemplates(imagePromptCategories, draft, setDraft)
   const [referenceFileIds, setReferenceFileIds] = useState<string[]>([])
-  const history = useExperimentHistory(sessionId)
+  const history = useExperimentHistory(sessionId, { readPage: mediaTrial.snapshot })
   const inputSignature = (prompt: string) => JSON.stringify([prompt, selectedTemplate?.id, selectedTemplate?.version, templateValues, referenceFileIds])
   const submission = useExperimentSubmission(sessionId, history, inputSignature(draft))
   const { submitting } = submission
   useExperimentLeaveStatus(submission.dirty)
   const persistedMessages = history.messages.map(toImageLabMessage)
-  const { messages, runningTaskId, retryStatus } = useExperimentTaskResults(persistedMessages, history.refresh, (item, result) => {
-    const resultUrls = result.status === 'succeeded' ? extractImageUrls(result.generation_delivery ?? result.result, result.outputs) : []
+  const { messages, runningTaskId, retryStatus } = useExperimentTaskResults(sessionId, history.eventCursor, persistedMessages, history.refresh, (item, result) => {
+    const resultUrls = (result.artifacts ?? []).filter(file => !file.deleted && file.media_type === 'image')
+      .flatMap(file => buildFileDownloadUrl(file.file_id) ?? [])
     return { ...item, resultUrls: resultUrls.length ? resultUrls : item.resultUrls }
   })
 
   const currentPrompt = selectedTemplate ? renderPromptTemplate(selectedTemplate.content, templateValues).trim() : draft.trim()
 
-  const { models, modelsLoading, modelsFailed, loadModels } = useExperimentModels('image', id => {
-    setModelId(current => current ?? id)
-  })
+  const { models, modelsLoading, modelsFailed, loadModels } = useExperimentModels('image', setSoleModel)
 
   /** 在首条有效输入前创建会话，再经固定统一入口提交图片异步任务。 */
   const handleSubmit = async () => {
@@ -150,7 +153,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
     await submission.submitTask({
       ensureSession: () => sessionId ? Promise.resolve({ id: sessionId }) : ensureSession('image'),
       request: async (targetSessionId, idempotencyKey) => {
-        const response = await StudioGenerationTasksService.submitImageLabGenerationTaskApiV1StudioGenerationTasksLabsImageSessionsSessionIdTasksPost({
+        const response = await mediaTrial.send({
           sessionId: targetSessionId, idempotencyKey,
           requestBody: {
             model_id: modelId,
@@ -208,6 +211,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
         >
             {isUser || item.content !== '图片生成任务已提交，正在等待生成结果。' ? item.content : null}
             {isUser ? <ExperimentHistoryReferences files={files} references={(item.referenceFileIds ?? []).map((id) => ({ id, label: uiText("参考图") }))} /> : null}
+            {item.receipt && <MediaTaskDetails receipt={item.receipt} />}
             {item.error ? <div className="mt-2 text-sm text-red-600">{item.error}</div> : null}
             {item.resultUrls?.length ? <ExperimentResultMedia kind="image" urls={item.resultUrls} /> : null}
         </ExperimentMessageBubble>

@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.media_task import MediaTaskReceipt
+
 LabType = Literal["text", "image", "video"]
 MessageRole = Literal["user", "assistant", "task"]
 
@@ -45,6 +47,7 @@ class ExperimentMessageRead(BaseModel):
     status: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     task_id: str | None = None
+    media_receipt: MediaTaskReceipt | None = None
 
     id: str
     session_id: str

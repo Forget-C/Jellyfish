@@ -52,6 +52,7 @@ try {
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (request.method() === 'DELETE') deletions.push(url.pathname)
     if (url.pathname.endsWith('/experiment-sessions')) return respond(url.searchParams.get('lab_type') === 'video' ? sessions : [])
+    if (url.pathname.endsWith('/model-settings')) return respond({ default_video_model_id: 'a' })
     if (url.pathname.endsWith('/models')) return respond({ items: models })
     if (url.pathname.endsWith('/video-generation-options')) {
       const modelId = url.searchParams.get('model_id')
@@ -75,7 +76,7 @@ try {
       ? route.fulfill({ status: 503 })
       : route.fulfill({ body: referenceVideo, contentType: 'video/mp4' })
     if (url.pathname.endsWith('/download')) return route.fulfill({ body: png, contentType: 'image/png' })
-    const run = url.pathname.match(/\/labs\/video\/sessions\/([^/]+)\/tasks$/)
+    const run = url.pathname.match(/\/chat\/sessions\/media\/([^/]+)\/turns$/)
     if (run) {
       submissions.push({ session: run[1], body: request.postDataJSON() })
       const taskId = `task-${submissions.length}`
@@ -107,7 +108,7 @@ try {
     selectModel(from, model),
   ])
 
-  await getCapability('A')
+  await page.getByRole('button', { name: '验收模型 A', exact: true }).waitFor()
   await prompt.fill('验证混合主体素材与帧引用')
   await openLabAddition(page, '配置参考素材')
   await panel.getByRole('button', { name: '选择首帧', exact: true }).click()

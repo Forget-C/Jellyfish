@@ -25,6 +25,9 @@ def isolate_message_projection(monkeypatch):
         """投影只能在提交完成后执行。"""
         assert db.commits == 1
         return [ExperimentMessageRead.model_validate(message) for message in messages]
+    async def publish(*_args):
+        pass
+    monkeypatch.setattr(route, "publish_media_fact", publish)
     monkeypatch.setattr(route, "read_experiment_messages", read)
 
 
@@ -48,6 +51,9 @@ class _DummyDB:
         """记录任务和消息完成同一事务提交。"""
 
         self.commits += 1
+
+    async def flush(self):
+        """Assign generated identities in the production transaction."""
 
     async def refresh(self, item: object) -> None:
         """记录返回前刷新权威消息。"""
@@ -174,13 +180,14 @@ async def test_video_lab_task_binds_video_modality_and_rejects_wrong_session_typ
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("explicit_model", [False, True])
+@pytest.mark.parametrize("unified", [False, True])
 @pytest.mark.parametrize(("modality", "model", "media", "operation"), [
     ("image", "gpt-image-1", {"references": [{"file_id": "input", "media_kind": "image", "ordinal": 0}]},
      {"kind": "image_generation", "target_ratio": "1:1", "count": 2}),
     ("video", "viduq2", {"frames": {"first": {"file_id": "input", "media_kind": "image", "ordinal": 0}}},
      {"kind": "video_generation", "ratio": "16:9", "seconds": 4}),
 ])
-async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatch, modality, model, media, operation, explicit_model):
+async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatch, modality, model, media, operation, explicit_model, unified):
     """用户可从历史读取已提交输入，任务消息继续承载关联任务状态。"""
     from app.models.llm import Model, ModelSettings, Provider
     from app.models.studio import FileItem
@@ -210,7 +217,8 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         body = {"execution_prompt": "按参考图生成", "media": media, "operation_input": operation}
         if explicit_model:
             body["model_id"] = "lab-model"
-        submit_url = base + f"/generation-tasks/labs/{modality}/sessions/{session_id}/tasks"
+        submit_url = base + (f"/chat/sessions/media/{session_id}/turns" if unified else
+                             f"/generation-tasks/labs/{modality}/sessions/{session_id}/tasks")
         headers = {"Idempotency-Key": "same-lab-request"}
         submitted = await client.post(submit_url, json=body, headers=headers)
         assert submitted.status_code == 201, submitted.text
@@ -221,7 +229,8 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         assert replayed.status_code == 201 and replayed.json()["data"] == submitted.json()["data"]
         changed = await client.post(submit_url, json={**body, "execution_prompt": "更换请求正文"}, headers=headers)
         assert changed.status_code == 409, changed.text
-        history = await client.get(base + f"/experiment-sessions/{session_id}/messages")
+        history = await client.get(base + (f"/chat/sessions/media/{session_id}" if unified else
+                                           f"/experiment-sessions/{session_id}/messages"))
         assert history.status_code == 200
         user, task = history.json()["data"]
         snapshot = user["payload"]["input_snapshot"]
@@ -236,3 +245,78 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
             assert snapshot["media"]["frames"]["first"] == media["frames"]["first"]
         assert task["task_id"] == submitted.json()["data"]["task_id"] and task["status"] == "queued"
         assert "private-key" not in history.text
+        if unified:
+            event_url = base + f"/chat/sessions/media/{session_id}/events"
+            events = await client.get(event_url, params={"follow": "false"})
+            assert events.status_code == 200
+            import json
+            observed = [json.loads(line[6:]) for line in events.text.splitlines() if line.startswith("data: ")]
+            assert [item["type"] for item in observed] == ["task.accepted"]
+            receipt = observed[0]["payload"]
+            assert receipt["task_id"] == task["task_id"]
+            assert receipt["model_id"] == "lab-model" and receipt["model_name"] == model
+            assert receipt["references"][0]["file_id"] == "input"
+            assert "private-key" not in events.text
+            assert task["media_receipt"] == receipt
+            assert not (await client.get(event_url, params={"after": observed[0]["cursor"], "follow": "false"})).text
+            if explicit_model:
+                await complete_media_trial(sessions, client, event_url, modality, model, monkeypatch)
+
+
+async def complete_media_trial(sessions, api, url, modality, model, monkeypatch):
+    """Run the real worker against controlled HTTP/storage edges and replay its archived files."""
+    import asyncio
+    import base64
+    import json
+    import httpx
+    from botocore.exceptions import ClientError
+    from app.task_worker import TaskWorker
+
+    reference = b"trial reference image"
+    posts = []
+    uploads = []
+
+    async def download(*, key):
+        assert key == "input.png"
+        return reference
+
+    async def head(**_):
+        raise ClientError({"Error": {"Code": "NoSuchKey"}}, "HeadObject")
+
+    async def upload(**kwargs):
+        uploads.append(kwargs["data"].read())
+
+    def provider(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"state": "success", "creations": [{"b64_json": "dg=="}]})
+        posts.append(request)
+        if modality == "video":
+            body = json.loads(request.content)
+            assert body["model"] == model and body["duration"] == 4
+            assert body["images"] == ["data:image/png;base64," + base64.b64encode(reference).decode()]
+            return httpx.Response(200, json={"task_id": "remote-video"})
+        assert model.encode() in request.content and (reference in request.content or base64.b64encode(reference) in request.content)
+        return httpx.Response(200, json={"data": [{"b64_json": "YQ=="}, {"b64_json": "Yg=="}]})
+
+    monkeypatch.setattr("app.core.storage.download_file", download)
+    monkeypatch.setattr("app.core.storage.get_file_info", head)
+    monkeypatch.setattr("app.core.storage.upload_file", upload)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as http:
+        worker = TaskWorker(sessions, client=http)
+        try:
+            for _ in range(2 if modality == "video" else 1):
+                await worker.tick()
+                await asyncio.gather(*list(worker.jobs.values()))
+        finally:
+            worker.text_pool.shutdown(wait=True)
+    events = await api.get(url, params={"follow": "false"})
+    items = [json.loads(line[6:]) for line in events.text.splitlines() if line.startswith("data: ")]
+    assert items[-1]["type"] == "task.completed"
+    assert any(item["type"] == "task.progress" for item in items)
+    assert items[-2]["type"] == "artifact.created"
+    receipt = items[-1]["payload"]
+    assert len(posts) == 1 and uploads == ([b"v"] if modality == "video" else [b"a", b"b"])
+    assert len({item["file_id"] for item in receipt["artifacts"]}) == len(uploads)
+    snapshot = await api.get(url.removesuffix("/events"))
+    assert snapshot.json()["data"][-1]["media_receipt"] == receipt
+    assert snapshot.json()["meta"]["cursor"] == items[-1]["cursor"]

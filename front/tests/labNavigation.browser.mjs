@@ -77,10 +77,11 @@ try {
       deleteAttempts += 1
       return respond(null)
     }
-    const mediaRun = url.pathname.match(/\/labs\/(image|video)\/sessions\/([^/]+)\/tasks$/)
+    const mediaRun = url.pathname.match(/\/chat\/sessions\/media\/([^/]+)\/turns$/)
     if (mediaRun) {
-      const [, mode, sessionId] = mediaRun
+      const sessionId = mediaRun[1]
       const body = request.postDataJSON()
+      const mode = body.operation_input.kind.split('_')[0]
       mediaRequests.push({ mode, sessionId, prompt: body.execution_prompt })
       const messages = [
         message(mode + '-user', sessionId, 'user', body.execution_prompt, 1),
@@ -102,7 +103,8 @@ try {
           }),
       })
     }
-    if (url.pathname.endsWith('/image-1/messages') && imageLookupPending) prematureImageMessages.push(url.pathname)
+    if (url.pathname.endsWith('/chat/sessions/media/image-1') && imageLookupPending) prematureImageMessages.push(url.pathname)
+    if (/\/chat\/sessions\/media\/[^/]+$/.test(url.pathname)) return respond(persisted.get(url.pathname.split('/').at(-1)) ?? [])
     if (url.pathname.endsWith('/messages')) return respond(persisted.get(url.pathname.split('/').at(-2)) ?? [])
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])

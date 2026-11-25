@@ -40,7 +40,8 @@ try {
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (request.method() === 'DELETE') deletions.push(url.pathname)
     if (url.pathname.endsWith('/experiment-sessions')) return respond(url.searchParams.get('lab_type') === 'image' ? sessions : [])
-    if (url.pathname.endsWith('/models')) return respond({ items: [{ id: 'model-1', name: '验收图片模型', category: 'image' }] })
+    if (url.pathname.endsWith('/model-settings')) return respond({ default_image_model_id: 'model-1' })
+    if (url.pathname.endsWith('/models')) return respond({ items: [{ id: 'other', name: '其他图片模型', category: 'image' }, { id: 'model-1', name: '验收图片模型', category: 'image' }] })
     if (url.pathname.endsWith('/files/upload')) {
       const attempt = ++uploadCount
       await uploadGate
@@ -59,7 +60,7 @@ try {
       if (url.pathname.includes('/file-6/')) return route.fulfill({ status: 404 })
       return route.fulfill({ body: png, contentType: 'image/png' })
     }
-    const run = url.pathname.match(/\/labs\/image\/sessions\/([^/]+)\/tasks$/)
+    const run = url.pathname.match(/\/chat\/sessions\/media\/([^/]+)\/turns$/)
     if (run) {
       const body = request.postDataJSON()
       submissions.push({ session: run[1], body })

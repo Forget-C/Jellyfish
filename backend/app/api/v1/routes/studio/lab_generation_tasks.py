@@ -6,11 +6,11 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.contracts.generation import (
     GenerationCommand,
@@ -25,11 +25,14 @@ from app.core.contracts.generation import (
 )
 from app.core.contracts.media import ImageMediaInput, VideoMediaInput
 from app.dependencies import get_db
-from app.models.experiment_sessions import ExperimentSession
+from app.models.experiment_sessions import ExperimentSession, ExperimentSessionEvent
+from app.services.chat.stream import session_event_stream
+from app.services.studio.media_receipts import publish_media_fact
 from app.schemas.common import ApiResponse, created_response
 from app.schemas.interaction import InteractionRequestHeader
 from app.services.studio.experiment_interaction import find_media_receipt, interaction_request_payload
-from app.schemas.studio.experiment_sessions import ExperimentTaskCreated
+from app.schemas.studio.experiment_sessions import ExperimentMessageRead, ExperimentTaskCreated
+from app.api.v1.routes.studio.experiment_sessions import experiment_history_page
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.submission import GenerationSubmitter
 from app.services.studio.experiment_messages import (
@@ -117,6 +120,8 @@ async def _submit_lab_task(
             ),
         ],
     )
+    await db.flush()
+    await publish_media_fact(db, accepted.task_id, session_id)
     session.updated_at = func.now()
     await db.commit()
     await db.refresh(user_message)
@@ -163,3 +168,52 @@ async def submit_video_lab_generation_task(
 
     _require_operation_request(body, modality=GenerationModality.video)
     return await _submit_lab_task(db, session_id=session_id, modality=GenerationModality.video, body=body, request_id=idempotency_key)
+
+
+chat_router = APIRouter()
+
+
+@chat_router.post('/media/{session_id}/turns', response_model=ApiResponse[ExperimentTaskCreated],
+                  status_code=201, operation_id='chat_media_send')
+async def send_media_turn(session_id: str, body: GenerationSubmitRequest, db: AsyncSession = Depends(get_db),
+                          idempotency_key: InteractionRequestHeader = None):
+    """Submit one direct trial; the bound session must match the operation and media."""
+    modality = GenerationModality.image if isinstance(body.operation_input, ImageGenerationOperationInput) else GenerationModality.video
+    _require_operation_request(body, modality=modality)
+    return await _submit_lab_task(db, session_id=session_id, modality=modality, body=body, request_id=idempotency_key)
+
+
+async def _media_session(db, session_id):
+    session = await db.get(ExperimentSession, session_id)
+    if session is None or session.lab_type not in ('image', 'video'):
+        raise HTTPException(404, 'Media trial session not found')
+    return session
+
+
+@chat_router.get('/media/{session_id}', response_model=ApiResponse[list[ExperimentMessageRead]], operation_id='chat_media_snapshot')
+async def media_snapshot(session_id: str, page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=100),
+                         db: AsyncSession = Depends(get_db)):
+    """Restore submitted parameters, references and current task receipts."""
+    session = await _media_session(db, session_id)
+    cursor = await db.scalar(select(func.max(ExperimentSessionEvent.cursor))
+                             .where(ExperimentSessionEvent.session_id == session_id))
+    response = await experiment_history_page(db, session, page, page_size)
+    response.meta = dict(response.meta, cursor=cursor or 0, capabilities=('snapshot', 'send', 'events', 'task_receipt'))
+    return response
+
+
+@chat_router.get('/media/{session_id}/events', operation_id='chat_media_events',
+                 responses={200: {'content': {'text/event-stream': {}}}})
+async def media_events(session_id: str, after: Annotated[int, Query(ge=0)] = 0, follow: bool = True,
+                       last_event_id: Annotated[int, Header(ge=0)] = 0,
+                       db: AsyncSession = Depends(get_db, scope='function')):
+    """Replay task facts committed after the client's cursor, then follow new events."""
+    from app.services.studio.session_events import session_event_page
+    await _media_session(db, session_id)
+    sessions = async_sessionmaker(db.bind, expire_on_commit=False)
+
+    async def page(cursor):
+        async with sessions() as session:
+            return await session_event_page(session, session_id, cursor)
+
+    return await session_event_stream(page, max(after, last_event_id), follow=follow)

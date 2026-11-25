@@ -1,77 +1,59 @@
-import { useUiText } from '../../../../uiText'
 import { useEffect, useState } from 'react'
-import { FilmService, type TaskResultRead } from '../../../../services/generated'
+import type { MediaTaskReceipt } from '../../../../services/generated'
+import { mediaTrial } from '../../../../services/mediaTrial'
 
-type TaskMessage = { taskId?: string; status?: string }
-type TaskRead = { result?: TaskResultRead; unavailable: boolean }
+type TaskMessage = { taskId?: string; status?: string; receipt?: MediaTaskReceipt }
+const isTerminal = (status?: string) => status === 'succeeded' || status === 'failed' || status === 'cancelled'
 
-function isTerminal(status?: string) {
-  return status === 'succeeded' || status === 'failed' || status === 'cancelled'
-}
-
-/** 合成历史与轮询状态；读取错误保留可靠状态，媒体解析由各模态提供。 */
+/** Replay committed receipts and overlay them on the paginated, authoritative history. */
 export function useExperimentTaskResults<T extends TaskMessage>(
-  messages: T[], refreshHistory: () => Promise<void>, projectMedia: (message: T, result: TaskResultRead) => T,
+  sessionId: string | undefined, snapshotCursor: number | undefined, messages: T[],
+  refreshHistory: () => Promise<void>, projectMedia: (message: T, receipt: MediaTaskReceipt) => T,
 ) {
-  const uiText = useUiText()
-  const [reads, setReads] = useState<Record<string, TaskRead>>({})
+  const [reads, setReads] = useState<Record<string, MediaTaskReceipt>>({})
+  const [failed, setFailed] = useState(false)
   const [retry, setRetry] = useState(0)
-  const runningTaskId = messages.find((message) => {
-    if (!message.taskId || isTerminal(message.status)) return false
-    const status = reads[message.taskId]?.result?.status ?? message.status
-    return status === 'queued' || status === 'running' || status === 'pending'
-  })?.taskId
 
   useEffect(() => {
-    if (!runningTaskId) return
-    const taskId = runningTaskId
-    let cancelled = false
+    setReads({})
+    setFailed(false)
+    if (!sessionId) return
+    const id = sessionId
+    const abort = new AbortController()
     let timer: number | undefined
-    let request: ReturnType<typeof FilmService.getTaskResultApiV1FilmTasksTaskIdResultGet> | undefined
+    let cursor = snapshotCursor ?? 0
 
-    const poll = async () => {
+    const consume = async () => {
       try {
-        request = FilmService.getTaskResultApiV1FilmTasksTaskIdResultGet({ taskId })
-        const { data } = await request
-        if (cancelled) return
-        if (!data || data.task_id !== taskId) throw new Error(uiText("任务状态不可用"))
-        setReads((current) => ({ ...current, [taskId]: { result: data, unavailable: false } }))
-        if (isTerminal(data.status)) {
-          void refreshHistory()
-          return
+        for await (const event of mediaTrial.events(id, cursor, abort.signal)) {
+          if (abort.signal.aborted) return
+          cursor = event.cursor
+          setFailed(false)
+          setReads(current => ({ ...current, [event.payload.task_id]: event.payload }))
+          if (event.type === 'task.accepted' || isTerminal(event.payload.status)) void refreshHistory()
         }
       } catch {
-        if (cancelled) return
-        setReads((current) => ({ ...current, [taskId]: { result: current[taskId]?.result, unavailable: true } }))
+        if (!abort.signal.aborted) setFailed(true)
       }
-      // 上一次读取结束后再调度，避免慢响应覆盖更新的任务状态。
-      if (!cancelled) timer = window.setTimeout(() => void poll(), 1500)
+      if (!abort.signal.aborted) timer = window.setTimeout(() => void consume(), 1500)
     }
-    void poll()
+    void consume()
     return () => {
-      cancelled = true
+      abort.abort()
       window.clearTimeout(timer)
-      request?.cancel()
     }
-  }, [uiText, refreshHistory, retry, runningTaskId])
+  }, [sessionId, snapshotCursor, refreshHistory, retry])
 
-  // 历史已确认终态时，旧的轮询进度和读取失败不再代表当前状态。
-  const currentReads = { ...reads }
-  for (const { taskId, status } of messages) {
-    if (!taskId || !isTerminal(status)) continue
-    const result = reads[taskId]?.result
-    if (result?.status === status) currentReads[taskId] = { result, unavailable: false }
-    else delete currentReads[taskId]
-  }
-
-  const currentMessages = messages.map(message => {
-    const read = message.taskId ? currentReads[message.taskId] : undefined
-    const result = read?.result
+  const currentMessages = messages.map(item => {
+    const observed = item.taskId ? reads[item.taskId] : undefined
+    const receipt = isTerminal(item.status) ? item.receipt : observed ?? item.receipt
+    const status = receipt?.status ?? item.status
     return {
-      ...(result ? projectMedia(message, result) : message),
-      ...(result ? { status: result.status, progress: result.progress, error: result.error } : {}),
-      unavailable: read?.unavailable,
+      ...(receipt ? projectMedia(item, receipt) : item),
+      ...(receipt ? { receipt, status, progress: receipt.progress, error: receipt.error } : {}),
+      unavailable: Boolean(item.taskId && !isTerminal(status) && failed),
     }
   })
-  return { messages: currentMessages, runningTaskId, retryStatus: () => setRetry((current) => current + 1) }
+  const runningTaskId = currentMessages.find(item => item.taskId && !isTerminal(item.status))?.taskId
+  return { messages: currentMessages, runningTaskId, retryStatus: () => setRetry(current => current + 1) }
 }

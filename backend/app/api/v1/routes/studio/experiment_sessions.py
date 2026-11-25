@@ -83,7 +83,12 @@ async def list_experiment_messages(session_id: str, db: AsyncSession = Depends(g
     session = await db.get(ExperimentSession, session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Experiment session not found")
-    rows = (await db.execute(select(ExperimentMessage).where(ExperimentMessage.session_id == session_id).order_by(ExperimentMessage.sequence.desc()).offset((page - 1) * page_size).limit(page_size))).scalars().all()
+    return await experiment_history_page(db, session, page, page_size)
+
+
+async def experiment_history_page(db, session, page, page_size):
+    """Return one ordered history page and its recovery cursor."""
+    rows = (await db.execute(select(ExperimentMessage).where(ExperimentMessage.session_id == session.id).order_by(ExperimentMessage.sequence.desc()).offset((page - 1) * page_size).limit(page_size))).scalars().all()
     rows.reverse()
     capabilities = ('snapshot', 'send', 'events', 'stop') if session.lab_type == 'text' else ('snapshot', 'send', 'task_receipt')
     snapshot = InteractionSnapshot(session_id=session.id, cursor=session.message_sequence, capabilities=capabilities)

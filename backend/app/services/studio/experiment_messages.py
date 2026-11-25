@@ -63,6 +63,8 @@ async def read_experiment_messages(
     ))).all()) if task_ids else {}
     task_ids = {message.task_id for message in messages if owners.get(message.task_id) == message.session_id}
     tasks = await TaskQueries(db).results(list(task_ids))
+    from app.services.studio.media_receipts import media_task_receipts
+    receipts = await media_task_receipts(db, tasks)
     result = []
     for message in messages:
         view = ExperimentMessageRead.model_validate(message)
@@ -80,7 +82,8 @@ async def read_experiment_messages(
                     payload["result"] = task.result
                 if task.error:
                     payload["error"] = task.error
-                view = view.model_copy(update={"status": task.status.value, "payload": payload})
+                view = view.model_copy(update={"status": task.status.value, "payload": payload,
+                                              "media_receipt": receipts.get(message.task_id)})
             else:
                 view = view.model_copy(update={"status": None, "payload": {**payload, "error": "关联任务不存在"}})
         result.append(view)

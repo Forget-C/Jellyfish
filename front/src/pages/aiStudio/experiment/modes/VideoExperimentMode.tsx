@@ -1,16 +1,19 @@
 import { useUiText } from '../../../../uiText'
+import { mediaTrial } from '../../../../services/mediaTrial'
+import { useTrialModelPreference } from '../hooks/useTrialModelPreference'
+import { MediaTaskDetails } from '../components/MediaTaskDetails'
 import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
 /**
  * 视频实验室模态组件。
  *
  * 页面壳负责会话选择和布局；本组件只保留视频特有的帧输入、异步任务轮询和结果展示。
  */
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, InputNumber, Select, Tag, message } from 'antd'
 import {
   LlmService,
-  StudioGenerationTasksService,
+  type MediaTaskReceipt,
   type ExperimentMessageRead,
   type VideoGenerationOptionsRead,
 } from '../../../../services/generated'
@@ -38,6 +41,7 @@ import { focusExperimentPromptEditor, orderedMediaReferences, readExperimentInpu
 import type { ExperimentLabType } from '../hooks/useExperimentSessions'
 
 type VideoMessage = {
+  receipt?: MediaTaskReceipt
   id: string; role: 'user' | 'assistant'; content: string; taskId?: string; status?: string
   progress?: number | null; videoUrl?: string; error?: string; ratio?: string
   resolution?: string
@@ -78,7 +82,7 @@ function toVideoMessage(item: ExperimentMessageRead): VideoMessage {
   const operation = inputSnapshot?.operation_input
   return {
     id: item.id, role: item.role === 'user' ? 'user' : 'assistant', content: item.content ?? '',
-    taskId: item.task_id ?? undefined, status: item.status ?? undefined,
+    receipt: item.media_receipt ?? undefined, taskId: item.task_id ?? undefined, status: item.status ?? undefined,
     progress: typeof payload.progress === 'number' ? payload.progress : undefined,
     videoUrl: extractVideoUrl(payload.result as Record<string, unknown> | undefined),
     error: typeof payload.error === 'string' ? payload.error : undefined,
@@ -103,9 +107,9 @@ type VideoExperimentModeProps = {
 /** 组合视频模态的输入、历史和任务轮询，并交给统一实验室页面壳渲染。 */
 export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMessages, render }: VideoExperimentModeProps) {
   const uiText = useUiText()
-  const history = useExperimentHistory(sessionId)
+  const history = useExperimentHistory(sessionId, { readPage: mediaTrial.snapshot })
   const { files, libraryState, loadLibrary, onUploaded } = useExperimentLibrary('video')
-  const [modelId, setModelId] = useState<string>()
+  const [modelId, setModelId, setSoleModel] = useTrialModelPreference('video', sessionId)
   const [draft, setDraft] = useState('')
   const {
     templates, selectedTemplate, templateValues, setTemplateValues, templatesLoading, templatesFailed,
@@ -127,9 +131,9 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
 
   const currentPrompt = selectedTemplate ? renderPromptTemplate(selectedTemplate.content, templateValues).trim() : draft.trim()
   const persistedMessages = history.messages.map(toVideoMessage)
-  const { messages, runningTaskId, retryStatus } = useExperimentTaskResults(persistedMessages, history.refresh, (item, result) => ({
+  const { messages, runningTaskId, retryStatus } = useExperimentTaskResults(sessionId, history.eventCursor, persistedMessages, history.refresh, (item, result) => ({
     ...item,
-    videoUrl: result.status === 'succeeded' ? extractVideoUrl(result.generation_delivery ?? result.result) ?? item.videoUrl : item.videoUrl,
+    videoUrl: buildFileDownloadUrl(result.artifacts?.find(file => !file.deleted && file.media_type === 'video')?.file_id) ?? item.videoUrl,
   }))
 
   const references = { frames: frameFileIds, subjects: subjectReferences }
@@ -158,9 +162,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   )
   const disabled = submitting || Boolean(runningTaskId)
 
-  const { models, modelsLoading, modelsFailed, loadModels } = useExperimentModels('video', id => {
-    if (!modelId) selectModel(id)
-  })
+  const { models, modelsLoading, modelsFailed, loadModels } = useExperimentModels('video', setSoleModel)
 
   /** 以请求代次关联当前模型，晚到的能力响应不能覆盖新选择。 */
   const loadCapability = async (nextModelId?: string) => {
@@ -186,8 +188,9 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     setModelId(nextModelId)
     setResolution(undefined)
     setSeconds(undefined)
-    void loadCapability(nextModelId)
   }
+
+  useEffect(() => { void loadCapability(modelId) }, [modelId])
 
   /** 先保证会话落库，再经固定统一入口创建视频任务，避免草稿态产生空会话。 */
   const submit = async () => {
@@ -197,7 +200,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     await submission.submitTask({
       ensureSession: () => sessionId ? Promise.resolve({ id: sessionId }) : ensureSession('video'),
       request: async (targetSessionId, idempotencyKey) => {
-        const response = await StudioGenerationTasksService.submitVideoLabGenerationTaskApiV1StudioGenerationTasksLabsVideoSessionsSessionIdTasksPost({
+        const response = await mediaTrial.send({
           sessionId: targetSessionId, idempotencyKey,
           requestBody: {
             model_id: modelId,
@@ -256,7 +259,8 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
       >
           {isUser || item.content !== '视频生成任务已提交，正在等待生成结果。' ? item.content : null}
           {isUser ? <><ExperimentHistoryReferences files={files} references={[...(['first', 'last', 'key'] as FrameSlot[]).flatMap((slot) => item.frameFileIds?.[slot] ? [{ id: item.frameFileIds[slot]!, label: uiText(frameLabels[slot]) }] : []), ...(item.subjectReferences ?? []).flatMap((subject) => subject.media.filter(file => file.kind === 'image').map(({ id }) => ({ id, label: uiText("{{name}}图片", { name: subject.name }) })))]} />{(item.subjectReferences ?? []).flatMap((subject) => subject.media.filter(file => file.kind === 'video').map(({ id }) => <Tag key={`${subject.id}:${id}`} className="mt-1">{subject.name}{uiText("视频：")}{files.find((file) => file.id === id)?.name ?? id}</Tag>))}{item.ratio ? <div className="mt-2 text-xs text-slate-500">{uiText("画幅：")}{item.ratio}</div> : null}</> : null}
-          {item.error ? <div className="mt-2 text-sm text-red-600">{item.error}</div> : null}
+          {item.receipt && <MediaTaskDetails receipt={item.receipt} />}
+            {item.error ? <div className="mt-2 text-sm text-red-600">{item.error}</div> : null}
           {item.videoUrl ? <ExperimentResultMedia kind="video" urls={[item.videoUrl]} /> : null}
       </ExperimentMessageBubble>
     })}

@@ -96,7 +96,7 @@ class TaskService:
         )
         if result.rowcount:
             row = await self.db.get(Task, task_id, populate_existing=True)
-            await self._sync_canvas(row)
+            await self._sync_target(row)
         return bool(result.rowcount)
 
     async def claim_next(self, *, worker_id: str, kinds: Sequence[str], timeout_seconds: int = 1800) -> Task | None:
@@ -139,7 +139,7 @@ class TaskService:
             row.error_code = row.error_message = None
         await self.db.flush()
         if tracked_approval:
-            await self._sync_canvas(row)
+            await self._sync_target(row)
         return row
 
     async def begin_provider_submission(self, task_id: str, *, worker_id: str) -> bool:
@@ -153,7 +153,7 @@ class TaskService:
             return False
         row.stage = SUBMISSION_IN_FLIGHT
         await self.db.flush()
-        await self._sync_canvas(row)
+        await self._sync_target(row)
         return True
 
     async def mark_provider_submission_unknown(self, task_id: str) -> bool:
@@ -170,7 +170,7 @@ class TaskService:
             row.error_code = SUBMISSION_UNKNOWN
             row.error_message = '供应商受理结果未确定，系统会保留原任务等待核对'
             await self.db.flush()
-            await self._sync_canvas(row)
+            await self._sync_target(row)
         return True
 
     async def record_poll_result(
@@ -229,7 +229,7 @@ class TaskService:
                               .values(progress=progress, stage=stage))
         row = await self._lock(task_id)
         if row is not None and row.status == TaskStatus.running:
-            await self._sync_canvas(row)
+            await self._sync_target(row)
 
     async def checkpoint_storyboard_review(self, task_id: str, draft: dict, *, stage: str) -> bool:
         """Persist the validated draft and repair progress before calling the model."""
@@ -253,7 +253,7 @@ class TaskService:
         if row.status == TaskStatus.queued or row.stage == SUBMISSION_UNKNOWN:
             return await self.finish(task_id, cancelled=True)
         await self.db.flush()
-        await self._sync_canvas(row)
+        await self._sync_target(row)
         return row
 
     async def add_output(self, task_id: str, *, ordinal: int, file_id: str) -> TaskOutput | None:
@@ -316,7 +316,7 @@ class TaskService:
         if status == TaskStatus.succeeded:
             row.progress = 100
         await self.db.flush()
-        await self._sync_canvas(row)
+        await self._sync_target(row)
         return row
 
     async def interrupt_previous_workers(self, *, worker_id: str) -> int:
@@ -367,11 +367,14 @@ class TaskService:
                                     .execution_options(populate_existing=True))
 
 
-    async def _sync_canvas(self, row: Task, *, delta: str | None = None) -> None:
-        """Canvas fact hook keeps Task and business events in the same transaction."""
+    async def _sync_target(self, row: Task, *, delta: str | None = None) -> None:
+        """Publish target updates in the transaction that changes the task."""
         if row.target_type == 'canvas_node':
             from app.services.generation_canvas.settlement import sync_task_fact
             await sync_task_fact(self.db, row, delta=delta)
+        elif row.target_type == "experiment_session" and row.kind in MEDIA_KINDS:
+            from app.services.studio.media_receipts import publish_media_fact
+            await publish_media_fact(self.db, row.id, row.target_id)
 
     async def append_canvas_text(self, task_id: str, delta: str) -> bool:
         """Persist a provider chunk under the Task lock; cancellation wins before append."""
@@ -384,5 +387,5 @@ class TaskService:
             raise ValueError('stream target is not a canvas node')
         row.stage = 'generating'
         await self.db.flush()
-        await self._sync_canvas(row, delta=delta)
+        await self._sync_target(row, delta=delta)
         return True

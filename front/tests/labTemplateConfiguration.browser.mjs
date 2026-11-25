@@ -67,8 +67,10 @@ try {
       ] })
     }
     const run = url.pathname.match(/\/labs\/(text|image|video)\/sessions\/([^/]+)\/(stream|tasks)$/)
-    if (run) {
-      const [, mode, sessionId] = run
+    const mediaRun = url.pathname.match(/\/chat\/sessions\/media\/([^/]+)\/turns$/)
+    if (run || mediaRun) {
+      const mode = run?.[1] ?? request.postDataJSON().operation_input.kind.split('_')[0]
+      const sessionId = run?.[2] ?? mediaRun[1]
       const requestBody = request.postDataJSON()
       const content = requestBody.content ?? requestBody.execution_prompt
       submitted.push({ mode, content })
@@ -85,6 +87,7 @@ try {
       persisted.set(sessionId, messages)
       return respond({ task_id: runId, messages })
     }
+    if (/\/chat\/sessions\/media\/[^/]+$/.test(url.pathname)) return respond(persisted.get(url.pathname.split('/').at(-1)) ?? [])
     if (url.pathname.endsWith('/messages')) return respond(persisted.get(url.pathname.split('/').at(-2)) ?? [])
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])
@@ -174,7 +177,7 @@ try {
   }
   const send = async (mode) => {
     await selectModel(mode)
-    const run = page.waitForResponse(response => response.url().includes(`/labs/${mode}/sessions/`) && response.request().method() === 'POST')
+    const run = page.waitForResponse(response => response.url().includes(mode === 'text' ? '/labs/text/sessions/' : '/chat/sessions/media/') && response.request().method() === 'POST')
     await page.getByRole('button', { name: /^发\s*送$/ }).click()
     assert.ok((await run).ok())
     await page.getByText('测试结果', { exact: true }).waitFor()
