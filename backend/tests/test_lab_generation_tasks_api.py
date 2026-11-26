@@ -230,6 +230,18 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         )
         assert submitted.status_code == concurrent.status_code == 202, (submitted.text, concurrent.text)
         assert submitted.json() == concurrent.json()
+        receipt_url = session_url + "/requests/same-lab-request"
+        bound_receipt = await client.get(receipt_url)
+        assert bound_receipt.status_code == 200, bound_receipt.text
+        assert bound_receipt.json()["data"] == submitted.json()["data"]
+        assert bound_receipt.headers["cache-control"] == "no-store"
+        unknown = await client.get(session_url + "/requests/unknown-request")
+        assert unknown.status_code == 404 and unknown.headers["cache-control"] == "no-store"
+        wrong_kind = "video" if modality == "image" else "image"
+        assert (await client.get(base + f"/chat/sessions/{wrong_kind}/{session_id}/requests/same-lab-request")).status_code == 404
+        another = await client.post(base + "/experiment-sessions", json={"lab_type": modality})
+        another_id = another.json()["data"]["id"]
+        assert (await client.get(base + f"/chat/sessions/{modality}/{another_id}/requests/same-lab-request")).status_code == 404
         reconnected = await client.get(base + f"/experiment-sessions/{session_id}/interaction/requests/same-lab-request")
         assert reconnected.status_code == 200, reconnected.text
         created_task = reconnected.json()["data"]
@@ -299,6 +311,8 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
             replayed = await client.get(event_url, params={"follow": "false", "after": submitted.json()["data"]["cursor"]})
             first = next(json.loads(line[6:]) for line in replayed.text.splitlines() if line.startswith("data: "))
             assert first == restored_event
+            assert (await client.get(receipt_url)).json()["data"] == submitted.json()["data"]
+            assert (await client.get(event_url, params=params)).text == replayed.text
 
 
 async def complete_media_trial(sessions, api, url, snapshot_url, modality, model, monkeypatch, *, after):

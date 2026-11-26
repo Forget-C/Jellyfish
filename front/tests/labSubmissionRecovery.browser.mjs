@@ -20,6 +20,8 @@ const writes = []
 const requestHeaders = []
 let submission
 const histories = new Map()
+const receiptReads = []
+const receipts = new Map()
 let historyReads = 0
 let failHistory = false
 let modelsState = 'ready'
@@ -75,6 +77,15 @@ try {
       writes.push(request.postDataJSON())
       requestHeaders.push(request.headers())
       return submission(route)
+    }
+    const receiptPath = url.pathname.match(/\/chat\/sessions\/(image|video)\/([^/]+)\/requests\/([^/]+)$/)
+    if (receiptPath) {
+      const [, kind, sessionId, requestId] = receiptPath
+      receiptReads.push({ kind, sessionId, requestId })
+      const receipt = receipts.get(requestId)
+      if (typeof receipt === 'function') return receipt(route, respond)
+      if (receipt?.session_id === sessionId) return respond(receipt)
+      return route.fulfill({ status: 404, json: { detail: '未查到请求' } })
     }
     if (/\/chat\/sessions\/(image|video)\/[^/]+\/snapshot$/.test(url.pathname)) {
       historyReads += 1
@@ -245,14 +256,19 @@ try {
   const lateRequest = new Promise(resolve => { lateEntered = resolve })
   let releaseLate
   const lateGate = new Promise(resolve => { releaseLate = resolve })
-  submission = async route => {
-    lateEntered()
-    await lateGate
-    return route.fulfill({ json: { success: true, data: mediaTurnReceipt(route, { task_id: 'late-task', messages: [
-      historyMessage(imageSession, 'late-msg', 'task', '迟到的旧会话结果', 5, { task_id: 'late-task', status: 'succeeded' }),
-    ] }) } })
+  submission = route => {
+    const original = mediaTurnReceipt(route, { task_id: 'late-task' })
+    receipts.set(original.turn_id, async (_query, respond) => {
+      lateEntered()
+      await lateGate
+      return respond(original)
+    })
+    return route.abort('failed')
   }
-  await imageSubmit.dblclick()
+  await Promise.all([
+    page.waitForRequest(request => request.url().includes('/image-session/requests/')),
+    imageSubmit.dblclick(),
+  ])
   await lateRequest
   assert.equal(writes.length, 7, '双击只提交一次')
   assert.deepEqual(writes.at(-1).media.references.map(item => item.file_id), ['reference-a'])
@@ -261,7 +277,7 @@ try {
   await page.waitForURL(url => url.searchParams.get('session') === 'image-other')
   await imageInput.fill('新会话继续写作')
   await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/image-session/turns')),
+    page.waitForResponse(response => response.url().includes('/image-session/requests/')),
     releaseLate(),
   ])
   assert.equal(await imageInput.inputValue(), '新会话继续写作')
@@ -302,6 +318,34 @@ try {
   assert.equal(writes.at(-1).media.frames.first.file_id, 'reference-a')
   assert.deepEqual(writes.at(-1), writes.at(-2))
   await page.screenshot({ path: join(output, 'configured-retry.png'), animations: 'disabled' })
+
+  for (const mode of ['image', 'video']) {
+    await openLab(mode)
+    const activeInput = mode === 'image' ? imageInput : videoInput
+    const activeSubmit = mode === 'image' ? imageSubmit : videoSubmit
+    const sessionId = mode + '-session'
+    const recovered = labels[mode] + '原任务已恢复'
+    const previousWrites = writes.length
+    const previousReads = receiptReads.length
+    await activeInput.fill(labels[mode] + '发送回执丢失')
+    submission = route => {
+      const task = historyMessage(sessionId, mode + '-recovered', 'task', recovered, 10, {
+        task_id: mode + '-recovered', status: 'succeeded',
+      })
+      const original = mediaTurnReceipt(route, { task_id: task.task_id, messages: [task] })
+      receipts.set(original.turn_id, original)
+      histories.set(sessionId, [task])
+      return route.abort('failed')
+    }
+    await activeSubmit.click()
+    await page.getByText(recovered, { exact: true }).waitFor()
+    await page.getByText(labels[mode] + '生成任务已创建', { exact: true }).waitFor()
+    assert.equal(await activeInput.inputValue(), '')
+    assert.equal(writes.length, previousWrites + 1)
+    assert.deepEqual(receiptReads.slice(previousReads), [{
+      kind: mode, sessionId, requestId: requestHeaders.at(-1)['idempotency-key'],
+    }])
+  }
 
   await openLab('text')
   await textInput.fill('已接收但流意外断开')

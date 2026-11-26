@@ -2,10 +2,9 @@ import { useUiText } from '../../../../uiText'
 import { useLayoutEffect, useRef, useState } from 'react'
 import {
   ApiError,
-  StudioExperimentSessionsService,
-  type ExperimentMessageRead,
   type ExperimentTaskCreated,
 } from '../../../../services/generated'
+import { bindChatSession } from '../../../../services/chatSession'
 import { defaultTaskActionErrorMessage } from '../../components/taskActionHelpers'
 import type { ExperimentHistoryState } from './useExperimentHistory'
 
@@ -16,12 +15,14 @@ type Attempt = {
   input: string
 }
 
+type MediaKind = 'image' | 'video'
+
 type UncertainSubmission = {
   attempt: Attempt
   sessionId: string
   taskId?: string
   accepted?: boolean
-  recoverMedia?: boolean
+  recoverMedia?: MediaKind
   accept: () => void
 }
 
@@ -112,26 +113,29 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
     checkingRef.current = uncertain
     setNotice({ kind: 'checking', accepted: uncertain.accepted })
     try {
-      if (uncertain.recoverMedia && !uncertain.taskId) {
-        const receipt = await StudioExperimentSessionsService.experimentInteractionReceipt({
-          sessionId: uncertain.sessionId, requestId: uncertain.attempt.requestId,
-        }).catch(error => {
+      const recovered = uncertain.recoverMedia && !uncertain.taskId
+        ? await bindChatSession(uncertain.recoverMedia, uncertain.sessionId).mediaReceipt(uncertain.attempt.requestId).catch(error => {
           if (error instanceof ApiError && error.status === 404) return undefined
           throw error
         })
-        if (uncertainRef.current !== uncertain || !isCurrent(uncertain.attempt)) return
-        if (receipt?.data && hasTaskReceipt(receipt.data, uncertain.sessionId)) {
-          history.adoptCanonicalMessages(uncertain.sessionId, receipt.data.messages)
-          uncertainRef.current = undefined
-          setNotice(undefined)
-          uncertain.accept()
-          return
-        }
+        : undefined
+      if (uncertainRef.current !== uncertain || !isCurrent(uncertain.attempt)) return
+      if (recovered) {
+        uncertainRef.current = undefined
+        setNotice(undefined)
+        uncertain.accept()
+        // Result display follows the snapshot and event stream after confirming admission.
+        void history.readLatest(uncertain.sessionId).then(({data}) => {
+          if (isCurrent(uncertain.attempt) && Array.isArray(data)) {
+            history.adoptCanonicalMessages(uncertain.sessionId, data.filter(item => item.session_id === uncertain.sessionId))
+          }
+        }).catch(() => undefined)
+        return
       }
       const response = await history.readLatest(uncertain.sessionId)
       if (uncertainRef.current !== uncertain || !isCurrent(uncertain.attempt)) return
       if (!Array.isArray(response.data)) throw new Error(uiText("未返回会话历史"))
-      const messages: ExperimentMessageRead[] = response.data.filter(item => item.session_id === uncertain.sessionId)
+      const messages = response.data.filter(item => item.session_id === uncertain.sessionId)
       history.adoptCanonicalMessages(uncertain.sessionId, messages)
       // History alone cannot correlate identical prompts from separate submissions.
       const matched = uncertain.taskId && messages.find(item => item.role !== 'user' && (
@@ -155,7 +159,7 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
   }
 
   const checkOutcome = async (
-    attempt: Attempt, targetSessionId: string, accept: () => void, result?: { taskId?: string; accepted?: boolean; recoverMedia?: boolean },
+    attempt: Attempt, targetSessionId: string, accept: () => void, result?: { taskId?: string; accepted?: boolean; recoverMedia?: MediaKind },
   ) => {
     if (!isCurrent(attempt)) return
     uncertainRef.current = { attempt, sessionId: targetSessionId, accept, ...result }
@@ -163,7 +167,8 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
   }
 
   /** Both media modes consume the same durable task receipt, with mode-specific request bodies. */
-  const submitTask = async ({ ensureSession, request, onAccept, failureMessage }: {
+  const submitTask = async ({ kind, ensureSession, request, onAccept, failureMessage }: {
+    kind: MediaKind
     ensureSession: () => Promise<{ id: string }>
     request: (sessionId: string, requestId: string) => Promise<ExperimentTaskCreated | null | undefined>
     onAccept: (attempt: Attempt, sessionId: string) => void
@@ -184,12 +189,12 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
         history.adoptCanonicalMessages(session.id, created.messages.filter(item => item.session_id === session.id))
         accept()
       } else {
-        await checkOutcome(attempt, session.id, accept, { taskId: created?.task_id, recoverMedia: true })
+        await checkOutcome(attempt, session.id, accept, { taskId: created?.task_id, recoverMedia: kind })
       }
     } catch (error) {
       if (targetSessionId && !isRejectedSubmission(error)) {
         const acceptedSession = targetSessionId
-        await checkOutcome(attempt, targetSessionId, () => onAccept(attempt, acceptedSession), { recoverMedia: true })
+        await checkOutcome(attempt, targetSessionId, () => onAccept(attempt, acceptedSession), { recoverMedia: kind })
       } else {
         reject(attempt, defaultTaskActionErrorMessage(error, failureMessage))
       }

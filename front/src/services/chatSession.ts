@@ -112,6 +112,9 @@ export function bindChatSession(kind: BoundSend['kind'], sessionId: string) {
     answer(command: Omit<BoundAnswer, 'kind' | 'sessionId'>) {
       return receiveTurn(ChatService.chatBoundAnswer({...command, kind, sessionId}), sessionId, command.turnId)
     },
+    mediaReceipt(requestId: string) {
+      return receiveTurn(ChatService.chatBoundMediaReceipt({kind, sessionId, requestId}), sessionId, requestId)
+    },
     events(after = 0, signal = new AbortController().signal, connected?: () => void) {
       return sessionEvents(ChatService.chatBoundEvents({kind, sessionId, after}), sessionId, after, signal, connected)
     },
