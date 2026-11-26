@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { MediaTaskReceipt } from '../../../../services/generated'
-import { bindChatSession } from '../../../../services/chatSession'
+import type { bindChatSession } from '../../../../services/chatSession'
 
 type TaskMessage = { taskId?: string; status?: string; receipt?: MediaTaskReceipt }
 const isTerminal = (status?: string) => status === 'succeeded' || status === 'failed' || status === 'cancelled'
