@@ -606,4 +606,32 @@ export class ChatService {
             },
         });
     }
+    /**
+     * Bound Media Receipt
+     * Look up an accepted media request without changing its task or event history.
+     * @returns ApiResponse_ChatTurnReceipt_ Successful Response
+     * @throws ApiError
+     */
+    public static chatBoundMediaReceipt({
+        kind,
+        sessionId,
+        requestId,
+    }: {
+        kind: 'canvas' | 'chat' | 'text' | 'image' | 'video',
+        sessionId: string,
+        requestId: string,
+    }): CancelablePromise<ApiResponse_ChatTurnReceipt_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/chat/sessions/{kind}/{session_id}/requests/{request_id}',
+            path: {
+                'kind': kind,
+                'session_id': sessionId,
+                'request_id': requestId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
 }

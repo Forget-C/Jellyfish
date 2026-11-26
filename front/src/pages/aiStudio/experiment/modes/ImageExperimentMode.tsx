@@ -154,6 +154,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
     if (!currentPrompt) return message.warning(selectedTemplate ? uiText("请填写模板变量，生成有效提示词") : uiText("请输入图片提示词"))
     if (disabled) return
     await submission.submitTask({
+      kind: 'image',
       ensureSession: () => sessionId ? Promise.resolve({ id: sessionId }) : ensureSession('image'),
       request: async (targetSessionId, idempotencyKey) => {
         const target = session ?? bindChatSession('image', targetSessionId)

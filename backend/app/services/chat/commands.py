@@ -7,6 +7,7 @@ from app.services.chat import laboratory
 from app.services.chat.admission import admit_turn
 from app.services.generation_canvas.assistant import CanvasAssistant
 from app.services.studio import text_trials
+from app.services.studio.experiment_interaction import find_media_request
 from app.services.studio.media_trials import submit_media_trial
 from app.services.studio.session_events import turn_replay_cursor
 
@@ -35,6 +36,14 @@ async def send(db, session_id, owner, command, idempotency_key):
         turn_id = idempotency_key or result.messages[-1].id
         cursor = await turn_replay_cursor(db, session_id, turn_id)
     return ChatTurnReceipt(session_id=session_id, turn_id=turn_id, cursor=cursor)
+
+
+async def media_request_receipt(db, session_id: str, request_id: str) -> ChatTurnReceipt | None:
+    """Return the original receipt without reading current task state or admitting work."""
+    if await find_media_request(db, session_id, request_id) is None:
+        return None
+    cursor = await turn_replay_cursor(db, session_id, request_id)
+    return ChatTurnReceipt(session_id=session_id, turn_id=request_id, cursor=cursor)
 
 
 async def answer(db, session_id, turn_id, owner, command):

@@ -45,12 +45,17 @@ async def text_stream_result(db, session_id: str, task_id: str):
     ))
 
 
-async def find_media_receipt(db, session_id: str, request_id: str, *, body=None) -> ExperimentTaskCreated | None:
-    """Replay the paired messages and their current task read model without resubmitting."""
-    task_message = await db.scalar(select(ExperimentMessage).where(
+async def find_media_request(db, session_id: str, request_id: str):
+    """Read the task message bound to a committed media request identity."""
+    return await db.scalar(select(ExperimentMessage).where(
         ExperimentMessage.session_id == session_id, ExperimentMessage.role == 'task',
         ExperimentMessage.payload[_REQUEST_KEY].as_string() == request_id,
     ))
+
+
+async def find_media_receipt(db, session_id: str, request_id: str, *, body=None) -> ExperimentTaskCreated | None:
+    """Replay the paired messages and their current task read model without resubmitting."""
+    task_message = await find_media_request(db, session_id, request_id)
     if task_message is None:
         return None
     if body is not None and task_message.payload[_DIGEST_KEY] != interaction_request_payload(request_id, body)[_DIGEST_KEY]:

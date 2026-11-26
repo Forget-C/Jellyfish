@@ -201,6 +201,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     if (!currentPrompt) return message.warning(selectedTemplate ? uiText("请填写模板变量，生成有效提示词") : uiText("请输入视频提示词"))
     if (disabled || capabilityBlocked || ratioConflict || durationConflict || modeConflict || referenceIssues.length) return
     await submission.submitTask({
+      kind: 'video',
       ensureSession: () => sessionId ? Promise.resolve({ id: sessionId }) : ensureSession('video'),
       request: async (targetSessionId, idempotencyKey) => {
         const target = session ?? bindChatSession('video', targetSessionId)

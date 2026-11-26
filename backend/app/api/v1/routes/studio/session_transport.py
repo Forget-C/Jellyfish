@@ -1,8 +1,8 @@
 """Send a turn or follow a session without client-side routing information."""
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from fastapi.responses import Response, StreamingResponse
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import SkipValidation, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -13,7 +13,7 @@ from app.models.experiment_sessions import ExperimentSession
 from app.models.generation_canvas import GenerationCanvas
 from app.schemas.chat import ChatEvent, ChatSessionKind, ChatSessionSnapshot, ChatTurnReceipt, TrialChatHistory
 from app.schemas.canvas_assistant import CanvasAssistantMessage, CanvasAssistantQuestionAnswer
-from app.schemas.common import ApiResponse, success_response
+from app.schemas.common import ApiResponse, error_response, success_response
 from app.schemas.interaction import InteractionRequestHeader
 from app.schemas.studio.lab_chat import ArtifactAnswer, LabChatCommand
 from app.schemas.studio.text_lab import TextLabRunRequest
@@ -134,6 +134,22 @@ async def send_bound_turn(kind: ChatSessionKind, session_id: str, body: Command,
     if kind in ('image', 'video') and not idempotency_key:
         raise HTTPException(422, 'Idempotency-Key required')
     return await _send_turn(session_id, body, db, idempotency_key, owner)
+
+
+@router.get('/{kind}/{session_id}/requests/{request_id}', operation_id='chat_bound_media_receipt',
+            response_model=ApiResponse[ChatTurnReceipt])
+async def bound_media_receipt(kind: ChatSessionKind, session_id: str, db: Database, response: Response,
+                              request_id: Annotated[str, Path(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')]):
+    """Look up an accepted media request without changing its task or event history."""
+    await typed_session_owner(db, kind, session_id)
+    if kind not in ('image', 'video'):
+        raise HTTPException(404, 'Chat session does not support media receipts')
+    receipt = await commands.media_request_receipt(db, session_id, request_id)
+    if receipt is None:
+        return JSONResponse(status_code=404, headers={'Cache-Control': 'no-store'},
+                            content=error_response(code=404, message='Laboratory interaction request not found').model_dump())
+    response.headers['Cache-Control'] = 'no-store'
+    return success_response(receipt)
 
 
 @router.post('/{kind}/{session_id}/turns/{turn_id}/answer', operation_id='chat_bound_answer',
