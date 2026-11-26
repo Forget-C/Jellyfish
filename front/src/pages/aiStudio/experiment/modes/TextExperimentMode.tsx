@@ -328,7 +328,7 @@ export function TextExperimentMode({
               loading={stopState === 'requesting'}
               disabled={!activeRunId || stopState === 'requested'}
               onClick={() => { void handleStop().catch(() => {}) }}>{uiText("停止")}</Button> : null}
-            submitting={submitting && !disconnected}
+            submitting={submitting}
             submitDisabled={busy || stopState === 'requesting' || submission.outcomePending || Boolean(sessionId && historyState.loading)}
             onSubmit={() => void handleSubmit()}
             options={modelControl} addAction={addControl}
