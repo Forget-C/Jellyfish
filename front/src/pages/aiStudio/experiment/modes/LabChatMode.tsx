@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Suggestion } from '@ant-design/x'
 import { Alert, Button, Input, Upload } from 'antd'
 import { WorkbenchConversation } from '../../../../components/workbench/WorkbenchConversation'
 import { applyReply, bindChatSession, chatClient } from '../../../../services/chatSession'
-import { ApiError, FilmService, LlmService, type ChatEvent, type ChatTurnReceipt, type ExperimentMessageRead, type ExperimentSessionRead, type LabChatSnapshot, type LabModels, type FileRead } from '../../../../services/generated'
+import { observeChatRequest, useChatTurnLifecycle, type ChatTurnAdapter } from '../../../../services/chatTurnLifecycle'
+import { ApiError, FilmService, LlmService, type ChatEvent, type ExperimentMessageRead, type ExperimentSessionRead, type LabChatSnapshot, type LabModels, type FileRead } from '../../../../services/generated'
 import { useUiText } from '../../../../uiText'
 import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
 import { MediaTaskDetails } from '../components/MediaTaskDetails'
@@ -47,12 +48,15 @@ function mergeMessages(previous: ExperimentMessageRead[], updates: ExperimentMes
 function applyChatEvent(snapshot: LabChatSnapshot, event: ChatEvent): LabChatSnapshot {
   if (event.cursor <= snapshot.cursor) return snapshot
   const next = {...snapshot, cursor: event.cursor}
-  if (event.category === 'message') {
+  const currentTurn = event.turn_id === snapshot.active_turn
+  if (event.category === 'message' && currentTurn) {
     next.partial_reply = applyReply(snapshot.partial_reply ?? '', event.payload)
   } else if (event.category === 'turn') {
-    next.active_turn = event.type === 'turn.accepted' ? event.turn_id : null
-    next.partial_reply = ''
-    next.question = null
+    if (event.type === 'turn.accepted' || currentTurn) {
+      next.active_turn = event.type === 'turn.accepted' ? event.turn_id : null
+      next.partial_reply = ''
+      next.question = null
+    }
     if (event.payload.message) next.messages = mergeMessages(snapshot.messages, [event.payload.message])
   } else if (event.category === 'tool' && event.payload.message) {
     next.messages = mergeMessages(snapshot.messages, [event.payload.message])
@@ -61,28 +65,55 @@ function applyChatEvent(snapshot: LabChatSnapshot, event: ChatEvent): LabChatSna
     next.messages = mergeMessages(snapshot.messages, messages ?? []).map(message =>
       message.task_id === receipt.task_id && message.role === 'task'
         ? {...message, media_receipt: receipt, status: receipt.status} : message)
-  } else if (event.type === 'question.asked' && event.detail && 'options' in event.detail) {
+  } else if (event.type === 'question.asked' && currentTurn && event.detail && 'options' in event.detail) {
     next.question = event.detail
-  } else if (event.type === 'question.answered') {
+  } else if (event.type === 'question.answered' && currentTurn) {
     next.question = null
   }
   return next
 }
 
+const labLifecycle: ChatTurnAdapter<LabChatSnapshot> = {
+  async read(sessionId, signal) {
+    const {data} = await observeChatRequest(bindChatSession('chat', sessionId).snapshot(), signal)
+    if (data?.kind !== 'chat' || !('models' in data.history)) throw new Error('Invalid laboratory chat snapshot')
+    return data.history
+  },
+  events: (sessionId, cursor, signal, connected) => bindChatSession('chat', sessionId).events(cursor, signal, connected),
+  apply: applyChatEvent,
+  active: snapshot => snapshot.active_turn
+    ? {id: snapshot.active_turn, questionId: snapshot.question?.id}
+    : undefined,
+  outcome(snapshot, turnId) {
+    const status = [...snapshot.messages].reverse().find(row => row.role === 'assistant' &&
+      row.payload?.turn_id === turnId && !row.payload.tool_error)?.status
+    if (status === 'completed' || status === 'failed' || status === 'stopped' || status === 'interrupted') return status
+  },
+  async stop(sessionId, turnId, signal) {
+    const {data} = await observeChatRequest(chatClient.labStop({sessionId, turnId}), signal)
+    if (!data) throw new Error('Missing stop snapshot')
+    return data
+  },
+}
+
 /** One composer for the lab chat profile. Server snapshots own admission and history. */
 export function LabChatMode({ sessionId, ensureSession, render }: Props) {
   const uiText = useUiText()
-  const boundSession = useMemo(() => sessionId ? bindChatSession('chat', sessionId) : undefined, [sessionId])
+  const lifecycle = useChatTurnLifecycle(sessionId, labLifecycle)
+  const { snapshot, stoppableTurn, stop } = lifecycle
   const [models, setModels] = useState<LabModels>({})
-  const [snapshot, setSnapshot] = useState<LabChatSnapshot>()
   const [text, setText] = useState('')
   const [files, setFiles] = useState<FileRead[]>([])
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [admission, setAdmission] = useState<ChatTurnReceipt>()
   const [saving, setSaving] = useState(false)
   const inFlight = useRef(false)
-  const pending = useRef<{ key: string; id: string }>()
+  const draftVersion = useRef(0)
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
   const initialized = useRef(false)
   const upload = useExperimentReferenceUpload<string>(() => {}, uiText('上传失败'))
   const errorText = useCallback((detail?: string) => detail === 'ASSISTANT_MODEL_INPUT_UNSUPPORTED' ? uiText('主聊天模型无法理解此素材，请更换模型后发送') :
@@ -90,9 +121,9 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
       detail === 'CHAT_IMAGE_MODEL_REQUIRED' ? uiText('请先选择图片模型') :
       detail === 'CHAT_VIDEO_MODEL_REQUIRED' ? uiText('请先选择视频模型') :
       detail || uiText('请求失败'), [uiText])
-  const report = useCallback((failure: unknown) => {
-    setError(errorText(failure instanceof ApiError ? failure.body?.message : failure instanceof Error ? failure.message : undefined))
-  }, [errorText])
+  const failureText = useCallback((failure: unknown) =>
+    errorText(failure instanceof ApiError ? failure.body?.message : failure instanceof Error ? failure.message : undefined), [errorText])
+  const report = useCallback((failure: unknown) => setError(failureText(failure)), [failureText])
 
   useEffect(() => {
     let current = true
@@ -105,56 +136,16 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     return () => { current = false }
   }, [report])
 
-  const restore = (data: LabChatSnapshot) => setSnapshot(previous =>
-    previous?.session_id === data.session_id && previous.cursor > data.cursor ? previous : data)
-
   useEffect(() => {
-    if (!boundSession) return
-    const abort = new AbortController()
-    const watch = async () => {
-      let cursor = 0
-      const refresh = async () => {
-        const data = (await boundSession.snapshot()).data
-        if (!data || abort.signal.aborted) return
-        cursor = data.cursor
-        restore(data.history)
-        if (!initialized.current) { initialized.current = true; setModels(data.history.models) }
-      }
-      while (!abort.signal.aborted) {
-        try {
-          await refresh()
-          for await (const event of boundSession.events(cursor, abort.signal)) {
-            if (abort.signal.aborted) return
-            if (event.cursor <= cursor) continue
-            cursor = event.cursor
-            setSnapshot(previous => previous && applyChatEvent(previous, event))
-          }
-        } catch (e) {
-          if (!abort.signal.aborted) report(e)
-        }
-        if (!abort.signal.aborted) await new Promise(resolve => setTimeout(resolve, 1000))
-      }
+    if (snapshot && !initialized.current) {
+      initialized.current = true
+      setModels(snapshot.models)
     }
-    void watch()
-    return () => abort.abort()
-  }, [boundSession, report])
+  }, [snapshot])
 
-  // HTTP acknowledges the command. The session subscription or a newer snapshot
-  // releases its composer once that same turn finishes or asks for input.
-  useEffect(() => {
-    if (!admission || !snapshot || snapshot.session_id !== admission.session_id || snapshot.cursor <= admission.cursor) return
-    if (snapshot.active_turn === admission.turn_id && !snapshot.question) return
-    if (pending.current?.id === admission.turn_id) {
-      const failed = snapshot.messages.some(row => row.payload?.turn_id === admission.turn_id &&
-        row.status === 'failed' && !row.payload.tool_error)
-      if (!failed) { setText(''); setFiles([]) }
-      pending.current = undefined
-    }
-    setAdmission(undefined)
-  }, [snapshot, admission])
-
-  const sending = submitting || Boolean(admission)
-  useExperimentLeaveStatus(!sending && Boolean(text.trim() || files.length))
+  const sending = submitting || lifecycle.commandPending
+  const draftLocked = (submitting || lifecycle.busy) && !lifecycle.reconnecting && !lifecycle.uncertain
+  useExperimentLeaveStatus(Boolean(text.trim() || files.length))
 
   const selectModel = async (kind: ModelKind, value: string) => {
     initialized.current = true
@@ -165,7 +156,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
       if (selected.data) setModels(selected.data)
     } catch (e) { report(e) } finally { setSaving(false) }
   }
-  const busy = sending || Boolean(snapshot?.active_turn)
+  const busy = submitting || lifecycle.busy
   const modelSelect = (kind: ModelKind) => <ChatModelChoice key={kind} kind={kind} value={models[kind]}
     disabled={busy || saving} onChange={id => void selectModel(kind, id)} />
   const send = async () => {
@@ -173,48 +164,48 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     inFlight.current = true
     setSubmitting(true)
     setError('')
-    const fileIds = files.map(file => file.id)
-    const key = JSON.stringify([text, fileIds, models])
-    if (pending.current?.key !== key) pending.current = { key, id: crypto.randomUUID() }
-    let commandSession = boundSession
+    const version = draftVersion.current
+    const body = {request_id: crypto.randomUUID(), text, file_ids: files.map(file => file.id)}
     try {
       const session = await ensureSession('chat')
-      commandSession = boundSession ?? bindChatSession(session.lab_type, session.id)
+      if (!mounted.current) return
+      const bound = bindChatSession('chat', session.id)
       if (!sessionId) await chatClient.labModels({sessionId: session.id, requestBody: models})
-      const receipt = await commandSession.send({ requestBody: {
-        request_id: pending.current.id, text, file_ids: fileIds,
-      } })
-      setAdmission(receipt)
-    } catch (e) {
-      report(e)
-      if (commandSession && pending.current) {
-        const id = pending.current.id
-        const recovered = (await commandSession.snapshot().catch(() => undefined))?.data?.history
-        if (recovered) {
-          restore(recovered)
-          if (recovered.messages?.some(row => row.status === 'failed' && !row.payload?.tool_error && row.payload?.turn_id === id)) pending.current = undefined
-        }
+      if (!mounted.current) return
+      const result = await lifecycle.submit(session.id, {
+        turnId: body.request_id,
+        send: () => bound.send({requestBody: body}),
+      })
+      if (result && result.outcome !== 'failed' && draftVersion.current === version) {
+        setText('')
+        setFiles([])
       }
-    } finally { inFlight.current = false; setSubmitting(false) }
-  }
-  const stoppableTurn = snapshot?.active_turn ?? admission?.turn_id
-  const stop = async () => {
-    if (!sessionId || !stoppableTurn) return
-    try {
-      const response = await chatClient.labStop({sessionId, turnId: stoppableTurn})
-      if (response.data) restore(response.data)
     } catch (e) { report(e) }
+    finally { inFlight.current = false; setSubmitting(false) }
   }
   const question = snapshot?.question
   const answer = async (fileId: string) => {
-    if (!boundSession || !snapshot?.active_turn || !question || inFlight.current) return
+    if (!sessionId || !snapshot?.active_turn || !question || inFlight.current) return
     inFlight.current = true
-    setSubmitting(true)
+    setError('')
+    const turnId = snapshot.active_turn
+    const bound = bindChatSession('chat', sessionId)
     try {
-      const receipt = await boundSession.answer({turnId: snapshot.active_turn,
-        requestBody: {question_id: question.id, file_id: fileId}})
-      setAdmission(receipt)
-    } catch (e) { report(e) } finally { inFlight.current = false; setSubmitting(false) }
+      await lifecycle.submit(sessionId, {
+        turnId,
+        questionId: question.id,
+        send: () => bound.answer({turnId, requestBody: {question_id: question.id, file_id: fileId}}),
+      })
+    } catch (e) { report(e) }
+    finally { inFlight.current = false }
+  }
+  const editText = (value: string) => {
+    draftVersion.current++
+    setText(value)
+  }
+  const editFiles = (update: (current: FileRead[]) => FileRead[]) => {
+    draftVersion.current++
+    setFiles(update)
   }
   const messageText = (row: ExperimentMessageRead) => {
     if (row.payload?.tool_error) return [row.payload.tool, row.payload.tool_call_id, row.content].join(' · ')
@@ -246,24 +237,25 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
         onClick={() => void answer(option.file_id)}>#{option.sequence}.{option.ordinal + 1} {option.name} {option.prompt}</Button>)}
     </section>})
   if (snapshot?.partial_reply) items.push({ key: 'pending', role: 'assistant', content: snapshot.partial_reply, placement: 'start' })
+  const feedback = error || upload.uploadError?.message || (lifecycle.error ? failureText(lifecycle.error) : undefined)
   return render({
     history: <WorkbenchConversation items={items} />,
     composer: <ExperimentComposer options={modelSelect('text')} onSubmit={() => void send()}
       submitting={sending} submitDisabled={busy || !text.trim() || saving || upload.uploading}
       contextActions={<details><summary>{uiText('模态配置')}</summary>{modelSelect('image')} {modelSelect('video')}</details>}
-      secondaryAction={stoppableTurn && <Button onClick={() => void stop()}>{uiText('停止回复')}</Button>}
-      feedback={(error || upload.uploadError) && <Alert type="error" message={error || upload.uploadError?.message} />}>
-      <Suggestion block items={['/imagegen', '/videogen'].map(value => ({ label: value, value }))} onSelect={value => setText(value + ' ')}>
-        {({ onTrigger, onKeyDown, open }) => <Input.TextArea aria-label={uiText('聊天消息')} disabled={busy} value={text}
-          onChange={event => { setText(event.target.value); onTrigger(event.target.value === '/' ? undefined : false) }}
+      secondaryAction={stoppableTurn && <Button disabled={lifecycle.stopping} onClick={() => void stop()}>{uiText('停止回复')}</Button>}
+      feedback={feedback ? <Alert type="error" message={feedback} /> : null}>
+      <Suggestion block items={['/imagegen', '/videogen'].map(value => ({ label: value, value }))} onSelect={value => editText(value + ' ')}>
+        {({ onTrigger, onKeyDown, open }) => <Input.TextArea aria-label={uiText('聊天消息')} disabled={draftLocked} value={text}
+          onChange={event => { editText(event.target.value); onTrigger(event.target.value === '/' ? undefined : false) }}
           onKeyDown={event => { if (open) onKeyDown(event) }}
           onPressEnter={event => { if (!open && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send() } }} />}
       </Suggestion>
-      <Upload accept="image/*,video/*" disabled={busy || upload.uploading} showUploadList={false} beforeUpload={file => {
-        void upload.uploadFile(file, 'chat', saved => setFiles(old => [...old, saved]))
+      <Upload accept="image/*,video/*" disabled={draftLocked || upload.uploading} showUploadList={false} beforeUpload={file => {
+        void upload.uploadFile(file, 'chat', saved => editFiles(old => [...old, saved]))
         return false
       }}><Button>{uiText('添加素材')}</Button></Upload>
-      {files.map(file => <Button key={file.id} disabled={busy} onClick={() => setFiles(old => old.filter(f => f.id !== file.id))}>{file.name} ×</Button>)}
+      {files.map(file => <Button key={file.id} disabled={draftLocked} onClick={() => editFiles(old => old.filter(f => f.id !== file.id))}>{file.name} ×</Button>)}
     </ExperimentComposer>,
   })
 }

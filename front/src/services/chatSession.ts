@@ -25,6 +25,7 @@ export function canvasPayload(event: ChatEvent) {
 /** Consume committed SSE records with the same authentication as generated requests. */
 async function* sessionEvents(
   request: ReturnType<typeof ChatService.chatSessionEvents>, sessionId: string, after: number, signal: AbortSignal,
+  connected?: () => void,
 ): AsyncGenerator<ChatEvent> {
   const cancel = () => request.cancel()
   signal.addEventListener('abort', cancel, {once: true})
@@ -34,6 +35,7 @@ async function* sessionEvents(
   if (!(response instanceof Response) || !response.body || !response.headers.get('content-type')?.startsWith('text/event-stream')) {
     throw new Error('Session event stream unavailable')
   }
+  if (!signal.aborted) connected?.()
   const reader = response.body.getReader()
   const close = () => { void reader.cancel().catch(() => {}) }
   signal.addEventListener('abort', close, {once: true})
@@ -123,8 +125,8 @@ export function bindChatSession(kind: BoundSend['kind'], sessionId: string) {
     answer(command: Omit<BoundAnswer, 'kind' | 'sessionId'>) {
       return receiveTurn(ChatService.chatBoundAnswer({...command, kind, sessionId}), sessionId, command.turnId)
     },
-    events(after = 0, signal = new AbortController().signal) {
-      return sessionEvents(ChatService.chatBoundEvents({kind, sessionId, after}), sessionId, after, signal)
+    events(after = 0, signal = new AbortController().signal, connected?: () => void) {
+      return sessionEvents(ChatService.chatBoundEvents({kind, sessionId, after}), sessionId, after, signal, connected)
     },
     snapshot(paging: Omit<BoundSnapshot, 'kind' | 'sessionId'> = {}) {
       return ChatService.chatBoundSnapshot({...paging, kind, sessionId})
