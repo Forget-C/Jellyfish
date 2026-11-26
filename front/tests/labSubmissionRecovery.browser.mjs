@@ -1,4 +1,4 @@
-import { textTrialFrame, turnReceipt, mediaTurnReceipt, mediaAdmissionStream, textTrialSnapshot } from './text-trial-events.mjs'
+import { textTrialFrame, turnReceipt, mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot, textTrialSnapshot } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -71,15 +71,15 @@ try {
       historyReads += 1
       return textTrialSnapshot(route, histories.get('text-session') ?? [])
     }
-    if (/\/chat\/sessions\/[^/]+\/turns$/.test(url.pathname)) {
+    if (/\/chat\/sessions\/(image|video)\/[^/]+\/turns$/.test(url.pathname)) {
       writes.push(request.postDataJSON())
       requestHeaders.push(request.headers())
       return submission(route)
     }
-    if (/\/chat\/sessions\/media\/[^/]+$/.test(url.pathname) || url.pathname.endsWith('/messages')) {
+    if (/\/chat\/sessions\/(image|video)\/[^/]+\/snapshot$/.test(url.pathname)) {
       historyReads += 1
       if (failHistory) return route.fulfill({ status: 503, json: { detail: '历史暂不可用' } })
-      return respond(histories.get(url.pathname.split('/').at(url.pathname.endsWith('/messages') ? -2 : -1)) ?? [])
+      return respond(boundTrialSnapshot(url, histories.get(url.pathname.split('/').at(-2)) ?? []))
     }
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])

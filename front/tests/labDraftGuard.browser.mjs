@@ -1,4 +1,4 @@
-import { textTrialFrame, mediaTurnReceipt, mediaAdmissionStream, textTrialSnapshot } from './text-trial-events.mjs'
+import { textTrialFrame, mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot, textTrialSnapshot } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -134,7 +134,7 @@ try {
       deleteRequests.push(url.pathname)
       return respond(null)
     }
-    if (/\/chat\/sessions\/media\/[^/]+$/.test(url.pathname)) return respond(histories.get(url.pathname.split('/').at(-1)) ?? [])
+    if (/\/chat\/sessions\/(image|video)\/[^/]+\/snapshot$/.test(url.pathname)) return respond(boundTrialSnapshot(url, histories.get(url.pathname.split('/').at(-2)) ?? []))
     if (url.pathname.endsWith('/messages')) return respond(histories.get(url.pathname.split('/').at(-2)) ?? [])
     if (url.pathname.endsWith('/models')) {
       const category = url.searchParams.get('category')
@@ -146,7 +146,7 @@ try {
     }] : [] })
     if (url.pathname.endsWith('/files')) return respond({ items: [{ id: 'file-a', name: '测试参考图', type: 'image' }] })
     if (url.pathname.endsWith('/video-generation-options')) return respond({ model_id: 'video-model', allowed_ratios: ['16:9'] })
-    const media = url.pathname.match(/\/chat\/sessions\/([^/]+)\/turns$/)
+    const media = url.pathname.match(/\/chat\/sessions\/(?:image|video)\/([^/]+)\/turns$/)
     if (media && request.method() === 'POST') {
       const input = request.postDataJSON()
       generationRequests.push(input)

@@ -148,11 +148,12 @@ export async function readTrialHistory(
 export async function waitForTurnEvent<T>(
   receipt: ChatTurnReceipt, select: (event: ChatEvent) => T | undefined | Promise<T | undefined>,
   signal = new AbortController().signal,
+  events: ReturnType<typeof bindChatSession>['events'] = (after, abort) => chatClient.events(receipt.session_id, after, abort),
 ): Promise<T> {
   let cursor = receipt.cursor
   for (let attempt = 0; attempt < 3 && !signal.aborted; attempt++) {
     try {
-      for await (const event of chatClient.events(receipt.session_id, cursor, signal)) {
+      for await (const event of events(cursor, signal)) {
         const result = event.turn_id === receipt.turn_id ? await select(event) : undefined
         if (signal.aborted) signal.throwIfAborted()
         cursor = event.cursor
@@ -165,10 +166,10 @@ export async function waitForTurnEvent<T>(
   throw new Error('Chat turn event stream closed before the expected event')
 }
 
-export function waitForMediaAdmission(receipt: ChatTurnReceipt) {
+export function waitForMediaAdmission(session: ReturnType<typeof bindChatSession>, receipt: ChatTurnReceipt) {
   return waitForTurnEvent(receipt, event => {
     if (event.category !== 'task' || event.type !== 'task.accepted') return
     const {task_id, messages} = event.payload
     return {task_id, messages: messages ?? []}
-  }, AbortSignal.timeout(8000))
+  }, AbortSignal.timeout(8000), session.events)
 }
