@@ -204,10 +204,18 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     return true
   }, [canvasId, setTurns])
 
-  const isPendingQuestion = useCallback(async (turnId: string, questionId: string, cursor: number) => {
-    const { data } = await chatClient.canvasSnapshot({ canvasId, projectId })
-    if (!data || data.cursor < cursor) throw new Error('Canvas conversation snapshot is behind the question')
-    return data.pending_request?.request_id === turnId && data.pending_question?.id === questionId
+  const isPendingQuestion = useCallback(async (turnId: string, questionId: string, cursor: number, signal: AbortSignal) => {
+    signal.throwIfAborted()
+    const request = chatClient.canvasSnapshot({ canvasId, projectId })
+    const cancel = () => request.cancel()
+    signal.addEventListener('abort', cancel, { once: true })
+    try {
+      const { data } = await request
+      if (!data || data.cursor < cursor) throw new Error('Canvas conversation snapshot is behind the question')
+      return data.pending_request?.request_id === turnId && data.pending_question?.id === questionId
+    } finally {
+      signal.removeEventListener('abort', cancel)
+    }
   }, [canvasId, projectId])
 
   const updateDraft = (value: string) => {
@@ -288,7 +296,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           if (!active) return
           const asked = wire.type === 'question.asked' && 'question' in update.payload ? update.payload : undefined
           const questionPending = asked?.question &&
-            await isPendingQuestion(asked.request_id, asked.question.id, wire.cursor)
+            await isPendingQuestion(asked.request_id, asked.question.id, wire.cursor, controller.signal)
           if (!active) return
           const cursor = snapshotCursor.current?.cursor ?? 0
           const updates = [update].filter(event => event.session_id === canvasId && event.cursor > cursor)
@@ -487,7 +495,8 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       const update = canvasPayload(event)
       if (!('reply' in update)) return
       if (event.type === 'question.asked' &&
-          (!update.question || !await isPendingQuestion(receipt.turn_id, update.question.id, event.cursor))) return
+          (!update.question ||
+            !await isPendingQuestion(receipt.turn_id, update.question.id, event.cursor, subscription.signal))) return
       return update
     }, subscription.signal)
   }

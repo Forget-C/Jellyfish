@@ -365,9 +365,9 @@ try {
     await panel.getByRole('button', { name: '发送消息' }).click()
     await panel.getByText('答复 ' + text, { exact: true }).waitFor()
   }
-  const verifyAnsweredQuestionReplay = async () => {
+  const openConsecutiveQuestions = async name => {
     const createdForReplay = await fetch(canvasApi, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '连续追问回放' }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
     })
     assert.ok(createdForReplay.ok, await createdForReplay.clone().text())
     const replayCanvas = (await createdForReplay.json()).data.id
@@ -380,6 +380,10 @@ try {
     await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill(consecutiveQuestions)
     await panel.getByRole('button', { name: '发送消息' }).click()
     await panel.getByRole('form', { name: '创作问题' }).getByText('先确认情绪').waitFor()
+    return replayCanvas
+  }
+  const verifyAnsweredQuestionReplay = async () => {
+    const replayCanvas = await openConsecutiveQuestions('连续追问回放')
     const firstQuestion = await readCanvasChat(replayCanvas)
     const sessionPath = '/api/v1/studio/chat/sessions/' + replayCanvas
     const answerPath = sessionPath + '/turns/' + firstQuestion.pending_request.request_id + '/answer'
@@ -432,8 +436,46 @@ try {
     assert.equal(await panel.getByRole('form', { name: '创作问题' }).count(), 0)
     assert.equal(await page.evaluate(() => window.replayedQuestionWasShown), false)
   }
+  const verifyStopWhileCheckingQuestion = async () => {
+    const canvasId = await openConsecutiveQuestions('停止挂起的追问核验')
+    const snapshotPath = '**/chat/sessions/canvas/' + canvasId + '?*'
+    const sessionPath = '/api/v1/studio/chat/sessions/' + canvasId
+    let notifyPending, releaseSnapshots
+    const bothPending = new Promise(resolve => { notifyPending = resolve })
+    const blocked = new Promise(resolve => { releaseSnapshots = resolve })
+    let pendingSnapshots = 0
+    const holdSnapshot = async route => {
+      if (++pendingSnapshots === 2) notifyPending()
+      await blocked
+      await route.continue().catch(() => {})
+    }
+    await page.route(snapshotPath, holdSnapshot)
+    try {
+      await panel.getByRole('form', { name: '创作问题' }).getByRole('button', { name: '紧张', exact: true }).click()
+      await Promise.race([
+        bothPending, delay(5000).then(() => { throw new Error('Both question checks did not reach the snapshot') }),
+      ])
+      const stopping = page.waitForResponse(response =>
+        response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/stop'))
+      await panel.getByRole('button', { name: '停止回复', exact: true }).click()
+      assert.equal((await stopping).status(), 200)
+      await panel.getByText('助手已停止', { exact: true }).waitFor()
+
+      const composer = panel.getByRole('textbox', { name: '给画布助手发消息' })
+      await composer.fill('停止后继续聊天', { timeout: 2000 })
+      const next = page.waitForResponse(response =>
+        response.request().method() === 'POST' && new URL(response.url()).pathname === sessionPath + '/turns')
+      await panel.getByRole('button', { name: '发送消息', exact: true }).click()
+      assert.equal((await next).status(), 202)
+      await panel.getByText('找到原先的草稿', { exact: true }).waitFor()
+    } finally {
+      releaseSnapshots()
+      await page.unroute(snapshotPath, holdSnapshot)
+    }
+  }
   if (process.env.CANVAS_ASSISTANT_REPLAY_ONLY) {
     await verifyAnsweredQuestionReplay()
+    await verifyStopWhileCheckingQuestion()
   } else if (process.env.CANVAS_ASSISTANT_STREAM_ONLY) {
     const sendLive = async text => {
       await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill(text)
@@ -1341,6 +1383,7 @@ try {
   assert.equal((await (await fetch(exactPath)).json()).data.document.cards.filter(card => card.text === '潮水涌入').length, 1)
 
   await verifyAnsweredQuestionReplay()
+  await verifyStopWhileCheckingQuestion()
   console.log('Assistant conversation persisted independently on both real canvas entries and skipped answered questions on replay.')
   }
 } finally {
