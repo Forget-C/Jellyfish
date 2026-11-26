@@ -47,6 +47,10 @@ def laboratory_tools(tools, media, reference_only=False):
 
 
 async def session_for(db, session_id, *, lock=False):
+    if lock and db.get_bind().dialect.name == 'sqlite':
+        # SQLite ignores FOR UPDATE. Take the write lock before reading command identities.
+        await db.execute(update(ExperimentSession).where(ExperimentSession.id == session_id)
+                         .values(updated_at=ExperimentSession.updated_at))
     session = await db.get(ExperimentSession, session_id, with_for_update=lock, populate_existing=True)
     if session is None or session.lab_type != 'chat':
         raise HTTPException(404, 'Laboratory chat session not found')
@@ -187,7 +191,7 @@ async def send(db, session_id, body, *, recovering=None, on_accepted=None):
     if prior and not recovering:
         if prior.content != body.text or prior.payload.get('file_ids', []) != body.file_ids:
             raise HTTPException(409, 'Conflicting retry')
-        return await snapshot(db, session_id)
+        return
     choices = LabModels(**prior.payload['models']) if recovering else await model_choices(db, session)
     if session.active_turn and not recovering:
         raise HTTPException(409, 'Chat turn active')

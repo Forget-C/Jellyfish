@@ -1,14 +1,12 @@
 """Recover a laboratory operation through its original interaction identity."""
 
-from hashlib import sha256
-import json
-
 from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.schemas.media_task import MediaTaskReceipt
 from app.schemas.studio.experiment_sessions import ExperimentMessageRead, ExperimentTaskCreated
+from app.services.chat.admission import command_digest
 from app.services.studio.experiment_messages import read_experiment_messages, task_message_display_payload
 
 _REQUEST_KEY = '_interaction_request'
@@ -17,8 +15,7 @@ _DIGEST_KEY = '_interaction_digest'
 
 def interaction_request_payload(request_id, body):
     """Bind a stable request identity to normalized accepted input."""
-    value = json.dumps(body.model_dump(mode='json'), sort_keys=True, separators=(',', ':'), ensure_ascii=False)
-    return {_REQUEST_KEY: request_id, _DIGEST_KEY: sha256(value.encode()).hexdigest()} if request_id else {}
+    return {_REQUEST_KEY: request_id, _DIGEST_KEY: command_digest(body)} if request_id else {}
 
 
 async def find_text_request(db, session_id: str, request_id: str, body):

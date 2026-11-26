@@ -15,9 +15,10 @@ from langchain.tools import ToolRuntime
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import ToolException, tool
 from pydantic import Field, ValidationError
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.services.chat.admission import command_digest
 from app.services.chat.harness import build_chat_agent
 from app.models.canvas_assistant import (
     CanvasAssistantEvent, CanvasAssistantGeneration, CanvasAssistantSession, CanvasAssistantTurn,
@@ -362,22 +363,57 @@ class CanvasAssistant:
         pending = session.pending_request
         if not pending or pending['command']['request_id'] != source_id:
             raise HTTPException(404, 'Canvas assistant question not found')
-        if answer.model_dump() in pending.get('answers', []):
+        previous_answer = next((item for item in pending.get('answers', []) if item['question_id'] == answer.question_id), None)
+        if previous_answer is not None:
+            if previous_answer != answer.model_dump():
+                raise HTTPException(409, 'Conflicting answer')
             return
         command = CanvasAssistantMessage.model_validate(pending['command'])
         await self.send(canvas_id, command, answer=answer, on_accepted=on_accepted)
 
+    async def _original_send_event(self, canvas_id, turn_id):
+        """Select the first send admission. An answer is a separate command within its turn."""
+        return await self.db.scalar(select(CanvasAssistantEvent).where(
+            CanvasAssistantEvent.canvas_id == canvas_id, CanvasAssistantEvent.source_id == turn_id,
+            or_(
+                and_(CanvasAssistantEvent.kind == 'turn.accepted',
+                     CanvasAssistantEvent.payload[('question_answers', 0, 'question_id')].as_string().is_(None)),
+                and_(CanvasAssistantEvent.kind == 'turn.completed',
+                     CanvasAssistantEvent.payload['_command_digest'].as_string().is_not(None)),
+            ),
+        ).order_by(CanvasAssistantEvent.cursor).limit(1))
+
     async def turn_replay_cursor(self, canvas_id: str, turn_id: str) -> int:
-        """Replay the latest send attempt independently of follow-up answer admissions."""
-        turn_filter = (CanvasAssistantEvent.canvas_id == canvas_id, CanvasAssistantEvent.source_id == turn_id)
-        cursor = await self.db.scalar(select(func.max(CanvasAssistantEvent.cursor)).where(
-            *turn_filter, CanvasAssistantEvent.kind == 'turn.accepted',
-            CanvasAssistantEvent.payload[('question_answers', 0, 'question_id')].as_string().is_(None),
-        ))
-        if cursor is None:
-            # Synchronous preview submissions and imported turns may have only a terminal event.
-            cursor = await self.db.scalar(select(func.min(CanvasAssistantEvent.cursor)).where(*turn_filter))
+        """Replay the original send, with a fallback for legacy terminal-only exchanges."""
+        accepted = await self._original_send_event(canvas_id, turn_id)
+        if accepted is not None:
+            return accepted.cursor - 1
+        cursor = await self.db.scalar(select(func.min(CanvasAssistantEvent.cursor)).where(
+            CanvasAssistantEvent.canvas_id == canvas_id, CanvasAssistantEvent.source_id == turn_id))
         return (cursor or 1) - 1
+
+    @staticmethod
+    def _check_original_send(event, command):
+        if event is not None and (digest := event.payload.get('_command_digest')) is not None:
+            if digest != command_digest(command):
+                raise HTTPException(409, 'Request already used for a different assistant message')
+            return CanvasAssistantExchange.model_validate(event.payload)
+        return None
+
+    async def _replayed_send(self, session, command, pending):
+        accepted = await self._original_send_event(session.canvas_id, command.request_id)
+        replay = self._check_original_send(accepted, command)
+        if replay is not None or pending is None:
+            return replay
+        stored = CanvasAssistantMessage.model_validate(pending['command']).model_dump(mode='json')
+        if stored != command.model_dump(mode='json'):
+            raise HTTPException(409, 'Request already used for a different assistant message')
+        if accepted is not None:
+            return CanvasAssistantExchange.model_validate(accepted.payload)
+        if question := pending.get('question'):
+            return self._question_exchange(command, session, pending, CanvasAssistantQuestion.model_validate(question))
+        return CanvasAssistantExchange(request_id=command.request_id, text=command.text,
+                                       sequence=session.sequence + 1, model_id=pending['model_id'], reply='')
 
     async def _answer_acceptance_cursor(self, canvas_id, turn_id, answer) -> int | None:
         """Find the original admission even if the model was stopped or interrupted."""
@@ -387,8 +423,11 @@ class CanvasAssistant:
         ).order_by(CanvasAssistantEvent.cursor))
         payload = answer.model_dump(mode='json')
         for event in events:
-            if payload in (event.payload.get('question_answers') or []):
-                return event.cursor - 1
+            for accepted in event.payload.get('question_answers') or []:
+                if accepted['question_id'] == answer.question_id:
+                    if accepted != payload:
+                        raise HTTPException(409, 'Conflicting answer')
+                    return event.cursor - 1
         return None
 
     async def answer_replay_cursor(self, canvas_id, turn_id, answer) -> int:
@@ -415,6 +454,10 @@ class CanvasAssistant:
         session = await self._lock_session(canvas_id)
         pending = session.pending_request
         resuming = pending is not None and pending['command']['request_id'] == command.request_id
+        if answer is None:
+            replay = await self._replayed_send(session, command, pending if resuming else None)
+            if replay is not None:
+                return replay
         previous = await self.db.get(CanvasAssistantTurn, (canvas_id, command.request_id))
         supplemental = previous.instructions if previous else pending.get('instructions') if resuming else None
         context = None
@@ -453,14 +496,6 @@ class CanvasAssistant:
         now = datetime.now(UTC).replace(tzinfo=None)
         request = command.model_dump(mode='json')
         if session.pending_until is not None and session.pending_until > now:
-            if resuming and request == CanvasAssistantMessage.model_validate(pending['command']).model_dump(mode='json') and (
-                answer is None or answer.model_dump() in pending.get('answers', [])
-            ):
-                progress = {**(pending.get('progress') or {}), 'streaming': True,
-                            'request_id': command.request_id, 'model_id': pending['model_id']}
-                return CanvasAssistantExchange(request_id=command.request_id, text=command.text, reply='',
-                                               sequence=session.sequence + 1, model_id=pending['model_id'],
-                                               progress=CanvasAssistantProgress.model_validate(progress))
             raise HTTPException(409, 'Canvas assistant is already replying')
         if resuming and (CanvasAssistantMessage.model_validate(pending['command']).model_dump(mode='json') != request
                          or pending['context'] != context):
@@ -472,8 +507,6 @@ class CanvasAssistant:
         if question:
             if not resuming:
                 raise HTTPException(409, 'Answer the ongoing creative question before sending a new turn')
-            if answer is None:
-                return self._question_exchange(command, session, pending, CanvasAssistantQuestion.model_validate(question))
             if answer.question_id != question['id']:
                 raise HTTPException(409, 'The assistant is waiting on a different question')
             answers.append(answer.model_dump())
@@ -535,7 +568,7 @@ class CanvasAssistant:
             publish_events(self.db, session, CanvasAssistantExchange(
                 request_id=command.request_id, text=command.text, sequence=session.sequence + 1,
                 model_id=model_id, reply='', progress=progress, question_answers=[answer] if answer else None,
-            ), 'turn.accepted')
+            ), 'turn.accepted', command_digest=command_digest(command) if answer is None else None)
         snapshot = session.pending_checkpoint
         # Keep database locks away from provider I/O. The short lease serializes
         # turns for this conversation and can expire after an interrupted process.
@@ -722,6 +755,12 @@ class CanvasAssistant:
         """Submit exactly the reviewed snapshot without running a second creative turn."""
         canvas = await self.store.get(canvas_id, lock=True)
         session = await self._lock_session(canvas_id)
+        accepted = await self._original_send_event(canvas_id, command.request_id)
+        replay = self._check_original_send(accepted, command)
+        if replay is not None:
+            return replay
+        if accepted is not None and accepted.kind == 'turn.accepted':
+            raise HTTPException(409, 'Request already used for a different assistant message')
         previous = await self.db.get(CanvasAssistantTurn, (canvas_id, command.request_id))
         if previous:
             if previous.submitted_preview_id != command.submit_preview_id or previous.text != command.text:
@@ -745,7 +784,7 @@ class CanvasAssistant:
         self.db.add(turn)
         await issue_canvas_edit_approval(self.db, self.store.project_id, turn, preview, revises=None)
         exchange = await self._exchange(turn, session.approval_mode)
-        publish_events(self.db, session, exchange, 'turn.completed')
+        publish_events(self.db, session, exchange, 'turn.completed', command_digest=command_digest(command))
         publish_events(self.db, session, exchange, 'proposal.created')
         return exchange
 
@@ -760,7 +799,7 @@ class CanvasAssistant:
             revises_field=command.revises_field.model_dump() if command.revises_field else None,
             canvas_references=[item.model_dump(mode='json') for item in command.canvas_references] or None,
             attachments=[{'file_id': file_id, 'observation': 'unavailable'} for file_id in command.attachment_file_ids],
-            instructions=pending.get('instructions'),
+            question_answers=pending.get('answers'), instructions=pending.get('instructions'),
         )
         self.db.add(turn)
         await self.db.flush()
