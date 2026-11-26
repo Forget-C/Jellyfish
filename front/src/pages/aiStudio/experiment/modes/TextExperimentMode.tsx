@@ -328,7 +328,7 @@ export function TextExperimentMode({
               loading={stopState === 'requesting'}
               disabled={!activeRunId || stopState === 'requested'}
               onClick={() => { void handleStop().catch(() => {}) }}>{uiText("停止")}</Button> : null}
-            submitting={submitting}
+            submitting={submitting && !disconnected}
             submitDisabled={busy || stopState === 'requesting' || submission.outcomePending || Boolean(sessionId && historyState.loading)}
             onSubmit={() => void handleSubmit()}
             options={modelControl} addAction={addControl}
@@ -337,7 +337,7 @@ export function TextExperimentMode({
             {liveRun && stopState === 'requested' && <p role="status">{uiText("已请求停止，等待本轮结束。")}</p>}
             {liveRun && stopState === 'failed' && <p role="alert">{uiText("停止生成请求失败，请重试。")}</p>}
             <ExperimentSubmissionFeedback notice={submission.notice ?? (disconnected && activeRunId ? {kind: 'run-unavailable', historyUnavailable: false} : undefined)}
-              onCheck={() => { void (submission.notice ? submission.checkHistory() : historyState.refresh()) }} onAcknowledge={submission.acknowledgeUnknown} />
+              onCheck={() => { void (submission.notice ? submission.checkHistory() : historyState.refresh()) }} onAcknowledge={submission.notice ? submission.acknowledgeUnknown : undefined} />
             <ExperimentPromptEditor
               template={selectedTemplate}
               templateValues={templateValues}
