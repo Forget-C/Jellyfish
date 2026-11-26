@@ -7,7 +7,7 @@ from app.api.v1.routes.studio import generation_canvases as canvas_routes
 from app.dependencies import get_db
 from app.schemas.canvas_assistant import CanvasAssistantExchange, CanvasAssistantHistory
 from app.schemas.common import ApiResponse, success_response
-from app.services.generation_canvas.assistant import CanvasAssistant
+from app.services.chat.snapshots import canvas_snapshot as read_canvas_snapshot, stop_canvas_snapshot
 
 router = APIRouter()
 
@@ -15,7 +15,7 @@ router = APIRouter()
 @router.get('/canvas/{canvas_id}', response_model=ApiResponse[CanvasAssistantHistory], operation_id='chat_canvas_snapshot')
 async def canvas_snapshot(canvas_id: str, project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
     """Open the canvas conversation at its latest committed cursor."""
-    return success_response(await CanvasAssistant(db, project_id).history(canvas_id))
+    return success_response(await read_canvas_snapshot(db, canvas_id, project_id))
 
 
 @router.post('/canvas/{canvas_id}/turns/{source_id}/stop/snapshot',
@@ -23,9 +23,7 @@ async def canvas_snapshot(canvas_id: str, project_id: str = '', db: AsyncSession
 async def canvas_stop_snapshot(canvas_id: str, source_id: str, project_id: str = '',
                                db: AsyncSession = Depends(get_db, scope='function')):
     """Confirm the stop together with the new cursor and current assistant state."""
-    assistant = CanvasAssistant(db, project_id)
-    await assistant.stop(canvas_id, source_id)
-    return success_response(await assistant.history(canvas_id))
+    return success_response(await stop_canvas_snapshot(db, canvas_id, project_id, source_id))
 
 
 # Share the existing canvas authorization, approval and execution receipts.

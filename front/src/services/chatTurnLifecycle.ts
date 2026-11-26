@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { ApiError, type CancelablePromise, type ChatEvent, type ChatTurnReceipt } from './generated'
+import { observeChatSession, waitForChatReconnect } from './chatSessionObservation'
 
 type Snapshot = { session_id: string; cursor: number }
 type TurnOutcome = 'completed' | 'failed' | 'stopped' | 'interrupted'
@@ -59,19 +60,6 @@ export async function observeChatRequest<T>(request: CancelablePromise<T>, signa
 const rejected = (error: unknown) =>
   error instanceof ApiError && error.status >= 400 && error.status < 500 && ![408, 429].includes(error.status)
 
-function retryDelay(signal: AbortSignal) {
-  return new Promise<void>(resolve => {
-    const finish = () => {
-      clearTimeout(timer)
-      signal.removeEventListener('abort', finish)
-      resolve()
-    }
-    const timer = setTimeout(finish, 1000)
-    signal.addEventListener('abort', finish, {once: true})
-    if (signal.aborted) finish()
-  })
-}
-
 const emptyState = { commandPending: false, busy: false, stopping: false, reconnecting: false, uncertain: false }
 
 function createLifecycle<S extends Snapshot>(adapter: ChatTurnAdapter<S>) {
@@ -115,41 +103,39 @@ function createLifecycle<S extends Snapshot>(adapter: ChatTurnAdapter<S>) {
     publish({snapshot})
   }
 
-  async function watch(sessionId: string, signal: AbortSignal) {
-    while (!signal.aborted) {
-      try {
+  function watch(sessionId: string, signal: AbortSignal) {
+    return observeChatSession({
+      signal,
+      cursor: () => state.snapshot?.cursor,
+      async load() {
         const snapshot = await adapter.read(sessionId, signal)
-        if (signal.aborted) return
-        adopt(snapshot)
-        const connected = () => {
-          if (!signal.aborted && state.reconnecting) publish({reconnecting: false, error: undefined})
+        if (!signal.aborted) adopt(snapshot)
+      },
+      events: (cursor, signal, connected) => adapter.events(sessionId, cursor, signal, connected),
+      async apply(event) {
+        const snapshot = state.snapshot
+        if (!snapshot) return
+        const projection = new AbortController()
+        applying = {abort: projection, cursor: event.cursor}
+        try {
+          const next = await adapter.apply(snapshot, event, projection.signal)
+          if (signal.aborted || projection.signal.aborted || event.cursor <= (state.snapshot?.cursor ?? -1)) return
+          const outcome = event.type === 'turn.completed' ? 'completed'
+            : event.type === 'turn.failed' ? 'failed'
+            : event.type === 'turn.stopped' ? 'stopped'
+            : event.type === 'turn.interrupted' ? 'interrupted' : undefined
+          adopt(next, outcome && event.turn_id ? {turnId: event.turn_id, outcome} : undefined)
+        } catch (error) {
+          if (!projection.signal.aborted) throw error
+        } finally {
+          if (applying?.abort === projection) applying = undefined
         }
-        for await (const event of adapter.events(sessionId, state.snapshot?.cursor ?? 0, signal, connected)) {
-          if (signal.aborted) return
-          if (!state.snapshot || event.cursor <= state.snapshot.cursor) continue
-          const projection = new AbortController()
-          applying = {abort: projection, cursor: event.cursor}
-          try {
-            const next = await adapter.apply(state.snapshot, event, projection.signal)
-            if (!signal.aborted && !projection.signal.aborted && event.cursor > (state.snapshot?.cursor ?? -1)) {
-              const outcome = event.type === 'turn.completed' ? 'completed'
-                : event.type === 'turn.failed' ? 'failed'
-                : event.type === 'turn.stopped' ? 'stopped'
-                : event.type === 'turn.interrupted' ? 'interrupted' : undefined
-              adopt(next, outcome && event.turn_id ? {turnId: event.turn_id, outcome} : undefined)
-            }
-          } catch (error) {
-            if (!projection.signal.aborted) throw error
-          } finally {
-            if (applying?.abort === projection) applying = undefined
-          }
-        }
-        if (!signal.aborted) publish({reconnecting: true})
-      } catch (error) {
-        if (!signal.aborted) publish({reconnecting: true, error})
-      }
-      await retryDelay(signal)
-    }
+      },
+      connected: () => {
+        if (state.reconnecting) publish({reconnecting: false, error: undefined})
+      },
+      disconnected: error => publish({reconnecting: true, error}),
+    })
   }
 
   function close() {
@@ -205,10 +191,10 @@ function createLifecycle<S extends Snapshot>(adapter: ChatTurnAdapter<S>) {
             }
             break
           } catch {
-            await retryDelay(signal)
+            await waitForChatReconnect(signal)
           }
         }
-        await retryDelay(signal)
+        await waitForChatReconnect(signal)
       }
     }
   }
