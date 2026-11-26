@@ -266,7 +266,7 @@ try {
   let releaseLate
   const lateGate = new Promise(resolve => { releaseLate = resolve })
   submission = route => {
-    const original = mediaTurnReceipt(route, { task_id: 'late-task' })
+    const original = mediaTurnReceipt(route, { task_id: 'late-task', status: 'succeeded' })
     receipts.set(original.turn_id, async (_query, respond) => {
       lateEntered()
       await lateGate
