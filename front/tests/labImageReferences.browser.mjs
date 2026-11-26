@@ -107,7 +107,7 @@ try {
   await page.keyboard.press('Escape')
   await page.getByRole('textbox', { name: '图片提示词', exact: true }).fill('参考图次序验证')
   await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/sessions/image-a/turns')),
+    page.waitForResponse(response => response.url().endsWith('/sessions/image/image-a/turns')),
     page.getByRole('button', { name: /^发\s*送$/, exact: true }).click(),
   ])
   assert.deepEqual(submissions.map(({ session, body }) => [session, body.media.references]), [[
@@ -247,7 +247,7 @@ try {
   assert.equal(await page.getByRole('textbox', { name: 'Image prompt', exact: true }).inputValue(), '应用已上传的参考图')
   await page.getByRole('button', { name: 'View all media (6)', exact: true }).waitFor()
   await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/sessions/image-a/turns')),
+    page.waitForResponse(response => response.url().endsWith('/sessions/image/image-a/turns')),
     page.getByRole('button', { name: 'Send', exact: true }).click(),
   ])
   assert.equal(submissions[1].body.execution_prompt, '应用已上传的参考图')
