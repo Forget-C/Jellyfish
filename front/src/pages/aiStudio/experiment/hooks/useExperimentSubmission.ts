@@ -2,7 +2,7 @@ import { useUiText } from '../../../../uiText'
 import { useLayoutEffect, useRef, useState } from 'react'
 import {
   ApiError,
-  type ExperimentTaskCreated,
+  type ChatTurnReceipt,
 } from '../../../../services/generated'
 import { bindChatSession } from '../../../../services/chatSession'
 import { defaultTaskActionErrorMessage } from '../../components/taskActionHelpers'
@@ -23,7 +23,7 @@ type UncertainSubmission = {
   taskId?: string
   accepted?: boolean
   recoverMedia?: MediaKind
-  accept: () => void
+  accept: (receipt?: ChatTurnReceipt) => void
 }
 
 export type ExperimentSubmissionNotice =
@@ -35,16 +35,6 @@ export function isRejectedSubmission(error: unknown) {
   if (error instanceof ApiError && (error.body?.message ?? error.body?.detail) === 'TEXT_LAB_STREAM_RESULT_UNKNOWN') return false
   const status = error instanceof ApiError ? error.status : undefined
   return status !== undefined && status >= 400 && status < 500 && status !== 408
-}
-
-/** A creation receipt is attributable only when a canonical message carries the returned task identity. */
-function hasTaskReceipt(
-  created: ExperimentTaskCreated | null | undefined,
-  sessionId: string,
-): boolean {
-  return Boolean(created?.task_id && Array.isArray(created.messages) && created.messages.some(item =>
-    item.session_id === sessionId && item.role !== 'user' && item.task_id === created.task_id,
-  ))
 }
 
 /**
@@ -123,7 +113,7 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
       if (recovered) {
         uncertainRef.current = undefined
         setNotice(undefined)
-        uncertain.accept()
+        uncertain.accept(recovered)
         // Result display follows the snapshot and event stream after confirming admission.
         void history.readLatest(uncertain.sessionId).then(({data}) => {
           if (isCurrent(uncertain.attempt) && Array.isArray(data)) {
@@ -159,19 +149,19 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
   }
 
   const checkOutcome = async (
-    attempt: Attempt, targetSessionId: string, accept: () => void, result?: { taskId?: string; accepted?: boolean; recoverMedia?: MediaKind },
+    attempt: Attempt, targetSessionId: string, accept: (receipt?: ChatTurnReceipt) => void, result?: { taskId?: string; accepted?: boolean; recoverMedia?: MediaKind },
   ) => {
     if (!isCurrent(attempt)) return
     uncertainRef.current = { attempt, sessionId: targetSessionId, accept, ...result }
     await checkHistory()
   }
 
-  /** Both media modes consume the same durable task receipt, with mode-specific request bodies. */
+  /** Submit media work and hand its committed receipt to the current session observer. */
   const submitTask = async ({ kind, ensureSession, request, onAccept, failureMessage }: {
     kind: MediaKind
     ensureSession: () => Promise<{ id: string }>
-    request: (sessionId: string, requestId: string) => Promise<ExperimentTaskCreated | null | undefined>
-    onAccept: (attempt: Attempt, sessionId: string) => void
+    request: (sessionId: string, requestId: string) => Promise<ChatTurnReceipt>
+    onAccept: (attempt: Attempt, sessionId: string, receipt: ChatTurnReceipt) => void
     failureMessage: string
   }) => {
     const attempt = begin()
@@ -182,19 +172,16 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
       if (!isCurrent(attempt)) return
       targetSessionId = session.id
       attempt.sessionId = session.id
-      const accept = () => onAccept(attempt, session.id)
-      const created = await request(session.id, attempt.requestId)
+      const receipt = await request(session.id, attempt.requestId)
       if (!isCurrent(attempt)) return
-      if (created && hasTaskReceipt(created, session.id)) {
-        history.adoptCanonicalMessages(session.id, created.messages.filter(item => item.session_id === session.id))
-        accept()
-      } else {
-        await checkOutcome(attempt, session.id, accept, { taskId: created?.task_id, recoverMedia: kind })
-      }
+      if (receipt.turn_id !== attempt.requestId) throw new Error('Invalid media admission identity')
+      onAccept(attempt, session.id, receipt)
     } catch (error) {
       if (targetSessionId && !isRejectedSubmission(error)) {
         const acceptedSession = targetSessionId
-        await checkOutcome(attempt, targetSessionId, () => onAccept(attempt, acceptedSession), { recoverMedia: kind })
+        await checkOutcome(attempt, targetSessionId, receipt => {
+          if (receipt) onAccept(attempt, acceptedSession, receipt)
+        }, { recoverMedia: kind })
       } else {
         reject(attempt, defaultTaskActionErrorMessage(error, failureMessage))
       }

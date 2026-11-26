@@ -15,7 +15,6 @@ const sessions = [session('text-history', 'text', '文本历史'), session('text
 const item = (id, session_id, role, content, sequence, extra = {}) => ({
   id, session_id, role, content, sequence, created_at: timestamp, updated_at: timestamp, ...extra,
 })
-const server = await createServer({ root, cacheDir: output + '/vite-cache', server: { host: '127.0.0.1', port: 4805, strictPort: true, open: false } })
 let browser
 let failTextHistory = true
 let textHistoryReads = 0
@@ -51,6 +50,29 @@ const staleTask = item('stale-task', 'image-stale-poll', 'task', '图片生成�
   task_id: 'stale-run', status: 'queued',
 })
 const writes = []
+const observedMedia = new Map(['image', 'video'].map(kind => [kind + '-observe', {
+  kind, after: [], open: new Set(), rows: [], replay: [], cursor: 10,
+}]))
+for (const [id, entry] of observedMedia) sessions.push(session(id, entry.kind, id))
+const encodeEvent = event => `id: ${event.cursor}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`
+function serveMediaObservation(request, response, next) {
+  const url = new URL(request.url, origin)
+  const match = url.pathname.match(/\/chat\/sessions\/(image|video)\/([^/]+)\/events$/)
+  const entry = match && observedMedia.get(match[2])
+  if (!entry) return next()
+  entry.after.push(Number(url.searchParams.get('after')))
+  entry.open.add(response)
+  response.on('close', () => entry.open.delete(response))
+  response.setHeader('Content-Type', 'text/event-stream')
+  response.write(': ready\n\n')
+  for (const event of entry.replay) response.write(encodeEvent(event))
+}
+const server = await createServer({
+  root, cacheDir: output + '/vite-cache', server: { host: '127.0.0.1', port: 4805, strictPort: true, open: false },
+  plugins: [{ name: 'media-observation-fixture', configureServer(instance) {
+    instance.middlewares.use(serveMediaObservation)
+  } }],
+})
 const cleanup = browserCleanup(() => ({ browser, server }))
 
 try {
@@ -71,6 +93,23 @@ try {
     const admission = mediaAdmissionStream(route, url)
     if (admission) return admission
     const respond = data => route.fulfill({ json: { success: true, data } })
+    const bound = url.pathname.match(/\/chat\/sessions\/(image|video)\/([^/]+)\/(events|snapshot|turns)$/)
+    const observed = bound && observedMedia.get(bound[2])
+    if (observed) {
+      if (bound[3] === 'events') return route.continue()
+      if (bound[3] === 'snapshot') return respond(boundTrialSnapshot(url, observed.rows, observed.cursor))
+      const requestId = request.headers()['idempotency-key']
+      const taskId = bound[2] + '-task'
+      observed.rows = [item(taskId, bound[2], 'task', '观察中的媒体任务', 1, { task_id: taskId, status: 'queued' })]
+      const receipt = {session_id: bound[2], turn_id: requestId, cursor: observed.cursor}
+      const event = {session_id: bound[2], turn_id: requestId, cursor: ++observed.cursor, category: 'task',
+        type: 'task.accepted', payload: {task_id: taskId, status: 'running', progress: 37, messages: observed.rows}}
+      observed.replay.push(event)
+      if (observed.kind === 'image') {
+        for (const stream of observed.open) stream.write(encodeEvent(event))
+      }
+      return respond(receipt)
+    }
     if (request.method() !== 'GET') writes.push(url.pathname)
     if (url.pathname.endsWith('/experiment-sessions')) {
       return respond(sessions.filter(entry => entry.lab_type === url.searchParams.get('lab_type')))
@@ -98,7 +137,11 @@ try {
       return respond(boundTrialSnapshot(url, [...earlier, {...imagePrompt, sequence: 50}, {...imageTask, sequence: 51}]))
 
     }
-    if (url.pathname.endsWith('/models')) return respond({ items: [{ id: 'image-model', name: '验收图片模型', category: 'image' }] })
+    if (url.pathname.endsWith('/models')) {
+      const video = url.searchParams.get('category') === 'video'
+      return respond({ items: [{ id: video ? 'video-model' : 'image-model', name: video ? '验收视频模型' : '验收图片模型', category: video ? 'video' : 'image' }] })
+    }
+    if (url.pathname.endsWith('/video-generation-options')) return respond({model_id: 'video-model', allowed_ratios: ['16:9']})
     if (url.pathname.endsWith('/image/image-stale-poll/turns')) return respond(mediaTurnReceipt(route, { task_id: 'stale-run', messages: [staleTask, stalePrompt] }))
     if (url.pathname.endsWith('/chat/sessions/image/image-stale-poll/snapshot')) {
       if (!staleHistoryAvailable) return route.fulfill({ status: 503 })
@@ -131,7 +174,7 @@ try {
       const status = stale ? (staleStatusAvailable ? 'running' : 'unavailable') : image ? imageStatus : videoStatus
       if (status === 'unavailable') return route.fulfill({ status: 503 })
       const type = status === 'succeeded' ? 'task.completed' : 'task.progress'
-      const cursor = status === 'succeeded' ? 2 : 1
+      const cursor = stale || status === 'succeeded' ? 2 : 1
       const artifacts = status === 'succeeded' ? (image ? ['landscape', 'portrait'] : ['video-file'])
         .map((file_id, ordinal) => ({ file_id, ordinal, media_type: image ? 'image' : 'video', deleted: false })) : []
       const payload = { task_id: stale ? 'stale-run' : image ? 'image-run' : 'video-run',
@@ -280,6 +323,41 @@ try {
   assert.equal(await history.getByText('状态暂不可用', { exact: true }).count(), 0)
   assert.equal(await generate.isEnabled(), true)
   assert.deepEqual(writes, ['/api/v1/studio/chat/sessions/image/image-stale-poll/turns'])
+  await page.setViewportSize({ width: 1440, height: 900 })
+  for (const [id, entry] of observedMedia) {
+    const label = entry.kind === 'image' ? '图片' : '视频'
+    const first = page.waitForResponse(response => response.url().includes('/' + id + '/events'))
+    await page.goto(origin + '/lab?session=' + id)
+    await first
+    assert.deepEqual(entry.after, [10])
+    await page.getByRole('button', { name: '选择模型', exact: true }).click()
+    await page.getByRole('button', { name: '验收' + label + '模型' }).click()
+    await page.getByRole('textbox', { name: label + '提示词' }).fill('复用当前订阅')
+    const observeSubmit = page.getByRole('button', { name: /^发\s*送$/, exact: true })
+    await observeSubmit.click()
+    if (entry.kind === 'video') {
+      await page.getByText('视频生成任务已创建', { exact: true }).waitFor()
+      assert.equal(await page.getByRole('textbox', { name: '视频提示词' }).isDisabled(), true,
+        '已经受理但尚未出现在历史中的任务仍占用发送')
+      for (const stream of entry.open) stream.write(encodeEvent(entry.replay[0]))
+    }
+    await history.getByText('生成中 37%', { exact: true }).waitFor()
+    assert.deepEqual(entry.after, [10], label + '发送不应打开新的 SSE')
+    assert.equal(entry.open.size, 1)
+    const initial = entry.replay[0]
+    entry.replay.push({...initial, cursor: ++entry.cursor, type: 'task.progress',
+      payload: {...initial.payload, progress: 71, messages: undefined}})
+    const reconnected = page.waitForResponse(response => {
+      const url = new URL(response.url())
+      return url.pathname.endsWith('/' + id + '/events') && url.searchParams.get('after') === '11'
+    })
+    for (const stream of entry.open) stream.end()
+    await reconnected
+    await history.getByText('生成中 71%', { exact: true }).waitFor()
+    assert.deepEqual(entry.after, [10, 11], label + '断线后按已处理游标续读')
+    assert.equal(await history.getByText('生成中 71%', { exact: true }).count(), 1)
+    assert.equal(entry.open.size, 1)
+  }
   console.log(`Experiment result browser acceptance passed. Evidence: ${output}`)
 } finally {
   await cleanup()

@@ -1,5 +1,5 @@
 import { useUiText } from '../../../../uiText'
-import { bindChatSession, readTrialHistory, waitForMediaAdmission } from '../../../../services/chatSession'
+import { bindChatSession, readTrialHistory } from '../../../../services/chatSession'
 import { useTrialModelPreference } from '../hooks/useTrialModelPreference'
 import { MediaTaskDetails } from '../components/MediaTaskDetails'
 import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
@@ -134,7 +134,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
 
   const currentPrompt = selectedTemplate ? renderPromptTemplate(selectedTemplate.content, templateValues).trim() : draft.trim()
   const persistedMessages = history.messages.map(toVideoMessage)
-  const { messages, runningTaskId, retryStatus } = useExperimentTaskResults(session, history.eventCursor, persistedMessages, history.refresh, (item, result) => ({
+  const { messages, runningTaskId, observeAdmission, retryStatus } = useExperimentTaskResults(session, history, persistedMessages, (item, result) => ({
     ...item,
     videoUrl: buildFileDownloadUrl(result.artifacts?.find(file => !file.deleted && file.media_type === 'video')?.file_id) ?? item.videoUrl,
   }))
@@ -203,9 +203,9 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     await submission.submitTask({
       kind: 'video',
       ensureSession: () => sessionId ? Promise.resolve({ id: sessionId }) : ensureSession('video'),
-      request: async (targetSessionId, idempotencyKey) => {
-        const target = session ?? bindChatSession('video', targetSessionId)
-        const response = await target.send({
+      request: (targetSessionId, idempotencyKey) => {
+        const target = bindChatSession('video', targetSessionId)
+        return target.send({
           idempotencyKey,
           requestBody: {
             model_id: modelId,
@@ -224,9 +224,9 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
             operation_input: { kind: 'video_generation', ratio, ...(resolutions.length ? { resolution, seconds } : {}) },
           },
         })
-        return waitForMediaAdmission(target, response)
       },
-      onAccept: (attempt, targetSessionId) => {
+      onAccept: (attempt, targetSessionId, receipt) => {
+        observeAdmission(receipt)
         const unchanged = submission.acceptInput(attempt, targetSessionId, inputSignature(''))
         if (unchanged && !selectedTemplate) setDraft(current => current === draft ? '' : current)
         message.success(uiText("视频生成任务已创建"))

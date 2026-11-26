@@ -1,5 +1,5 @@
 import { useUiText } from '../../../../uiText'
-import { bindChatSession, readTrialHistory, waitForMediaAdmission } from '../../../../services/chatSession'
+import { bindChatSession, readTrialHistory } from '../../../../services/chatSession'
 import { useTrialModelPreference } from '../hooks/useTrialModelPreference'
 import { MediaTaskDetails } from '../components/MediaTaskDetails'
 import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
@@ -138,7 +138,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
   const { submitting } = submission
   useExperimentLeaveStatus(submission.dirty)
   const persistedMessages = history.messages.map(toImageLabMessage)
-  const { messages, runningTaskId, retryStatus } = useExperimentTaskResults(session, history.eventCursor, persistedMessages, history.refresh, (item, result) => {
+  const { messages, runningTaskId, observeAdmission, retryStatus } = useExperimentTaskResults(session, history, persistedMessages, (item, result) => {
     const resultUrls = (result.artifacts ?? []).filter(file => !file.deleted && file.media_type === 'image')
       .flatMap(file => buildFileDownloadUrl(file.file_id) ?? [])
     return { ...item, resultUrls: resultUrls.length ? resultUrls : item.resultUrls }
@@ -156,9 +156,9 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
     await submission.submitTask({
       kind: 'image',
       ensureSession: () => sessionId ? Promise.resolve({ id: sessionId }) : ensureSession('image'),
-      request: async (targetSessionId, idempotencyKey) => {
-        const target = session ?? bindChatSession('image', targetSessionId)
-        const response = await target.send({
+      request: (targetSessionId, idempotencyKey) => {
+        const target = bindChatSession('image', targetSessionId)
+        return target.send({
           idempotencyKey,
           requestBody: {
             model_id: modelId,
@@ -169,9 +169,9 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
             operation_input: { kind: 'image_generation' },
           },
         })
-        return waitForMediaAdmission(target, response)
       },
-      onAccept: (attempt, targetSessionId) => {
+      onAccept: (attempt, targetSessionId, receipt) => {
+        observeAdmission(receipt)
         const unchanged = submission.acceptInput(attempt, targetSessionId, inputSignature(''))
         if (unchanged && !selectedTemplate) setDraft(current => current === draft ? '' : current)
         message.success(uiText("图片生成任务已创建"))
