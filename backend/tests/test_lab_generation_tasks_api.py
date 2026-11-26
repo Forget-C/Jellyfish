@@ -261,7 +261,12 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         event_url = session_url + "/events"
         receipt = submitted.json()["data"]
         assert receipt["session_id"] == session_id and receipt["turn_id"] == "same-lab-request"
-        events = await client.get(event_url, params={"follow": "false", "after": receipt["cursor"]})
+        params = {"follow": False, "after": receipt["cursor"]}
+        events = await client.get(event_url, params=params)
+        compatibility = base + f"/chat/sessions/{session_id}"
+        compatibility_retry = await client.post(compatibility + "/turns", json=body, headers=headers)
+        assert compatibility_retry.json() == submitted.json()
+        assert (await client.get(compatibility + "/events", params=params)).text == events.text
         assert events.status_code == 200
         import json
         observed = [json.loads(line[6:]) for line in events.text.splitlines() if line.startswith("data: ")]

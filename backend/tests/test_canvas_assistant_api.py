@@ -478,7 +478,8 @@ async def test_creative_question_resumes_original_turn_and_replays_answer(canvas
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
     base = '/api/v1/studio'
     canvas = (await canvas_client.post(base + '/generation-canvases', json={'name': '选择叙事方向'})).json()['data']
-    url = f"{base}/chat/sessions/{canvas['id']}"
+    compatibility_url = f"{base}/chat/sessions/{canvas['id']}"
+    url = f"{base}/chat/sessions/canvas/{canvas['id']}"
     command = {'request_id': 'same-turn', 'text': '设置场景情绪'}
     started, duplicate = await asyncio.gather(
         canvas_client.post(url + '/turns', json=command), canvas_client.post(url + '/turns', json=command))
@@ -520,7 +521,8 @@ async def test_creative_question_resumes_original_turn_and_replays_answer(canvas
         await wait_for_chat_event(canvas_client, url, 'same-turn', 'turn.completed', after=second.json()['data']['cursor'])
         for path, item, saved in (('/turns', command, started), ('/turns/same-turn/answer', body, accepted),
                                   ('/turns/same-turn/answer', second_answer, second)):
-            assert (await canvas_client.post(url + path, json=item)).json() == saved.json()
+            for session_url in (url, compatibility_url):
+                assert (await canvas_client.post(session_url + path, json=item)).json() == saved.json()
             cursor = saved.json()['data']['cursor']
             replayed = (await read_chat_events(canvas_client, url, after=cursor))[0]
             assert replayed['type'] == 'turn.accepted'
