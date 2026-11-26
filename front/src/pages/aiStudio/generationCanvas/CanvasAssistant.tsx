@@ -204,6 +204,12 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     return true
   }, [canvasId, setTurns])
 
+  const isPendingQuestion = useCallback(async (turnId: string, questionId: string, cursor: number) => {
+    const { data } = await chatClient.canvasSnapshot({ canvasId, projectId })
+    if (!data || data.cursor < cursor) throw new Error('Canvas conversation snapshot is behind the question')
+    return data.pending_request?.request_id === turnId && data.pending_question?.id === questionId
+  }, [canvasId, projectId])
+
   const updateDraft = (value: string) => {
     setConfirmationHint(undefined)
     setDraft(value)
@@ -280,6 +286,10 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         for await (const wire of chatClient.events(canvasId, checkpoint.cursor, controller.signal)) {
           const update = {...wire, payload: canvasPayload(wire)}
           if (!active) return
+          const asked = wire.type === 'question.asked' && 'question' in update.payload ? update.payload : undefined
+          const questionPending = asked?.question &&
+            await isPendingQuestion(asked.request_id, asked.question.id, wire.cursor)
+          if (!active) return
           const cursor = snapshotCursor.current?.cursor ?? 0
           const updates = [update].filter(event => event.session_id === canvasId && event.cursor > cursor)
           if (!updates.length) continue
@@ -324,13 +334,11 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             const stillRunning = !updates.some(event => event.turn_id === steerUpdate.turn_id && event.type === 'turn.completed')
             setPendingInstructions(stillRunning ? steerUpdate.payload.instructions ?? [] : [])
           }
-          const lastQuestion = [...updates].reverse().map(event => event.payload).find(payload =>
-            'question' in payload && !!payload.question)
           const completed = (id?: string) => updates.some(event => event.turn_id === id &&
             (event.type === 'turn.completed' || event.type === 'turn.stopped'))
-          if (lastQuestion && 'question' in lastQuestion && !completed(lastQuestion.request_id)) {
-            setPendingServerRequest({ request_id: lastQuestion.request_id, text: lastQuestion.text })
-            setPendingQuestion(lastQuestion.question ?? undefined)
+          if (asked?.question && questionPending) {
+            setPendingServerRequest({ request_id: asked.request_id, text: asked.text })
+            setPendingQuestion(asked.question)
           } else if (pendingServerRequest && completed(pendingServerRequest.request_id)) {
             setPendingServerRequest(undefined)
             setPendingQuestion(undefined)
@@ -343,7 +351,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       }
     }, activeRequestId || pendingServerRequest ? 250 : 1500)
     return () => { active = false; window.clearInterval(timer); controller.abort() }
-  }, [open, canvasId, projectId, localDraft, pendingServerRequest, activeRequestId, setTurns])
+  }, [open, canvasId, projectId, localDraft, pendingServerRequest, activeRequestId, isPendingQuestion, setTurns])
 
 
 
@@ -474,10 +482,13 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const followCanvasTurn = (receipt: ChatTurnReceipt) => {
     const subscription = new AbortController()
     activeRequest.current = {cancel: () => subscription.abort()}
-    return waitForTurnEvent(receipt, event => {
+    return waitForTurnEvent(receipt, async event => {
       if (!['turn.completed', 'turn.stopped', 'turn.interrupted', 'turn.failed', 'question.asked'].includes(event.type)) return
       const update = canvasPayload(event)
-      if ('reply' in update) return update
+      if (!('reply' in update)) return
+      if (event.type === 'question.asked' &&
+          (!update.question || !await isPendingQuestion(receipt.turn_id, update.question.id, event.cursor))) return
+      return update
     }, subscription.signal)
   }
 

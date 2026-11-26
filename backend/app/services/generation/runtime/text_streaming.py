@@ -60,10 +60,10 @@ class _TextStreamRun:
 
 
 class TextStreamingRuntime:
-    """协调隐藏文本运行、递增 SSE id 和断线后的事件重放。
+    """维护隐藏文本运行的进程内状态和有序事件。
 
-    ``GenerationStreamEvent.sequence`` 就是 SSE ``id``：每次写入均由运行时按
-    日志长度生成，调用方不能自行指定。会话接口通过持久化的事件提供重放和订阅。
+    ``GenerationStreamEvent.sequence`` 按运行日志长度递增。公开 SSE 使用持久化
+    会话事件的 ``cursor`` 作为 ``id``，用于订阅和断线回放。
     """
 
     def __init__(self) -> None:

@@ -110,15 +110,16 @@ export const chatClient = {
 
 /** Follow one admitted turn, resuming after the last event if the connection drops. */
 export async function waitForTurnEvent<T>(
-  receipt: ChatTurnReceipt, select: (event: ChatEvent) => T | undefined, signal = new AbortController().signal,
+  receipt: ChatTurnReceipt, select: (event: ChatEvent) => T | undefined | Promise<T | undefined>,
+  signal = new AbortController().signal,
 ): Promise<T> {
   let cursor = receipt.cursor
   for (let attempt = 0; attempt < 3 && !signal.aborted; attempt++) {
     try {
       for await (const event of chatClient.events(receipt.session_id, cursor, signal)) {
+        const result = event.turn_id === receipt.turn_id ? await select(event) : undefined
+        if (signal.aborted) signal.throwIfAborted()
         cursor = event.cursor
-        if (event.turn_id !== receipt.turn_id) continue
-        const result = select(event)
         if (result !== undefined) return result
       }
     } catch (error) {

@@ -21,6 +21,9 @@ const readCanvasChat = async (id, query = '') => (
   await (await fetch(api + '/api/v1/studio/chat/sessions/canvas/' + id + query)).json()
 ).data
 const journey = '把镜头三的推近放慢并整理目标卡片布局，生成一版，再审看'
+const consecutiveQuestions = '/plan 依次确认情绪和视角'
+const replayedQuestion = '这一段要用哪种视角？'
+const replayedReply = '已确认情绪和视角'
 const clipPath = join(output, 'known-silent-clip.mp4')
 execFileSync('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi',
   '-i', 'color=red:size=64x64:rate=24:duration=2', '-an', '-c:v', 'libx264', '-bf', '0',
@@ -161,6 +164,13 @@ const provider = createHttpServer(async (request, response) => {
       answer = { role: 'assistant', tool_calls: [{
         id: 'context', type: 'function', function: { name: 'read_canvas', arguments: '{}' },
       }] }
+    } else if (turns.at(-1) === consecutiveQuestions) {
+      const next = ['mood', 'viewpoint'].find(id => !messages.some(message => message.tool_call_id === id))
+      answer = next ? { role: 'assistant', tool_calls: [{
+        id: next, type: 'function', function: { name: 'ask_canvas_question', arguments: JSON.stringify(next === 'mood'
+          ? { question: '先确认情绪', options: ['紧张', '放松'] }
+          : { question: replayedQuestion, options: ['正面', '侧面'] }) },
+      }] } : { role: 'assistant', content: replayedReply }
     } else if (turns.at(-1) === '/plan 先确认这一段的情绪') {
       const choice = messages.find(message => message.role === 'tool' && message.tool_call_id === 'creative-choice')
       answer = choice ? { role: 'assistant', content: '这一段采用：' + choice.content } :
@@ -355,7 +365,76 @@ try {
     await panel.getByRole('button', { name: '发送消息' }).click()
     await panel.getByText('答复 ' + text, { exact: true }).waitFor()
   }
-  if (process.env.CANVAS_ASSISTANT_STREAM_ONLY) {
+  const verifyAnsweredQuestionReplay = async () => {
+    const createdForReplay = await fetch(canvasApi, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '连续追问回放' }),
+    })
+    assert.ok(createdForReplay.ok, await createdForReplay.clone().text())
+    const replayCanvas = (await createdForReplay.json()).data.id
+    const selectReplayModel = await fetch(canvasApi + '/' + replayCanvas + '/assistant/model', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model_id: 'browser-tool-model' }),
+    })
+    assert.ok(selectReplayModel.ok, await selectReplayModel.clone().text())
+    await page.goto(base + '/canvases/' + replayCanvas)
+    await open()
+    await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill(consecutiveQuestions)
+    await panel.getByRole('button', { name: '发送消息' }).click()
+    await panel.getByRole('form', { name: '创作问题' }).getByText('先确认情绪').waitFor()
+    const firstQuestion = await readCanvasChat(replayCanvas)
+    const sessionPath = '/api/v1/studio/chat/sessions/' + replayCanvas
+    const answerPath = sessionPath + '/turns/' + firstQuestion.pending_request.request_id + '/answer'
+    let finished = false
+    await page.route('**' + sessionPath + '/events?*', async route => {
+      if (!finished) return route.abort()
+      const url = new URL(route.request().url())
+      url.searchParams.set('follow', 'false')
+      await route.fulfill({ response: await route.fetch({ url: url.toString() }) })
+    })
+    // Start from a snapshot paused at the first question, with no open event streams.
+    await page.reload()
+    await open()
+    await panel.getByRole('form', { name: '创作问题' }).getByText('先确认情绪').waitFor()
+    await page.evaluate(questionText => {
+      window.replayedQuestionWasShown = false
+      new MutationObserver(() => {
+        const form = document.querySelector('form[aria-label="创作问题"]')
+        if (form?.textContent.includes(questionText)) window.replayedQuestionWasShown = true
+      }).observe(document.body, { childList: true, subtree: true, characterData: true })
+    }, replayedQuestion)
+    const waitForSnapshot = async ready => {
+      for (let retry = 0; retry < 100; retry++) {
+        const snapshot = await readCanvasChat(replayCanvas)
+        if (ready(snapshot)) return snapshot
+        await delay(30)
+      }
+      throw new Error('Canvas replay snapshot did not reach the expected state')
+    }
+    await page.route('**' + answerPath, async route => {
+      const first = await route.fetch()
+      assert.equal(first.status(), 202)
+      const next = await waitForSnapshot(snapshot =>
+        snapshot.pending_question && snapshot.pending_question.id !== firstQuestion.pending_question.id)
+      assert.equal(next.pending_question.text, replayedQuestion)
+      const second = await fetch(api + answerPath, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question_id: next.pending_question.id, answer: '侧面' }),
+      })
+      assert.equal(second.status, 202, await second.text())
+      await waitForSnapshot(snapshot => snapshot.turns.some(turn => turn.reply === replayedReply))
+      const repeated = await route.fetch()
+      assert.equal(repeated.status(), 202)
+      assert.deepEqual(await repeated.json(), await first.json())
+      finished = true
+      await route.fulfill({ response: repeated })
+    })
+    await panel.getByRole('form', { name: '创作问题' }).getByRole('button', { name: '紧张', exact: true }).click()
+    await panel.getByText(replayedReply, { exact: true }).waitFor()
+    assert.equal(await panel.getByRole('form', { name: '创作问题' }).count(), 0)
+    assert.equal(await page.evaluate(() => window.replayedQuestionWasShown), false)
+  }
+  if (process.env.CANVAS_ASSISTANT_REPLAY_ONLY) {
+    await verifyAnsweredQuestionReplay()
+  } else if (process.env.CANVAS_ASSISTANT_STREAM_ONLY) {
     const sendLive = async text => {
       await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill(text)
       await panel.getByRole('button', { name: '发送消息' }).click()
@@ -1261,7 +1340,8 @@ try {
   await exactProposal.getByText('已写入画布', { exact: true }).waitFor()
   assert.equal((await (await fetch(exactPath)).json()).data.document.cards.filter(card => card.text === '潮水涌入').length, 1)
 
-  console.log('Assistant conversation persisted independently on both real canvas entries.')
+  await verifyAnsweredQuestionReplay()
+  console.log('Assistant conversation persisted independently on both real canvas entries and skipped answered questions on replay.')
   }
 } finally {
   for (const release of replyGates.values()) release()

@@ -92,6 +92,11 @@ async def test_first_save_migrates_selected_legacy_approval_groups(canvas_client
     draft_id = str(uuid4())
     url = f'/canvases/drafts/{draft_id}'
     document = (await canvas_client.get(url)).json()['data']['document']
+    upload = await canvas_client.post('/files/upload', files={'file': ('tide.png', b'example-image', 'image/png')})
+    assert upload.status_code == 201, upload.text
+    file_id = upload.json()['data']['id']
+    file_url = f'/files/{file_id}'
+    assert (await canvas_client.get(file_url)).json()['data']['usages'] == []
     cards = [
         {'id': 'notes', 'type': 'content.text', 'text': '逆光'},
         {'id': 'model', 'type': 'model.text'},
@@ -117,8 +122,11 @@ async def test_first_save_migrates_selected_legacy_approval_groups(canvas_client
         **edits[0], 'groups': [{'id': '1', 'title': '分镜结构', 'edits': edits[:3]},
                                {'id': '2', 'title': '备用方案', 'edits': edits[3:]}],
     })
-    exchange = CanvasAssistantExchange(request_id='draft-batch', text='新建两张卡并连接，另给备用方案',
-                                       reply='请确认分镜和备用方案', sequence=1, model_id='canvas-text', proposal=proposal)
+    exchange = CanvasAssistantExchange.model_validate({
+        'request_id': 'draft-batch', 'text': '新建两张卡并连接，另给备用方案',
+        'reply': '请确认分镜和备用方案', 'sequence': 1, 'model_id': 'canvas-text', 'proposal': proposal,
+        'attachments': [{'file_id': file_id, 'observation': 'image'}],
+    })
     previous = exchange.model_copy(update={'request_id': 'old-batch'})
     turns = [exchange]
 
@@ -160,6 +168,8 @@ async def test_first_save_migrates_selected_legacy_approval_groups(canvas_client
     )
     history = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['turns']
     assert len(history) == len(turns)
+    assert all([attachment['file_id'] for attachment in turn['attachments']] == [file_id] for turn in history)
+    assert len((await canvas_client.get(file_url)).json()['data']['usages']) == 1
     if revised:
         assert history[0]['proposal']['state'] == 'superseded'
     assert [group['state'] for group in history[-1]['proposal']['groups']] == [
