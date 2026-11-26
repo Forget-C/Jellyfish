@@ -25,6 +25,7 @@ const receipts = new Map()
 let historyReads = 0
 let failHistory = false
 let modelsState = 'ready'
+sessions.push({ id: 'text-other', lab_type: 'text', title: '另一条文本会话', created_at: timestamp, updated_at: timestamp })
 sessions.push({ id: 'image-other', lab_type: 'image', title: '另一张图片会话', created_at: timestamp, updated_at: timestamp })
 const historyMessage = (session_id, id, role, content, sequence, more = {}) => ({
   id, session_id, role, content, sequence, created_at: timestamp, updated_at: timestamp, ...more,
@@ -37,6 +38,8 @@ const cleanup = browserCleanup(() => ({ browser, server }))
 let textEvents
 let textWritesBaseline = 0
 let textCursor = 0
+let holdTextSnapshot
+let textSendsAfterClear = false
 
 try {
   await server.listen()
@@ -70,13 +73,23 @@ try {
     if (url.pathname.endsWith('/chat/sessions/text/text-session/turns')) {
       writes.push(request.postDataJSON())
       requestHeaders.push(request.headers())
-      return respond(turnReceipt(route, writes.at(-1).content.includes('断开') ? 'disconnect-run' : 'text-run'))
+      const turnId = textSendsAfterClear ? 'after-clear' : writes.at(-1).content.includes('断开') ? 'disconnect-run' : 'text-run'
+      return respond(turnReceipt(route, turnId))
     }
     if (url.pathname.endsWith('/text-session/events')) {
       if (writes.length > textWritesBaseline && textEvents) return textEvents(route)
       return route.fulfill({contentType: 'text/event-stream', body: ''})
     }
+    if (url.pathname.endsWith('/chat/sessions/text/text-other/snapshot')) return textTrialSnapshot(route, [])
+    if (url.pathname.endsWith('/experiment-sessions/text-session/messages') && request.method() === 'DELETE') {
+      histories.set('text-session', [])
+      textCursor = 0
+      textEvents = undefined
+      textWritesBaseline = writes.length
+      return respond(null)
+    }
     if (url.pathname.endsWith('/chat/sessions/text/text-session/snapshot')) {
+      if (holdTextSnapshot) return holdTextSnapshot(route)
       historyReads += 1
       return textTrialSnapshot(route, histories.get('text-session') ?? [], textCursor)
     }
@@ -385,6 +398,66 @@ try {
   assert.ok(historyReads >= readsBeforeDisconnect + 2)
   assert.equal(writes.length, writesBeforeDisconnect + 1)
   assert.ok(requestHeaders.at(-1)['idempotency-key'])
+
+  // The event stream remains unavailable when the durable terminal snapshot arrives.
+  const terminal = historyMessage('text-session', 'disconnect-answer', 'assistant', '快照确认的终态', 4, {
+    status: 'succeeded', payload: { interaction_run_id: 'disconnect-run' },
+  })
+  histories.set('text-session', [...histories.get('text-session'), terminal])
+  textCursor = 5
+  await page.getByRole('button', { name: '重试读取历史', exact: true }).click()
+  await page.getByText('快照确认的终态', { exact: true }).waitFor()
+  await textSubmit.waitFor()
+  assert.equal(await textSubmit.isEnabled(), true, '快照已确认原轮次结束，应释放发送')
+
+  await page.getByRole('button', { name: '更多会话操作', exact: true }).click()
+  await page.getByRole('menuitem', { name: '清空会话内容', exact: true }).click()
+  const clear = page.getByRole('dialog', { name: '清空会话内容', exact: true })
+  const afterClearSnapshot = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/text-session/snapshot'))
+  await clear.getByRole('button', { name: '清空会话内容', exact: true }).click()
+  await afterClearSnapshot
+  await clear.waitFor({state: 'hidden'})
+  await page.getByText('快照确认的终态', { exact: true }).waitFor({state: 'hidden'})
+  await textInput.fill('清空后继续发送')
+  textSendsAfterClear = true
+  textWritesBaseline = writes.length
+  textEvents = route => {
+    const after = Number(new URL(route.request().url()).searchParams.get('after'))
+    if (after >= 2) return route.fulfill({contentType: 'text/event-stream', body: ''})
+    const user = historyMessage('text-session', 'clear-user', 'user', '清空后继续发送', 1)
+    const answer = historyMessage('text-session', 'clear-answer', 'assistant', '清空后的新轮次已完成', 2, {
+      status: 'succeeded', payload: { interaction_run_id: 'after-clear' },
+    })
+    histories.set('text-session', [user, answer])
+    textCursor = 2
+    return route.fulfill({contentType: 'text/event-stream', body:
+      textTrialFrame('text-session', 'after-clear', 1, 'turn.accepted', {user_message: user}) +
+      textTrialFrame('text-session', 'after-clear', 2, 'turn.completed', {assistant_message: answer}),
+    })
+  }
+  await textSubmit.click()
+  await page.getByText('清空后的新轮次已完成', {exact: true}).waitFor()
+  await textSubmit.waitFor()
+  assert.equal(writes.length, textWritesBaseline + 1)
+
+  // A still-open first-page fetch must abort when switching sessions.
+  let held
+  const requestedSnapshot = new Promise(resolve => { held = resolve })
+  let releaseSnapshot
+  const snapshotGate = new Promise(resolve => { releaseSnapshot = resolve })
+  holdTextSnapshot = async route => {
+    held()
+    await snapshotGate
+    return textTrialSnapshot(route, [terminal], 5)
+  }
+  await page.reload()
+  await requestedSnapshot
+  const aborted = page.waitForEvent('requestfailed', {predicate: request => new URL(request.url()).pathname.endsWith('/text-session/snapshot')})
+  await page.getByRole('button', { name: '另一条文本会话', exact: true }).click()
+  await aborted
+  releaseSnapshot()
+  await page.waitForURL(url => url.searchParams.get('session') === 'text-other')
+  assert.equal(await page.getByText('快照确认的终态', {exact: true}).count(), 0)
 
   console.log('Lab submission recovery browser checks passed', output)
 } catch (error) {

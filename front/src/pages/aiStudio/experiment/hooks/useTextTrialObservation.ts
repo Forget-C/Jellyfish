@@ -33,13 +33,40 @@ function projectRun(events: Record<string, TextTrialRun>, event: ChatEvent) {
   return {...events, [id]: run}
 }
 
+function reconcileSnapshot(checkpoint: ExperimentHistoryState, previous: Record<string, TextTrialRun>) {
+  const active = new Set(checkpoint.activeTurnIds)
+  const finished = new Set(checkpoint.messages.filter(row => row.role === 'assistant').map(row => row.payload?.interaction_run_id))
+  const runs = {...previous}
+  for (const id of Object.keys(runs)) {
+    if (finished.has(id)) delete runs[id]
+    else if (checkpoint.activeTurnIds && !active.has(id) && runs[id].status === 'running') {
+      runs[id] = {...runs[id], status: 'unknown'}
+    }
+  }
+  for (const row of checkpoint.messages) {
+    const turnId = row.payload?.interaction_run_id
+    if (row.role !== 'user' || typeof turnId !== 'string' || finished.has(turnId)) continue
+    const running = active.delete(turnId)
+    const text = typeof row.payload?.partial_text === 'string' ? row.payload.partial_text : previous[turnId]?.text ?? ''
+    if (running || text) {
+      runs[turnId] = {...runs[turnId], text, status: running ? 'running' : runs[turnId]?.status ?? 'unknown', userId: row.id}
+    }
+  }
+  for (const turnId of active) {
+    if (!finished.has(turnId)) runs[turnId] = {...runs[turnId], text: runs[turnId]?.text ?? '', status: 'running'}
+  }
+  return runs
+}
+
 /** Observe the same text trial from its checkpoint, including turns sent by another view. */
 export function useTextTrialObservation(sessionId: string | undefined, history: ExperimentHistoryState) {
-  const [observation, setObservation] = useState<{sessionId: string; runs: Record<string, TextTrialRun>}>()
+  const [observation, setObservation] = useState<{sessionId: string; epoch: number; runs: Record<string, TextTrialRun>}>()
   const [disconnected, setDisconnected] = useState(false)
   const historyRef = useRef(history)
+  const adopt = useRef<() => void>()
   historyRef.current = history
-  const ready = history.eventCursor !== undefined
+  const {eventCursor, checkpointEpoch} = history
+  const ready = eventCursor !== undefined
 
   useEffect(() => {
     if (!sessionId || !ready) return
@@ -48,19 +75,18 @@ export function useTextTrialObservation(sessionId: string | undefined, history: 
     const checkpoint = historyRef.current
     let cursor = checkpoint.eventCursor
     let lastRecovery: number | undefined
-    const activeTurns = new Set(checkpoint.activeTurnIds)
-    let runs: Record<string, TextTrialRun> = {}
-    const finishedTurns = new Set(checkpoint.messages.filter(row => row.role === 'assistant').map(row => row.payload?.interaction_run_id))
-    for (const row of checkpoint.messages) {
-      const turnId = row.payload?.interaction_run_id
-      if (row.role !== 'user' || typeof turnId !== 'string' || finishedTurns.has(turnId)) continue
-      const active = activeTurns.delete(turnId)
-      const text = typeof row.payload?.partial_text === 'string' ? row.payload.partial_text : ''
-      if (active || text) runs[turnId] = {text, status: active ? 'running' : 'unknown', userId: row.id}
-
+    let runs = reconcileSnapshot(checkpoint, {})
+    const publish = () => setObservation({sessionId, epoch: checkpointEpoch, runs})
+    adopt.current = () => {
+      const latest = historyRef.current
+      if (latest.eventCursor === undefined || latest.checkpointEpoch !== checkpointEpoch ||
+          latest.eventCursor <= (cursor ?? -1)) return
+      runs = reconcileSnapshot(latest, runs)
+      cursor = latest.eventCursor
+      publish()
     }
-    for (const turnId of activeTurns) runs[turnId] = {text: '', status: 'running'}
-    setObservation({sessionId, runs})
+    setDisconnected(false)
+    publish()
     void observeChatSession({
       signal: abort.signal,
       cursor: () => cursor,
@@ -74,7 +100,7 @@ export function useTextTrialObservation(sessionId: string | undefined, history: 
         }
         runs = projectRun(runs, event)
         cursor = event.cursor
-        setObservation({sessionId, runs})
+        publish()
       },
       connected: () => setDisconnected(false),
       disconnected: () => {
@@ -85,8 +111,16 @@ export function useTextTrialObservation(sessionId: string | undefined, history: 
         }
       },
     })
-    return () => abort.abort()
-  }, [ready, sessionId])
+    return () => {
+      abort.abort()
+      adopt.current = undefined
+    }
+  }, [checkpointEpoch, ready, sessionId])
 
-  return {runs: observation?.sessionId === sessionId ? observation?.runs : undefined, disconnected}
+  useEffect(() => { adopt.current?.() }, [checkpointEpoch, eventCursor, sessionId])
+
+  return {
+    runs: observation?.sessionId === sessionId && observation?.epoch === checkpointEpoch ? observation?.runs : undefined,
+    disconnected,
+  }
 }
