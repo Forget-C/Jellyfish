@@ -5,19 +5,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
-from app.schemas.interaction import InteractionEvent
-from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
+from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory,
                                           CanvasAssistantModelSelection)
-from app.schemas.canvas_assistant_draft import CanvasDraftSave, CanvasDraftSaved, DraftAssistantMessage
-from app.services.generation_canvas.assistant_draft import DraftCanvasAssistant
+from app.schemas.canvas_assistant_draft import CanvasDraftSave, CanvasDraftSaved
 from app.schemas.common import PaginatedData, paginated_response, ApiResponse, created_response, empty_response, success_response
 from app.schemas.generation_canvas import CanvasRename, CanvasSummary, CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError, CanvasModelCapability, CanvasCompiledInput
 from app.services.generation_canvas.lifecycle import canvas_lifecycle, free_canvas_lifecycle
 from app.services.generation_canvas.edits import canvas_edits, free_canvas_edits
 from app.services.generation_canvas.generation_inputs import canvas_generation_inputs
-from app.schemas.canvas_assistant import (
-    CanvasAssistantEventPayload, CanvasAssistantQuestionAnswer,
-)
 from app.schemas.canvas_assistant_edit import CanvasAssistantProposalDecision, CanvasAssistantProposalResult
 from app.services.generation_canvas.assistant import CanvasAssistant
 from app.schemas.canvas_assistant_layout import CanvasAssistantLayout, CanvasAssistantLayoutDecision
@@ -56,14 +51,6 @@ async def save_free_draft(canvas_id: UUID, body: CanvasDraftSave, db: AsyncSessi
     return success_response(await free_canvas_edits(db).save_free_draft(str(canvas_id), body))
 
 
-@router.post('/drafts/{canvas_id}/assistant', response_model=ApiResponse[CanvasAssistantExchange],
-             operation_id='canvas_draft_assistant_send')
-async def send_draft_assistant_message(canvas_id: UUID, body: DraftAssistantMessage,
-                                       db: AsyncSession = Depends(get_db, scope='function')):
-    """Reply to a browser-owned free canvas conversation without saving it."""
-    return success_response(await DraftCanvasAssistant(db, '').reply_to_draft(str(canvas_id), body))
-
-
 @router.patch('/{canvas_id}/name', response_model=ApiResponse[CanvasRead], operation_id='canvas_rename')
 async def rename_canvas(canvas_id: str, body: CanvasRename, db: AsyncSession = Depends(get_db, scope='function')):
     """按修订重命名独立画布，复用完整保存校验。"""
@@ -84,26 +71,6 @@ async def get_assistant_history(canvas_id: str, project_id: str = '',
     return success_response(await CanvasAssistant(db, project_id).history(canvas_id))
 
 
-@router.get('/{canvas_id}/assistant/events',
-            response_model=ApiResponse[list[InteractionEvent[CanvasAssistantEventPayload]]],
-            operation_id='canvas_assistant_events')
-async def get_assistant_events(canvas_id: str, after: Annotated[int, Query(ge=0)] = 0, project_id: str = '',
-                               db: AsyncSession = Depends(get_db, scope='function')):
-    """Read the next page of committed assistant events for a saved canvas."""
-    events = await CanvasAssistant(db, project_id).events(canvas_id, after)
-    progress_kinds = {'turn.accepted', 'tool.started', 'tool.completed', 'tool.failed', 'message.updated'}
-    return success_response([event.model_copy(update={'type': 'turn.progress'}) if event.type in progress_kinds
-                             else event for event in events])
-
-
-@router.post('/{canvas_id}/assistant', response_model=ApiResponse[CanvasAssistantExchange],
-             operation_id='canvas_assistant_send')
-async def send_assistant_message(canvas_id: str, body: CanvasAssistantMessage, project_id: str = '',
-                                 db: AsyncSession = Depends(get_db, scope='function')):
-    """Send a turn, replaying the receipt when the request already succeeded."""
-    return success_response(await CanvasAssistant(db, project_id).send(canvas_id, body))
-
-
 @router.patch('/{canvas_id}/assistant/model', response_model=ApiResponse[CanvasAssistantModelSelection],
               operation_id='canvas_assistant_set_model')
 async def set_assistant_model(canvas_id: str, body: CanvasAssistantModelSelection, project_id: str = '',
@@ -118,14 +85,6 @@ async def set_assistant_approval(canvas_id: str, body: CanvasAssistantApprovalSe
                                  db: AsyncSession = Depends(get_db, scope='function')):
     """Set the assistant approval mode for this canvas."""
     return success_response(await CanvasAssistant(db, project_id).set_approval(canvas_id, body))
-
-
-@router.post('/{canvas_id}/assistant/turns/{source_id}/answer', response_model=ApiResponse[CanvasAssistantExchange],
-             operation_id='canvas_assistant_answer')
-async def answer_assistant_question(canvas_id: str, source_id: str, body: CanvasAssistantQuestionAnswer,
-                                    project_id: str = '', db: AsyncSession = Depends(get_db, scope='function')):
-    """Resume a paused creative question on its original canvas assistant turn."""
-    return success_response(await CanvasAssistant(db, project_id).answer(canvas_id, source_id, body))
 
 
 @router.post('/{canvas_id}/assistant/turns/{source_id}/stop', response_model=ApiResponse[CanvasAssistantExchange],

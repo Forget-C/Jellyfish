@@ -7,7 +7,6 @@ import {
   type ExperimentTaskCreated,
 } from '../../../../services/generated'
 import { defaultTaskActionErrorMessage } from '../../components/taskActionHelpers'
-import { TextLabStreamTransportError } from '../../../../services/textLabStream'
 import type { ExperimentHistoryState } from './useExperimentHistory'
 
 type Attempt = {
@@ -32,9 +31,8 @@ export type ExperimentSubmissionNotice =
   | { kind: 'unknown' | 'run-unavailable'; historyUnavailable: boolean }
 
 export function isRejectedSubmission(error: unknown) {
-  if (error instanceof ApiError && error.body?.detail === 'TEXT_LAB_STREAM_RESULT_UNKNOWN') return false
-  if (error instanceof TextLabStreamTransportError && error.responseBody?.includes('TEXT_LAB_STREAM_RESULT_UNKNOWN')) return false
-  const status = error instanceof ApiError || error instanceof TextLabStreamTransportError ? error.status : undefined
+  if (error instanceof ApiError && (error.body?.message ?? error.body?.detail) === 'TEXT_LAB_STREAM_RESULT_UNKNOWN') return false
+  const status = error instanceof ApiError ? error.status : undefined
   return status !== undefined && status >= 400 && status < 500 && status !== 408
 }
 

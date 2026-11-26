@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
 from app.schemas.common import ApiResponse, success_response
-from app.schemas.studio.lab_chat import ArtifactAnswer, LabChatSnapshot, LabModels
+from app.schemas.studio.lab_chat import LabChatSnapshot, LabModels
 from app.services.chat import laboratory
 
 router = APIRouter()
@@ -21,13 +21,6 @@ async def lab_snapshot(session_id: str, db: Database):
 @router.patch('/{session_id}/models', response_model=ApiResponse[LabModels], operation_id='chat_lab_models')
 async def lab_models(session_id: str, body: LabModels, db: Database):
     return success_response(await laboratory.save_models(db, session_id, body))
-
-
-@router.post('/{session_id}/turns/{turn_id}/answer', response_model=ApiResponse[LabChatSnapshot],
-             operation_id='chat_lab_answer')
-async def lab_answer(session_id: str, turn_id: str, body: ArtifactAnswer, db: Database):
-    """Resume the original turn with the selected archived output."""
-    return success_response(await laboratory.answer_turn(db, session_id, turn_id, body))
 
 
 @router.post('/{session_id}/turns/{turn_id}/stop', response_model=ApiResponse[LabChatSnapshot], operation_id='chat_lab_stop')

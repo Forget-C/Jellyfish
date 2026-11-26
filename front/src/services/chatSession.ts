@@ -70,32 +70,39 @@ async function* sessionEvents(
 }
 
 
+function receiveTurn(
+  request: ReturnType<typeof ChatService.chatSessionSend>, sessionId: string, turnId?: string,
+): CancelablePromise<ChatTurnReceipt> {
+  return new CancelablePromise((resolve, reject, onCancel) => {
+    onCancel(() => request.cancel())
+    request.then(({data}) => {
+      if (!data || data.session_id !== sessionId || !data.turn_id ||
+          (turnId && data.turn_id !== turnId) || !Number.isSafeInteger(data.cursor)) {
+        throw new Error('Invalid chat turn receipt')
+      }
+      resolve(data)
+    }).catch(reject)
+  })
+}
+
 export const chatClient = {
-  send(command: Parameters<typeof ChatService.chatSessionSend>[0]): CancelablePromise<ChatTurnReceipt> {
-    return new CancelablePromise((resolve, reject, onCancel) => {
-      const request = ChatService.chatSessionSend(command)
-      onCancel(() => request.cancel())
-      request.then(({data}) => {
-        if (!data || data.session_id !== command.sessionId || !data.turn_id || !Number.isSafeInteger(data.cursor)) {
-          throw new Error('Invalid chat turn receipt')
-        }
-        resolve(data)
-      }).catch(reject)
-    })
+  send(command: Parameters<typeof ChatService.chatSessionSend>[0]) {
+    return receiveTurn(ChatService.chatSessionSend(command), command.sessionId)
+  },
+  answer(command: Parameters<typeof ChatService.chatSessionAnswer>[0]) {
+    return receiveTurn(ChatService.chatSessionAnswer(command), command.sessionId, command.turnId)
   },
   events(sessionId: string, after = 0, signal = new AbortController().signal) {
     return sessionEvents(ChatService.chatSessionEvents({sessionId, after}), sessionId, after, signal)
   },
   canvasSnapshot: ChatService.chatCanvasSnapshot,
   canvasStop: ChatService.chatCanvasStop,
-  canvasAnswer: ChatService.chatCanvasAnswer,
   canvasDecide: ChatService.chatCanvasDecide,
   canvasLayout: ChatService.chatCanvasLayout,
   canvasGeneration: ChatService.chatCanvasGeneration,
   labSnapshot: ChatService.chatLabSnapshot,
   labModels: ChatService.chatLabModels,
   labStop: ChatService.chatLabStop,
-  labAnswer: ChatService.chatLabAnswer,
   textSnapshot: ChatService.chatTextSnapshot,
   textStop: ChatService.chatTextStop,
   mediaSnapshot: ChatService.chatMediaSnapshot,

@@ -63,7 +63,9 @@ async def canvas_client(request, monkeypatch, canvas_file_store, tmp_path):
         app = FastAPI()
         from app.api.v1.routes.studio.chapters import router as chapters_router
         from app.api.v1.routes.studio.directing import router as directing_router
+        from tests.canvas_assistant_fixture_routes import router as assistant_fixture_router
         app.include_router(router, prefix='/canvases')
+        app.include_router(assistant_fixture_router, prefix='/canvases')
         from app.api.v1.routes.studio.projects import router as projects_router
         app.include_router(projects_router, prefix='/projects')
         app.include_router(chapters_router, prefix='/chapters')

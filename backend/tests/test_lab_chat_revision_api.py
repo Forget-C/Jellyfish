@@ -46,6 +46,7 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
             await append_experiment_messages(db, session_id=sid, drafts=[ExperimentMessageDraft(
                 role='task', task_id=tid, content='generate_video', payload={'turn_id': f'prior-{i}', 'modality': 'video'})])
     responses = []
+    resumed, release = asyncio.Event(), asyncio.Event()
     original_send = httpx.AsyncClient.send
 
     async def language(client, request, **kwargs):
@@ -54,6 +55,9 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
         messages = json.loads(request.content)['messages']
         if messages[-1]['role'] == 'tool':
             responses.append(json.loads(messages[-1]['content']))
+            if count > 1:
+                resumed.set()
+                await release.wait()
             answer = {'role': 'assistant', 'content': '已提交新版'}
         else:
             assert originals[0] in json.dumps(messages)
@@ -74,13 +78,22 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
         assert state['active_turn'] == 'revision'
         assert [opt['file_id'] for opt in question['options']] == originals
         assert not responses and len([m for m in state['messages'] if m['role'] == 'task']) == count
-        endpoint = lab_url + '/turns/revision/answer'
+        endpoint = url + '/turns/revision/answer'
         invalid = await canvas_client.post(endpoint, json={'question_id': question['id'], 'file_id': 'foreign'})
         assert invalid.status_code in (409, 422)
         decision = {'question_id': question['id'], 'file_id': originals[-1]}
-        response = await canvas_client.post(endpoint, json=decision)
-        assert response.is_success, response.text
-        assert (await canvas_client.post(endpoint, json=decision)).is_success
+        try:
+            response = await asyncio.wait_for(canvas_client.post(endpoint, json=decision), 2)
+            assert response.status_code == 202, response.text
+            accepted = response.json()['data']
+            assert set(accepted) == {'session_id', 'turn_id', 'cursor'}
+            assert accepted['turn_id'] == 'revision'
+            await asyncio.wait_for(resumed.wait(), 4)
+            stream = await canvas_client.get(url + '/events', params={'after': accepted['cursor'], 'follow': False})
+            assert 'event: question.answered' in stream.text and 'event: turn.completed' not in stream.text
+            assert (await canvas_client.post(endpoint, json=decision)).json() == response.json()
+        finally:
+            release.set()
     await wait_for_chat_event(canvas_client, url, 'revision', 'turn.completed')
     receipt, = responses
     assert receipt['model_id'] == 'canvas-video' and receipt['parameters']['ratio'] == '16:9'

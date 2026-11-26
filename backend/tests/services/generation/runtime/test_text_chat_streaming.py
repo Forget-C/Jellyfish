@@ -20,9 +20,8 @@ from app.services.generation.runtime import text_chat_streaming
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("unified", [False, True])
 @pytest.mark.parametrize("responses", [False, True, "failed", "disabled"])
-async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, responses, unified) -> None:
+async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, responses) -> None:
     from app.dependencies import get_db
     from app.main import app
 
@@ -69,10 +68,10 @@ async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, res
             db.add(ExperimentSession(id="gateway-session", lab_type="text"))
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             base = "/api/v1/studio/chat/sessions/gateway-session"
-            url = base + "/turns" if unified else "/api/v1/studio/labs/text/sessions/gateway-session/stream"
+            url = base + "/turns"
             body = {"model_id": "custom-text", "content": "你好"}
             response = await client.post(url, json=body, headers={"Idempotency-Key": "gateway-trial"})
-            if unified and responses != "disabled":
+            if responses != "disabled":
                 assert response.status_code == 202, response.text
                 receipt = response.json()['data']
                 assert receipt['session_id'] == 'gateway-session' and 'result' not in receipt
@@ -97,9 +96,9 @@ async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, res
             return
         assert response.status_code == 200
         if responses == "failed":
-            assert ("event: turn.failed" if unified else "event: error") in response.text
+            assert "event: turn.failed" in response.text
             return
-        assert ("event: turn.completed" if unified else "event: completed") in response.text
+        assert "event: turn.completed" in response.text
         assert "第一段" in response.text and "第二段" in response.text
         [(url, auth, payload)] = requests
         assert (url, auth) == ("https://gateway.test/v1/" + ("responses" if responses else "chat/completions"), "Bearer gateway-key")
@@ -179,24 +178,44 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
         async with sessions.begin() as db:
             db.add(ExperimentSession(id='sse-replay', lab_type='text'))
         async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
-            url = '/api/v1/studio/labs/text/sessions/sse-replay/stream'
+            from tests.chat_events import wait_for_chat_event
+
+            session_url = '/api/v1/studio/chat/sessions/sse-replay'
+            url = session_url + '/turns'
             body = {'model_id': 'text-model', 'content': '独立的本轮输入'}
             headers = {'Idempotency-Key': 'same-stream'}
             first = await client.post(url, json=body, headers=headers)
-            assert first.status_code == 200, first.text
-            assert all(event in first.text for event in ['event: accepted', 'event: completed', '第一段', '第二段'])
+            assert first.status_code == 202, first.text
+            receipt = first.json()['data']
+            completed = await wait_for_chat_event(client, session_url, receipt['turn_id'], 'turn.completed')
             monkeypatch.setattr(text_chat_streaming, '_runtime', TextStreamingRuntime())
-            replayed = await client.post(url, json=body, headers={**headers, 'Last-Event-ID': '2'})
-            assert replayed.status_code == 200, replayed.text
-            assert 'event: accepted' not in replayed.text and 'id: 2\n' not in replayed.text
-            assert 'id: 3\nevent: delta' in replayed.text and 'id: 4\nevent: completed' in replayed.text
+            replayed = await client.post(url, json=body, headers=headers)
+            assert replayed.json() == first.json()
+            replay = await client.get(session_url + '/events', params={'follow': False},
+                                      headers={'Last-Event-ID': str(completed['cursor'] - 1)})
+            assert 'event: message.updated' not in replay.text
+            assert 'event: turn.completed' in replay.text and '第一段第二段' in replay.text
+            # Historical rows written before the unified event log can still be retried.
+            from sqlalchemy import delete
+            from app.models.experiment_sessions import ExperimentSessionEvent
+
+            async with sessions.begin() as db:
+                await db.execute(delete(ExperimentSessionEvent).where(
+                    ExperimentSessionEvent.session_id == 'sse-replay',
+                    ExperimentSessionEvent.turn_id == receipt['turn_id']))
+            migrated = await client.post(url, json=body, headers=headers)
+            assert migrated.status_code == 202
+            assert migrated.json()['data']['turn_id'] == receipt['turn_id']
+            assert (await client.post(url, json=body, headers=headers)).json() == migrated.json()
+            completed = await wait_for_chat_event(client, session_url, receipt['turn_id'], 'turn.completed')
+            assert completed['payload']['text'] == '第一段第二段'
             assert received == ['独立的本轮输入']
             changed = await client.post(url, json={**body, 'content': '另一个输入'}, headers=headers)
             assert changed.status_code == 409, changed.text
             snapshot = (await client.get('/api/v1/studio/experiment-sessions/sse-replay/messages')).json()
             assert snapshot['meta']['session_id'] == 'sse-replay' and snapshot['meta']['cursor'] == 2
             task_id = snapshot['data'][0]['payload']['interaction_run_id']
-            late_stop = await client.post(f'/api/v1/studio/labs/text/sessions/sse-replay/runs/{task_id}/cancel', json={})
+            late_stop = await client.post(f'/api/v1/studio/chat/sessions/text/sse-replay/turns/{task_id}/stop', json={})
             assert late_stop.json()['data']['status'] == 'succeeded'
             history = snapshot['data']
             assert [(message['role'], message['content']) for message in history] == [
@@ -206,7 +225,9 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
             simultaneous = await asyncio.gather(*[client.post(
                 url, json={**body, 'content': '并发请求只运行一次'}, headers=concurrent,
             ) for _ in range(2)])
-            assert [item.status_code for item in simultaneous] == [200, 200]
+            assert [item.status_code for item in simultaneous] == [202, 202]
+            assert simultaneous[0].json() == simultaneous[1].json()
+            await wait_for_chat_event(client, session_url, simultaneous[0].json()['data']['turn_id'], 'turn.completed')
             assert received.count('并发请求只运行一次') == 1
             first_delta = asyncio.Event()
 
@@ -219,28 +240,26 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
             monkeypatch.setattr(text_chat_streaming, 'build_laboratory_chat', AsyncMock(return_value=InterruptedTextModel()))
             interrupted = {'Idempotency-Key': 'interrupted-stream'}
             interrupted_body = {**body, 'content': '恢复未结束的流'}
-            original = asyncio.create_task(client.post(url, json=interrupted_body, headers=interrupted))
+            first = await client.post(url, json=interrupted_body, headers=interrupted)
+            assert first.status_code == 202
+            turn_id = first.json()['data']['turn_id']
+            from app.services.studio import text_trials
+
+            execution, = text_trials._executions
             try:
                 await asyncio.wait_for(first_delta.wait(), timeout=5)
+                await wait_for_chat_event(client, session_url, turn_id, 'message.updated')
                 monkeypatch.setattr(text_chat_streaming, '_runtime', TextStreamingRuntime())
                 snapshot = (await client.get('/api/v1/studio/experiment-sessions/sse-replay/messages')).json()['data']
                 pending = next(item for item in snapshot if item['content'] == interrupted_body['content'])
                 assert pending['payload']['partial_text'] == '已经送达的前缀'
                 assert '_stream_partial' not in pending['payload']
                 recovered = await client.post(url, json=interrupted_body, headers=interrupted)
-                assert recovered.status_code == 200
-                assert '已经送达的前缀' in recovered.text and 'event: error' in recovered.text
-                assert 'event: completed' not in recovered.text
-                resumed = await client.post(url, json=interrupted_body, headers={**interrupted, 'Last-Event-ID': '2'})
-                assert resumed.status_code == 200 and 'id: 3\nevent: error' in resumed.text
-                assert 'event: delta' not in resumed.text
-                history = (await client.get('/api/v1/studio/experiment-sessions/sse-replay/messages')).json()['data']
-                assert sum(message.get('payload', {}).get('partial_text') == '已经送达的前缀' for message in history) == 1
-                assert not any(message['content'] == '已经送达的前缀' for message in history)
-                assert 'stream_result_unknown' in recovered.text
+                assert recovered.status_code == 409
+                assert 'TEXT_LAB_STREAM_RESULT_UNKNOWN' in recovered.text
             finally:
-                original.cancel()
-                await asyncio.gather(original, return_exceptions=True)
+                execution.cancel()
+                await asyncio.gather(execution, return_exceptions=True)
 
     finally:
         await engine.dispose()

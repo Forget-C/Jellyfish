@@ -104,35 +104,6 @@ export class ChatService {
         });
     }
     /**
-     * Lab Answer
-     * Resume the original turn with the selected archived output.
-     * @returns ApiResponse_LabChatSnapshot_ Successful Response
-     * @throws ApiError
-     */
-    public static chatLabAnswer({
-        sessionId,
-        turnId,
-        requestBody,
-    }: {
-        sessionId: string,
-        turnId: string,
-        requestBody: ArtifactAnswer,
-    }): CancelablePromise<ApiResponse_LabChatSnapshot_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/chat/sessions/lab/{session_id}/turns/{turn_id}/answer',
-            path: {
-                'session_id': sessionId,
-                'turn_id': turnId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
      * Lab Stop
      * @returns ApiResponse_LabChatSnapshot_ Successful Response
      * @throws ApiError
@@ -187,8 +158,8 @@ export class ChatService {
         });
     }
     /**
-     * Cancel Text Lab Stream
-     * 会话绑定取消入口不复用任务中心取消 API，避免 hidden run 越权展示。
+     * Stop Text Trial
+     * Cancel a hidden run scoped to its original text trial session.
      * @returns ApiResponse_TextLabRunStatus_ Successful Response
      * @throws ApiError
      */
@@ -237,6 +208,35 @@ export class ChatService {
             },
             headers: {
                 'Idempotency-Key': idempotencyKey,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Answer Turn
+     * Admit an answer to the original paused turn and resume it independently.
+     * @returns ApiResponse_ChatTurnReceipt_ Successful Response
+     * @throws ApiError
+     */
+    public static chatSessionAnswer({
+        sessionId,
+        turnId,
+        requestBody,
+    }: {
+        sessionId: string,
+        turnId: string,
+        requestBody: (CanvasAssistantQuestionAnswer | ArtifactAnswer),
+    }): CancelablePromise<ApiResponse_ChatTurnReceipt_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/{session_id}/turns/{turn_id}/answer',
+            path: {
+                'session_id': sessionId,
+                'turn_id': turnId,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -301,40 +301,6 @@ export class ChatService {
             query: {
                 'project_id': projectId,
             },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Answer Assistant Question
-     * Resume a paused creative question on its original canvas assistant turn.
-     * @returns ApiResponse_CanvasAssistantExchange_ Successful Response
-     * @throws ApiError
-     */
-    public static chatCanvasAnswer({
-        canvasId,
-        sourceId,
-        requestBody,
-        projectId = '',
-    }: {
-        canvasId: string,
-        sourceId: string,
-        requestBody: CanvasAssistantQuestionAnswer,
-        projectId?: string,
-    }): CancelablePromise<ApiResponse_CanvasAssistantExchange_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/chat/sessions/canvas/{canvas_id}/turns/{source_id}/answer',
-            path: {
-                'canvas_id': canvasId,
-                'source_id': sourceId,
-            },
-            query: {
-                'project_id': projectId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

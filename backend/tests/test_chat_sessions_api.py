@@ -169,3 +169,26 @@ def test_chat_api_exposes_only_one_send_and_event_subscription():
     assert stream['itemSchema']['properties']['data']['contentSchema'] == {'$ref': '#/components/schemas/ChatEvent'}
     responses = paths[sessions + '{session_id}/turns']['post']['responses']
     assert responses['202']['content']['application/json']['schema']['$ref'].endswith('/ApiResponse_ChatTurnReceipt_')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
+async def test_retired_chat_routes_cannot_execute_or_subscribe(canvas_client):
+    base = '/api/v1/studio'
+    sid = 'a00e6fca-316f-4625-80c7-e2824ff2137d'
+    for path in (
+        f'/generation-canvases/drafts/{sid}/assistant',
+        f'/generation-canvases/{sid}/assistant',
+        f'/generation-canvases/{sid}/assistant/turns/turn/answer',
+        f'/chat/sessions/canvas/{sid}/turns/turn/answer',
+        f'/chat/sessions/lab/{sid}/turns/turn/answer',
+        *(f'/labs/text/sessions/{sid}/{action}' for action in ('execute', 'tasks', 'stream')),
+        *(f'/generation-tasks/labs/{mode}/sessions/{sid}/tasks' for mode in ('image', 'video')),
+    ):
+        result = await canvas_client.post(base + path, json={})
+        assert result.status_code in (404, 405), path
+    canvas = await canvas_client.post(base + '/generation-canvases', json={'name': '旧事件路由验证'})
+    assert canvas.is_success
+    canvas_id = canvas.json()['data']['id']
+    events = await canvas_client.get(f'{base}/generation-canvases/{canvas_id}/assistant/events')
+    assert events.status_code == 404

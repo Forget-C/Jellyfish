@@ -197,9 +197,12 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     inFlight.current = true
     setSending(true)
     try {
-      const result = await chatClient.labAnswer({sessionId, turnId: snapshot.active_turn,
+      const receipt = await chatClient.answer({sessionId, turnId: snapshot.active_turn,
         requestBody: {question_id: question.id, file_id: fileId}})
-      if (result.data) setSnapshot(result.data)
+      const event = await waitForTurnEvent(receipt, event => {
+        if (['turn.completed', 'turn.failed', 'turn.stopped', 'question.asked'].includes(event.type)) return event
+      })
+      if (event.type === 'turn.failed') setError(uiText('生成失败'))
     } catch (e) { report(e) } finally { inFlight.current = false; setSending(false) }
   }
   const items = (snapshot?.messages ?? []).map(row => ({

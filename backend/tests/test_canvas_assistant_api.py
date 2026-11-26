@@ -410,8 +410,11 @@ async def test_explicit_plan_uses_named_skills_without_available_writes(canvas_c
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("canvas_client", ["app-handler-file"], indirect=True)
 async def test_creative_question_resumes_original_turn_and_replays_answer(canvas_client, monkeypatch):
+    import asyncio
     from app.models.llm import Model
+    from tests.chat_events import wait_for_chat_event
 
     async with canvas_client.canvas_sessions.begin() as db:
         provider = await db.get(Provider, 'canvas-provider')
@@ -421,6 +424,7 @@ async def test_creative_question_resumes_original_turn_and_replays_answer(canvas
         db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
     original = httpx.AsyncClient.send
     model_calls = []
+    resumed, release = asyncio.Event(), asyncio.Event()
 
     async def respond(client, request, **kwargs):
         if request.url.host != 'example.test':
@@ -430,6 +434,8 @@ async def test_creative_question_resumes_original_turn_and_replays_answer(canvas
         tool_messages = [item for item in body['messages'] if item['role'] == 'tool']
         if tool_messages:
             assert '紧张逼近' in tool_messages[-1]['content']
+            resumed.set()
+            await release.wait()
             answer = {'role': 'assistant', 'content': '保留紧张逼近的镜头。'}
         else:
             answer = {'role': 'assistant', 'tool_calls': [{
@@ -445,25 +451,33 @@ async def test_creative_question_resumes_original_turn_and_replays_answer(canvas
         })
 
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
-    canvas = (await canvas_client.post('/canvases', json={'name': '选择叙事方向'})).json()['data']
-    url = f"/canvases/{canvas['id']}/assistant"
-    started = await canvas_client.post(url, json={'request_id': 'same-turn', 'text': '设置场景情绪'})
-    assert started.status_code == 200, started.text
-    question = started.json()['data']['question']
+    base = '/api/v1/studio'
+    canvas = (await canvas_client.post(base + '/generation-canvases', json={'name': '选择叙事方向'})).json()['data']
+    url = f"{base}/chat/sessions/{canvas['id']}"
+    started = await canvas_client.post(url + '/turns', json={'request_id': 'same-turn', 'text': '设置场景情绪'})
+    assert started.status_code == 202, started.text
+    question_event = await wait_for_chat_event(canvas_client, url, 'same-turn', 'question.asked')
+    question = question_event['detail']['question']
     assert question['options'] == ['紧张逼近', '保持疏离']
-    history = (await canvas_client.get(url)).json()['data']
-    assert history['pending_question'] == question and not history['turns']
 
     body = {'question_id': question['id'], 'answer': '紧张逼近'}
-    accepted = await canvas_client.post(url + '/turns/same-turn/answer', json=body)
-    assert accepted.status_code == 200, accepted.text
-    assert accepted.json()['data']['request_id'] == 'same-turn'
-    assert accepted.json()['data']['reply'] == '保留紧张逼近的镜头。'
-    assert (await canvas_client.post(url + '/turns/same-turn/answer', json=body)).json() == accepted.json()
-    assert (await canvas_client.post(url + '/turns/same-turn/answer',
-                                     json={**body, 'answer': '保持疏离'})).status_code == 409
-    history = (await canvas_client.get(url)).json()['data']
-    assert history['pending_question'] is None and len(history['turns']) == 1
+    endpoint = url + '/turns/same-turn/answer'
+    try:
+        accepted = await asyncio.wait_for(canvas_client.post(endpoint, json=body), 2)
+        assert accepted.status_code == 202, accepted.text
+        receipt = accepted.json()['data']
+        assert set(receipt) == {'session_id', 'turn_id', 'cursor'}
+        assert receipt['turn_id'] == 'same-turn' and receipt['cursor'] >= question_event['cursor']
+        await asyncio.wait_for(resumed.wait(), 4)
+        replay = await canvas_client.get(url + '/events', params={'after': receipt['cursor'], 'follow': False})
+        assert 'event: turn.accepted' in replay.text and 'event: turn.completed' not in replay.text
+        assert (await canvas_client.post(endpoint, json=body)).json() == accepted.json()
+    finally:
+        release.set()
+    completed = await wait_for_chat_event(canvas_client, url, 'same-turn', 'turn.completed')
+    assert completed['payload']['text'] == '保留紧张逼近的镜头。'
+    assert (await canvas_client.post(endpoint, json=body)).json() == accepted.json()
+    assert (await canvas_client.post(endpoint, json={**body, 'answer': '保持疏离'})).status_code == 409
     assert len(model_calls) == 2
 
 

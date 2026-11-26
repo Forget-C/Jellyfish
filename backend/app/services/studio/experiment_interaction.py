@@ -57,6 +57,11 @@ async def find_media_receipt(db, session_id: str, request_id: str, *, body=None)
         return None
     if body is not None and task_message.payload[_DIGEST_KEY] != interaction_request_payload(request_id, body)[_DIGEST_KEY]:
         raise HTTPException(409, 'Laboratory request identity already belongs to different input')
+    return await _media_submission_messages(db, task_message)
+
+
+async def _media_submission_messages(db, task_message):
+    session_id = task_message.session_id
     user_message = await db.scalar(select(ExperimentMessage).where(
         ExperimentMessage.session_id == session_id, ExperimentMessage.role == 'user',
         ExperimentMessage.sequence == task_message.sequence - 1,
@@ -66,6 +71,15 @@ async def find_media_receipt(db, session_id: str, request_id: str, *, body=None)
     return ExperimentTaskCreated(
         task_id=task_message.task_id, messages=await read_experiment_messages(db, [user_message, task_message], include_media_receipts=True),
     )
+
+
+async def read_media_admission(db, session_id, task_id):
+    """Recover original messages for media events stored before the shared API."""
+    task_message = await db.scalar(select(ExperimentMessage).where(
+        ExperimentMessage.session_id == session_id, ExperimentMessage.role == 'task',
+        ExperimentMessage.task_id == task_id,
+    ))
+    return await _media_submission_messages(db, task_message) if task_message else None
 
 
 async def read_experiment_receipt(db, session_id, request_id):

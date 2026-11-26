@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 
-from app.schemas.canvas_assistant import CanvasAssistantExchange, CanvasAssistantMessage
+from app.schemas.canvas_assistant import CanvasAssistantExchange
 from app.schemas.generation_canvas import CanvasDocument, CanvasSave, CanvasSaved
 
 
@@ -30,10 +30,6 @@ class DraftAssistantConversation(BaseModel):
     def validated_turns(self) -> list[CanvasAssistantExchange]:
         """Read the completed exchanges received by the browser."""
         return [CanvasAssistantExchange.model_validate(turn) for turn in self.turns]
-
-
-class DraftAssistantMessage(CanvasAssistantMessage, DraftAssistantConversation):
-    """Reply without storing a conversation or requiring a saved canvas."""
 
 
 class DraftAssistantApproval(BaseModel):

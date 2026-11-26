@@ -95,7 +95,9 @@ async def test_upgrade_expires_held_old_proposal_and_preserves_history(generatio
     await execute_upgrade(sessions)
 
     app = FastAPI()
+    from tests.canvas_assistant_fixture_routes import router as assistant_fixture_router
     app.include_router(router, prefix='/canvases')
+    app.include_router(assistant_fixture_router, prefix='/canvases')
 
     async def transaction():
         async with sessions.begin() as db:

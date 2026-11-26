@@ -26,6 +26,14 @@ try {
   await page.route('**/api/**', route => {
     const url = new URL(route.request().url())
     if (url.pathname.endsWith('/events')) {
+      if (selected && Number(url.searchParams.get('after')) < 4) {
+        const event = {category: 'turn', type: 'turn.completed', cursor: 4, session_id: existing.id,
+          turn_id: 'active', payload: {text: '续答已完成', message: {
+            id: 'answered', role: 'assistant', content: '续答已完成', sequence: 2,
+          }}}
+        return route.fulfill({contentType: 'text/event-stream',
+          body: 'id: 4\nevent: turn.completed\ndata: ' + JSON.stringify(event) + '\n\n'})
+      }
       const turn = !question && requests.length > 1 && Number(url.searchParams.get('after')) < 2 ? requests.at(-1) : undefined
       const event = {category: 'turn', type: 'turn.completed', cursor: 2, session_id: existing.id,
         turn_id: turn, payload: {text: '', error: null, reason: null}}
@@ -36,6 +44,7 @@ try {
       selected = route.request().postDataJSON()
       question = undefined
       active = false
+      return route.fulfill({status: 202, json: {data: {session_id: existing.id, turn_id: 'active', cursor: 3}}})
     }
     if (url.pathname.endsWith('/turns') && route.request().method() === 'POST') {
       const command = route.request().postDataJSON()
@@ -91,6 +100,7 @@ try {
   active = true
   await page.reload()
   await page.getByRole('button', {name: /雨夜二/}).click()
+  await page.getByText('续答已完成', {exact: true}).waitFor()
   assert.deepEqual(selected, {question_id: 'pick', file_id: 'v2'})
 } finally {
   await cleanup()

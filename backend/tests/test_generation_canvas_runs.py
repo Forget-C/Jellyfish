@@ -44,7 +44,9 @@ async def runtime(tmp_path, request):
         from app.main import app
     else:
         app = FastAPI()
+        from tests.canvas_assistant_fixture_routes import router as assistant_fixture_router
         app.include_router(router, prefix='/canvases')
+        app.include_router(assistant_fixture_router, prefix='/canvases')
         from app.api.v1.routes.studio.projects import router as projects_router
         app.include_router(projects_router, prefix='/projects')
     async def database():

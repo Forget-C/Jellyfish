@@ -5,10 +5,12 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
+from app.core.contracts.streaming import StreamEventType
 from app.models.experiment_sessions import ExperimentSession, ExperimentSessionEvent
 from app.schemas.interaction import InteractionSnapshot
 from app.services.generation.runtime.text_chat_streaming import admit_text_interaction, stream_text_run
 from app.services.studio.experiment_messages import read_experiment_page
+from app.services.studio.session_events import append_session_event
 
 _executions = set()
 
@@ -35,8 +37,26 @@ async def snapshot(db, session_id, page, page_size):
     return await read_experiment_page(db, session_id, page, page_size), snapshot
 
 
+async def _restore_accepted_events(db, session_id, task_id, saved_events):
+    """Publish a terminal legacy text run using the durable messages already on record."""
+    kinds = {
+        StreamEventType.accepted: 'turn.accepted',
+        StreamEventType.delta: 'message.updated',
+        StreamEventType.completed: 'turn.completed',
+        StreamEventType.error: 'turn.failed',
+        StreamEventType.cancelled: 'turn.stopped',
+    }
+    accepted = None
+    for event in saved_events:
+        committed = await append_session_event(
+            db, session_id, task_id, kinds[event.event], event.data.model_dump(mode='json'))
+        if event.event == StreamEventType.accepted:
+            accepted = committed.cursor
+    return accepted
+
+
 async def send(db, session_id, body, idempotency_key):
-    result = await admit_text_interaction(db, session_id, body, idempotency_key, publish_events=True)
+    result = await admit_text_interaction(db, session_id, body, idempotency_key)
     cursor = await db.scalar(select(ExperimentSessionEvent.cursor).where(
         ExperimentSessionEvent.session_id == session_id, ExperimentSessionEvent.turn_id == result.task_id,
         ExperimentSessionEvent.kind == "turn.accepted"))
@@ -44,6 +64,8 @@ async def send(db, session_id, body, idempotency_key):
         result.saved_events[-1].data.error.code == "stream_result_unknown"
     ):
         raise HTTPException(409, "TEXT_LAB_STREAM_RESULT_UNKNOWN")
+    if cursor is None and result.saved_events:
+        cursor = await _restore_accepted_events(db, session_id, result.task_id, result.saved_events)
     if cursor is None:
         raise HTTPException(409, "TEXT_LAB_STREAM_RESULT_UNKNOWN")
     await db.commit()

@@ -19,8 +19,6 @@ async def canvas_snapshot(canvas_id: str, project_id: str = '', db: AsyncSession
 
 
 # Share the existing canvas authorization, approval and execution receipts.
-router.add_api_route('/canvas/{canvas_id}/turns/{source_id}/answer', canvas_routes.answer_assistant_question,
-                     methods=['POST'], response_model=ApiResponse[CanvasAssistantExchange], operation_id='chat_canvas_answer')
 router.add_api_route('/canvas/{canvas_id}/turns/{source_id}/stop', canvas_routes.stop_assistant_turn,
                      methods=['POST'], response_model=ApiResponse[CanvasAssistantExchange], operation_id='chat_canvas_stop')
 router.add_api_route('/canvas/{canvas_id}/proposals/{source_id}', canvas_routes.decide_assistant_proposal,

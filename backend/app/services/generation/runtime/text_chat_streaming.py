@@ -1,4 +1,4 @@
-"""文本实验室的同步 SSE 运行与异步文本任务服务。"""
+"""文本实验室的流式运行服务。"""
 
 from __future__ import annotations
 
@@ -12,15 +12,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.contracts.generation import (
-    GenerationCommand,
-    GenerationDelivery,
-    GenerationModality,
-    GenerationOperation,
-    GenerationSubmitRequest,
-    GenerationTarget,
-    GenerationTargetKind,
-)
 from app.core.contracts.streaming import (
     GenerationStreamEvent,
     StreamAcceptedData,
@@ -33,13 +24,10 @@ from app.core.contracts.streaming import (
     StreamMessageData,
     StreamEventType,
 )
-from app.core.contracts.model_provider import ProviderChatMessage, TextModelProvider
-from app.core.contracts.text_generation import TextChatInput, TextChatMessage
+from app.core.contracts.model_provider import TextModelProvider
 from app.core.db import async_session_maker
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
-from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.runtime.text_streaming import TextStreamRunNotFoundError, TextStreamingRuntime
-from app.services.generation.submission import GenerationAccepted, GenerationSubmitter
 from app.services.llm.resolver import build_laboratory_chat
 from app.services.studio.session_events import append_session_event
 from app.schemas.studio.text_lab import TextLabRunRequest
@@ -112,26 +100,25 @@ class TextInteractionAdmission:
     saved_events: tuple[GenerationStreamEvent, ...] | None = None
 
 
-async def admit_text_interaction(db, session_id, body: TextLabRunRequest, request_id: str | None, *, publish_events=False) -> TextInteractionAdmission:
+async def admit_text_interaction(db, session_id, body: TextLabRunRequest, request_id: str) -> TextInteractionAdmission:
     """Resume an existing text stream by identity without starting the model again."""
-    if request_id is not None:
-        await _lock_text_interaction(db, session_id)
-        previous = await find_text_request(db, session_id, request_id, body)
-        if previous is not None:
-            task_id = previous.payload['interaction_run_id']
-            try:
-                await _runtime.state_of(task_id)
-            except TextStreamRunNotFoundError as error:
-                result = await text_stream_result(db, session_id, task_id)
-                if result is None:
-                    deltas = previous.payload.get('_stream_partial', [])
-                    if not deltas:
-                        raise HTTPException(409, 'TEXT_LAB_STREAM_RESULT_UNKNOWN') from error
-                    return TextInteractionAdmission(task_id, False, _recovered_text_events(previous, None, task_id, deltas))
-                return TextInteractionAdmission(task_id, False, _recovered_text_events(previous, result, task_id))
-            return TextInteractionAdmission(task_id, False)
+    await _lock_text_interaction(db, session_id)
+    previous = await find_text_request(db, session_id, request_id, body)
+    if previous is not None:
+        task_id = previous.payload['interaction_run_id']
+        try:
+            await _runtime.state_of(task_id)
+        except TextStreamRunNotFoundError as error:
+            result = await text_stream_result(db, session_id, task_id)
+            if result is None:
+                deltas = previous.payload.get('_stream_partial', [])
+                if not deltas:
+                    raise HTTPException(409, 'TEXT_LAB_STREAM_RESULT_UNKNOWN') from error
+                return TextInteractionAdmission(task_id, False, _recovered_text_events(previous, None, task_id, deltas))
+            return TextInteractionAdmission(task_id, False, _recovered_text_events(previous, result, task_id))
+        return TextInteractionAdmission(task_id, False)
     task_id, _ = await create_text_stream_run(
-        db, session_id=session_id, model_id=body.model_id, content=body.content, request_id=request_id, publish_events=publish_events,
+        db, session_id=session_id, model_id=body.model_id, content=body.content, request_id=request_id, publish_events=True,
     )
     return TextInteractionAdmission(task_id, True)
 
@@ -165,54 +152,6 @@ def _recovered_text_events(user, result, task_id, partial=None):
     return tuple(events)
 
 
-def _text_chat_command(*, session_id: str, model_id: str, content: str, delivery: GenerationDelivery) -> GenerationCommand:
-    """从固定文本实验室路径构建异步或 inline 文本命令。"""
-    return GenerationCommand(
-        modality=GenerationModality.text,
-        operation=GenerationOperation.text_chat,
-        delivery=delivery,
-        target=GenerationTarget(kind=GenerationTargetKind.experiment_session, entity_id=session_id),
-        request=GenerationSubmitRequest(
-            model_id=model_id,
-            operation_input=TextChatInput(messages=[TextChatMessage(role="user", content=content, sequence=1)]),
-        ),
-    )
-
-
-async def create_text_async_task(
-    db: AsyncSession, *, session_id: str, model_id: str, content: str
-) -> tuple[GenerationAccepted, ExperimentMessage, ExperimentMessage]:
-    """原子写入异步文本任务及其在实验室时间线中的两条消息。"""
-    session = await _require_text_session(db, session_id=session_id)
-    command = _text_chat_command(session_id=session_id, model_id=model_id, content=content, delivery=GenerationDelivery.async_polling)
-    user_message, task_message = await append_experiment_messages(
-        db,
-        session_id=session_id,
-        drafts=[
-            experiment_user_message(prompt=content, model_id=model_id),
-            ExperimentMessageDraft(role="task", content="文本生成任务已提交，正在等待生成结果。", payload={"modality": "text"}),
-        ],
-    )
-    accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(db, command)
-    task_message.task_id = accepted.task_id
-    session.updated_at = func.now()
-    await db.flush()
-    return accepted, user_message, task_message
-
-
-async def execute_text_inline(
-    db: AsyncSession, *, session_id: str, model_id: str, content: str
-) -> tuple[ExperimentMessage, ExperimentMessage]:
-    """执行同步 JSON 文本请求并持久化 canonical 用户和助手消息。"""
-    await _require_text_session(db, session_id=session_id)
-    command = _text_chat_command(session_id=session_id, model_id=model_id, content=content, delivery=GenerationDelivery.inline)
-    snapshot = await GenerationEntityGate().validate(db, command)
-    user_message = (await append_experiment_messages(db, session_id=session_id, drafts=[experiment_user_message(prompt=content, model_id=model_id)]))[0]
-    text = await _invoke_text_snapshot(db, snapshot_payload=snapshot.model_dump(mode="json"))
-    assistant_message = (await append_experiment_messages(db, session_id=session_id, drafts=[ExperimentMessageDraft(role="assistant", content=text, payload={"model_id": snapshot.model_id})]))[0]
-    return user_message, assistant_message
-
-
 async def _lock_text_interaction(db, session_id):
     # Use the same session row as message sequencing. A no-op update obtains
     # the write lock even on SQLite, whose SELECT FOR UPDATE is ignored.
@@ -232,19 +171,6 @@ async def _require_text_session(db: AsyncSession, *, session_id: str) -> Experim
     return session
 
 
-def _snapshot_messages(messages: list[dict[str, object]]) -> list[ProviderChatMessage]:
-    """恢复已保存的纯文本消息。"""
-    result: list[ProviderChatMessage] = []
-    for message in messages:
-        role = message.get("role")
-        if role not in ("user", "assistant", "system"):
-            raise RuntimeError("text chat snapshot contains an unsupported role")
-        result.append({"role": role, "content": str(message.get("content") or "")})
-    if not result:
-        raise RuntimeError("text chat snapshot contains no messages")
-    return result
-
-
 async def _stream_chat(
     model: TextModelProvider, content: str,
 ) -> AsyncGenerator[str, None]:
@@ -254,23 +180,6 @@ async def _stream_chat(
                 raise RuntimeError(event.error or "Text model stream failed")
             if event.kind == "delta" and event.choice == 0 and event.text:
                 yield event.text
-
-
-async def _invoke_text_snapshot(db: AsyncSession, *, snapshot_payload: dict[str, object]) -> str:
-    """执行异步或 inline 文本任务的参数快照，并在运行时解析当前模型。"""
-    operation_input = dict(snapshot_payload.get("operation_input") or {})
-    if operation_input.get("kind") != "text_chat":
-        raise RuntimeError("text chat snapshot operation is unavailable")
-    model_id = str(snapshot_payload.get("model_id") or "")
-    if not model_id:
-        raise RuntimeError("text chat snapshot model is unavailable")
-    model = await build_laboratory_chat(db, model_id=model_id)
-    messages = _snapshot_messages(list(operation_input.get("messages") or []))
-    result = await model.invoke(messages)
-    text = next((choice.text.strip() for choice in result.choices if choice.choice == 0), "")
-    if not text:
-        raise RuntimeError("text model returned an empty response")
-    return text
 
 
 async def stream_text_run(run_id: str) -> None:
@@ -445,6 +354,6 @@ async def reap_expired_text_stream_runs(*, limit: int = 100) -> list[str]:
 
 
 __all__ = [
-    "create_text_async_task", "create_text_stream_run", "execute_text_inline", "reap_expired_text_stream_runs",
+    "create_text_stream_run", "reap_expired_text_stream_runs",
     "request_text_stream_cancel", "stream_text_run", "subscribe_text_stream",
 ]

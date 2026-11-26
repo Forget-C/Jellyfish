@@ -161,13 +161,6 @@ async def finish(db, session_id, turn_id, status, text='', owner=None, error_cod
     await db.commit()
 
 
-async def resume_turn(db, session_id, body, *, paused=True):
-    owner = await turn_recovery.claim(db, session_id, body.request_id, paused=paused)
-    if owner:
-        return await send(db, session_id, body, recovering=owner)
-    return await snapshot(db, session_id)
-
-
 async def recover_turn(sessions, session_id, turn_id):
     async with sessions() as db:
         owner = await turn_recovery.claim(db, session_id, turn_id)
@@ -300,14 +293,30 @@ async def save_models(db, session_id, body):
     return await model_choices(db, session)
 
 
-async def answer_turn(db, session_id, turn_id, body):
+async def answer_turn(db, session_id, turn_id, body, *, on_accepted):
+    """Record the answer and release HTTP before resuming the leased turn."""
     session = await session_for(db, session_id, lock=True)
     row, changed = await record_answer(db, session, turn_id, body)
+    cursor = await db.scalar(select(ExperimentSessionEvent.cursor).where(
+        ExperimentSessionEvent.session_id == session_id, ExperimentSessionEvent.turn_id == turn_id,
+        ExperimentSessionEvent.kind == 'question.answered',
+        ExperimentSessionEvent.payload['question_id'].as_string() == body.question_id,
+    ))
     if not changed:
-        return await snapshot(db, session_id)
+        await db.commit()
+        on_accepted(cursor - 1)
+        return
     command = LabChatCommand(request_id=turn_id, text=row.content, file_ids=row.payload.get('file_ids', []))
-    await db.flush()
-    return await resume_turn(db, session_id, command)
+    owner = await turn_recovery.claim(db, session_id, turn_id, paused=True)
+    if owner is None:
+        raise HTTPException(409, 'Chat question is no longer active')
+    on_accepted(cursor - 1)
+    try:
+        await send(db, session_id, command, recovering=owner)
+    except Exception:
+        await db.rollback()
+        await finish(db, session_id, turn_id, 'failed', owner=owner)
+        raise
 
 
 async def stop_turn(db, session_id, turn_id):

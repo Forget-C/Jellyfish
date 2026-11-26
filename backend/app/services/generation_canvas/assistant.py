@@ -347,7 +347,7 @@ class CanvasAssistant:
         return session
 
     async def answer(self, canvas_id: str, source_id: str,
-                     answer: CanvasAssistantQuestionAnswer) -> CanvasAssistantExchange:
+                     answer: CanvasAssistantQuestionAnswer, *, on_accepted=None) -> CanvasAssistantExchange:
         """Continue the original turn for a known question, or replay the accepted answer."""
         await self.store.get(canvas_id)
         session = await self._lock_session(canvas_id)
@@ -359,7 +359,11 @@ class CanvasAssistant:
         pending = session.pending_request
         if not pending or pending['command']['request_id'] != source_id:
             raise HTTPException(404, 'Canvas assistant question not found')
-        return await self.send(canvas_id, CanvasAssistantMessage.model_validate(pending['command']), answer=answer)
+        command = CanvasAssistantMessage.model_validate(pending['command'])
+        question = pending.get('question')
+        if question and question['id'] != answer.question_id and answer.model_dump() in pending.get('answers', []):
+            return self._question_exchange(command, session, pending, CanvasAssistantQuestion.model_validate(question))
+        return await self.send(canvas_id, command, answer=answer, on_accepted=on_accepted)
 
     async def turn_replay_cursor(self, canvas_id: str, turn_id: str) -> int:
         """Locate the latest attempt, or a synchronous preview submission."""
@@ -370,6 +374,18 @@ class CanvasAssistant:
         first = next((cursor for cursor, kind in events if kind == 'turn.accepted'),
                      events[-1].cursor if events else 1)
         return first - 1
+
+    async def answer_replay_cursor(self, canvas_id, turn_id, answer):
+        """Find the acceptance boundary of this answer, even after another question."""
+        events = await self.db.scalars(select(CanvasAssistantEvent).where(
+            CanvasAssistantEvent.canvas_id == canvas_id, CanvasAssistantEvent.source_id == turn_id,
+            CanvasAssistantEvent.kind == 'turn.accepted',
+        ).order_by(CanvasAssistantEvent.cursor.desc()))
+        payload = answer.model_dump(mode='json')
+        for event in events:
+            if payload in (event.payload.get('question_answers') or []):
+                return event.cursor - 1
+        return await self.turn_replay_cursor(canvas_id, turn_id)
 
     async def send(self, canvas_id: str, command: CanvasAssistantMessage, *,
                    answer: CanvasAssistantQuestionAnswer | None = None, on_accepted=None) -> CanvasAssistantExchange:
@@ -499,7 +515,7 @@ class CanvasAssistant:
                 session.pending_request = {**session.pending_request, 'progress': progress.model_dump(mode='json')}
             publish_events(self.db, session, CanvasAssistantExchange(
                 request_id=command.request_id, text=command.text, sequence=session.sequence + 1,
-                model_id=model_id, reply='', progress=progress,
+                model_id=model_id, reply='', progress=progress, question_answers=[answer] if answer else None,
             ), 'turn.accepted')
         snapshot = session.pending_checkpoint
         # Keep database locks away from provider I/O. The short lease serializes

@@ -2,7 +2,6 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { ApiResponse_ExperimentTaskCreated_ } from '../models/ApiResponse_ExperimentTaskCreated_';
 import type { ApiResponse_TaskCreated_ } from '../models/ApiResponse_TaskCreated_';
 import type { GenerationSubmitRequest } from '../models/GenerationSubmitRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -91,68 +90,6 @@ export class StudioGenerationTasksService {
                 'asset_type': assetType,
                 'asset_id': assetId,
                 'slot_id': slotId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 提交图片实验室统一任务
-     * 为图片实验会话创建权威消息和安全快照任务。
-     * @returns ApiResponse_ExperimentTaskCreated_ Successful Response
-     * @throws ApiError
-     */
-    public static submitImageLabGenerationTaskApiV1StudioGenerationTasksLabsImageSessionsSessionIdTasksPost({
-        sessionId,
-        requestBody,
-        idempotencyKey,
-    }: {
-        sessionId: string,
-        requestBody: GenerationSubmitRequest,
-        idempotencyKey?: (string | null),
-    }): CancelablePromise<ApiResponse_ExperimentTaskCreated_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/generation-tasks/labs/image/sessions/{session_id}/tasks',
-            path: {
-                'session_id': sessionId,
-            },
-            headers: {
-                'Idempotency-Key': idempotencyKey,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 提交视频实验室统一任务
-     * 为视频实验会话创建权威消息和安全快照任务。
-     * @returns ApiResponse_ExperimentTaskCreated_ Successful Response
-     * @throws ApiError
-     */
-    public static submitVideoLabGenerationTaskApiV1StudioGenerationTasksLabsVideoSessionsSessionIdTasksPost({
-        sessionId,
-        requestBody,
-        idempotencyKey,
-    }: {
-        sessionId: string,
-        requestBody: GenerationSubmitRequest,
-        idempotencyKey?: (string | null),
-    }): CancelablePromise<ApiResponse_ExperimentTaskCreated_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/generation-tasks/labs/video/sessions/{session_id}/tasks',
-            path: {
-                'session_id': sessionId,
-            },
-            headers: {
-                'Idempotency-Key': idempotencyKey,
             },
             body: requestBody,
             mediaType: 'application/json',

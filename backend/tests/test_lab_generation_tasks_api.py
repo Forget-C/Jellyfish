@@ -7,9 +7,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.api.v1.routes.studio import lab_generation_tasks as route
+from app.services.studio import media_trials
 from app.core.contracts.generation import (
-    GenerationSubmitRequest,
+    GenerationModality, GenerationSubmitRequest,
     ImageGenerationOperationInput,
     VideoGenerationOperationInput,
 )
@@ -22,13 +22,14 @@ from app.schemas.studio.experiment_sessions import ExperimentMessageRead
 def isolate_message_projection(monkeypatch):
     """这里验证路由编排；消息状态投影另由真实数据库测试覆盖。"""
     async def read(db, messages, *, include_media_receipts):
-        """投影只能在提交完成后执行。"""
-        assert db.commits == 1 and include_media_receipts
+        """受理事件和消息投影在同一事务提交。"""
+        assert db.commits == 0 and include_media_receipts
         return [ExperimentMessageRead.model_validate(message) for message in messages]
-    async def publish(*_args):
+    async def publish(*_args, messages):
+        assert messages
         pass
-    monkeypatch.setattr(route, "publish_media_fact", publish)
-    monkeypatch.setattr(route, "read_experiment_messages", read)
+    monkeypatch.setattr(media_trials, "publish_media_fact", publish)
+    monkeypatch.setattr(media_trials, "read_experiment_messages", read)
 
 
 class _DummyDB:
@@ -94,8 +95,8 @@ def _message(message_id: str, role: str) -> ExperimentMessage:
 
 
 @pytest.mark.anyio
-async def test_image_lab_task_commits_messages_and_snapshot_before_read_projection(monkeypatch, isolate_message_projection) -> None:
-    """图片实验室提交先原子保存消息和任务，再查询响应投影。"""
+async def test_image_lab_task_commits_messages_and_acceptance_together(monkeypatch, isolate_message_projection) -> None:
+    """图片实验室提交原子保存消息、任务和受理事件。"""
 
     db = _DummyDB()
     user_message, task_message = _message("user-1", "user"), _message("task-message-1", "task")
@@ -116,28 +117,27 @@ async def test_image_lab_task_commits_messages_and_snapshot_before_read_projecti
         events.append("task")
         return GenerationAccepted(task_id="task-1", model_id="resolved-model")
 
-    monkeypatch.setattr(route, "append_experiment_messages", _append)
-    monkeypatch.setattr(route, "GenerationSubmitter", _Submitter)
+    monkeypatch.setattr(media_trials, "append_experiment_messages", _append)
+    monkeypatch.setattr(media_trials, "GenerationSubmitter", _Submitter)
     monkeypatch.setattr(_Submitter, "submit_async", _submit)
 
-    response = await route.submit_image_lab_generation_task(
-        "session-1",
+    response = await media_trials.submit_media_trial(
+        db, "session-1", GenerationModality.image,
         GenerationSubmitRequest(
             model_id="image-model",
             execution_prompt="实验图片",
             operation_input=ImageGenerationOperationInput(),
         ),
-        db,
+        None,
     )
 
-    assert response.data.task_id == "task-1"
+    assert response.task_id == "task-1"
     assert task_message.task_id == "task-1"
     assert _Submitter.command.target.kind.value == "experiment_session"
     assert _Submitter.command.target.entity_id == "session-1"
     assert _Submitter.command.modality.value == "image"
     assert events == ["task", "messages"]
     assert db.commits == 1
-    assert db.refreshed == [user_message, task_message]
 
 
 @pytest.mark.anyio
@@ -150,44 +150,43 @@ async def test_video_lab_task_binds_video_modality_and_rejects_wrong_session_typ
     async def _append(*_args, **_kwargs):  # noqa: ANN001
         return user_message, task_message
 
-    monkeypatch.setattr(route, "append_experiment_messages", _append)
-    monkeypatch.setattr(route, "GenerationSubmitter", _Submitter)
-    await route.submit_video_lab_generation_task(
-        "session-1",
+    monkeypatch.setattr(media_trials, "append_experiment_messages", _append)
+    monkeypatch.setattr(media_trials, "GenerationSubmitter", _Submitter)
+    await media_trials.submit_media_trial(
+        db, "session-1", GenerationModality.video,
         GenerationSubmitRequest(
             model_id="video-model",
             execution_prompt="实验视频",
             operation_input=VideoGenerationOperationInput(ratio="16:9"),
         ),
-        db,
+        None,
     )
     assert _Submitter.command.modality.value == "video"
     assert _Submitter.command.operation.value == "video_generation"
 
     wrong_type_db = _DummyDB(lab_type="image")
     with pytest.raises(Exception) as error:
-        await route.submit_video_lab_generation_task(
-            "session-1",
+        await media_trials.submit_media_trial(
+            wrong_type_db, "session-1", GenerationModality.video,
             GenerationSubmitRequest(
                 model_id="video-model",
                 execution_prompt="实验视频",
                 operation_input=VideoGenerationOperationInput(ratio="16:9"),
             ),
-            wrong_type_db,
+            None,
         )
     assert getattr(error.value, "detail", None) == "experiment_session_type_invalid"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("explicit_model", [False, True])
-@pytest.mark.parametrize("unified", [False, True])
 @pytest.mark.parametrize(("modality", "model", "media", "operation"), [
     ("image", "gpt-image-1", {"references": [{"file_id": "input", "media_kind": "image", "ordinal": 0}]},
      {"kind": "image_generation", "target_ratio": "1:1", "count": 2}),
     ("video", "viduq2", {"frames": {"first": {"file_id": "input", "media_kind": "image", "ordinal": 0}}},
      {"kind": "video_generation", "ratio": "16:9", "seconds": 4}),
 ])
-async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatch, modality, model, media, operation, explicit_model, unified):
+async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatch, modality, model, media, operation, explicit_model):
     """用户可从历史读取已提交输入，任务消息继续承载关联任务状态。"""
     from app.models.llm import Model, ModelSettings, Provider
     from app.models.studio import FileItem
@@ -217,21 +216,19 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         body = {"execution_prompt": "按参考图生成", "media": media, "operation_input": operation}
         if explicit_model:
             body["model_id"] = "lab-model"
-        submit_url = base + (f"/chat/sessions/{session_id}/turns" if unified else
-                             f"/generation-tasks/labs/{modality}/sessions/{session_id}/tasks")
+        submit_url = base + f"/chat/sessions/{session_id}/turns"
         headers = {"Idempotency-Key": "same-lab-request"}
         submitted = await client.post(submit_url, json=body, headers=headers)
-        assert submitted.status_code == (202 if unified else 201), submitted.text
+        assert submitted.status_code == 202, submitted.text
         reconnected = await client.get(base + f"/experiment-sessions/{session_id}/interaction/requests/same-lab-request")
         assert reconnected.status_code == 200, reconnected.text
-        created_task = reconnected.json()["data"] if unified else submitted.json()["data"]
+        created_task = reconnected.json()["data"]
         assert reconnected.json()["data"] == created_task
         replayed = await client.post(submit_url, json=body, headers=headers)
         assert replayed.status_code == submitted.status_code and replayed.json()["data"] == submitted.json()["data"]
         changed = await client.post(submit_url, json={**body, "execution_prompt": "更换请求正文"}, headers=headers)
         assert changed.status_code == 409, changed.text
-        history = await client.get(base + (f"/chat/sessions/media/{session_id}" if unified else
-                                           f"/experiment-sessions/{session_id}/messages"))
+        history = await client.get(base + f"/chat/sessions/media/{session_id}")
         assert history.status_code == 200
         user, task = history.json()["data"]
         snapshot = user["payload"]["input_snapshot"]
@@ -246,26 +243,38 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
             assert snapshot["media"]["frames"]["first"] == media["frames"]["first"]
         assert task["task_id"] == created_task["task_id"] and task["status"] == "queued"
         assert "private-key" not in history.text
-        if unified:
-            event_url = base + f"/chat/sessions/{session_id}/events"
-            receipt = submitted.json()["data"]
-            assert receipt["session_id"] == session_id and receipt["turn_id"] == "same-lab-request"
-            events = await client.get(event_url, params={"follow": "false", "after": receipt["cursor"]})
-            assert events.status_code == 200
-            import json
-            observed = [json.loads(line[6:]) for line in events.text.splitlines() if line.startswith("data: ")]
-            assert [item["type"] for item in observed] == ["task.accepted"]
-            assert observed[0]["category"] == "task" and observed[0]["turn_id"] == receipt["turn_id"]
-            receipt = observed[0]["payload"]
-            assert receipt.pop("messages") == created_task["messages"]
-            assert receipt["task_id"] == task["task_id"]
-            assert receipt["model_id"] == "lab-model" and receipt["model_name"] == model
-            assert receipt["references"][0]["file_id"] == "input"
-            assert "private-key" not in events.text
-            assert task["media_receipt"] == receipt
-            assert not (await client.get(event_url, params={"after": observed[0]["cursor"], "follow": "false"})).text
-            if explicit_model:
-                await complete_media_trial(sessions, client, event_url, history.request.url, modality, model, monkeypatch)
+        event_url = base + f"/chat/sessions/{session_id}/events"
+        receipt = submitted.json()["data"]
+        assert receipt["session_id"] == session_id and receipt["turn_id"] == "same-lab-request"
+        events = await client.get(event_url, params={"follow": "false", "after": receipt["cursor"]})
+        assert events.status_code == 200
+        import json
+        observed = [json.loads(line[6:]) for line in events.text.splitlines() if line.startswith("data: ")]
+        assert [item["type"] for item in observed] == ["task.accepted"]
+        assert observed[0]["category"] == "task" and observed[0]["turn_id"] == receipt["turn_id"]
+        receipt = observed[0]["payload"]
+        assert receipt.pop("messages") == created_task["messages"]
+        # Simulate a task accepted by the retired media endpoint.
+        from sqlalchemy import select
+        from app.models.experiment_sessions import ExperimentSessionEvent
+
+        async with sessions.begin() as db:
+            accepted = await db.scalar(select(ExperimentSessionEvent).where(
+                ExperimentSessionEvent.session_id == session_id, ExperimentSessionEvent.kind == "task.accepted"))
+            accepted.payload = {key: value for key, value in accepted.payload.items() if key != "messages"}
+        legacy_retry = await client.post(submit_url, json=body, headers=headers)
+        assert legacy_retry.json() == submitted.json()
+        restored = await client.get(event_url, params={"follow": "false", "after": submitted.json()["data"]["cursor"]})
+        restored_event = next(json.loads(line[6:]) for line in restored.text.splitlines() if line.startswith("data: "))
+        assert restored_event["payload"]["messages"] == created_task["messages"]
+        assert receipt["task_id"] == task["task_id"]
+        assert receipt["model_id"] == "lab-model" and receipt["model_name"] == model
+        assert receipt["references"][0]["file_id"] == "input"
+        assert "private-key" not in events.text
+        assert task["media_receipt"] == receipt
+        assert not (await client.get(event_url, params={"after": observed[0]["cursor"], "follow": "false"})).text
+        if explicit_model:
+            await complete_media_trial(sessions, client, event_url, history.request.url, modality, model, monkeypatch)
 
 
 async def complete_media_trial(sessions, api, url, snapshot_url, modality, model, monkeypatch):
