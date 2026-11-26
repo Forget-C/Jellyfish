@@ -263,8 +263,7 @@ async def test_can_stop_request_before_first_assistant_reply(canvas_client, monk
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('resume', [True, False])
-async def test_resending_interrupted_assistant_turn_continues_completed_tool_step(canvas_client, monkeypatch, resume):
+async def test_resending_interrupted_assistant_turn_returns_original_receipt(canvas_client, monkeypatch):
     calls = []
     real_send = httpx.AsyncClient.send
 
@@ -309,16 +308,24 @@ async def test_resending_interrupted_assistant_turn_continues_completed_tool_ste
     assert history['pending_request']['request_id'] == command['request_id']
     assert '模型未能完成回复' in history['pending_progress']['reply']
     assert history['pending_request']['context']['draft'] == command['context']['draft']
-    follow_up = history['pending_request'] if resume else {**command, 'request_id': 'new-turn'}
-    assert (await observe_canvas_turn(canvas_client, assistant, json=follow_up)).detail['reply'] == '已从中断处继续'
+    url = f"/api/v1/studio/chat/sessions/{canvas['id']}"
+    repeated = await canvas_client.post(url + '/turns', json=command)
+    assert repeated.status_code == 202
+    assert repeated.json() == outcome.receipt.json()
+    assert calls == [False, True]
+    assert (await canvas_client.post(url + '/turns', json={**command, 'stream_reply': True})).status_code == 409
+
+    first = {**command, 'request_id': 'new-turn', 'text': '继续'}
+    second = {**first, 'request_id': 'another-turn'}
+    assert (await observe_canvas_turn(canvas_client, assistant, json=first)).detail['reply'] == '已从中断处继续'
+    assert (await observe_canvas_turn(canvas_client, assistant, json=second)).detail['reply'] == '已从中断处继续'
     refreshed = (await read_canvas_chat_snapshot(canvas_client, assistant)).json()['data']
     assert refreshed['pending_request'] is None
-    if resume:
-        assert calls == [False, True, True]
-    else:
-        assert [(turn['request_id']) for turn in refreshed['turns']] == ['resume-turn', 'new-turn']
-        assert '模型未能完成回复' in refreshed['turns'][0]['reply']
-        assert calls == [False, True, False, True]
+    assert [(turn['request_id']) for turn in refreshed['turns']] == ['resume-turn', 'new-turn', 'another-turn']
+    assert '模型未能完成回复' in refreshed['turns'][0]['reply']
+    assert calls == [False, True, False, True, False, True]
+    assert (await canvas_client.post(url + '/turns', json=command)).json() == outcome.receipt.json()
+    assert calls == [False, True, False, True, False, True]
 
 
 @pytest.mark.asyncio
@@ -361,8 +368,10 @@ async def test_assistant_model_context_limit_keeps_current_request_and_drops_old
     async with canvas_client.canvas_sessions.begin() as db:
         db.add(Model(id='large-window', name='large-window', category='text', provider_id='canvas-provider'))
     assert (await canvas_client.patch(assistant + '/model', json={'model_id': 'large-window'})).status_code == 200
-    retried = (await observe_canvas_turn(canvas_client, assistant, json=history['pending_request'])).detail
-    assert retried['request_id'] == 'long2' and retried['model_id'] == 'large-window'
+    retried = (await observe_canvas_turn(canvas_client, assistant, json={
+        **history['pending_request'], 'request_id': 'new-large-window-turn',
+    })).detail
+    assert retried['request_id'] == 'new-large-window-turn' and retried['model_id'] == 'large-window'
 
 
 @pytest.mark.asyncio
@@ -415,9 +424,10 @@ async def test_explicit_plan_uses_named_skills_without_available_writes(canvas_c
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("canvas_client", ["app-handler-file"], indirect=True)
-@pytest.mark.parametrize("outcome", ["completed", "interrupted", "stopped", "legacy"])
+@pytest.mark.parametrize("outcome", ["completed", "interrupted", "stopped", "legacy", "consecutive"])
 async def test_creative_question_resumes_original_turn_and_replays_answer(canvas_client, monkeypatch, outcome):
     import asyncio
+    from tests.chat_events import read_chat_events
     from app.models.llm import Model
 
     async with canvas_client.canvas_sessions.begin() as db:
@@ -437,12 +447,21 @@ async def test_creative_question_resumes_original_turn_and_replays_answer(canvas
         model_calls.append(body['messages'])
         tool_messages = [item for item in body['messages'] if item['role'] == 'tool']
         if tool_messages:
-            assert '紧张逼近' in tool_messages[-1]['content']
             resumed.set()
             await release.wait()
             if outcome == 'interrupted':
                 return httpx.Response(400, request=request, json={'error': {'message': 'rejected'}})
-            answer = {'role': 'assistant', 'content': '保留紧张逼近的镜头。'}
+            if outcome == 'consecutive' and len(tool_messages) == 1:
+                assert '紧张逼近' in tool_messages[-1]['content']
+                answer = {'role': 'assistant', 'tool_calls': [{
+                    'id': 'ask-frame', 'type': 'function',
+                    'function': {'name': 'ask_canvas_question', 'arguments': json.dumps({
+                        'question': '选哪个画幅？', 'options': ['横屏', '竖屏'],
+                    }, ensure_ascii=False)},
+                }]}
+            else:
+                assert ('横屏' if outcome == 'consecutive' else '紧张逼近') in tool_messages[-1]['content']
+                answer = {'role': 'assistant', 'content': '保留紧张逼近的镜头。'}
         else:
             answer = {'role': 'assistant', 'tool_calls': [{
                 'id': 'ask-dramatic-intent', 'type': 'function',
@@ -460,8 +479,11 @@ async def test_creative_question_resumes_original_turn_and_replays_answer(canvas
     base = '/api/v1/studio'
     canvas = (await canvas_client.post(base + '/generation-canvases', json={'name': '选择叙事方向'})).json()['data']
     url = f"{base}/chat/sessions/{canvas['id']}"
-    started = await canvas_client.post(url + '/turns', json={'request_id': 'same-turn', 'text': '设置场景情绪'})
-    assert started.status_code == 202, started.text
+    command = {'request_id': 'same-turn', 'text': '设置场景情绪'}
+    started, duplicate = await asyncio.gather(
+        canvas_client.post(url + '/turns', json=command), canvas_client.post(url + '/turns', json=command))
+    assert started.status_code == duplicate.status_code == 202, (started.text, duplicate.text)
+    assert started.json() == duplicate.json()
     question_event = await wait_for_chat_event(canvas_client, url, 'same-turn', 'question.asked')
     question = question_event['detail']['question']
     assert question['options'] == ['紧张逼近', '保持疏离']
@@ -469,8 +491,10 @@ async def test_creative_question_resumes_original_turn_and_replays_answer(canvas
     body = {'question_id': question['id'], 'answer': '紧张逼近'}
     endpoint = url + '/turns/same-turn/answer'
     try:
-        accepted = await asyncio.wait_for(canvas_client.post(endpoint, json=body), 2)
-        assert accepted.status_code == 202, accepted.text
+        accepted, duplicate = await asyncio.wait_for(asyncio.gather(
+            canvas_client.post(endpoint, json=body), canvas_client.post(endpoint, json=body)), 2)
+        assert accepted.status_code == duplicate.status_code == 202, (accepted.text, duplicate.text)
+        assert accepted.json() == duplicate.json()
         receipt = accepted.json()['data']
         assert set(receipt) == {'session_id', 'turn_id', 'cursor'}
         assert receipt['turn_id'] == 'same-turn' and receipt['cursor'] >= question_event['cursor']
@@ -485,6 +509,26 @@ async def test_creative_question_resumes_original_turn_and_replays_answer(canvas
             assert stop.status_code == 200 and stop.json()['data']['stopped']
     finally:
         release.set()
+    if outcome == 'consecutive':
+        second_question = await wait_for_chat_event(canvas_client, url, 'same-turn', 'question.asked', after=receipt['cursor'])
+        second_answer = {'question_id': second_question['detail']['question']['id'], 'answer': '横屏'}
+        assert second_answer['question_id'] != body['question_id']
+        assert (await canvas_client.post(endpoint, json={**body, 'answer': '冲突'})).status_code == 409
+        second = await canvas_client.post(endpoint, json=second_answer)
+        assert second.status_code == 202
+        assert second.json()['data']['cursor'] > receipt['cursor']
+        await wait_for_chat_event(canvas_client, url, 'same-turn', 'turn.completed', after=second.json()['data']['cursor'])
+        for path, item, saved in (('/turns', command, started), ('/turns/same-turn/answer', body, accepted),
+                                  ('/turns/same-turn/answer', second_answer, second)):
+            assert (await canvas_client.post(url + path, json=item)).json() == saved.json()
+            cursor = saved.json()['data']['cursor']
+            replayed = (await read_chat_events(canvas_client, url, after=cursor))[0]
+            assert replayed['type'] == 'turn.accepted'
+            assert replayed['cursor'] == cursor + 1
+            if 'question_id' in item:
+                assert replayed['detail']['question_answers'] == [item]
+        assert len(model_calls) == 3
+        return
     terminal_kind = 'turn.interrupted' if outcome == 'interrupted' else 'turn.completed'
     terminal = await wait_for_chat_event(canvas_client, url, 'same-turn', terminal_kind, after=receipt['cursor'])
     if outcome in ('completed', 'legacy'):

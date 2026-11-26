@@ -8,7 +8,8 @@ from app.schemas.canvas_assistant import CanvasAssistantEventPayload, CanvasAssi
 
 
 def publish_events(db, session: CanvasAssistantSession, exchange: CanvasAssistantExchange, *kinds: str,
-                   subject: str | None = None, group_ids: list[str] | None = None) -> None:
+                   subject: str | None = None, group_ids: list[str] | None = None,
+                   command_digest: str | None = None) -> None:
     """Append exact exchange snapshots under the caller's session or canvas lock."""
     if not kinds:
         return
@@ -16,6 +17,8 @@ def publish_events(db, session: CanvasAssistantSession, exchange: CanvasAssistan
     if not subject and kinds and all(kind in ('proposal.created', 'proposal.superseded') for kind in kinds):
         subject = 'edit'
         group_ids = [group.id for group in exchange.proposal.groups or []] if exchange.proposal else None
+    if command_digest is not None:
+        payload['_command_digest'] = command_digest
     if subject:
         payload['_event'] = {'subject': subject, 'group_ids': group_ids, 'target_version': exchange.request_id}
     for kind in kinds:

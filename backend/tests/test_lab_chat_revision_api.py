@@ -10,13 +10,13 @@ from app.models.llm import Model, ModelSettings, Provider
 from app.models.studio_prompts_files_timeline import FileItem
 from app.models.task import Task, TaskOutput
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
-from tests.chat_events import wait_for_chat_event
+from tests.chat_events import read_chat_events, wait_for_chat_event
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # pylint: disable=unused-import
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
-@pytest.mark.parametrize('count', [1, 2])
+@pytest.mark.parametrize('count', [1, 2, 3])
 async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, count):
     from app.task_worker import TaskWorker
 
@@ -46,6 +46,8 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
             await append_experiment_messages(db, session_id=sid, drafts=[ExperimentMessageDraft(
                 role='task', task_id=tid, content='generate_video', payload={'turn_id': f'prior-{i}', 'modality': 'video'})])
     responses = []
+    model_calls = []
+    second_resumed, finish_second = asyncio.Event(), asyncio.Event()
     resumed, release = asyncio.Event(), asyncio.Event()
     original_send = httpx.AsyncClient.send
 
@@ -53,12 +55,21 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
         if request.url.host != 'example.test':
             return await original_send(client, request, **kwargs)
         messages = json.loads(request.content)['messages']
+        model_calls.append(messages)
         if messages[-1]['role'] == 'tool':
             responses.append(json.loads(messages[-1]['content']))
             if count > 1:
                 resumed.set()
                 await release.wait()
-            answer = {'role': 'assistant', 'content': '已提交新版'}
+            if count == 3 and len(responses) == 1:
+                answer = {'role': 'assistant', 'tool_calls': [{'id': 'revision-tool-two', 'type': 'function', 'function': {
+                    'name': 'revise_artifact', 'arguments': json.dumps({
+                        'modality': 'video', 'changes': {'ratio': '16:9'}, 'submit_only': True})}}]}
+            else:
+                if count == 3:
+                    second_resumed.set()
+                    await finish_second.wait()
+                answer = {'role': 'assistant', 'content': '已提交新版'}
         else:
             assert originals[0] in json.dumps(messages)
             answer = {'role': 'assistant', 'tool_calls': [{'id': 'revision-tool', 'type': 'function', 'function': {
@@ -69,8 +80,13 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
 
     monkeypatch.setattr(httpx.AsyncClient, 'send', language)
     command = {'text': '把刚才的视频改成横屏，只提交', 'request_id': 'revision'}
-    response = await canvas_client.post(url + '/turns', json=command)
-    assert response.is_success, response.text
+    first, second = await asyncio.gather(
+        canvas_client.post(url + '/turns', json=command),
+        canvas_client.post(url + '/turns', json=command),
+    )
+    assert first.status_code == second.status_code == 202, (first.text, second.text)
+    assert first.json() == second.json()
+    assert (await canvas_client.post(url + '/turns', json={**command, 'file_ids': ['other-file']})).status_code == 409
     if count > 1:
         await wait_for_chat_event(canvas_client, url, 'revision', 'question.asked')
         state = (await canvas_client.get(lab_url)).json()['data']
@@ -83,8 +99,12 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
         assert invalid.status_code in (409, 422)
         decision = {'question_id': question['id'], 'file_id': originals[-1]}
         try:
-            response = await asyncio.wait_for(canvas_client.post(endpoint, json=decision), 2)
-            assert response.status_code == 202, response.text
+            response, duplicate = await asyncio.wait_for(asyncio.gather(
+                canvas_client.post(endpoint, json=decision),
+                canvas_client.post(endpoint, json=decision),
+            ), 2)
+            assert response.status_code == duplicate.status_code == 202, (response.text, duplicate.text)
+            assert response.json() == duplicate.json()
             accepted = response.json()['data']
             assert set(accepted) == {'session_id', 'turn_id', 'cursor'}
             assert accepted['turn_id'] == 'revision'
@@ -94,7 +114,40 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
             assert (await canvas_client.post(endpoint, json=decision)).json() == response.json()
         finally:
             release.set()
+    if count == 3:
+        first_cursor = first.json()['data']['cursor']
+        assert (await read_chat_events(canvas_client, url, after=first_cursor))[0]['type'] == 'turn.accepted'
+        next_question = await wait_for_chat_event(
+            canvas_client, url, 'revision', 'question.asked', after=accepted['cursor'],
+        )
+        second_decision = {'question_id': 'revision-tool-two', 'file_id': originals[0]}
+        assert next_question['detail']['id'] == second_decision['question_id']
+        assert (await canvas_client.post(endpoint, json=decision)).json() == response.json()
+        try:
+            answer_two = await canvas_client.post(endpoint, json=second_decision)
+            assert answer_two.status_code == 202
+            cursor = answer_two.json()['data']['cursor']
+            for cursor_before, item in ((accepted['cursor'], decision), (cursor, second_decision)):
+                event = (await read_chat_events(canvas_client, url, after=cursor_before))[0]
+                assert event['type'] == 'question.answered' and event['detail'] == item
+            await asyncio.wait_for(second_resumed.wait(), 4)
+            stopped = await canvas_client.post(lab_url + '/turns/revision/stop')
+            assert stopped.status_code == 200
+            assert stopped.json()['data']['active_turn'] is None
+            for path, body, saved in (('/turns', command, first), ('/turns/revision/answer', decision, response),
+                                      ('/turns/revision/answer', second_decision, answer_two)):
+                assert (await canvas_client.post(url + path, json=body)).json() == saved.json()
+            assert (await canvas_client.post(endpoint, json={**second_decision, 'file_id': originals[1]})).status_code == 409
+            assert len(model_calls) == 3
+            assert len(responses) == 2
+        finally:
+            finish_second.set()
+        return
     await wait_for_chat_event(canvas_client, url, 'revision', 'turn.completed')
+    assert (await canvas_client.post(url + '/turns', json=command)).json() == first.json()
+    if count > 1:
+        assert (await canvas_client.post(endpoint, json=decision)).json() == response.json()
+        assert (await canvas_client.post(endpoint, json={**decision, 'file_id': originals[0]})).status_code == 409
     receipt, = responses
     assert receipt['model_id'] == 'canvas-video' and receipt['parameters']['ratio'] == '16:9'
     assert receipt['parameters']['seconds'] == 4 and receipt['source_file_id'] == originals[-1]
