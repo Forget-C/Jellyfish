@@ -67,7 +67,7 @@ async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, res
                          provider_id="custom", capability_profile={"native_streaming": {"declaration": "unsupported"}} if responses == "disabled" else {}, params={"temperature": 0.4, "use_responses_api": bool(responses)}))
             db.add(ExperimentSession(id="gateway-session", lab_type="text"))
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            base = "/api/v1/studio/chat/sessions/gateway-session"
+            base = "/api/v1/studio/chat/sessions/text/gateway-session"
             url = base + "/turns"
             body = {"model_id": "custom-text", "content": "你好"}
             response = await client.post(url, json=body, headers={"Idempotency-Key": "gateway-trial"})
@@ -89,8 +89,8 @@ async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, res
                 assert [(e['payload']['mode'], e['payload']['text']) for e in events if e['type'] == 'message.updated'] == [('append', '第一段'), ('append', '第二段')]
                 replay = await client.get(base + "/events", params={"after": events[-2]['cursor'], "follow": False})
                 assert replay.text.count("data: ") == 1
-                snapshot = await client.get("/api/v1/studio/chat/sessions/text/gateway-session")
-                assert snapshot.json()['data'][0]['content'] == '你好'
+                snapshot = await client.get(base + "/snapshot")
+                assert snapshot.json()['data']['history']['messages'][0]['content'] == '你好'
         if responses == "disabled":
             assert response.status_code == 422 and not requests
             return
@@ -131,10 +131,10 @@ async def test_text_stream_creates_message_without_generation_task(tmp_path, mon
         assert accepted.data.task_id == run_id
         expected = {"version": 1, "prompt": "你好", "model_id": "text-model"}
         assert accepted.data.user_message.payload["input_snapshot"] == expected
-        from app.api.v1.routes.studio.experiment_sessions import list_experiment_messages
+        from app.services.studio.text_trials import snapshot
         async with session_local() as db:
-            history = await list_experiment_messages("text-session", db, page=1, page_size=50)
-            assert history.data[0].payload["input_snapshot"] == expected
+            rows, _ = await snapshot(db, "text-session", page=1, page_size=50)
+            assert rows[0].payload["input_snapshot"] == expected
         async with session_local() as db:
             assert list((await db.scalars(select(Task))).all()) == []
         assert await text_chat_streaming.request_text_stream_cancel(
@@ -195,12 +195,6 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
                                       headers={'Last-Event-ID': str(completed['cursor'] - 1)})
             assert 'event: message.updated' not in replay.text
             assert 'event: turn.completed' in replay.text and '第一段第二段' in replay.text
-            compatibility = '/api/v1/studio/chat/sessions/sse-replay'
-            compatibility_retry = await client.post(compatibility + '/turns', json=body, headers=headers)
-            assert compatibility_retry.json() == first.json()
-            compat_stream = await client.get(compatibility + '/events',
-                                             params={'follow': False, 'after': completed['cursor'] - 1})
-            assert compat_stream.text == replay.text
             # Historical rows written before the unified event log can still be retried.
             from sqlalchemy import delete
             from app.models.experiment_sessions import ExperimentSessionEvent

@@ -14,7 +14,6 @@ from app.api.v1.routes.studio import (
     files,
     home,
     generation_tasks,
-    lab_generation_tasks,
     lab_chat,
     generation_prompts,
     projects,
@@ -25,7 +24,6 @@ from app.api.v1.routes.studio import (
 router = APIRouter()
 
 router.include_router(directing.router)
-router.include_router(lab_generation_tasks.chat_router, prefix="/chat/sessions", tags=["chat"])
 router.include_router(lab_chat.router, prefix="/chat/sessions/lab", tags=["chat"])
 router.include_router(text_trials.router, prefix="/chat/sessions/text", tags=["chat"])
 router.include_router(session_transport.router, prefix="/chat/sessions", tags=["chat"])

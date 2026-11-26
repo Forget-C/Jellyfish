@@ -1,15 +1,12 @@
 import { useUiText } from '../../../../uiText'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  StudioExperimentSessionsService,
-  type ExperimentMessageRead,
-} from '../../../../services/generated'
+import type { ExperimentMessageRead } from '../../../../services/generated'
 
 /** 共享历史 Hook 的可选配置，用于按页面展示容量调整分页大小。 */
 export interface UseExperimentHistoryOptions {
   /** 单页消息数量；服务端允许的范围为 1 到 100。 */
   pageSize?: number
-  readPage?: (options: {sessionId: string; page: number; pageSize: number}) =>
+  readPage: (options: {sessionId: string; page: number; pageSize: number}) =>
     Promise<{data?: ExperimentMessageRead[] | null; meta?: {cursor?: unknown; activeTurnIds?: string[] | null} | null}>
 }
 
@@ -31,7 +28,7 @@ export interface ExperimentHistoryState {
   hasLoadedHistory: boolean
   eventCursor?: number
   activeTurnIds?: string[]
-  readLatest: (targetSessionId: string) => ReturnType<NonNullable<UseExperimentHistoryOptions['readPage']>>
+  readLatest: (targetSessionId: string) => ReturnType<UseExperimentHistoryOptions['readPage']>
   /** 分页错误重试原页，避免重试时重置已经加载的历史。 */
   errorOnLoadMore: boolean
   /** 从第一页重新读取当前会话历史。 */
@@ -75,8 +72,8 @@ function releaseAdoptedMessages(sessionId: string, persistedItems: ExperimentMes
  * 当 sessionId 为空时代表未持久化草稿，本 Hook 只维护一个空的本地历史。
  */
 export function useExperimentHistory(
-  sessionId?: string,
-  { pageSize = 50, readPage = StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet }: UseExperimentHistoryOptions = {},
+  sessionId: string | undefined,
+  { pageSize = 50, readPage }: UseExperimentHistoryOptions,
 ): ExperimentHistoryState {
   const uiText = useUiText()
   const [messages, setMessages] = useState<ExperimentMessageRead[]>([])

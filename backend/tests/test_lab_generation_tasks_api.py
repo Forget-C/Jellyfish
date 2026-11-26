@@ -242,10 +242,6 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         another = await client.post(base + "/experiment-sessions", json={"lab_type": modality})
         another_id = another.json()["data"]["id"]
         assert (await client.get(base + f"/chat/sessions/{modality}/{another_id}/requests/same-lab-request")).status_code == 404
-        reconnected = await client.get(base + f"/experiment-sessions/{session_id}/interaction/requests/same-lab-request")
-        assert reconnected.status_code == 200, reconnected.text
-        created_task = reconnected.json()["data"]
-        assert reconnected.json()["data"] == created_task
         replayed = await client.post(submit_url, json=body, headers=headers)
         assert replayed.status_code == submitted.status_code and replayed.json()["data"] == submitted.json()["data"]
         changed = await client.post(submit_url, json={**body, "execution_prompt": "更换请求正文"}, headers=headers)
@@ -259,7 +255,6 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         assert earlier["history"]["messages"] == [user]
         assert earlier["cursor"] == state["cursor"]
         snapshot = user["payload"]["input_snapshot"]
-        assert created_task["messages"][0]["payload"]["input_snapshot"] == snapshot
         assert snapshot["version"] == 1
         assert snapshot["prompt"] == "按参考图生成" and snapshot["model_id"] == "lab-model"
         for field, value in operation.items():
@@ -268,24 +263,21 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
             assert snapshot["media"]["references"] == media["references"]
         else:
             assert snapshot["media"]["frames"]["first"] == media["frames"]["first"]
-        assert task["task_id"] == created_task["task_id"] and task["status"] == "queued"
+        assert task["task_id"] and task["status"] == "queued"
         assert "private-key" not in history.text
         event_url = session_url + "/events"
         receipt = submitted.json()["data"]
         assert receipt["session_id"] == session_id and receipt["turn_id"] == "same-lab-request"
         params = {"follow": False, "after": receipt["cursor"]}
         events = await client.get(event_url, params=params)
-        compatibility = base + f"/chat/sessions/{session_id}"
-        compatibility_retry = await client.post(compatibility + "/turns", json=body, headers=headers)
-        assert compatibility_retry.json() == submitted.json()
-        assert (await client.get(compatibility + "/events", params=params)).text == events.text
         assert events.status_code == 200
         import json
         observed = [json.loads(line[6:]) for line in events.text.splitlines() if line.startswith("data: ")]
         assert [item["type"] for item in observed] == ["task.accepted"]
         assert observed[0]["category"] == "task" and observed[0]["turn_id"] == receipt["turn_id"]
         receipt = observed[0]["payload"]
-        assert receipt.pop("messages") == created_task["messages"]
+        accepted_messages = receipt.pop("messages")
+        assert accepted_messages == [user, task]
         # Simulate a task accepted by the retired media endpoint.
         from sqlalchemy import select
         from app.models.experiment_sessions import ExperimentSessionEvent
@@ -298,7 +290,7 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         assert legacy_retry.json() == submitted.json()
         restored = await client.get(event_url, params={"follow": "false", "after": submitted.json()["data"]["cursor"]})
         restored_event = next(json.loads(line[6:]) for line in restored.text.splitlines() if line.startswith("data: "))
-        assert restored_event["payload"]["messages"] == created_task["messages"]
+        assert restored_event["payload"]["messages"] == accepted_messages
         assert receipt["task_id"] == task["task_id"]
         assert receipt["model_id"] == "lab-model" and receipt["model_name"] == model
         assert receipt["references"][0]["file_id"] == "input"

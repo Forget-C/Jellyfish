@@ -67,10 +67,10 @@ async def test_worker_resumes_exact_authorized_versions(runtime, monkeypatch):
     stopped_command = {**command, 'request_id': 'stopped-before-admission', 'text': '生成一版'}
     requested = await observe_canvas_turn(runtime.client, assistant, json=stopped_command)
     assert requested.receipt.status_code == 202, requested.receipt.text
-    stop_url = endpoint + '/assistant/turns/stopped-before-admission/stop' + ('?' + query if query else '')
+    stop_url = canvas_chat_url(assistant) + '/turns/stopped-before-admission/stop/snapshot' + ('?' + query if query else '')
     stopped = await runtime.client.post(stop_url)
     assert stopped.status_code == 200, stopped.text
-    assert stopped.json()['data']['generation']['state'] == 'stopped'
+    assert stopped.json()['data']['turns'][-1]['generation']['state'] == 'stopped'
     async with httpx.AsyncClient() as transport:
         worker = TaskWorker(runtime.sessions, client=transport)
         try:
@@ -135,7 +135,7 @@ async def test_worker_resumes_exact_authorized_versions(runtime, monkeypatch):
             await running
     replayed = await runtime.client.post(canvas_chat_url(assistant) + '/turns', json=command)
     assert replayed.json() == response.receipt.json()
-    replay = (await read_canvas_chat_snapshot(runtime.client, assistant)).json()['data']['turns'][-1]['generation']
+    replay = (await read_canvas_chat_snapshot(runtime.client, assistant)).json()['data']['history']['turns'][-1]['generation']
     assert replay['requested_count'] == 3
     assert replay['state'] == 'completed'
     assert [item['version'] for item in replay['versions']] == [1, 2, 3]
@@ -318,7 +318,7 @@ async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypa
             await worker.tick()
             await worker.tick()
             response = await read_canvas_chat_snapshot(runtime.client, assistant)
-            generation = response.json()['data']['turns'][0]['generation']
+            generation = response.json()['data']['history']['turns'][0]['generation']
             assert (generation and generation['state']) == expected_state
             published = (await runtime.client.get(runs)).json()['data']['runs']
             assert len(published) == expected_runs

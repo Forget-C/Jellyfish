@@ -13,11 +13,6 @@ router = APIRouter()
 Database = Annotated[AsyncSession, Depends(get_db, scope='function')]
 
 
-@router.get('/{session_id}', response_model=ApiResponse[LabChatSnapshot], operation_id='chat_lab_snapshot')
-async def lab_snapshot(session_id: str, db: Database):
-    return success_response(await laboratory.snapshot(db, session_id))
-
-
 @router.patch('/{session_id}/models', response_model=ApiResponse[LabModels], operation_id='chat_lab_models')
 async def lab_models(session_id: str, body: LabModels, db: Database):
     return success_response(await laboratory.save_models(db, session_id, body))

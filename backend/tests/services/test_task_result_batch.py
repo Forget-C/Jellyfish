@@ -1,5 +1,6 @@
 """Verify result and history projections through their public HTTP endpoints."""
 
+import re
 from datetime import datetime
 from uuid import uuid4
 
@@ -16,7 +17,7 @@ from tests.test_database_baseline_business import baseline_client
 async def test_history_query_count_and_order(baseline_client):
     client, sessions = baseline_client
     sid = uuid4().hex
-    history = f"/api/v1/studio/experiment-sessions/{sid}/messages"
+    history = f"/api/v1/studio/chat/sessions/image/{sid}/snapshot"
     engine = sessions.kw["bind"]
 
     async def read(path):
@@ -32,8 +33,13 @@ async def test_history_query_count_and_order(baseline_client):
         finally:
             event.remove(engine.sync_engine, "before_cursor_execute", record)
         assert response.status_code == 200, response.text
-        assert all("tasks.input_snapshot" not in sql and "files.storage_key" not in sql for sql in statements)
-        return response.json()["data"], len(statements)
+        # Media receipts extract selected public input fields in SQL. Keep
+        # execution snapshots and storage keys out of the projected columns.
+        whole_snapshot = re.compile(r"(?:select|,)\s*tasks\.input_snapshot\s*(?:as\s+\w+)?\s*(?:,|from\b)")
+        assert all(not whole_snapshot.search(sql) and "files.storage_key" not in sql for sql in statements)
+        data = response.json()["data"]
+        rows = data["history"]["messages"] if "history" in data else data
+        return rows, len(statements)
 
     async with sessions.begin() as db:
         db.add(ExperimentSession(id=sid, lab_type="image"))
@@ -41,7 +47,7 @@ async def test_history_query_count_and_order(baseline_client):
         db.add(ExperimentMessage(id=uuid4().hex, session_id=sid, sequence=1, role="user",
                                  payload={"input_snapshot": {"prompt": "saved"}}))
     ordinary, count = await read(history)
-    assert count == 2 and ordinary[0]["payload"]["input_snapshot"]["prompt"] == "saved"
+    assert count == 4 and ordinary[0]["payload"]["input_snapshot"]["prompt"] == "saved"
 
     async with sessions.begin() as db:
         task_ids = [uuid4().hex for _ in range(100)]
@@ -63,7 +69,7 @@ async def test_history_query_count_and_order(baseline_client):
 
     one, one_count = await read(history + "?page_size=1")
     many, many_count = await read(history + "?page_size=100")
-    assert one_count == many_count <= 5
+    assert one_count == many_count <= 9
     assert many[-1] == one[0]
     assert [msg["task_id"] for msg in many] == task_ids
     previous, _ = await read(history + "?page_size=100&page=2")

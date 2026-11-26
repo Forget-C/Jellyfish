@@ -12,7 +12,7 @@ CANVAS_TURN_OUTCOMES = ('turn.completed', 'turn.stopped', 'turn.interrupted', 'q
 
 def canvas_chat_url(canvas_url):
     canvas_id = urlsplit(canvas_url).path.removesuffix('/assistant').rsplit('/', 1)[-1]
-    return f'{CHAT_SESSIONS}/{canvas_id}'
+    return f'{CHAT_SESSIONS}/canvas/{canvas_id}'
 
 
 async def read_chat_events(client, session_url, *, after=0):
@@ -62,7 +62,7 @@ async def read_canvas_chat_snapshot(client, canvas_url, *, params=None):
     url = urlsplit(canvas_url)
     canvas_id = canvas_chat_url(canvas_url).rsplit('/', 1)[-1]
     query = dict(parse_qsl(url.query)) if params is None else params
-    return await client.get(f'{CHAT_SESSIONS}/canvas/{canvas_id}', params=query)
+    return await client.get(f'{CHAT_SESSIONS}/canvas/{canvas_id}/snapshot', params=query)
 
 
 async def save_canvas_for_chat(client, draft_url, document):

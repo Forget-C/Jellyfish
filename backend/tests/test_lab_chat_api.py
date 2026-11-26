@@ -33,8 +33,7 @@ async def test_lab_chat_replays_messages_and_uses_previous_turn(canvas_client, m
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
     created = await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})
     assert created.status_code == 201, created.text
-    url = '/api/v1/studio/chat/sessions/' + created.json()['data']['id']
-    lab_url = '/api/v1/studio/chat/sessions/lab/' + created.json()['data']['id']
+    url = '/api/v1/studio/chat/sessions/chat/' + created.json()['data']['id']
     for request_id, prompt in [('first', '雨夜'), ('next', '接着说')]:
         body = {'request_id': request_id, 'text': prompt}
         sent = await canvas_client.post(url + '/turns', json=body)
@@ -45,7 +44,7 @@ async def test_lab_chat_replays_messages_and_uses_previous_turn(canvas_client, m
         assert repeat.json()['data']['cursor'] == sent.json()['data']['cursor']
         await wait_for_chat_event(canvas_client, url, request_id, 'turn.completed')
     assert len(prompts) == 2 and any(m['content'] == '雨夜' for m in prompts[1])
-    snapshot = (await canvas_client.get(lab_url)).json()['data']
+    snapshot = (await canvas_client.get(url + '/snapshot')).json()['data']['history']
     assert not snapshot['active_turn'] and snapshot['models']['text'] == 'canvas-text'
     assert [m['content'] for m in snapshot['messages']] == ['雨夜', '霓虹', '接着说', '霓虹']
     events = await canvas_client.get(url + '/events', params={'follow': False})
@@ -76,7 +75,7 @@ async def test_chat_admission_stop_and_independent_session(canvas_client, monkey
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
     async def create():
         result = await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})
-        return '/api/v1/studio/chat/sessions/' + result.json()['data']['id']
+        return '/api/v1/studio/chat/sessions/chat/' + result.json()['data']['id']
 
     first, second = await create(), await create()
     command = {'request_id': 'one', 'text': 'pause'}
@@ -91,17 +90,17 @@ async def test_chat_admission_stop_and_independent_session(canvas_client, monkey
             'follow': False, 'after': admitted.json()['data']['cursor']})
         assert 'event: turn.accepted' in stream.text
         assert 'event: turn.completed' not in stream.text
-        assert (await canvas_client.get(first.replace('/sessions/', '/sessions/lab/'))).json()['data']['active_turn'] == 'one'
+        assert (await canvas_client.get(first + '/snapshot')).json()['data']['history']['active_turn'] == 'one'
         assert (await canvas_client.post(first + '/turns', json=command)).status_code == 202
         another = {'request_id': 'two', 'text': 'new'}
         assert (await canvas_client.post(first + '/turns', json=another)).status_code == 409
         assert (await canvas_client.post(second + '/turns', json=another)).status_code == 202
-        stopped = await canvas_client.post(first.replace('/sessions/', '/sessions/lab/') + '/turns/one/stop')
+        stopped = await canvas_client.post(first.replace('/sessions/chat/', '/sessions/lab/') + '/turns/one/stop')
         assert stopped.json()['data']['active_turn'] is None
     finally:
         resume.set()
         await active
-    snapshot = (await canvas_client.get(first.replace('/sessions/', '/sessions/lab/'))).json()['data']
+    snapshot = (await canvas_client.get(first + '/snapshot')).json()['data']['history']
     assert [m['status'] for m in snapshot['messages'] if m['role'] == 'assistant'] == ['stopped']
 
 
@@ -114,14 +113,14 @@ async def test_media_understanding_is_checked_before_turn_admission(canvas_clien
         db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
     file = await canvas_client.post('/api/v1/studio/files/upload', files={'file': ('scene.png', b'picture', 'image/png')})
     created = await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})
-    url = '/api/v1/studio/chat/sessions/' + created.json()['data']['id']
+    url = '/api/v1/studio/chat/sessions/chat/' + created.json()['data']['id']
     lab_url = '/api/v1/studio/chat/sessions/lab/' + created.json()['data']['id']
     prefs = await canvas_client.patch(lab_url + '/models', json={'image': 'canvas-image', 'video': 'canvas-video'})
     assert prefs.json()['data'] == {'text': 'canvas-text', 'image': 'canvas-image', 'video': 'canvas-video'}
     response = await canvas_client.post(url + '/turns', json={
         'request_id': 'analyze', 'text': '分析图片', 'file_ids': [file.json()['data']['id']]})
     assert response.status_code == 422 and 'ASSISTANT_MODEL_INPUT_UNSUPPORTED' in response.text
-    snapshot = (await canvas_client.get(lab_url)).json()['data']
+    snapshot = (await canvas_client.get(url + '/snapshot')).json()['data']['history']
     assert not snapshot['active_turn'] and not snapshot['messages'] and snapshot['models'] == prefs.json()['data']
 
 
@@ -146,7 +145,7 @@ async def test_native_text_stream_publishes_real_model_chunks(canvas_client, mon
 
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
     created = await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})
-    url = '/api/v1/studio/chat/sessions/' + created.json()['data']['id']
+    url = '/api/v1/studio/chat/sessions/chat/' + created.json()['data']['id']
     reply = await canvas_client.post(url + '/turns', json={'text': 'weather', 'request_id': 'stream'})
     assert reply.status_code == 202, reply.text
     completed = await wait_for_chat_event(canvas_client, url, 'stream', 'turn.completed')
@@ -190,7 +189,7 @@ async def test_chat_model_submits_requested_image_and_receives_task_receipt(canv
 
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
     created = await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})
-    url = '/api/v1/studio/chat/sessions/' + created.json()['data']['id']
+    url = '/api/v1/studio/chat/sessions/chat/' + created.json()['data']['id']
     lab_url = '/api/v1/studio/chat/sessions/lab/' + created.json()['data']['id']
     body = {'request_id': 'illustrate', 'text': '给雨夜街景配幅插画，只提交任务'}
     sending = asyncio.create_task(canvas_client.post(url + '/turns', json=body))
@@ -202,7 +201,7 @@ async def test_chat_model_submits_requested_image_and_receives_task_receipt(canv
         tool_events = [json.loads(line[6:]) for line in stream.text.splitlines() if line.startswith('data: ')]
         assert [(e['type'], e['payload']['tool_call_id']) for e in tool_events if e['type'].startswith('tool.')] == [
             ('tool.started', 'rain-one'), ('tool.failed', 'rain-one')]
-        snapshot = (await canvas_client.get(lab_url)).json()['data']
+        snapshot = (await canvas_client.get(url + '/snapshot')).json()['data']['history']
         failed, = [m for m in snapshot['messages'] if m['payload'].get('tool_error')]
         assert failed['content'] == 'Unknown image reference'
         assert failed['payload']['tool_call_id'] == 'rain-one'
@@ -214,7 +213,7 @@ async def test_chat_model_submits_requested_image_and_receives_task_receipt(canv
     if action != 'submit':
         async with asyncio.timeout(8):
             while True:
-                snap = (await canvas_client.get(lab_url)).json()['data']
+                snap = (await canvas_client.get(url + '/snapshot')).json()['data']['history']
                 if any(m['role'] == 'task' for m in snap['messages']):
                     break
                 await asyncio.sleep(.04)
@@ -244,7 +243,7 @@ async def test_chat_model_submits_requested_image_and_receives_task_receipt(canv
     result = await asyncio.wait_for(sending, 8)
     assert result.status_code == 202, result.text
     await wait_for_chat_event(canvas_client, url, 'illustrate', 'turn.completed', 'turn.stopped')
-    snap = (await canvas_client.get(lab_url)).json()['data']
+    snap = (await canvas_client.get(url + '/snapshot')).json()['data']['history']
     assert snap['active_turn'] is None
     task, = [m for m in snap['messages'] if m['role'] == 'task']
     receipt = task['media_receipt']
@@ -275,11 +274,10 @@ async def test_image_command_requires_selected_models_before_admission(canvas_cl
         (await db.get(Provider, 'canvas-provider')).api_key = 'local'
         db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
     session = await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})
-    url = '/api/v1/studio/chat/sessions/' + session.json()['data']['id']
-    lab_url = '/api/v1/studio/chat/sessions/lab/' + session.json()['data']['id']
+    url = '/api/v1/studio/chat/sessions/chat/' + session.json()['data']['id']
     result = await canvas_client.post(url + '/turns', json={'text': '/imagegen 雨夜', 'request_id': 'request'})
     assert result.status_code == 422 and error in result.text
-    assert not (await canvas_client.get(lab_url)).json()['data']['messages']
+    assert not (await canvas_client.get(url + '/snapshot')).json()['data']['history']['messages']
 
 
 @pytest.mark.asyncio
@@ -333,7 +331,7 @@ async def test_chat_video_uses_attached_first_frame(canvas_client, monkeypatch, 
 
     monkeypatch.setattr(httpx.AsyncClient, 'send', chat)
     session = await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})
-    url = '/api/v1/studio/chat/sessions/' + session.json()['data']['id']
+    url = '/api/v1/studio/chat/sessions/chat/' + session.json()['data']['id']
     lab_url = '/api/v1/studio/chat/sessions/lab/' + session.json()['data']['id']
     body = {'request_id': 'film', 'text': ('/videogen ' if action == 'submit' else '') + '把附件用作首帧推进4秒',
             'file_ids': [frame_id]}
@@ -342,7 +340,7 @@ async def test_chat_video_uses_attached_first_frame(canvas_client, monkeypatch, 
         assert response.status_code == 202, response.text
         event = await wait_for_chat_event(canvas_client, url, 'film', 'turn.failed')
         assert event['payload']['error_code'] == 'ASSISTANT_MODEL_INPUT_UNSUPPORTED'
-        snapshot = (await canvas_client.get(lab_url)).json()['data']
+        snapshot = (await canvas_client.get(url + '/snapshot')).json()['data']['history']
         assert snapshot['messages'][-1]['payload']['error_code'] == event['payload']['error_code']
         return
     sending = asyncio.create_task(canvas_client.post(url + '/turns', json=body))
@@ -351,7 +349,7 @@ async def test_chat_video_uses_attached_first_frame(canvas_client, monkeypatch, 
             if sending.done():
                 sent = sending.result()
                 assert sent.is_success, sent.text
-            snap = (await canvas_client.get(lab_url)).json()['data']
+            snap = (await canvas_client.get(url + '/snapshot')).json()['data']['history']
             tasks = [m for m in snap['messages'] if m['role'] == 'task']
             if tasks:
                 break

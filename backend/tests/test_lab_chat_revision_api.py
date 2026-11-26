@@ -21,7 +21,6 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
     from app.task_worker import TaskWorker
 
     sid = (await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})).json()['data']['id']
-    compatibility_url = '/api/v1/studio/chat/sessions/' + sid
     url = '/api/v1/studio/chat/sessions/chat/' + sid
     lab_url = '/api/v1/studio/chat/sessions/lab/' + sid
     originals = []
@@ -90,7 +89,7 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
     assert (await canvas_client.post(url + '/turns', json={**command, 'file_ids': ['other-file']})).status_code == 409
     if count > 1:
         await wait_for_chat_event(canvas_client, url, 'revision', 'question.asked')
-        state = (await canvas_client.get(lab_url)).json()['data']
+        state = (await canvas_client.get(url + '/snapshot')).json()['data']['history']
         question = state['question']
         assert state['active_turn'] == 'revision'
         assert [opt['file_id'] for opt in question['options']] == originals
@@ -137,8 +136,7 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
             assert stopped.json()['data']['active_turn'] is None
             for path, body, saved in (('/turns', command, first), ('/turns/revision/answer', decision, response),
                                       ('/turns/revision/answer', second_decision, answer_two)):
-                for session_url in (url, compatibility_url):
-                    assert (await canvas_client.post(session_url + path, json=body)).json() == saved.json()
+                assert (await canvas_client.post(url + path, json=body)).json() == saved.json()
             assert (await canvas_client.post(endpoint, json={**second_decision, 'file_id': originals[1]})).status_code == 409
             assert len(model_calls) == 3
             assert len(responses) == 2
@@ -178,7 +176,7 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
     new, = submissions
     assert new['prompt'] == f'original camera move {count - 1}' and new['duration'] == 4
     assert new['aspect_ratio'] == '16:9' and new['model'] == 'viduq2'
-    history = (await canvas_client.get(lab_url)).json()['data']['messages']
+    history = (await canvas_client.get(url + '/snapshot')).json()['data']['history']['messages']
     task_rows = [m for m in history if m['role'] == 'task']
     assert [m['media_receipt']['artifacts'][0]['file_id'] for m in task_rows[:-1]] == originals
     assert task_rows[-1]['payload']['source_file_id'] == originals[-1]
@@ -212,7 +210,7 @@ async def test_historical_video_analysis_checks_main_model_capability(canvas_cli
         return httpx.Response(200, request=request, json={'choices': [{'index': 0,
             'message': {'role': 'assistant', 'tool_calls': [call]}, 'finish_reason': 'tool_calls'}]})
     monkeypatch.setattr(httpx.AsyncClient, 'send', language)
-    result = await canvas_client.post(f'/api/v1/studio/chat/sessions/{sid}/turns',
+    result = await canvas_client.post(f'/api/v1/studio/chat/sessions/chat/{sid}/turns',
                                       json={'request_id': 'look', 'text': '分析刚才视频的运镜'})
     assert result.status_code == 202
-    await wait_for_chat_event(canvas_client, f'/api/v1/studio/chat/sessions/{sid}', 'look', 'turn.failed')
+    await wait_for_chat_event(canvas_client, f'/api/v1/studio/chat/sessions/chat/{sid}', 'look', 'turn.failed')

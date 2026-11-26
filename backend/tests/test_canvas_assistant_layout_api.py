@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from tests.test_canvas_assistant_edit_api import assistant_edit_model  # pylint: disable=unused-import
-from tests.chat_events import observe_canvas_turn, read_canvas_chat_snapshot
+from tests.chat_events import canvas_chat_url, observe_canvas_turn, read_canvas_chat_snapshot
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # pylint: disable=unused-import
 
 
@@ -62,13 +62,13 @@ async def test_layout_approval_survives_reload_and_records_one_editor_receipt(ca
     approved = await canvas_client.post(decision, json={'action': 'approve'})
     assert approved.json()['data']['state'] == 'waiting'
     history = await read_canvas_chat_snapshot(canvas_client, assistant)
-    assert history.json()['data']['turns'][0]['layout']['state'] == 'waiting'
+    assert history.json()['data']['history']['turns'][0]['layout']['state'] == 'waiting'
     assert (await canvas_client.get(target)).json()['data']['document']['groups'] == []
     assert (await canvas_client.post(decision, json={'action': 'applied'})).status_code == 409
     second = await observe_canvas_turn(canvas_client, assistant, json={**source, 'request_id': 'stopped-layout'})
     assert second.receipt.status_code == 202, second.receipt.text
     assert (await canvas_client.post(assistant + '/layout/stopped-layout', json={'action': 'approve'})).status_code == 200
-    stopped = await canvas_client.post(assistant + '/turns/stopped-layout/stop')
+    stopped = await canvas_client.post(canvas_chat_url(assistant) + '/turns/stopped-layout/stop/snapshot')
     assert stopped.status_code == 200, stopped.text
     assert (await canvas_client.post(assistant + '/layout/stopped-layout', json={'action': 'claim'})).status_code == 409
     claimed = await canvas_client.post(decision, json={'action': 'claim'})

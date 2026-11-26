@@ -3,7 +3,7 @@
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
+from app.models.experiment_sessions import ExperimentMessage
 from app.schemas.media_task import MediaTaskReceipt
 from app.schemas.studio.experiment_sessions import ExperimentMessageRead, ExperimentTaskCreated
 from app.services.chat.admission import command_digest
@@ -98,13 +98,3 @@ async def read_media_admission(db, session_id, receipt: MediaTaskReceipt) -> lis
             'status': receipt.status.value, 'payload': payload, 'media_receipt': receipt,
         }),
     ]
-
-
-async def read_experiment_receipt(db, session_id, request_id):
-    """Read only the receipt belonging to the requested laboratory session."""
-    session = await db.get(ExperimentSession, session_id)
-    if session:
-        receipt = await find_media_receipt(db, session_id, request_id)
-        if receipt:
-            return receipt
-    raise HTTPException(404, 'Laboratory interaction request not found')

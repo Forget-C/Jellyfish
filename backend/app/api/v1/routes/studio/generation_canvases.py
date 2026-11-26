@@ -5,8 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
-from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory,
-                                          CanvasAssistantModelSelection)
+from app.schemas.canvas_assistant import CanvasAssistantApprovalSetting, CanvasAssistantModelSelection
 from app.schemas.canvas_assistant_draft import CanvasDraftSave, CanvasDraftSaved
 from app.schemas.common import PaginatedData, paginated_response, ApiResponse, created_response, empty_response, success_response
 from app.schemas.generation_canvas import CanvasRename, CanvasSummary, CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError, CanvasModelCapability, CanvasCompiledInput
@@ -63,14 +62,6 @@ async def get_canvas(canvas_id: str, project_id: str = '', db: AsyncSession = De
     return success_response(await canvas_lifecycle(db, project_id).read(canvas_id))
 
 
-@router.get('/{canvas_id}/assistant', response_model=ApiResponse[CanvasAssistantHistory],
-            operation_id='canvas_assistant_history')
-async def get_assistant_history(canvas_id: str, project_id: str = '',
-                                db: AsyncSession = Depends(get_db, scope='function')):
-    """Read the saved conversation for the requested canvas."""
-    return success_response(await CanvasAssistant(db, project_id).history(canvas_id))
-
-
 @router.patch('/{canvas_id}/assistant/model', response_model=ApiResponse[CanvasAssistantModelSelection],
               operation_id='canvas_assistant_set_model')
 async def set_assistant_model(canvas_id: str, body: CanvasAssistantModelSelection, project_id: str = '',
@@ -85,14 +76,6 @@ async def set_assistant_approval(canvas_id: str, body: CanvasAssistantApprovalSe
                                  db: AsyncSession = Depends(get_db, scope='function')):
     """Set the assistant approval mode for this canvas."""
     return success_response(await CanvasAssistant(db, project_id).set_approval(canvas_id, body))
-
-
-@router.post('/{canvas_id}/assistant/turns/{source_id}/stop', response_model=ApiResponse[CanvasAssistantExchange],
-             operation_id='canvas_assistant_stop')
-async def stop_assistant_turn(canvas_id: str, source_id: str, project_id: str = '',
-                              db: AsyncSession = Depends(get_db, scope='function')):
-    """Stop the remaining assistant work without canceling any accepted runs."""
-    return success_response(await CanvasAssistant(db, project_id).stop(canvas_id, source_id))
 
 
 @router.post('/{canvas_id}/assistant/proposals/{source_id}', response_model=ApiResponse[CanvasAssistantProposalResult],

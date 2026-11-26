@@ -147,7 +147,6 @@ try {
       return respond(null)
     }
     if (/\/chat\/sessions\/(image|video)\/[^/]+\/snapshot$/.test(url.pathname)) return respond(boundTrialSnapshot(url, histories.get(url.pathname.split('/').at(-2)) ?? []))
-    if (url.pathname.endsWith('/messages')) return respond(histories.get(url.pathname.split('/').at(-2)) ?? [])
     if (url.pathname.endsWith('/models')) {
       const category = url.searchParams.get('category')
       return respond({ items: [{ id: category + '-model', name: labels[category] + '测试模型', category }] })
