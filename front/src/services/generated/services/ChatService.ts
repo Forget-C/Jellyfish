@@ -576,4 +576,34 @@ export class ChatService {
             },
         });
     }
+    /**
+     * Canvas Stop Snapshot
+     * Confirm the stop together with the new cursor and current assistant state.
+     * @returns ApiResponse_CanvasAssistantHistory_ Successful Response
+     * @throws ApiError
+     */
+    public static chatCanvasStopSnapshot({
+        canvasId,
+        sourceId,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantHistory_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/canvas/{canvas_id}/turns/{source_id}/stop/snapshot',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
 }

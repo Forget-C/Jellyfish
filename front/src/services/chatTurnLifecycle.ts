@@ -232,25 +232,48 @@ function createLifecycle<S extends Snapshot>(adapter: ChatTurnAdapter<S>) {
         void send(pending, sessionId, signal)
       })
     },
-    async stop() {
-      if (!scope || !state.stoppableTurn || state.stopping) return
+    async refresh() {
+      if (!scope) return false
       const {sessionId, signal} = scope
-      const turnId = state.stoppableTurn
+      try {
+        const snapshot = await adapter.read(sessionId, signal)
+        if (signal.aborted) return false
+        adopt(snapshot)
+        publish({error: undefined})
+        return true
+      } catch (error) {
+        if (!signal.aborted) publish({error})
+        return false
+      }
+    },
+    async stop(turnId = state.stoppableTurn) {
+      if (!scope || !turnId || state.stopping) return false
+      const {sessionId, signal} = scope
+      const wasActive = state.stoppableTurn === turnId
       publish({stopping: true, error: undefined})
       try {
         const snapshot = await adapter.stop(sessionId, turnId, signal)
         if (signal.aborted) return
         if (applying && applying.cursor <= snapshot.cursor) applying.abort.abort()
         adopt(snapshot, adapter.active(snapshot)?.id !== turnId ? {turnId, outcome: 'stopped'} : undefined)
+        return true
       } catch (error) {
         if (signal.aborted) return
         publish({error})
         try {
           const snapshot = await adapter.read(sessionId, signal)
-          if (!signal.aborted) adopt(snapshot)
+          if (signal.aborted) return false
+          if (applying && applying.cursor <= snapshot.cursor) applying.abort.abort()
+          adopt(snapshot)
+          const outcome = state.snapshot && adapter.outcome(state.snapshot, turnId)
+          if (outcome === 'stopped' || (wasActive && outcome)) {
+            publish({error: undefined})
+            return true
+          }
         } catch (failure) {
           if (!signal.aborted) publish({error: failure})
         }
+        return false
       } finally {
         if (!signal.aborted) publish({stopping: false})
       }
@@ -268,5 +291,5 @@ export function useChatTurnLifecycle<S extends Snapshot>(sessionId: string | und
     return controller.close
   }, [controller, sessionId])
   useEffect(() => controller.close, [controller])
-  return {...state, submit: controller.submit, stop: controller.stop}
+  return {...state, submit: controller.submit, stop: controller.stop, refresh: controller.refresh}
 }

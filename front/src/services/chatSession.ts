@@ -97,8 +97,7 @@ export const chatClient = {
   events(sessionId: string, after = 0, signal = new AbortController().signal) {
     return sessionEvents(ChatService.chatSessionEvents({sessionId, after}), sessionId, after, signal)
   },
-  canvasSnapshot: ChatService.chatCanvasSnapshot,
-  canvasStop: ChatService.chatCanvasStop,
+  canvasStopSnapshot: ChatService.chatCanvasStopSnapshot,
   canvasDecide: ChatService.chatCanvasDecide,
   canvasLayout: ChatService.chatCanvasLayout,
   canvasGeneration: ChatService.chatCanvasGeneration,
