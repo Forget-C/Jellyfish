@@ -55,6 +55,7 @@ export type { ApiResponse_ChapterOverview_ } from './models/ApiResponse_ChapterO
 export type { ApiResponse_ChapterRead_ } from './models/ApiResponse_ChapterRead_';
 export type { ApiResponse_ChapterSequences_ } from './models/ApiResponse_ChapterSequences_';
 export type { ApiResponse_ChapterWorkbenchManagement_ } from './models/ApiResponse_ChapterWorkbenchManagement_';
+export type { ApiResponse_ChatSessionSnapshot_ } from './models/ApiResponse_ChatSessionSnapshot_';
 export type { ApiResponse_ChatTurnReceipt_ } from './models/ApiResponse_ChatTurnReceipt_';
 export type { ApiResponse_CompileResult_ } from './models/ApiResponse_CompileResult_';
 export type { ApiResponse_ContinuityRead_ } from './models/ApiResponse_ContinuityRead_';
@@ -317,6 +318,7 @@ export type { CharacterUpdate } from './models/CharacterUpdate';
 export type { ChatEvent } from './models/ChatEvent';
 export type { ChatMessageEvent } from './models/ChatMessageEvent';
 export type { ChatSceneEvent } from './models/ChatSceneEvent';
+export type { ChatSessionSnapshot } from './models/ChatSessionSnapshot';
 export type { ChatTaskEvent } from './models/ChatTaskEvent';
 export type { ChatToolCall } from './models/ChatToolCall';
 export type { ChatToolEvent } from './models/ChatToolEvent';

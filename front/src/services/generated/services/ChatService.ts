@@ -7,6 +7,7 @@ import type { ApiResponse_CanvasAssistantGenerationRead_ } from '../models/ApiRe
 import type { ApiResponse_CanvasAssistantHistory_ } from '../models/ApiResponse_CanvasAssistantHistory_';
 import type { ApiResponse_CanvasAssistantLayout_ } from '../models/ApiResponse_CanvasAssistantLayout_';
 import type { ApiResponse_CanvasAssistantProposalResult_ } from '../models/ApiResponse_CanvasAssistantProposalResult_';
+import type { ApiResponse_ChatSessionSnapshot_ } from '../models/ApiResponse_ChatSessionSnapshot_';
 import type { ApiResponse_ChatTurnReceipt_ } from '../models/ApiResponse_ChatTurnReceipt_';
 import type { ApiResponse_LabChatSnapshot_ } from '../models/ApiResponse_LabChatSnapshot_';
 import type { ApiResponse_LabModels_ } from '../models/ApiResponse_LabModels_';
@@ -273,6 +274,143 @@ export class ChatService {
             query: {
                 'after': after,
                 'follow': follow,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Send Bound Turn
+     * Admit a turn in the session identified by the path.
+     * @returns ApiResponse_ChatTurnReceipt_ Successful Response
+     * @throws ApiError
+     */
+    public static chatBoundSend({
+        kind,
+        sessionId,
+        requestBody,
+        idempotencyKey,
+    }: {
+        kind: 'canvas' | 'chat' | 'text' | 'image' | 'video',
+        sessionId: string,
+        requestBody: (CanvasAssistantMessage | LabChatCommand | TextLabRunRequest | GenerationSubmitRequest),
+        idempotencyKey?: (string | null),
+    }): CancelablePromise<ApiResponse_ChatTurnReceipt_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/{kind}/{session_id}/turns',
+            path: {
+                'kind': kind,
+                'session_id': sessionId,
+            },
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Answer Bound Turn
+     * Admit an answer to a question in the bound session.
+     * @returns ApiResponse_ChatTurnReceipt_ Successful Response
+     * @throws ApiError
+     */
+    public static chatBoundAnswer({
+        kind,
+        sessionId,
+        turnId,
+        requestBody,
+    }: {
+        kind: 'canvas' | 'chat' | 'text' | 'image' | 'video',
+        sessionId: string,
+        turnId: string,
+        requestBody: (CanvasAssistantQuestionAnswer | ArtifactAnswer),
+    }): CancelablePromise<ApiResponse_ChatTurnReceipt_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/{kind}/{session_id}/turns/{turn_id}/answer',
+            path: {
+                'kind': kind,
+                'session_id': sessionId,
+                'turn_id': turnId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Subscribe Bound
+     * Stream committed events from a bound session.
+     * @returns string Successful Response
+     * @throws ApiError
+     */
+    public static chatBoundEvents({
+        kind,
+        sessionId,
+        after,
+        follow = true,
+        lastEventId,
+    }: {
+        kind: 'canvas' | 'chat' | 'text' | 'image' | 'video',
+        sessionId: string,
+        after?: number,
+        follow?: boolean,
+        lastEventId?: number,
+    }): CancelablePromise<string> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/chat/sessions/{kind}/{session_id}/events',
+            path: {
+                'kind': kind,
+                'session_id': sessionId,
+            },
+            headers: {
+                'last-event-id': lastEventId,
+            },
+            query: {
+                'after': after,
+                'follow': follow,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Bound Snapshot
+     * Return the public checkpoint and history for the bound session.
+     * @returns ApiResponse_ChatSessionSnapshot_ Successful Response
+     * @throws ApiError
+     */
+    public static chatBoundSnapshot({
+        kind,
+        sessionId,
+        page = 1,
+        pageSize = 50,
+    }: {
+        kind: 'canvas' | 'chat' | 'text' | 'image' | 'video',
+        sessionId: string,
+        page?: number,
+        pageSize?: number,
+    }): CancelablePromise<ApiResponse_ChatSessionSnapshot_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/chat/sessions/{kind}/{session_id}/snapshot',
+            path: {
+                'kind': kind,
+                'session_id': sessionId,
+            },
+            query: {
+                'page': page,
+                'page_size': pageSize,
             },
             errors: {
                 422: `Validation Error`,
