@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -41,6 +42,9 @@ class _DummyDB:
         self.session = SimpleNamespace(lab_type=lab_type, updated_at=None)
         self.commits = 0
         self.refreshed: list[object] = []
+
+    def get_bind(self):
+        return SimpleNamespace(dialect=SimpleNamespace(name='postgresql'))
 
     async def get(self, _model, _session_id, *, with_for_update):  # noqa: ANN001
         """返回已存在的实验会话。"""
@@ -216,10 +220,16 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         body = {"execution_prompt": "按参考图生成", "media": media, "operation_input": operation}
         if explicit_model:
             body["model_id"] = "lab-model"
-        submit_url = base + f"/chat/sessions/{session_id}/turns"
+        session_url = base + f"/chat/sessions/{modality}/{session_id}"
+        submit_url = session_url + "/turns"
+        assert (await client.post(submit_url, json=body)).status_code == 422
         headers = {"Idempotency-Key": "same-lab-request"}
-        submitted = await client.post(submit_url, json=body, headers=headers)
-        assert submitted.status_code == 202, submitted.text
+        submitted, concurrent = await asyncio.gather(
+            client.post(submit_url, json=body, headers=headers),
+            client.post(submit_url, json=body, headers=headers),
+        )
+        assert submitted.status_code == concurrent.status_code == 202, (submitted.text, concurrent.text)
+        assert submitted.json() == concurrent.json()
         reconnected = await client.get(base + f"/experiment-sessions/{session_id}/interaction/requests/same-lab-request")
         assert reconnected.status_code == 200, reconnected.text
         created_task = reconnected.json()["data"]
@@ -228,9 +238,14 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         assert replayed.status_code == submitted.status_code and replayed.json()["data"] == submitted.json()["data"]
         changed = await client.post(submit_url, json={**body, "execution_prompt": "更换请求正文"}, headers=headers)
         assert changed.status_code == 409, changed.text
-        history = await client.get(base + f"/chat/sessions/media/{session_id}")
+        history = await client.get(session_url + "/snapshot")
         assert history.status_code == 200
-        user, task = history.json()["data"]
+        state = history.json()["data"]
+        assert state["session_id"] == session_id and state["kind"] == modality
+        user, task = state["history"]["messages"]
+        earlier = (await client.get(session_url + "/snapshot", params={"page": 2, "page_size": 1})).json()["data"]
+        assert earlier["history"]["messages"] == [user]
+        assert earlier["cursor"] == state["cursor"]
         snapshot = user["payload"]["input_snapshot"]
         assert created_task["messages"][0]["payload"]["input_snapshot"] == snapshot
         assert snapshot["version"] == 1
@@ -243,7 +258,7 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
             assert snapshot["media"]["frames"]["first"] == media["frames"]["first"]
         assert task["task_id"] == created_task["task_id"] and task["status"] == "queued"
         assert "private-key" not in history.text
-        event_url = base + f"/chat/sessions/{session_id}/events"
+        event_url = session_url + "/events"
         receipt = submitted.json()["data"]
         assert receipt["session_id"] == session_id and receipt["turn_id"] == "same-lab-request"
         events = await client.get(event_url, params={"follow": "false", "after": receipt["cursor"]})
@@ -274,13 +289,14 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         assert task["media_receipt"] == receipt
         assert not (await client.get(event_url, params={"after": observed[0]["cursor"], "follow": "false"})).text
         if explicit_model:
-            await complete_media_trial(sessions, client, event_url, history.request.url, modality, model, monkeypatch)
+            await complete_media_trial(sessions, client, event_url, history.request.url, modality, model, monkeypatch,
+                                       after=state["cursor"])
             replayed = await client.get(event_url, params={"follow": "false", "after": submitted.json()["data"]["cursor"]})
             first = next(json.loads(line[6:]) for line in replayed.text.splitlines() if line.startswith("data: "))
             assert first == restored_event
 
 
-async def complete_media_trial(sessions, api, url, snapshot_url, modality, model, monkeypatch):
+async def complete_media_trial(sessions, api, url, snapshot_url, modality, model, monkeypatch, *, after):
     """Run the real worker against controlled HTTP/storage edges and replay its archived files."""
     import asyncio
     import base64
@@ -326,7 +342,7 @@ async def complete_media_trial(sessions, api, url, snapshot_url, modality, model
                 await asyncio.gather(*list(worker.jobs.values()))
         finally:
             worker.text_pool.shutdown(wait=True)
-    events = await api.get(url, params={"follow": "false"})
+    events = await api.get(url, params={"follow": "false", "after": after})
     items = [json.loads(line[6:]) for line in events.text.splitlines() if line.startswith("data: ")]
     assert items[-1]["type"] == "task.completed"
     assert any(item["type"] == "task.progress" for item in items)
@@ -335,5 +351,5 @@ async def complete_media_trial(sessions, api, url, snapshot_url, modality, model
     assert len(posts) == 1 and uploads == ([b"v"] if modality == "video" else [b"a", b"b"])
     assert len({item["file_id"] for item in receipt["artifacts"]}) == len(uploads)
     snapshot = await api.get(snapshot_url)
-    assert snapshot.json()["data"][-1]["media_receipt"] == receipt
-    assert snapshot.json()["meta"]["cursor"] == items[-1]["cursor"]
+    assert snapshot.json()["data"]["history"]["messages"][-1]["media_receipt"] == receipt
+    assert snapshot.json()["data"]["cursor"] == items[-1]["cursor"]

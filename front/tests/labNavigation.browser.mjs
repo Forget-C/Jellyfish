@@ -1,4 +1,4 @@
-import { successfulTextTrial, turnReceipt, mediaTurnReceipt, mediaAdmissionStream } from './text-trial-events.mjs'
+import { successfulTextTrial, turnReceipt, mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot, textTrialSnapshot } from './text-trial-events.mjs'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -77,7 +77,7 @@ try {
       deleteAttempts += 1
       return respond(null)
     }
-    const mediaRun = url.pathname.match(/\/chat\/sessions\/([^/]+)\/turns$/)
+    const mediaRun = url.pathname.match(/\/chat\/sessions\/(?:image|video)\/([^/]+)\/turns$/)
     if (mediaRun && request.postDataJSON().operation_input) {
       const sessionId = mediaRun[1]
       const body = request.postDataJSON()
@@ -90,7 +90,7 @@ try {
       persisted.set(sessionId, messages)
       return respond(mediaTurnReceipt(route, { task_id: mode + '-task', messages }))
     }
-    if (url.pathname.endsWith('/chat/sessions/new-text/turns')) {
+    if (url.pathname.endsWith('/chat/sessions/text/new-text/turns')) {
       const user = message('user-1', 'new-text', 'user', request.postDataJSON().content, 1)
       const assistant = message('assistant-1', 'new-text', 'assistant', '验收回复', 2)
       persisted.set('new-text', [user, assistant])
@@ -100,9 +100,9 @@ try {
       const [user, assistant] = persisted.get('new-text')
       return route.fulfill({ contentType: 'text/event-stream', body: successfulTextTrial('new-text', 'lab-run', user, assistant) })
     }
-    if (url.pathname.includes('/chat/sessions/text/')) return respond(persisted.get(url.pathname.split('/').at(-1)) ?? [])
-    if (url.pathname.endsWith('/chat/sessions/media/image-1') && imageLookupPending) prematureImageMessages.push(url.pathname)
-    if (/\/chat\/sessions\/media\/[^/]+$/.test(url.pathname)) return respond(persisted.get(url.pathname.split('/').at(-1)) ?? [])
+    if (/\/chat\/sessions\/text\/[^/]+\/snapshot$/.test(url.pathname)) return textTrialSnapshot(route, persisted.get(url.pathname.split('/').at(-2)) ?? [])
+    if (url.pathname.endsWith('/chat/sessions/image/image-1/snapshot') && imageLookupPending) prematureImageMessages.push(url.pathname)
+    if (/\/chat\/sessions\/(image|video)\/[^/]+\/snapshot$/.test(url.pathname)) return respond(boundTrialSnapshot(url, persisted.get(url.pathname.split('/').at(-2)) ?? []))
     if (url.pathname.endsWith('/messages')) return respond(persisted.get(url.pathname.split('/').at(-2)) ?? [])
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])

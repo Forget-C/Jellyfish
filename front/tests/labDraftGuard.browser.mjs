@@ -1,4 +1,4 @@
-import { textTrialFrame, mediaTurnReceipt, mediaAdmissionStream } from './text-trial-events.mjs'
+import { textTrialFrame, mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot, textTrialSnapshot } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -54,8 +54,8 @@ const finish = (run, event) => {
 }
 async function liveTextFixture(request, response, next) {
   const path = request.url?.split('?')[0] ?? ''
-  const send = path.match(/\/chat\/sessions\/([^/]+)\/turns$/)
-  const stream = path.match(/\/chat\/sessions\/([^/]+)\/events$/)
+  const send = path.match(/\/chat\/sessions\/text\/([^/]+)\/turns$/)
+  const stream = path.match(/\/chat\/sessions\/text\/([^/]+)\/events$/)
   const stop = path.match(/\/chat\/sessions\/text\/([^/]+)\/turns\/([^/]+)\/stop$/)
   if (!send && !stream && !stop) return next()
   let body = ''
@@ -116,10 +116,10 @@ try {
     const admission = mediaAdmissionStream(route, url)
     if (admission) return admission
     const respond = data => route.fulfill({ json: { success: true, data } })
-    const turn = url.pathname.match(/\/chat\/sessions\/([^/]+)\/(events|turns)$/)
+    const turn = url.pathname.match(/\/chat\/sessions\/text\/([^/]+)\/(events|turns)$/)
     if ((turn && sessions.some(session => session.id === turn[1] && session.lab_type === 'text')) ||
         /\/chat\/sessions\/text\/[^/]+\/turns\/[^/]+\/stop$/.test(url.pathname)) return route.continue()
-    if (url.pathname.includes('/chat/sessions/text/')) return respond(histories.get(url.pathname.split('/').at(-1)) ?? [])
+    if (/\/chat\/sessions\/text\/[^/]+\/snapshot$/.test(url.pathname)) return textTrialSnapshot(route, histories.get(url.pathname.split('/').at(-2)) ?? [])
     if (url.pathname.endsWith('/experiment-sessions')) {
       if (request.method() === 'POST') {
         const body = request.postDataJSON()
@@ -134,7 +134,7 @@ try {
       deleteRequests.push(url.pathname)
       return respond(null)
     }
-    if (/\/chat\/sessions\/media\/[^/]+$/.test(url.pathname)) return respond(histories.get(url.pathname.split('/').at(-1)) ?? [])
+    if (/\/chat\/sessions\/(image|video)\/[^/]+\/snapshot$/.test(url.pathname)) return respond(boundTrialSnapshot(url, histories.get(url.pathname.split('/').at(-2)) ?? []))
     if (url.pathname.endsWith('/messages')) return respond(histories.get(url.pathname.split('/').at(-2)) ?? [])
     if (url.pathname.endsWith('/models')) {
       const category = url.searchParams.get('category')
@@ -146,7 +146,7 @@ try {
     }] : [] })
     if (url.pathname.endsWith('/files')) return respond({ items: [{ id: 'file-a', name: '测试参考图', type: 'image' }] })
     if (url.pathname.endsWith('/video-generation-options')) return respond({ model_id: 'video-model', allowed_ratios: ['16:9'] })
-    const media = url.pathname.match(/\/chat\/sessions\/([^/]+)\/turns$/)
+    const media = url.pathname.match(/\/chat\/sessions\/(?:image|video)\/([^/]+)\/turns$/)
     if (media && request.method() === 'POST') {
       const input = request.postDataJSON()
       generationRequests.push(input)

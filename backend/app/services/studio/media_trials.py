@@ -2,7 +2,7 @@
 from typing import Literal
 
 from fastapi import HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.generation import (
@@ -10,7 +10,8 @@ from app.core.contracts.generation import (
     GenerationTarget, GenerationTargetKind, ImageGenerationOperationInput, VideoGenerationOperationInput,
 )
 from app.core.contracts.media import ImageMediaInput, VideoMediaInput
-from app.models.experiment_sessions import ExperimentSession
+from app.models.experiment_sessions import ExperimentSession, ExperimentSessionEvent
+from app.schemas.interaction import InteractionSnapshot
 from app.schemas.media_task import MediaTaskReceipt
 from app.schemas.studio.experiment_sessions import ExperimentTaskCreated
 from app.services.generation.gate import GenerationEntityGate
@@ -18,7 +19,7 @@ from app.services.generation.submission import GenerationSubmitter
 from app.services.studio.experiment_interaction import find_media_receipt, interaction_request_payload, read_media_admission
 from app.services.studio.experiment_messages import (
     ExperimentMessageDraft, append_experiment_messages, experiment_user_message,
-    read_experiment_messages, task_message_display_payload,
+    read_experiment_messages, read_experiment_page, task_message_display_payload,
 )
 from app.services.studio.media_receipts import publish_media_fact
 from app.services.studio.session_events import session_event_page
@@ -43,14 +44,20 @@ async def _require_session(
     db: AsyncSession,
     *,
     session_id: str,
-    lab_type: Literal["image", "video"],
+    lab_type: Literal["image", "video"] | None = None,
 ) -> ExperimentSession:
     """锁定会话并校验类型，任务与消息提交期间不允许删除会话。"""
 
+    if db.get_bind().dialect.name == 'sqlite':
+        # SQLite ignores FOR UPDATE. Serialize acceptance and the history checkpoint.
+        await db.execute(update(ExperimentSession).where(ExperimentSession.id == session_id)
+                         .values(updated_at=ExperimentSession.updated_at))
     session = await db.get(ExperimentSession, session_id, with_for_update=True)
     if session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="target_not_found")
-    if session.lab_type != lab_type:
+    if lab_type is None and session.lab_type not in ('image', 'video'):
+        raise HTTPException(404, 'Media trial session not found')
+    if lab_type is not None and session.lab_type != lab_type:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="experiment_session_type_invalid")
     return session
 
@@ -106,10 +113,21 @@ async def _submit_lab_task(
     return ExperimentTaskCreated(task_id=accepted.task_id, messages=messages)
 
 
+async def media_snapshot(db, session_id, page, page_size):
+    """Read a history page and its event checkpoint under the same session lock."""
+    await _require_session(db, session_id=session_id)
+    cursor = await db.scalar(select(func.max(ExperimentSessionEvent.cursor))
+                             .where(ExperimentSessionEvent.session_id == session_id))
+    rows = await read_experiment_page(db, session_id, page, page_size, include_media_receipts=True)
+    return rows, InteractionSnapshot(session_id=session_id, cursor=cursor or 0,
+                                     capabilities=('snapshot', 'send', 'events', 'task_receipt'))
+
+
 async def submit_media_trial(db, session_id, modality, body, idempotency_key):
     """Validate the request against the session's registered trial modality."""
     _require_operation_request(body, modality=modality)
     return await _submit_lab_task(db, session_id=session_id, modality=modality, body=body, request_id=idempotency_key)
+
 
 async def media_event_page(db, session_id, after):
     """Replay media events, projecting messages for older acceptance records."""

@@ -1,4 +1,4 @@
-import { mediaTurnReceipt, mediaAdmissionStream } from './text-trial-events.mjs'
+import { mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -63,13 +63,14 @@ try {
       if (url.pathname.includes('/file-6/')) return route.fulfill({ status: 404 })
       return route.fulfill({ body: png, contentType: 'image/png' })
     }
-    const run = url.pathname.match(/\/chat\/sessions\/([^/]+)\/turns$/)
+    const run = url.pathname.match(/\/chat\/sessions\/image\/([^/]+)\/turns$/)
     if (run) {
       const body = request.postDataJSON()
       submissions.push({ session: run[1], body })
       const taskId = `task-${submissions.length}`
       return respond(mediaTurnReceipt(route, { task_id: taskId, messages: [{ id: taskId, session_id: run[1], role: 'task', content: '已完成', sequence: 1, task_id: taskId, status: 'succeeded', created_at: timestamp, updated_at: timestamp }] }))
     }
+    if (/\/chat\/sessions\/image\/[^/]+\/snapshot$/.test(url.pathname)) return respond(boundTrialSnapshot(url, []))
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])
   })

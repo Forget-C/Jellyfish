@@ -751,6 +751,7 @@ export type { TextModelCard } from './models/TextModelCard';
 export type { TextModelConfig } from './models/TextModelConfig';
 export type { TextOutputPayload } from './models/TextOutputPayload';
 export type { ToolUpdate } from './models/ToolUpdate';
+export type { TrialChatHistory } from './models/TrialChatHistory';
 export type { TurnUpdate } from './models/TurnUpdate';
 export type { UnitContinuityRead } from './models/UnitContinuityRead';
 export type { UnitDependency } from './models/UnitDependency';

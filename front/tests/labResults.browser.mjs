@@ -1,4 +1,4 @@
-import { mediaTurnReceipt, mediaAdmissionStream } from './text-trial-events.mjs'
+import { mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot, textTrialSnapshot } from './text-trial-events.mjs'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -39,6 +39,7 @@ const portraitVideo = Buffer.from([
 const fixtureImage = (width, height, color) => `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="${color}"/></svg>`
 let imageStatus = 'unavailable'
 let videoStatus = 'unavailable'
+const observedImageCursors = []
 const imagePrompt = item('image-prompt', 'image-history', 'user', '图片实验原始提示词', 1)
 const imageTask = item('image-task', 'image-history', 'task', '图片生成任务已提交，正在等待生成结果。', 2, {
   task_id: 'image-run', status: 'queued',
@@ -74,38 +75,44 @@ try {
     if (url.pathname.endsWith('/experiment-sessions')) {
       return respond(sessions.filter(entry => entry.lab_type === url.searchParams.get('lab_type')))
     }
-    if (url.pathname.endsWith('/chat/sessions/text/text-history')) {
+    if (url.pathname.endsWith('/chat/sessions/text/text-history/snapshot')) {
       textHistoryReads++
       if (failTextHistory) return route.fulfill({ status: 503, json: { detail: '历史服务暂不可用' } })
-      return respond([item('text-answer', 'text-history', 'assistant', '历史回复', 2), item('text-prompt', 'text-history', 'user', '短提示词', 1)])
+      return textTrialSnapshot(route, [item('text-answer', 'text-history', 'assistant', '历史回复', 2), item('text-prompt', 'text-history', 'user', '短提示词', 1)])
     }
-    if (url.pathname.endsWith('/chat/sessions/text/text-long')) {
+    if (url.pathname.endsWith('/chat/sessions/text/text-long/snapshot')) {
       const earlier = url.searchParams.get('page') === '2'
       if (earlier && failEarlier) return route.fulfill({ status: 503, json: { detail: '更早消息暂不可用' } })
-      return respond(Array.from({ length: 50 }, (_, index) => {
+      return textTrialSnapshot(route, Array.from({ length: 50 }, (_, index) => {
         const sequence = (earlier ? 50 : 100) - index
         return item('long-' + sequence, 'text-long', 'assistant', `第 ${sequence} 条历史`, sequence)
       }))
     }
-    if (url.pathname.endsWith('/chat/sessions/media/image-history')) {
+    if (url.pathname.endsWith('/chat/sessions/image/image-history/snapshot')) {
       if (imageReadsFail) return route.fulfill({ status: 503, json: { detail: '历史服务暂不可用' } })
-      return respond([imageTask, imagePrompt])
+      if (url.searchParams.get('page') === '2') {
+        return respond(boundTrialSnapshot(url, [item('older-image', 'image-history', 'user', '更早的图片提示词', 1)], 99))
+      }
+      const earlier = Array.from({length: 48}, (_, index) =>
+        item('image-history-' + index, 'image-history', 'user', '历史图片提示词 ' + index, index + 2))
+      return respond(boundTrialSnapshot(url, [...earlier, {...imagePrompt, sequence: 50}, {...imageTask, sequence: 51}]))
+
     }
     if (url.pathname.endsWith('/models')) return respond({ items: [{ id: 'image-model', name: '验收图片模型', category: 'image' }] })
-    if (url.pathname.endsWith('/image-stale-poll/turns')) return respond(mediaTurnReceipt(route, { task_id: 'stale-run', messages: [staleTask, stalePrompt] }))
-    if (url.pathname.endsWith('/chat/sessions/media/image-stale-poll')) {
+    if (url.pathname.endsWith('/image/image-stale-poll/turns')) return respond(mediaTurnReceipt(route, { task_id: 'stale-run', messages: [staleTask, stalePrompt] }))
+    if (url.pathname.endsWith('/chat/sessions/image/image-stale-poll/snapshot')) {
       if (!staleHistoryAvailable) return route.fulfill({ status: 503 })
-      return respond([{ ...staleTask, status: 'succeeded', payload: { result: { images: [{ url: imageUrls[0] }] } } }, stalePrompt])
+      return respond(boundTrialSnapshot(url, [{ ...staleTask, status: 'succeeded', payload: { result: { images: [{ url: imageUrls[0] }] } } }, stalePrompt]))
     }
-    if (url.pathname.endsWith('/chat/sessions/media/portrait-history')) {
-      return respond([item('portrait-result', 'portrait-history', 'task', '视频生成任务已提交，正在等待生成结果。', 2, {
+    if (url.pathname.endsWith('/chat/sessions/video/portrait-history/snapshot')) {
+      return respond(boundTrialSnapshot(url, [item('portrait-result', 'portrait-history', 'task', '视频生成任务已提交，正在等待生成结果。', 2, {
         task_id: 'portrait-run', status: 'succeeded', payload: { result: { url: '/lab-test-media/portrait.webm' } },
-      })])
+      })]))
     }
-    if (url.pathname.endsWith('/chat/sessions/media/video-history')) {
-      return respond([item('video-result', 'video-history', 'task', '视频生成任务已提交，正在等待生成结果。', 2, {
+    if (url.pathname.endsWith('/chat/sessions/video/video-history/snapshot')) {
+      return respond(boundTrialSnapshot(url, [item('video-result', 'video-history', 'task', '视频生成任务已提交，正在等待生成结果。', 2, {
         task_id: 'video-run', status: videoStatus === 'succeeded' ? 'succeeded' : 'queued', payload: { result: { url: '/canvas-presets/pan.mp4' } },
-      })])
+      })]))
     }
     if (url.pathname.includes('/files/') && url.pathname.endsWith('/download')) {
       const file = url.pathname.split('/').at(-2)
@@ -120,6 +127,7 @@ try {
       const id = url.pathname.split('/').at(-2)
       const stale = id === 'image-stale-poll'
       const image = id === 'image-history'
+      if (image) observedImageCursors.push(Number(url.searchParams.get('after')))
       const status = stale ? (staleStatusAvailable ? 'running' : 'unavailable') : image ? imageStatus : videoStatus
       if (status === 'unavailable') return route.fulfill({ status: 503 })
       const type = status === 'succeeded' ? 'task.completed' : 'task.progress'
@@ -162,9 +170,15 @@ try {
   imageStatus = 'running'
   await englishHistory.getByRole('button', { name: 'Retry loading status' }).click()
   await englishHistory.getByText('Generating 38%', { exact: true }).waitFor()
+  await englishHistory.evaluate(region => { region.scrollTop = 0 })
+  await englishHistory.getByRole('button', { name: 'Load earlier messages' }).click()
+  await englishHistory.getByText('更早的图片提示词', { exact: true }).waitFor()
   imageReadsFail = true
   imageStatus = 'succeeded'
   await englishHistory.getByText('Completed', { exact: true }).waitFor()
+  assert.ok(observedImageCursors.includes(1), 'subscription continued after the progress event')
+  assert.ok(!observedImageCursors.includes(99), 'older history cursor did not change the subscription')
+
   await englishHistory.getByText(/Trial Provider Model/).waitFor()
   await englishHistory.getByText('Could not refresh session messages', { exact: true }).waitFor()
   await englishHistory.getByText('图片实验原始提示词', { exact: true }).waitFor()
@@ -265,7 +279,7 @@ try {
   await history.getByRole('button', { name: '查看图片 1' }).waitFor()
   assert.equal(await history.getByText('状态暂不可用', { exact: true }).count(), 0)
   assert.equal(await generate.isEnabled(), true)
-  assert.deepEqual(writes, ['/api/v1/studio/chat/sessions/image-stale-poll/turns'])
+  assert.deepEqual(writes, ['/api/v1/studio/chat/sessions/image/image-stale-poll/turns'])
   console.log(`Experiment result browser acceptance passed. Evidence: ${output}`)
 } finally {
   await cleanup()

@@ -134,15 +134,28 @@ export function bindChatSession(kind: BoundSend['kind'], sessionId: string) {
   }
 }
 
+/** Read one trial history page without changing the active event cursor. */
+export async function readTrialHistory(
+  kind: 'text' | 'image' | 'video',
+  {sessionId, ...paging}: Omit<BoundSnapshot, 'kind'>,
+) {
+  const {data} = await bindChatSession(kind, sessionId).snapshot(paging)
+  if (!data || data.kind !== kind || !('messages' in data.history) || 'models' in data.history) {
+    throw new Error('Invalid trial history snapshot')
+  }
+  return {data: data.history.messages, meta: {cursor: data.cursor}}
+}
+
 /** Follow one admitted turn, resuming after the last event if the connection drops. */
 export async function waitForTurnEvent<T>(
   receipt: ChatTurnReceipt, select: (event: ChatEvent) => T | undefined | Promise<T | undefined>,
   signal = new AbortController().signal,
+  events: ReturnType<typeof bindChatSession>['events'] = (after, abort) => chatClient.events(receipt.session_id, after, abort),
 ): Promise<T> {
   let cursor = receipt.cursor
   for (let attempt = 0; attempt < 3 && !signal.aborted; attempt++) {
     try {
-      for await (const event of chatClient.events(receipt.session_id, cursor, signal)) {
+      for await (const event of events(cursor, signal)) {
         const result = event.turn_id === receipt.turn_id ? await select(event) : undefined
         if (signal.aborted) signal.throwIfAborted()
         cursor = event.cursor
@@ -155,10 +168,10 @@ export async function waitForTurnEvent<T>(
   throw new Error('Chat turn event stream closed before the expected event')
 }
 
-export function waitForMediaAdmission(receipt: ChatTurnReceipt) {
+export function waitForMediaAdmission(session: ReturnType<typeof bindChatSession>, receipt: ChatTurnReceipt) {
   return waitForTurnEvent(receipt, event => {
     if (event.category !== 'task' || event.type !== 'task.accepted') return
     const {task_id, messages} = event.payload
     return {task_id, messages: messages ?? []}
-  }, AbortSignal.timeout(8000))
+  }, AbortSignal.timeout(8000), session.events)
 }

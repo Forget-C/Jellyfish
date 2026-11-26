@@ -9,7 +9,8 @@ import {
 export interface UseExperimentHistoryOptions {
   /** 单页消息数量；服务端允许的范围为 1 到 100。 */
   pageSize?: number
-  readPage?: typeof StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet
+  readPage?: (options: {sessionId: string; page: number; pageSize: number}) =>
+    Promise<{data?: ExperimentMessageRead[] | null; meta?: {cursor?: unknown} | null}>
 }
 
 /** 共享历史 Hook 暴露给实验室模态组件的状态和操作。 */
@@ -29,6 +30,7 @@ export interface ExperimentHistoryState {
   /** 是否已经成功读取过本会话，包括成功返回空列表。 */
   hasLoadedHistory: boolean
   eventCursor?: number
+  readLatest: (targetSessionId: string) => ReturnType<NonNullable<UseExperimentHistoryOptions['readPage']>>
   /** 分页错误重试原页，避免重试时重置已经加载的历史。 */
   errorOnLoadMore: boolean
   /** 从第一页重新读取当前会话历史。 */
@@ -222,6 +224,7 @@ export function useExperimentHistory(
     hasLoadedHistory: isCurrentHistory && hasLoadedHistory,
     errorOnLoadMore,
     refresh,
+    readLatest: targetSessionId => readPage({sessionId: targetSessionId, page: 1, pageSize}),
     loadMore,
     adoptCanonicalMessages,
     clearLocalHistory,

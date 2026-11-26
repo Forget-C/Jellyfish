@@ -1,5 +1,5 @@
 import { useUiText } from '../../../../uiText'
-import { chatClient, waitForMediaAdmission } from '../../../../services/chatSession'
+import { bindChatSession, readTrialHistory, waitForMediaAdmission } from '../../../../services/chatSession'
 import { useTrialModelPreference } from '../hooks/useTrialModelPreference'
 import { MediaTaskDetails } from '../components/MediaTaskDetails'
 import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
@@ -8,7 +8,7 @@ import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
  *
  * 页面壳负责会话选择和布局；本组件只保留视频特有的帧输入、异步任务轮询和结果展示。
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, InputNumber, Select, Tag, message } from 'antd'
 import {
@@ -104,10 +104,13 @@ type VideoExperimentModeProps = {
   render: (parts: RenderParts) => ReactNode
 }
 
+const readHistory = (paging: Parameters<typeof readTrialHistory>[1]) => readTrialHistory('video', paging)
+
 /** 组合视频模态的输入、历史和任务轮询，并交给统一实验室页面壳渲染。 */
 export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMessages, render }: VideoExperimentModeProps) {
   const uiText = useUiText()
-  const history = useExperimentHistory(sessionId, { readPage: chatClient.mediaSnapshot })
+  const session = useMemo(() => sessionId ? bindChatSession('video', sessionId) : undefined, [sessionId])
+  const history = useExperimentHistory(sessionId, { readPage: readHistory })
   const { files, libraryState, loadLibrary, onUploaded } = useExperimentLibrary('video')
   const [modelId, setModelId, setSoleModel] = useTrialModelPreference('video', sessionId)
   const [draft, setDraft] = useState('')
@@ -131,7 +134,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
 
   const currentPrompt = selectedTemplate ? renderPromptTemplate(selectedTemplate.content, templateValues).trim() : draft.trim()
   const persistedMessages = history.messages.map(toVideoMessage)
-  const { messages, runningTaskId, retryStatus } = useExperimentTaskResults(sessionId, history.eventCursor, persistedMessages, history.refresh, (item, result) => ({
+  const { messages, runningTaskId, retryStatus } = useExperimentTaskResults(session, history.eventCursor, persistedMessages, history.refresh, (item, result) => ({
     ...item,
     videoUrl: buildFileDownloadUrl(result.artifacts?.find(file => !file.deleted && file.media_type === 'video')?.file_id) ?? item.videoUrl,
   }))
@@ -200,8 +203,9 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     await submission.submitTask({
       ensureSession: () => sessionId ? Promise.resolve({ id: sessionId }) : ensureSession('video'),
       request: async (targetSessionId, idempotencyKey) => {
-        const response = await chatClient.send({
-          sessionId: targetSessionId, idempotencyKey,
+        const target = session ?? bindChatSession('video', targetSessionId)
+        const response = await target.send({
+          idempotencyKey,
           requestBody: {
             model_id: modelId,
             execution_prompt: currentPrompt,
@@ -219,7 +223,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
             operation_input: { kind: 'video_generation', ratio, ...(resolutions.length ? { resolution, seconds } : {}) },
           },
         })
-        return waitForMediaAdmission(response)
+        return waitForMediaAdmission(target, response)
       },
       onAccept: (attempt, targetSessionId) => {
         const unchanged = submission.acceptInput(attempt, targetSessionId, inputSignature(''))
