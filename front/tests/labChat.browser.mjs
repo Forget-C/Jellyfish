@@ -23,6 +23,7 @@ try {
   const requests = []
   let failedTurn
   let exerciseStop = false
+  let heldObserverRequests = 0
   let cursor = 1
   let activeId = 'active'
   let failureFrames = ''
@@ -33,6 +34,9 @@ try {
   const streamBlocked = new Promise(resolve => { markBlocked = resolve })
   let selected
   let replayAnsweredQuestion = false
+  let exerciseResume = false
+  const resumePositions = []
+  let resumeSnapshots = 0
   let exerciseRecovery = false
   const repeated = []
   let closeDuringSend = false
@@ -50,8 +54,24 @@ try {
     }
     if (url.pathname.endsWith('/events')) {
       assert.equal(url.pathname, '/api/v1/studio/chat/sessions/chat/chat/events')
+      if (exerciseResume) {
+        const after = Number(url.searchParams.get('after'))
+        resumePositions.push(after)
+        const event = {session_id: existing.id, turn_id: activeId, cursor: after + 1,
+          category: 'message', type: 'message.updated', payload: {mode: 'append', text: after === 20 ? '断线前' : '与重连后'}}
+        const records = after > 21 ? '' : 'id: ' + event.cursor + '\nevent: ' + event.type + '\ndata: ' + JSON.stringify(event) + '\n\n'
+        return route.fulfill({contentType: 'text/event-stream', body: records})
+      }
+      const recovered = exerciseRecovery && savedFailure.find(row => row.id === 'recovered-reply')
+      if (recovered && Number(url.searchParams.get('after')) < cursor) {
+        const event = {category:'turn', type:'turn.completed', cursor, session_id: existing.id,
+          turn_id: recovered.payload.turn_id, payload:{text:recovered.content, message:recovered}}
+        return route.fulfill({contentType:'text/event-stream',
+          body:'id: ' + cursor + '\nevent: turn.completed\ndata: ' + JSON.stringify(event) + '\n\n'})
+      }
       if (exerciseRecovery || closeDuringSend) return route.fulfill({contentType: 'text/event-stream', body: ': keep-alive\n\n'})
       if (exerciseStop && !failureFrames) {
+        heldObserverRequests++
         markBlocked()
         return blocked.then(() => route.fulfill({contentType: 'text/event-stream', body: failureFrames}))
       }
@@ -118,7 +138,10 @@ try {
     }
     if (url.pathname.endsWith('/stop')) { active = false; if (exerciseStop) cursor++ }
     const snapshot = {question, session_id: existing.id, cursor, models: {text: 'T', image: 'I'}, messages: savedFailure.length ? savedFailure : failedTurn ? [{id:'failed', role:'assistant', content:'失败', status:'failed', payload:{turn_id:failedTurn}}] : [], capabilities: [], active_turn: active ? activeId : null}
-    if (url.pathname.endsWith('/snapshot')) assert.equal(url.pathname, '/api/v1/studio/chat/sessions/chat/chat/snapshot')
+    if (url.pathname.endsWith('/snapshot')) {
+      assert.equal(url.pathname, '/api/v1/studio/chat/sessions/chat/chat/snapshot')
+      if (exerciseResume) resumeSnapshots++
+    }
     const data = url.pathname.endsWith('/experiment-sessions') ? (hasHistory && url.searchParams.get('lab_type') === 'chat' ? [existing] : [])
       : url.pathname.endsWith('/turns') ? turnReceipt(route)
       : url.pathname.endsWith('/snapshot') ? {kind: 'chat', session_id: existing.id, cursor, capabilities: [], history: snapshot}
@@ -198,6 +221,7 @@ try {
   await page.getByRole('button', {name:'发送', exact:true}).click()
   await nextSend
   assert.equal(requests.length, 4)
+  assert.equal(heldObserverRequests, 1)
   const toolMessage = {id: 'tool-error', role: 'assistant', status: 'failed', sequence: 3, content: '引用文件不可用',
     payload: {tool_error: true, tool: 'generate_video', tool_call_id: 'video-1', turn_id: activeId}}
   const turnMessage = {id: 'turn-error', role: 'assistant', status: 'failed', sequence: 4, content: '',
@@ -285,6 +309,16 @@ try {
   await page.reload()
   await page.getByText('关闭前已受理', {exact:true}).waitFor()
   assert.equal(requests.length, stopCount + 1)
+
+  // Reconnect the observation after the last applied event, without rereading the opening snapshot.
+  exerciseResume = true
+  active = true
+  activeId = 'resume'
+  cursor = 20
+  await page.reload()
+  await page.getByText('断线前与重连后', {exact:true}).waitFor()
+  assert.deepEqual(resumePositions.slice(0, 2), [20, 21])
+  assert.equal(resumeSnapshots, 1)
 } finally {
   await cleanup()
 }

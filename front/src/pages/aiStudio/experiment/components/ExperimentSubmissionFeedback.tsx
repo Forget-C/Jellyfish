@@ -5,7 +5,7 @@ import type { ExperimentSubmissionNotice } from '../hooks/useExperimentSubmissio
 export function ExperimentSubmissionFeedback({ notice, onCheck, onAcknowledge }: {
   notice?: ExperimentSubmissionNotice
   onCheck: () => void
-  onAcknowledge: () => void
+  onAcknowledge?: () => void
 }) {
   const uiText = useUiText()
   if (!notice) return null
@@ -22,7 +22,7 @@ export function ExperimentSubmissionFeedback({ notice, onCheck, onAcknowledge }:
     description={notice.historyUnavailable ? (accepted ? description + uiText(" 会话历史暂不可用，可重试读取。") : uiText("会话历史暂不可用，可重试读取。")) : description}
     action={<Space wrap>
       <Button size="small" onClick={onCheck}>{accepted ? uiText("重试读取历史") : uiText("重试核对")}</Button>
-      <Button size="small" onClick={onAcknowledge}>{uiText("我已核对")}</Button>
+      {onAcknowledge && <Button size="small" onClick={onAcknowledge}>{uiText("我已核对")}</Button>}
     </Space>}
   />
 }
