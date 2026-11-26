@@ -345,14 +345,20 @@ try {
     assert.deepEqual(entry.after, [10], label + '发送不应打开新的 SSE')
     assert.equal(entry.open.size, 1)
     const initial = entry.replay[0]
-    entry.replay.push({...initial, cursor: ++entry.cursor, type: 'task.progress',
-      payload: {...initial.payload, progress: 71, messages: undefined}})
     const reconnected = page.waitForResponse(response => {
       const url = new URL(response.url())
       return url.pathname.endsWith('/' + id + '/events') && url.searchParams.get('after') === '11'
     })
     for (const stream of entry.open) stream.end()
+    const unavailable = history.getByText('状态暂不可用', {exact: true})
+    await unavailable.waitFor()
     await reconnected
+    await unavailable.waitFor({state: 'hidden'})
+    assert.equal(await history.getByText('生成中 37%', {exact: true}).count(), 1)
+    const progress = {...initial, cursor: ++entry.cursor, type: 'task.progress',
+      payload: {...initial.payload, progress: 71, messages: undefined}}
+    entry.replay.push(progress)
+    for (const stream of entry.open) stream.write(encodeEvent(progress))
     await history.getByText('生成中 71%', { exact: true }).waitFor()
     assert.deepEqual(entry.after, [10, 11], label + '断线后按已处理游标续读')
     assert.equal(await history.getByText('生成中 71%', { exact: true }).count(), 1)

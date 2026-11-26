@@ -127,11 +127,21 @@ export function bindChatSession(kind: BoundSend['kind'], sessionId: string) {
 /** Read one trial history page without changing the active event cursor. */
 export async function readTrialHistory(
   kind: 'text' | 'image' | 'video',
-  {sessionId, ...paging}: Omit<BoundSnapshot, 'kind'>,
+  {sessionId, signal, ...paging}: Omit<BoundSnapshot, 'kind'> & {signal?: AbortSignal},
 ) {
-  const {data} = await bindChatSession(kind, sessionId).snapshot(paging)
-  if (!data || data.kind !== kind || !('messages' in data.history) || 'models' in data.history) {
-    throw new Error('Invalid trial history snapshot')
+  const request = bindChatSession(kind, sessionId).snapshot(paging)
+  const cancel = () => request.cancel()
+  signal?.addEventListener('abort', cancel, {once: true})
+  if (signal?.aborted) cancel()
+  try {
+    const {data} = await request
+    signal?.throwIfAborted()
+    if (!data || data.session_id !== sessionId || data.kind !== kind ||
+        !('messages' in data.history) || 'models' in data.history) {
+      throw new Error('Invalid trial history snapshot')
+    }
+    return {data: data.history.messages, meta: {cursor: data.cursor, activeTurnIds: data.history.active_turn_ids}}
+  } finally {
+    signal?.removeEventListener('abort', cancel)
   }
-  return {data: data.history.messages, meta: {cursor: data.cursor, activeTurnIds: data.history.active_turn_ids}}
 }

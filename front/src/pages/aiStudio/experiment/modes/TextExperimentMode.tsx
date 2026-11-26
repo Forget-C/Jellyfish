@@ -267,6 +267,7 @@ export function TextExperimentMode({
     if (!sessionId) return
     await onClearSession(sessionId)
     historyState.clearLocalHistory()
+    await historyState.refresh()
   }
 
   /** Restores a prior user message as editable free text without spending another model call. */
