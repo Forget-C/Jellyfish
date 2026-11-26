@@ -21,4 +21,3 @@ export type ApiResponse_ChatSessionSnapshot_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

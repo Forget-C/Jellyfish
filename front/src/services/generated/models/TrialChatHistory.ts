@@ -9,4 +9,3 @@ import type { ExperimentMessageRead } from './ExperimentMessageRead';
 export type TrialChatHistory = {
     messages: Array<ExperimentMessageRead>;
 };
-

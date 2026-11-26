@@ -15,4 +15,3 @@ export type ChatSessionSnapshot = {
     kind: 'canvas' | 'chat' | 'text' | 'image' | 'video';
     history: (CanvasAssistantHistory | LabChatSnapshot | TrialChatHistory);
 };
-
