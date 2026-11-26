@@ -97,8 +97,8 @@ try {
       return respond(turnReceipt(route, 'lab-run'))
     }
     if (url.pathname.endsWith('/new-text/events')) {
-      const [user, assistant] = persisted.get('new-text')
-      return route.fulfill({ contentType: 'text/event-stream', body: successfulTextTrial('new-text', 'lab-run', user, assistant) })
+      const [user, assistant] = persisted.get('new-text') ?? []
+      return route.fulfill({ contentType: 'text/event-stream', body: user && assistant && !Number(url.searchParams.get('after')) ? successfulTextTrial('new-text', 'lab-run', user, assistant) : '' })
     }
     if (/\/chat\/sessions\/text\/[^/]+\/snapshot$/.test(url.pathname)) return textTrialSnapshot(route, persisted.get(url.pathname.split('/').at(-2)) ?? [])
     if (url.pathname.endsWith('/chat/sessions/image/image-1/snapshot') && imageLookupPending) prematureImageMessages.push(url.pathname)

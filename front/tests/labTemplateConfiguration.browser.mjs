@@ -71,8 +71,8 @@ try {
     const turn = url.pathname.match(/\/chat\/sessions\/(?:text|image|video)\/([^/]+)\/turns$/)
     if (url.pathname.endsWith('/text-session/events')) {
       const sessionId = url.pathname.split('/').at(-2)
-      const [user, assistant] = persisted.get(sessionId)
-      return route.fulfill({ contentType: 'text/event-stream', body: successfulTextTrial(sessionId, 'text-run', user, assistant) })
+      const [user, assistant] = persisted.get(sessionId) ?? []
+      return route.fulfill({ contentType: 'text/event-stream', body: user && assistant && !Number(url.searchParams.get('after')) ? successfulTextTrial(sessionId, 'text-run', user, assistant) : '' })
     }
     if (turn) {
       const sessionId = turn[1]

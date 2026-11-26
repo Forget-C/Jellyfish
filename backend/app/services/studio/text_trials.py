@@ -3,12 +3,12 @@ import asyncio
 
 from fastapi import HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.core.contracts.streaming import StreamEventType
 from app.models.experiment_sessions import ExperimentSession, ExperimentSessionEvent
 from app.schemas.interaction import InteractionSnapshot
-from app.services.generation.runtime.text_chat_streaming import admit_text_interaction, stream_text_run
+from app.services.generation.runtime.text_chat_streaming import active_text_run_ids, admit_text_interaction, stream_text_run
 from app.services.studio.experiment_messages import read_experiment_page
 from app.services.studio.session_events import append_session_event
 
@@ -31,10 +31,26 @@ async def require_text(db, session_id):
 
 
 async def snapshot(db, session_id, page, page_size):
+    """Hold the session writer lock while reading the history and its event cursor."""
+    if db.get_bind().dialect.name == 'sqlite':
+        await db.execute(update(ExperimentSession).where(ExperimentSession.id == session_id)
+                         .values(updated_at=ExperimentSession.updated_at))
+    await db.get(ExperimentSession, session_id, with_for_update=True)
     await require_text(db, session_id)
     cursor = await db.scalar(select(func.max(ExperimentSessionEvent.cursor)).where(ExperimentSessionEvent.session_id == session_id))
     snapshot = InteractionSnapshot(session_id=session_id, cursor=cursor or 0, capabilities=("snapshot", "send", "events", "stop"))
     return await read_experiment_page(db, session_id, page, page_size), snapshot
+
+
+async def snapshot_active_turn_ids(db, session_id):
+    active = await active_text_run_ids(session_id)
+    if not active:
+        return []
+    finished = set(await db.scalars(select(ExperimentSessionEvent.turn_id).where(
+        ExperimentSessionEvent.session_id == session_id, ExperimentSessionEvent.turn_id.in_(active),
+        ExperimentSessionEvent.kind.in_(('turn.completed', 'turn.failed', 'turn.stopped')),
+    )))
+    return [turn_id for turn_id in active if turn_id not in finished]
 
 
 async def _restore_accepted_events(db, session_id, task_id, saved_events):

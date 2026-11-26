@@ -34,6 +34,10 @@ let browser
 let page
 const cleanup = browserCleanup(() => ({ browser, server }))
 
+let textEvents
+let textWritesBaseline = 0
+let textCursor = 0
+
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
@@ -68,10 +72,13 @@ try {
       requestHeaders.push(request.headers())
       return respond(turnReceipt(route, writes.at(-1).content.includes('断开') ? 'disconnect-run' : 'text-run'))
     }
-    if (url.pathname.endsWith('/text-session/events')) return submission(route)
+    if (url.pathname.endsWith('/text-session/events')) {
+      if (writes.length > textWritesBaseline && textEvents) return textEvents(route)
+      return route.fulfill({contentType: 'text/event-stream', body: ''})
+    }
     if (url.pathname.endsWith('/chat/sessions/text/text-session/snapshot')) {
       historyReads += 1
-      return textTrialSnapshot(route, histories.get('text-session') ?? [])
+      return textTrialSnapshot(route, histories.get('text-session') ?? [], textCursor)
     }
     if (/\/chat\/sessions\/(image|video)\/[^/]+\/turns$/.test(url.pathname)) {
       writes.push(request.postDataJSON())
@@ -182,11 +189,13 @@ try {
   const textRequest = new Promise(resolve => { textEntered = resolve })
   let releaseText
   const textGate = new Promise(resolve => { releaseText = resolve })
-  submission = async route => {
+  textWritesBaseline = writes.length
+  textEvents = async route => {
     textEntered()
     await textGate
     const user = historyMessage('text-session', 'text-user', 'user', textPrompt.trim(), 1)
     histories.set('text-session', [user])
+    textCursor = 2
     return route.fulfill({ contentType: 'text/event-stream', body:
       frame('accepted', 1, { task_id: 'text-run', user_message: user }) +
       frame('error', 2, { task_id: 'text-run', error: { code: 'provider_failure', message: '生成过程失败', retryable: true } }),
@@ -352,14 +361,16 @@ try {
   const disconnectUser = historyMessage('text-session', 'disconnect-user', 'user', '已接收但流意外断开', 3)
   const writesBeforeDisconnect = writes.length
   const readsBeforeDisconnect = historyReads
-  submission = route => {
-    if (new URL(route.request().url()).searchParams.get('after') === '2') {
+  textWritesBaseline = writes.length
+  textEvents = route => {
+    if (Number(new URL(route.request().url()).searchParams.get('after')) >= 4) {
       return route.fulfill({ contentType: 'text/event-stream', body: '' })
     }
     histories.set('text-session', [...(histories.get('text-session') ?? []), disconnectUser])
+    textCursor = 4
     return route.fulfill({ contentType: 'text/event-stream', body:
-      frame('accepted', 1, { task_id: 'disconnect-run', user_message: disconnectUser }) +
-      frame('delta', 2, { task_id: 'disconnect-run', text_delta: '断流前收到的部分回复' }),
+      frame('accepted', 3, { task_id: 'disconnect-run', user_message: disconnectUser }) +
+      frame('delta', 4, { task_id: 'disconnect-run', text_delta: '断流前收到的部分回复' }),
     })
   }
   await textSubmit.click()

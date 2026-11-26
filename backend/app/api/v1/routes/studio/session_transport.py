@@ -11,17 +11,17 @@ from app.core.contracts.generation import GenerationSubmitRequest
 from app.dependencies import get_db
 from app.models.experiment_sessions import ExperimentSession
 from app.models.generation_canvas import GenerationCanvas
-from app.schemas.chat import ChatEvent, ChatSessionKind, ChatSessionSnapshot, ChatTurnReceipt, TrialChatHistory
+from app.schemas.chat import ChatEvent, ChatSessionKind, ChatSessionSnapshot, ChatTurnReceipt
 from app.schemas.canvas_assistant import CanvasAssistantMessage, CanvasAssistantQuestionAnswer
 from app.schemas.common import ApiResponse, error_response, success_response
 from app.schemas.interaction import InteractionRequestHeader
 from app.schemas.studio.lab_chat import ArtifactAnswer, LabChatCommand
 from app.schemas.studio.text_lab import TextLabRunRequest
-from app.services.chat import commands, laboratory
+from app.services.chat import commands
+from app.services.chat.snapshots import session_snapshot
 from app.services.chat.stream import session_event_stream
 from app.services.generation_canvas.assistant import CanvasAssistant
-from app.services.studio import text_trials
-from app.services.studio.media_trials import media_event_page, media_snapshot
+from app.services.studio.media_trials import media_event_page
 from app.services.studio.session_events import session_event_page
 
 router = APIRouter()
@@ -177,14 +177,5 @@ async def bound_snapshot(kind: ChatSessionKind, session_id: str, db: Database, r
                          page_size: Annotated[int, Query(ge=1, le=100)] = 50):
     """Return the public checkpoint and history for the bound session."""
     response.headers['Cache-Control'] = 'no-store'
-    _, project = await typed_session_owner(db, kind, session_id)
-    if kind in ('text', 'image', 'video'):
-        read_snapshot = text_trials.snapshot if kind == 'text' else media_snapshot
-        messages, checkpoint = await read_snapshot(db, session_id, page, page_size)
-        return success_response(ChatSessionSnapshot(kind=kind, **checkpoint.model_dump(),
-                                                     history=TrialChatHistory(messages=messages)))
-    history = (await CanvasAssistant(db, project or '').history(session_id) if kind == 'canvas'
-               else await laboratory.snapshot(db, session_id))
-    return success_response(ChatSessionSnapshot(kind=kind, session_id=session_id,
-                                                 cursor=history.cursor, capabilities=history.capabilities,
-                                                 history=history))
+    owner = await typed_session_owner(db, kind, session_id)
+    return success_response(await session_snapshot(db, owner, session_id, page, page_size))
