@@ -35,6 +35,7 @@ try {
   await page.route('**/api/**', route => {
     const url = new URL(route.request().url())
     if (url.pathname.endsWith('/events')) {
+      assert.equal(url.pathname, '/api/v1/studio/chat/sessions/chat/chat/events')
       if (exerciseStop && !failureFrames) {
         markBlocked()
         return blocked.then(() => route.fulfill({contentType: 'text/event-stream', body: failureFrames}))
@@ -54,12 +55,14 @@ try {
       return route.fulfill({contentType: 'text/event-stream', body})
     }
     if (url.pathname.endsWith('/answer')) {
+      assert.equal(url.pathname, '/api/v1/studio/chat/sessions/chat/chat/turns/active/answer')
       selected = route.request().postDataJSON()
       question = undefined
       active = false
       return route.fulfill({status: 202, json: {data: {session_id: existing.id, turn_id: 'active', cursor: 3}}})
     }
     if (url.pathname.endsWith('/turns') && route.request().method() === 'POST') {
+      assert.equal(url.pathname, '/api/v1/studio/chat/sessions/chat/chat/turns')
       const command = route.request().postDataJSON()
       requests.push(command.request_id)
       if (exerciseStop) {
@@ -74,8 +77,10 @@ try {
     }
     if (url.pathname.endsWith('/stop')) { active = false; if (exerciseStop) cursor++ }
     const snapshot = {question, session_id: existing.id, cursor, models: {text: 'T', image: 'I'}, messages: savedFailure.length ? savedFailure : failedTurn ? [{id:'failed', role:'assistant', content:'失败', status:'failed', payload:{turn_id:failedTurn}}] : [], capabilities: [], active_turn: active ? activeId : null}
+    if (url.pathname.endsWith('/snapshot')) assert.equal(url.pathname, '/api/v1/studio/chat/sessions/chat/chat/snapshot')
     const data = url.pathname.endsWith('/experiment-sessions') ? (hasHistory && url.searchParams.get('lab_type') === 'chat' ? [existing] : [])
       : url.pathname.endsWith('/turns') ? turnReceipt(route)
+      : url.pathname.endsWith('/snapshot') ? {kind: 'chat', session_id: existing.id, cursor, capabilities: [], history: snapshot}
       : url.pathname.includes('/chat/sessions/lab/chat') ? snapshot
       : url.pathname.endsWith('/model-settings') ? {default_text_model_id: 'T', default_image_model_id: 'I'}
       : url.pathname.endsWith('/models') ? {items: [{id: 'T', name: '主模型T'}, {id: 'I', name: '图片模型I'}]} : []

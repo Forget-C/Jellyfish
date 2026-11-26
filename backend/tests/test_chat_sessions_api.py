@@ -11,6 +11,67 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
+async def test_typed_lab_session_snapshot_bridges_admission_and_event_subscription(canvas_client, monkeypatch):
+    import asyncio
+    from app.models.llm import Model
+
+    async with canvas_client.canvas_sessions.begin() as db:
+        (await db.get(Provider, 'canvas-provider')).api_key = 'local'
+        (await db.get(Model, 'canvas-text')).capability_profile = {
+            'native_streaming': {'declaration': 'unsupported'},
+        }
+        db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
+
+    release = asyncio.Event()
+    original = httpx.AsyncClient.send
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await original(client, request, **kwargs)
+        await release.wait()
+        return httpx.Response(200, request=request, json={'choices': [{
+            'index': 0, 'finish_reason': 'stop',
+            'message': {'role': 'assistant', 'content': '正在恢复的聊天'},
+        }]})
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    base = '/api/v1/studio'
+    created = await canvas_client.post(base + '/experiment-sessions', json={'lab_type': 'chat'})
+    sid = created.json()['data']['id']
+    session_base = f'{base}/chat/sessions'
+    url = f'{session_base}/chat/{sid}'
+    wrong = f'{session_base}/text/{sid}'
+    command = {'request_id': 'first', 'text': '你好'}
+    assert (await canvas_client.get(wrong + '/snapshot')).status_code == 404
+    assert (await canvas_client.get(wrong + '/events', params={'follow': False})).status_code == 404
+    assert (await canvas_client.post(wrong + '/turns', json=command)).status_code == 404
+    try:
+        sent = await asyncio.wait_for(canvas_client.post(url + '/turns', json=command), 5)
+        assert sent.status_code == 202, sent.text
+        receipt = sent.json()['data']
+        assert (receipt['session_id'], receipt['turn_id']) == (sid, 'first')
+        response = await canvas_client.get(url + '/snapshot')
+        assert response.status_code == 200, response.text
+        snapshot = response.json()['data']
+        assert (snapshot['kind'], snapshot['session_id']) == ('chat', sid)
+        assert snapshot['cursor'] > receipt['cursor']
+        assert snapshot['history']['active_turn'] == 'first'
+        assert snapshot['history']['models']['text'] == 'canvas-text'
+        assert snapshot['history']['messages'][0]['content'] == '你好'
+    finally:
+        release.set()
+
+    await wait_for_chat_event(canvas_client, url, 'first', 'turn.completed')
+    stream = await canvas_client.get(url + '/events', params={'follow': False, 'after': snapshot['cursor']})
+    assert 'event: turn.accepted' not in stream.text
+    assert 'event: turn.completed' in stream.text
+    recovered = (await canvas_client.get(url + '/snapshot')).json()['data']
+    assert recovered['history']['messages'][-1]['content'] == '正在恢复的聊天'
+    assert recovered['history']['active_turn'] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
 async def test_session_events_can_open_with_one_database_connection(canvas_client, monkeypatch):
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from app.dependencies import get_db
@@ -184,18 +245,16 @@ async def test_session_type_controls_dispatch_even_for_a_valid_foreign_command(c
     assert stream.status_code == 200 and not stream.text
 
 
-def test_chat_api_exposes_only_one_send_and_event_subscription():
+def test_typed_and_legacy_chat_routes_share_public_receipt_and_event_contracts():
     from app.main import app
 
     paths = app.openapi()['paths']
     sessions = '/api/v1/studio/chat/sessions/'
-    assert {p for p, ops in paths.items() if p.startswith(sessions) and p.endswith('/turns') and 'post' in ops} == {
-        sessions + '{session_id}/turns'}
-    assert {p for p in paths if p.startswith(sessions) and p.endswith('/events')} == {sessions + '{session_id}/events'}
-    stream = paths[sessions + '{session_id}/events']['get']['responses']['200']['content']['text/event-stream']
-    assert stream['itemSchema']['properties']['data']['contentSchema'] == {'$ref': '#/components/schemas/ChatEvent'}
-    responses = paths[sessions + '{session_id}/turns']['post']['responses']
-    assert responses['202']['content']['application/json']['schema']['$ref'].endswith('/ApiResponse_ChatTurnReceipt_')
+    for scope in ('{session_id}', '{kind}/{session_id}'):
+        stream = paths[sessions + scope + '/events']['get']['responses']['200']['content']['text/event-stream']
+        assert stream['itemSchema']['properties']['data']['contentSchema'] == {'$ref': '#/components/schemas/ChatEvent'}
+        responses = paths[sessions + scope + '/turns']['post']['responses']
+        assert responses['202']['content']['application/json']['schema']['$ref'].endswith('/ApiResponse_ChatTurnReceipt_')
 
 
 @pytest.mark.asyncio
@@ -207,13 +266,13 @@ async def test_retired_chat_routes_cannot_execute_or_subscribe(canvas_client):
         f'/generation-canvases/drafts/{sid}/assistant',
         f'/generation-canvases/{sid}/assistant',
         f'/generation-canvases/{sid}/assistant/turns/turn/answer',
-        f'/chat/sessions/canvas/{sid}/turns/turn/answer',
-        f'/chat/sessions/lab/{sid}/turns/turn/answer',
         *(f'/labs/text/sessions/{sid}/{action}' for action in ('execute', 'tasks', 'stream')),
         *(f'/generation-tasks/labs/{mode}/sessions/{sid}/tasks' for mode in ('image', 'video')),
     ):
         result = await canvas_client.post(base + path, json={})
         assert result.status_code in (404, 405), path
+    obsolete_lab_answer = await canvas_client.post(f'{base}/chat/sessions/lab/{sid}/turns/turn/answer', json={})
+    assert obsolete_lab_answer.status_code == 422
     canvas = await canvas_client.post(base + '/generation-canvases', json={'name': '旧事件路由验证'})
     assert canvas.is_success
     canvas_id = canvas.json()['data']['id']

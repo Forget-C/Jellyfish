@@ -11,7 +11,7 @@ from app.core.contracts.generation import GenerationSubmitRequest, GenerationMod
 from app.dependencies import get_db
 from app.models.experiment_sessions import ExperimentSession
 from app.models.generation_canvas import GenerationCanvas
-from app.schemas.chat import ChatEvent, ChatTurnReceipt
+from app.schemas.chat import ChatEvent, ChatSessionKind, ChatSessionSnapshot, ChatTurnReceipt
 from app.schemas.canvas_assistant import CanvasAssistantMessage, CanvasAssistantQuestionAnswer
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.interaction import InteractionRequestHeader
@@ -46,6 +46,13 @@ async def session_owner(db, session_id):
     raise HTTPException(404, 'Chat session not found')
 
 
+async def typed_session_owner(db, kind, session_id):
+    owner = await session_owner(db, session_id)
+    if owner[0] != kind:
+        raise HTTPException(404, 'Chat session not found')
+    return owner
+
+
 def command_for(schema, data):
     try:
         return schema.model_validate(data)
@@ -56,7 +63,12 @@ def command_for(schema, data):
 @router.post('/{session_id}/turns', operation_id='chat_session_send', response_model=ApiResponse[ChatTurnReceipt], status_code=202)
 async def send_turn(session_id: str, body: Command, db: Database,
                     idempotency_key: InteractionRequestHeader = None):
-    kind, project = await session_owner(db, session_id)
+    owner = await session_owner(db, session_id)
+    return await _send_turn(session_id, body, db, idempotency_key, owner)
+
+
+async def _send_turn(session_id, body, db, idempotency_key, owner):
+    kind, project = owner
     if kind == 'canvas':
         if isinstance(body, dict) and 'turns' in body:
             raise HTTPException(409, 'The draft has already been saved')
@@ -92,7 +104,12 @@ async def send_turn(session_id: str, body: Command, db: Database,
              response_model=ApiResponse[ChatTurnReceipt], status_code=202)
 async def answer_turn(session_id: str, turn_id: str, body: Answer, db: Database):
     """Admit an answer to the original paused turn and resume it independently."""
-    kind, project = await session_owner(db, session_id)
+    owner = await session_owner(db, session_id)
+    return await _answer_turn(session_id, turn_id, body, db, owner)
+
+
+async def _answer_turn(session_id, turn_id, body, db, owner):
+    kind, project = owner
     await db.rollback()
     if kind == 'canvas':
         command = command_for(CanvasAssistantQuestionAnswer, body)
@@ -109,15 +126,22 @@ async def answer_turn(session_id: str, turn_id: str, body: Answer, db: Database)
     return success_response(ChatTurnReceipt(session_id=session_id, turn_id=turn_id, cursor=cursor), code=202)
 
 
+EVENT_RESPONSES = {200: {'content': {'text/event-stream': {'itemSchema': {
+    'type': 'object', 'required': ['data'], 'properties': {
+        'data': {'type': 'string', 'contentMediaType': 'application/json',
+                 'contentSchema': {'$ref': '#/components/schemas/ChatEvent'}}}}}}}}
+
+
 @router.get('/{session_id}/events', operation_id='chat_session_events',
-            response_class=SessionEventStream, response_model=ChatEvent,
-            responses={200: {'content': {'text/event-stream': {'itemSchema': {
-                'type': 'object', 'required': ['data'], 'properties': {
-                    'data': {'type': 'string', 'contentMediaType': 'application/json',
-                             'contentSchema': {'$ref': '#/components/schemas/ChatEvent'}}}}}}}})
+            response_class=SessionEventStream, response_model=ChatEvent, responses=EVENT_RESPONSES)
 async def subscribe(session_id: str, db: Database, after: Annotated[int, Query(ge=0)] = 0,
                     last_event_id: Annotated[int, Header(ge=0)] = 0, follow: bool = True):
-    kind, project = await session_owner(db, session_id)
+    owner = await session_owner(db, session_id)
+    return await _subscribe(session_id, db, max(after, last_event_id), follow, owner)
+
+
+async def _subscribe(session_id, db, cursor, follow, owner):
+    kind, project = owner
     sessions = async_sessionmaker(db.bind, expire_on_commit=False)
     await db.rollback()  # Release the lookup connection before opening a page reader.
 
@@ -129,4 +153,46 @@ async def subscribe(session_id: str, db: Database, after: Annotated[int, Query(g
                 return await media_event_page(reader, session_id, cursor)
             return await session_event_page(reader, session_id, cursor)
 
-    return await session_event_stream(read_page, max(after, last_event_id), follow=follow)
+    return await session_event_stream(read_page, cursor, follow=follow)
+
+
+@router.post('/{kind}/{session_id}/turns', operation_id='chat_bound_send',
+             response_model=ApiResponse[ChatTurnReceipt], status_code=202)
+async def send_bound_turn(kind: ChatSessionKind, session_id: str, body: Command,
+                          db: Database, idempotency_key: InteractionRequestHeader = None):
+    """Admit a turn in the session identified by the path."""
+    owner = await typed_session_owner(db, kind, session_id)
+    return await _send_turn(session_id, body, db, idempotency_key, owner)
+
+
+@router.post('/{kind}/{session_id}/turns/{turn_id}/answer', operation_id='chat_bound_answer',
+             response_model=ApiResponse[ChatTurnReceipt], status_code=202)
+async def answer_bound_turn(kind: ChatSessionKind, session_id: str, turn_id: str, body: Answer, db: Database):
+    """Admit an answer to a question in the bound session."""
+    owner = await typed_session_owner(db, kind, session_id)
+    return await _answer_turn(session_id, turn_id, body, db, owner)
+
+
+@router.get('/{kind}/{session_id}/events', operation_id='chat_bound_events',
+            response_class=SessionEventStream, response_model=ChatEvent, responses=EVENT_RESPONSES)
+async def subscribe_bound(kind: ChatSessionKind, session_id: str, db: Database,
+                          after: Annotated[int, Query(ge=0)] = 0,
+                          last_event_id: Annotated[int, Header(ge=0)] = 0, follow: bool = True):
+    """Stream committed events from a bound session."""
+    owner = await typed_session_owner(db, kind, session_id)
+    return await _subscribe(session_id, db, max(after, last_event_id), follow, owner)
+
+
+@router.get('/{kind}/{session_id}/snapshot', operation_id='chat_bound_snapshot',
+            response_model=ApiResponse[ChatSessionSnapshot])
+async def bound_snapshot(kind: ChatSessionKind, session_id: str, db: Database,
+                         page: Annotated[int, Query(ge=1)] = 1,
+                         page_size: Annotated[int, Query(ge=1, le=100)] = 50):
+    """Return the public checkpoint and history for the bound session."""
+    await typed_session_owner(db, kind, session_id)
+    if kind != 'chat':
+        raise HTTPException(404, 'Chat snapshot not available')
+    history = await laboratory.snapshot(db, session_id)
+    return success_response(ChatSessionSnapshot(kind=kind, session_id=session_id,
+                                                 cursor=history.cursor, capabilities=history.capabilities,
+                                                 history=history))

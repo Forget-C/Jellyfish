@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Suggestion } from '@ant-design/x'
 import { Alert, Button, Input, Upload } from 'antd'
 import { WorkbenchConversation } from '../../../../components/workbench/WorkbenchConversation'
-import { applyReply, chatClient } from '../../../../services/chatSession'
+import { applyReply, bindChatSession, chatClient } from '../../../../services/chatSession'
 import { ApiError, FilmService, LlmService, type ChatEvent, type ChatTurnReceipt, type ExperimentMessageRead, type ExperimentSessionRead, type LabChatSnapshot, type LabModels, type FileRead } from '../../../../services/generated'
 import { useUiText } from '../../../../uiText'
 import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
@@ -72,6 +72,7 @@ function applyChatEvent(snapshot: LabChatSnapshot, event: ChatEvent): LabChatSna
 /** One composer for the lab chat profile. Server snapshots own admission and history. */
 export function LabChatMode({ sessionId, ensureSession, render }: Props) {
   const uiText = useUiText()
+  const boundSession = useMemo(() => sessionId ? bindChatSession('chat', sessionId) : undefined, [sessionId])
   const [models, setModels] = useState<LabModels>({})
   const [snapshot, setSnapshot] = useState<LabChatSnapshot>()
   const [text, setText] = useState('')
@@ -108,21 +109,21 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     previous?.session_id === data.session_id && previous.cursor > data.cursor ? previous : data)
 
   useEffect(() => {
-    if (!sessionId) return
+    if (!boundSession) return
     const abort = new AbortController()
     const watch = async () => {
       let cursor = 0
       const refresh = async () => {
-        const data = (await chatClient.labSnapshot({ sessionId })).data
+        const data = (await boundSession.snapshot()).data
         if (!data || abort.signal.aborted) return
         cursor = data.cursor
-        restore(data)
-        if (!initialized.current) { initialized.current = true; setModels(data.models) }
+        restore(data.history)
+        if (!initialized.current) { initialized.current = true; setModels(data.history.models) }
       }
       while (!abort.signal.aborted) {
         try {
           await refresh()
-          for await (const event of chatClient.events(sessionId, cursor, abort.signal)) {
+          for await (const event of boundSession.events(cursor, abort.signal)) {
             if (abort.signal.aborted) return
             if (event.cursor <= cursor) continue
             cursor = event.cursor
@@ -136,7 +137,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     }
     void watch()
     return () => abort.abort()
-  }, [report, sessionId])
+  }, [boundSession, report])
 
   // HTTP acknowledges the command. The session subscription or a newer snapshot
   // releases its composer once that same turn finishes or asks for input.
@@ -175,23 +176,23 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     const fileIds = files.map(file => file.id)
     const key = JSON.stringify([text, fileIds, models])
     if (pending.current?.key !== key) pending.current = { key, id: crypto.randomUUID() }
-    let acceptedSession = sessionId
+    let commandSession = boundSession
     try {
       const session = await ensureSession('chat')
-      acceptedSession = session.id
+      commandSession = boundSession ?? bindChatSession(session.lab_type, session.id)
       if (!sessionId) await chatClient.labModels({sessionId: session.id, requestBody: models})
-      const receipt = await chatClient.send({ sessionId: session.id, requestBody: {
+      const receipt = await commandSession.send({ requestBody: {
         request_id: pending.current.id, text, file_ids: fileIds,
       } })
       setAdmission(receipt)
     } catch (e) {
       report(e)
-      if (acceptedSession && pending.current) {
+      if (commandSession && pending.current) {
         const id = pending.current.id
-        const recovered = await chatClient.labSnapshot({sessionId: acceptedSession}).catch(() => undefined)
-        if (recovered?.data) {
-          restore(recovered.data)
-          if (recovered.data.messages?.some(row => row.status === 'failed' && !row.payload?.tool_error && row.payload?.turn_id === id)) pending.current = undefined
+        const recovered = (await commandSession.snapshot().catch(() => undefined))?.data?.history
+        if (recovered) {
+          restore(recovered)
+          if (recovered.messages?.some(row => row.status === 'failed' && !row.payload?.tool_error && row.payload?.turn_id === id)) pending.current = undefined
         }
       }
     } finally { inFlight.current = false; setSubmitting(false) }
@@ -206,11 +207,11 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
   }
   const question = snapshot?.question
   const answer = async (fileId: string) => {
-    if (!sessionId || !snapshot?.active_turn || !question || inFlight.current) return
+    if (!boundSession || !snapshot?.active_turn || !question || inFlight.current) return
     inFlight.current = true
     setSubmitting(true)
     try {
-      const receipt = await chatClient.answer({sessionId, turnId: snapshot.active_turn,
+      const receipt = await boundSession.answer({turnId: snapshot.active_turn,
         requestBody: {question_id: question.id, file_id: fileId}})
       setAdmission(receipt)
     } catch (e) { report(e) } finally { inFlight.current = false; setSubmitting(false) }

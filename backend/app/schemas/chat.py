@@ -4,10 +4,20 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field, RootModel
 
 from app.schemas.canvas_assistant import CanvasAssistantExchange, CanvasAssistantQueueItem
-from app.schemas.interaction import InteractionEvent
+from app.schemas.interaction import InteractionEvent, InteractionSnapshot
 from app.schemas.media_task import MediaTaskReceipt
 from app.schemas.studio.experiment_sessions import ExperimentMessageRead
-from app.schemas.studio.lab_chat import ArtifactAnswer, ArtifactQuestion
+from app.schemas.studio.lab_chat import ArtifactAnswer, ArtifactQuestion, LabChatSnapshot
+
+
+ChatSessionKind = Literal['canvas', 'chat', 'text', 'image', 'video']
+
+
+class ChatSessionSnapshot(InteractionSnapshot):
+    """Common history checkpoint returned when opening a typed chat session."""
+
+    kind: Literal['chat']
+    history: LabChatSnapshot
 
 
 class ChatTurnReceipt(BaseModel):
