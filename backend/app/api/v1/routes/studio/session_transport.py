@@ -192,13 +192,14 @@ async def bound_snapshot(kind: ChatSessionKind, session_id: str, db: Database,
                          page_size: Annotated[int, Query(ge=1, le=100)] = 50):
     """Return the public checkpoint and history for the bound session."""
     await typed_session_owner(db, kind, session_id)
-    if kind in ('image', 'video'):
-        messages, state = await media_snapshot(db, session_id, page, page_size)
-        return success_response(ChatSessionSnapshot(kind=kind, **state.model_dump(),
+    if kind in ('text', 'image', 'video'):
+        read_snapshot = text_trials.snapshot if kind == 'text' else media_snapshot
+        messages, checkpoint = await read_snapshot(db, session_id, page, page_size)
+        return success_response(ChatSessionSnapshot(kind=kind, **checkpoint.model_dump(),
                                                      history=TrialChatHistory(messages=messages)))
-    if kind != 'chat':
-        raise HTTPException(404, 'Chat snapshot not available')
-    history = await laboratory.snapshot(db, session_id)
-    return success_response(ChatSessionSnapshot(kind=kind, session_id=session_id,
-                                                 cursor=history.cursor, capabilities=history.capabilities,
-                                                 history=history))
+    if kind == 'chat':
+        history = await laboratory.snapshot(db, session_id)
+        return success_response(ChatSessionSnapshot(kind=kind, session_id=session_id,
+                                                     cursor=history.cursor, capabilities=history.capabilities,
+                                                     history=history))
+    raise HTTPException(404, 'Chat snapshot not available')

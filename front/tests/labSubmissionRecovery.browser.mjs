@@ -1,4 +1,4 @@
-import { textTrialFrame, turnReceipt, mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot } from './text-trial-events.mjs'
+import { textTrialFrame, turnReceipt, mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot, textTrialSnapshot } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -61,15 +61,15 @@ try {
       variables: ['主体'], variable_defaults: { 主体: '雪松' }, category: 'video_prompt',
       created_at: timestamp, updated_at: timestamp,
     }] : [] })
-    if (url.pathname.endsWith('/chat/sessions/text-session/turns')) {
+    if (url.pathname.endsWith('/chat/sessions/text/text-session/turns')) {
       writes.push(request.postDataJSON())
       requestHeaders.push(request.headers())
       return respond(turnReceipt(route, writes.at(-1).content.includes('断开') ? 'disconnect-run' : 'text-run'))
     }
     if (url.pathname.endsWith('/text-session/events')) return submission(route)
-    if (url.pathname.endsWith('/chat/sessions/text/text-session')) {
+    if (url.pathname.endsWith('/chat/sessions/text/text-session/snapshot')) {
       historyReads += 1
-      return respond(histories.get('text-session') ?? [])
+      return textTrialSnapshot(route, histories.get('text-session') ?? [])
     }
     if (/\/chat\/sessions\/(image|video)\/[^/]+\/turns$/.test(url.pathname)) {
       writes.push(request.postDataJSON())

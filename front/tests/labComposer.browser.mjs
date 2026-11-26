@@ -1,3 +1,4 @@
+import {textTrialSnapshot} from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
@@ -31,6 +32,7 @@ try {
       const mode = url.searchParams.get('lab_type')
       return respond([{ id: mode, lab_type: mode, title: modes[mode] + '输入验收', created_at: timestamp, updated_at: timestamp }])
     }
+    if (/\/chat\/sessions\/text\/[^/]+\/snapshot$/.test(url.pathname)) return textTrialSnapshot(route, [])
     if (url.pathname.endsWith('/model-settings')) return respond({ default_text_model_id: 'model-2' })
     if (url.pathname.endsWith('/models')) { await modelGate; return respond({ items: Array.from({ length: 10 }, (_, i) => ({ id: 'model-' + i, name: longModels ? '很长的模型名称'.repeat(8) + i : '模型 ' + i, category: url.searchParams.get('category') })) }) }
     if (url.pathname.endsWith('/video-generation-options')) return respond({ model_id: url.searchParams.get('model_id'), allowed_ratios: ['16:9', '9:16'] })

@@ -180,7 +180,7 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
         async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
             from tests.chat_events import wait_for_chat_event
 
-            session_url = '/api/v1/studio/chat/sessions/sse-replay'
+            session_url = '/api/v1/studio/chat/sessions/text/sse-replay'
             url = session_url + '/turns'
             body = {'model_id': 'text-model', 'content': '独立的本轮输入'}
             headers = {'Idempotency-Key': 'same-stream'}
@@ -212,12 +212,16 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
             assert received == ['独立的本轮输入']
             changed = await client.post(url, json={**body, 'content': '另一个输入'}, headers=headers)
             assert changed.status_code == 409, changed.text
-            snapshot = (await client.get('/api/v1/studio/experiment-sessions/sse-replay/messages')).json()
-            assert snapshot['meta']['session_id'] == 'sse-replay' and snapshot['meta']['cursor'] == 2
-            task_id = snapshot['data'][0]['payload']['interaction_run_id']
+            snapshot = (await client.get(session_url + '/snapshot')).json()['data']
+            assert snapshot['session_id'] == 'sse-replay' and snapshot['kind'] == 'text'
+            assert snapshot['cursor'] == completed['cursor']
+            history = snapshot['history']['messages']
+            older = await client.get(session_url + '/snapshot', params={'page': 2, 'page_size': 1})
+            assert older.json()['data']['history']['messages'] == history[:1]
+            assert older.json()['data']['cursor'] == snapshot['cursor']
+            task_id = history[0]['payload']['interaction_run_id']
             late_stop = await client.post(f'/api/v1/studio/chat/sessions/text/sse-replay/turns/{task_id}/stop', json={})
             assert late_stop.json()['data']['status'] == 'succeeded'
-            history = snapshot['data']
             assert [(message['role'], message['content']) for message in history] == [
                 ('user', '独立的本轮输入'), ('assistant', '第一段第二段'),
             ]
@@ -229,6 +233,10 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
             assert simultaneous[0].json() == simultaneous[1].json()
             await wait_for_chat_event(client, session_url, simultaneous[0].json()['data']['turn_id'], 'turn.completed')
             assert received.count('并发请求只运行一次') == 1
+            stream_after_paging = await client.get(
+                session_url + '/events', params={'after': snapshot['cursor'], 'follow': False})
+            assert '独立的本轮输入' not in stream_after_paging.text
+            assert '并发请求只运行一次' in stream_after_paging.text
             first_delta = asyncio.Event()
 
             class InterruptedTextModel:
@@ -250,13 +258,13 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
                 await asyncio.wait_for(first_delta.wait(), timeout=5)
                 await wait_for_chat_event(client, session_url, turn_id, 'message.updated')
                 monkeypatch.setattr(text_chat_streaming, '_runtime', TextStreamingRuntime())
-                snapshot = (await client.get('/api/v1/studio/experiment-sessions/sse-replay/messages')).json()['data']
-                pending = next(item for item in snapshot if item['content'] == interrupted_body['content'])
+                checkpoint = (await client.get(session_url + '/snapshot')).json()['data']
+                pending = next(item for item in checkpoint['history']['messages'] if item['content'] == interrupted_body['content'])
                 assert pending['payload']['partial_text'] == '已经送达的前缀'
                 assert '_stream_partial' not in pending['payload']
                 recovered = await client.post(url, json=interrupted_body, headers=interrupted)
-                assert recovered.status_code == 409
-                assert 'TEXT_LAB_STREAM_RESULT_UNKNOWN' in recovered.text
+                assert recovered.status_code == 202
+                assert recovered.json() == first.json()
             finally:
                 execution.cancel()
                 await asyncio.gather(execution, return_exceptions=True)

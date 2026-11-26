@@ -13,11 +13,17 @@ from app.schemas.studio.lab_chat import ArtifactAnswer, ArtifactQuestion, LabCha
 ChatSessionKind = Literal['canvas', 'chat', 'text', 'image', 'video']
 
 
+class TrialChatHistory(BaseModel):
+    """A page of persistent messages from one single-modality trial."""
+
+    messages: list[ExperimentMessageRead]
+
+
 class ChatSessionSnapshot(InteractionSnapshot):
     """Common history checkpoint returned when opening a typed chat session."""
 
-    kind: Literal['chat']
-    history: LabChatSnapshot
+    kind: ChatSessionKind
+    history: LabChatSnapshot | TrialChatHistory
 
 
 class ChatTurnReceipt(BaseModel):
