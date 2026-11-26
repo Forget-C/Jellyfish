@@ -69,7 +69,7 @@ export function canvasAssistantLifecycle(projectId: string): ChatTurnAdapter<Can
         }), streaming: false, error_code: change.error_code}
         return next
       }
-      if (event.type === 'turn.completed' || event.type === 'turn.stopped') {
+      if (event.type === 'turn.completed' || event.type === 'turn.stopped' || event.type === 'turn.archived') {
         if (snapshot.pending_request?.request_id === change.request_id) {
           next.pending_request = null
           next.pending_question = null

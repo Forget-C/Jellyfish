@@ -65,22 +65,30 @@ function applyChatEvent(snapshot: LabChatSnapshot, event: ChatEvent): LabChatSna
     next.messages = mergeMessages(snapshot.messages, messages ?? []).map(message =>
       message.task_id === receipt.task_id && message.role === 'task'
         ? {...message, media_receipt: receipt, status: receipt.status} : message)
-  } else if (event.type === 'question.asked' && currentTurn && event.detail && 'options' in event.detail) {
-    next.question = event.detail
   } else if (event.type === 'question.answered' && currentTurn) {
     next.question = null
   }
   return next
 }
 
+async function readLabSnapshot(sessionId: string, signal: AbortSignal) {
+  const {data} = await observeChatRequest(bindChatSession('chat', sessionId).snapshot(), signal)
+  if (data?.kind !== 'chat' || !('models' in data.history)) throw new Error('Invalid laboratory chat snapshot')
+  return data.history
+}
+
 const labLifecycle: ChatTurnAdapter<LabChatSnapshot> = {
-  async read(sessionId, signal) {
-    const {data} = await observeChatRequest(bindChatSession('chat', sessionId).snapshot(), signal)
-    if (data?.kind !== 'chat' || !('models' in data.history)) throw new Error('Invalid laboratory chat snapshot')
-    return data.history
-  },
+  read: readLabSnapshot,
   events: (sessionId, cursor, signal, connected) => bindChatSession('chat', sessionId).events(cursor, signal, connected),
-  apply: applyChatEvent,
+  async apply(snapshot, event, signal) {
+    if (event.type !== 'question.asked' || event.turn_id !== snapshot.active_turn) {
+      return applyChatEvent(snapshot, event)
+    }
+    // A question on the wire can already be answered by a different observer.
+    const current = await readLabSnapshot(snapshot.session_id, signal)
+    if (current.cursor < event.cursor) throw new Error('Laboratory snapshot is behind the question')
+    return current
+  },
   active: snapshot => snapshot.active_turn
     ? {id: snapshot.active_turn, questionId: snapshot.question?.id}
     : undefined,
