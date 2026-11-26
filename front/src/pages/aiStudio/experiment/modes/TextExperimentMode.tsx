@@ -29,7 +29,7 @@ import { useExperimentModels } from '../hooks/useExperimentModels'
 import { useExperimentTemplates } from '../hooks/useExperimentTemplates'
 import { focusExperimentPromptEditor, readExperimentInputSnapshot, type ExperimentInputSnapshot } from '../experimentInputSnapshot'
 import { applyReply } from '../../../../services/chatSession'
-import { chatClient } from '../../../../services/chatSession'
+import { bindChatSession, chatClient, readTrialHistory } from '../../../../services/chatSession'
 import { followTextTrial } from '../../../../services/textTrialSession'
 import { useTrialModelPreference } from '../hooks/useTrialModelPreference'
 
@@ -80,6 +80,8 @@ export type TextExperimentModeProps = {
   render: (parts: TextExperimentModeRenderProps) => ReactNode
 }
 
+const readTextHistory = (paging: Parameters<typeof readTrialHistory>[1]) => readTrialHistory('text', paging)
+
 /** 将服务端原始消息限制为文本模态可呈现的用户和助手消息。 */
 function toLocalMessages(messages: ExperimentMessageRead[], includePartial: boolean): LocalMessage[] {
   return messages.flatMap<LocalMessage>(item => {
@@ -123,7 +125,7 @@ export function TextExperimentMode({
     loadTemplates, selectTemplate, confirmReplacement, applyFreeInput, replacementDialog,
   } = useExperimentTemplates(textPromptCategories, draft, setDraft)
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([])
-  const historyState = useExperimentHistory(sessionId, { readPage: chatClient.textSnapshot })
+  const historyState = useExperimentHistory(sessionId, { readPage: readTextHistory })
   const inputSignature = (prompt: string) => JSON.stringify([prompt, selectedTemplate?.id, selectedTemplate?.version, templateValues])
   const submission = useExperimentSubmission(sessionId, historyState, inputSignature(draft))
   const { submitting } = submission
@@ -208,8 +210,9 @@ export function TextExperimentMode({
       controller = new AbortController()
       streamAbortRef.current = controller
       streamSessionIdRef.current = session.id
-      for await (const event of followTextTrial(session.id, () => chatClient.send({
-        sessionId: session.id, requestBody: { model_id: modelId, content: currentPrompt }, idempotencyKey: attempt.requestId,
+      const boundSession = bindChatSession('text', session.id)
+      for await (const event of followTextTrial(boundSession, () => boundSession.send({
+        requestBody: { model_id: modelId, content: currentPrompt }, idempotencyKey: attempt.requestId,
       }), controller.signal)) {
         if (!submission.isCurrent(attempt)) {
           controller.abort()

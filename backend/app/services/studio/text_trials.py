@@ -60,7 +60,7 @@ async def send(db, session_id, body, idempotency_key):
     cursor = await db.scalar(select(ExperimentSessionEvent.cursor).where(
         ExperimentSessionEvent.session_id == session_id, ExperimentSessionEvent.turn_id == result.task_id,
         ExperimentSessionEvent.kind == "turn.accepted"))
-    if result.saved_events and getattr(result.saved_events[-1].data, "error", None) and (
+    if cursor is None and result.saved_events and getattr(result.saved_events[-1].data, "error", None) and (
         result.saved_events[-1].data.error.code == "stream_result_unknown"
     ):
         raise HTTPException(409, "TEXT_LAB_STREAM_RESULT_UNKNOWN")

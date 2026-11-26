@@ -108,12 +108,10 @@ async def admit_text_interaction(db, session_id, body: TextLabRunRequest, reques
         task_id = previous.payload['interaction_run_id']
         try:
             await _runtime.state_of(task_id)
-        except TextStreamRunNotFoundError as error:
+        except TextStreamRunNotFoundError:
             result = await text_stream_result(db, session_id, task_id)
             if result is None:
                 deltas = previous.payload.get('_stream_partial', [])
-                if not deltas:
-                    raise HTTPException(409, 'TEXT_LAB_STREAM_RESULT_UNKNOWN') from error
                 return TextInteractionAdmission(task_id, False, _recovered_text_events(previous, None, task_id, deltas))
             return TextInteractionAdmission(task_id, False, _recovered_text_events(previous, result, task_id))
         return TextInteractionAdmission(task_id, False)

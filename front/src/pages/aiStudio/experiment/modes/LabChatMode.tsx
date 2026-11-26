@@ -115,7 +115,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
       let cursor = 0
       const refresh = async () => {
         const data = (await boundSession.snapshot()).data
-        if (!data || abort.signal.aborted) return
+        if (!data || !('models' in data.history) || abort.signal.aborted) return
         cursor = data.cursor
         restore(data.history)
         if (!initialized.current) { initialized.current = true; setModels(data.history.models) }
@@ -190,7 +190,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
       if (commandSession && pending.current) {
         const id = pending.current.id
         const recovered = (await commandSession.snapshot().catch(() => undefined))?.data?.history
-        if (recovered) {
+        if (recovered && 'models' in recovered) {
           restore(recovered)
           if (recovered.messages?.some(row => row.status === 'failed' && !row.payload?.tool_error && row.payload?.turn_id === id)) pending.current = undefined
         }

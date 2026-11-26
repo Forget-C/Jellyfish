@@ -11,7 +11,7 @@ from app.core.contracts.generation import GenerationSubmitRequest, GenerationMod
 from app.dependencies import get_db
 from app.models.experiment_sessions import ExperimentSession
 from app.models.generation_canvas import GenerationCanvas
-from app.schemas.chat import ChatEvent, ChatSessionKind, ChatSessionSnapshot, ChatTurnReceipt
+from app.schemas.chat import ChatEvent, ChatSessionKind, ChatSessionSnapshot, ChatTurnReceipt, TrialChatHistory
 from app.schemas.canvas_assistant import CanvasAssistantMessage, CanvasAssistantQuestionAnswer
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.interaction import InteractionRequestHeader
@@ -190,9 +190,13 @@ async def bound_snapshot(kind: ChatSessionKind, session_id: str, db: Database,
                          page_size: Annotated[int, Query(ge=1, le=100)] = 50):
     """Return the public checkpoint and history for the bound session."""
     await typed_session_owner(db, kind, session_id)
-    if kind != 'chat':
-        raise HTTPException(404, 'Chat snapshot not available')
-    history = await laboratory.snapshot(db, session_id)
-    return success_response(ChatSessionSnapshot(kind=kind, session_id=session_id,
-                                                 cursor=history.cursor, capabilities=history.capabilities,
-                                                 history=history))
+    if kind == 'text':
+        messages, checkpoint = await text_trials.snapshot(db, session_id, page, page_size)
+        return success_response(ChatSessionSnapshot(kind=kind, **checkpoint.model_dump(),
+                                                    history=TrialChatHistory(messages=messages)))
+    if kind == 'chat':
+        history = await laboratory.snapshot(db, session_id)
+        return success_response(ChatSessionSnapshot(kind=kind, session_id=session_id,
+                                                    cursor=history.cursor, capabilities=history.capabilities,
+                                                    history=history))
+    raise HTTPException(404, 'Chat snapshot not available')

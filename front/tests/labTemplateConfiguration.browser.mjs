@@ -1,4 +1,4 @@
-import { successfulTextTrial, turnReceipt, mediaTurnReceipt, mediaAdmissionStream } from './text-trial-events.mjs'
+import { successfulTextTrial, turnReceipt, mediaTurnReceipt, mediaAdmissionStream, textTrialSnapshot } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -68,7 +68,7 @@ try {
         { ...template, id: category + '-long', name: longName, variables: manyVariables, variable_defaults: {} },
       ] })
     }
-    const turn = url.pathname.match(/\/chat\/sessions\/([^/]+)\/turns$/)
+    const turn = url.pathname.match(/\/chat\/sessions\/(?:text\/)?([^/]+)\/turns$/)
     if (url.pathname.endsWith('/text-session/events')) {
       const sessionId = url.pathname.split('/').at(-2)
       const [user, assistant] = persisted.get(sessionId)
@@ -93,7 +93,8 @@ try {
       persisted.set(sessionId, messages)
       return respond(mediaTurnReceipt(route, { task_id: runId, messages }))
     }
-    if (/\/chat\/sessions\/(media|text)\/[^/]+$/.test(url.pathname)) return respond(persisted.get(url.pathname.split('/').at(-1)) ?? [])
+    if (/\/chat\/sessions\/text\/[^/]+\/snapshot$/.test(url.pathname)) return textTrialSnapshot(route, persisted.get(url.pathname.split('/').at(-2)) ?? [])
+    if (/\/chat\/sessions\/media\/[^/]+$/.test(url.pathname)) return respond(persisted.get(url.pathname.split('/').at(-1)) ?? [])
     if (url.pathname.endsWith('/messages')) return respond(persisted.get(url.pathname.split('/').at(-2)) ?? [])
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])

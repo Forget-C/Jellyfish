@@ -1,8 +1,8 @@
 import { ApiError, type ChatTurnReceipt } from './generated'
-import { chatClient } from './chatSession'
+import type { bindChatSession } from './chatSession'
 
 export async function* followTextTrial(
-  sessionId: string, send: () => Promise<ChatTurnReceipt>, signal: AbortSignal,
+  session: ReturnType<typeof bindChatSession>, send: () => Promise<ChatTurnReceipt>, signal: AbortSignal,
 ) {
   const receipt = await send().catch(error => {
     if (error instanceof ApiError || signal.aborted) throw error
@@ -11,7 +11,7 @@ export async function* followTextTrial(
   let cursor = receipt.cursor
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      for await (const event of chatClient.events(sessionId, cursor, signal)) {
+      for await (const event of session.events(cursor, signal)) {
         cursor = event.cursor
         if (event.turn_id !== receipt.turn_id || (event.category !== 'turn' && event.category !== 'message')) continue
         yield event
