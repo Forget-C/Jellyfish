@@ -7,6 +7,7 @@ import pytest
 
 from app.models.llm import Model, Provider
 from tests.canvas_urls import seed_scene_canvas
+from tests.chat_events import observe_canvas_turn, read_canvas_events
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
 
@@ -56,12 +57,12 @@ async def test_assistant_partial_approval_uses_original_version_and_actual_recei
                 'finish_reason': 'tool_calls' if 'tool_calls' in reply else 'stop'}]})
 
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
-    conversation = await canvas_client.post(path + '/assistant', params=params, json={
+    conversation = await observe_canvas_turn(canvas_client, path, json={
         'request_id': 'two-shots', 'text': '请新建两个镜头的内容卡',
         'context': {'scope': 'canvas', 'revision': canvas['revision'], 'draft': canvas['document']},
     })
-    assert conversation.status_code == 200, conversation.text
-    turn = conversation.json()['data']
+    assert conversation.receipt.status_code == 202, conversation.receipt.text
+    turn = conversation.detail
     [first, second] = turn['proposal']['groups']
     assert first['state'] == second['state'] == 'pending'
     assert (await canvas_client.get(path, params=params)).json()['data']['revision'] == canvas['revision']
@@ -74,6 +75,6 @@ async def test_assistant_partial_approval_uses_original_version_and_actual_recei
     assert [group['state'] for group in applied['proposal']['groups']] == ['applied', 'pending']
     assert [card['text'] for card in applied['canvas']['document']['cards']] == ['第一镜晨光']
     assert (await canvas_client.post(decision_path, params=params, json=choice)).json()['data']['receipt'] == applied['receipt']
-    events = (await canvas_client.get(path + '/assistant/events', params=params)).json()['data']
+    events = await read_canvas_events(canvas_client, path)
     assert [event['type'] for event in events].count('approval.decided') == 1
     assert [event['type'] for event in events].count('execution.succeeded') == 1

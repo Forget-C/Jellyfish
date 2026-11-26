@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import aclosing
 from dataclasses import dataclass
 from uuid import uuid4
@@ -234,12 +234,6 @@ async def cancel_text_interaction(db, session_id: str, task_id: str, reason: str
     raise HTTPException(404, 'text_stream_run_not_found')
 
 
-async def subscribe_text_stream(task_id: str, *, after: int = 0) -> AsyncIterator[GenerationStreamEvent]:
-    """订阅同步 SSE run 的进程内事件序列。"""
-    async for event in _runtime.subscribe(task_id, after_event_id=after):
-        yield event
-
-
 async def _complete_stream(run_id: str, stream_input: _TextStreamInput) -> None:
     """落库最终助手消息并发出 completed SSE 事件。"""
     events = await _runtime.replay(run_id)
@@ -355,5 +349,5 @@ async def reap_expired_text_stream_runs(*, limit: int = 100) -> list[str]:
 
 __all__ = [
     "create_text_stream_run", "reap_expired_text_stream_runs",
-    "request_text_stream_cancel", "stream_text_run", "subscribe_text_stream",
+    "request_text_stream_cancel", "stream_text_run",
 ]

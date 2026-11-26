@@ -11,6 +11,7 @@ from app.core.contracts.generation import (
 )
 from app.core.contracts.media import ImageMediaInput, VideoMediaInput
 from app.models.experiment_sessions import ExperimentSession
+from app.schemas.media_task import MediaTaskReceipt
 from app.schemas.studio.experiment_sessions import ExperimentTaskCreated
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.submission import GenerationSubmitter
@@ -115,7 +116,7 @@ async def media_event_page(db, session_id, after):
     events = await session_event_page(db, session_id, after)
     for event in events:
         if event.type == 'task.accepted' and 'messages' not in event.payload:
-            receipt = await read_media_admission(db, session_id, event.payload['task_id'])
-            if receipt:
-                event.payload = {**event.payload, 'messages': receipt.model_dump(mode='json')['messages']}
+            messages = await read_media_admission(db, session_id, MediaTaskReceipt.model_validate(event.payload))
+            if messages:
+                event.payload = {**event.payload, 'messages': [message.model_dump(mode='json') for message in messages]}
     return events

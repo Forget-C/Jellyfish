@@ -275,6 +275,9 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         assert not (await client.get(event_url, params={"after": observed[0]["cursor"], "follow": "false"})).text
         if explicit_model:
             await complete_media_trial(sessions, client, event_url, history.request.url, modality, model, monkeypatch)
+            replayed = await client.get(event_url, params={"follow": "false", "after": submitted.json()["data"]["cursor"]})
+            first = next(json.loads(line[6:]) for line in replayed.text.splitlines() if line.startswith("data: "))
+            assert first == restored_event
 
 
 async def complete_media_trial(sessions, api, url, snapshot_url, modality, model, monkeypatch):

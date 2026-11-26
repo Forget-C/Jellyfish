@@ -17,6 +17,9 @@ const apiPort = Number(process.env.CANVAS_ASSISTANT_TEST_API_PORT || 8462)
 const webPort = Number(process.env.CANVAS_ASSISTANT_TEST_WEB_PORT || 4462)
 const api = 'http://127.0.0.1:' + apiPort
 const canvasApi = api + '/api/v1/studio/generation-canvases'
+const readCanvasChat = async (id, query = '') => (
+  await (await fetch(api + '/api/v1/studio/chat/sessions/canvas/' + id + query)).json()
+).data
 const journey = '把镜头三的推近放慢并整理目标卡片布局，生成一版，再审看'
 const clipPath = join(output, 'known-silent-clip.mp4')
 execFileSync('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi',
@@ -1117,7 +1120,7 @@ try {
       assert.equal(afterTarget.prompt.segments[0].text, '缓慢推近')
       assert.ok(after.cards.every(card => !card.type.startsWith('direction.')))
     }
-    const [turn] = (await read('/assistant')).turns.filter(turn => turn.text === journey)
+    const [turn] = (await readCanvasChat(canvas.id, extra)).turns.filter(turn => turn.text === journey)
     const added = (await read('/runtime')).runs.filter(run => !originalRuns.some(original => original.id === run.id))
     assert.equal(added.length, 1)
     assert.equal(videoRequests.length - requestCount, 1)
@@ -1153,7 +1156,7 @@ try {
   await panel.getByText('答复 草稿里先聊', { exact: true }).waitFor()
   await page.getByText('已保存', { exact: true }).waitFor()
   assert.equal(await totalCanvases(), beforeDrafts + 1)
-  assert.equal((await (await fetch(canvasApi + '/' + conversationDraft + '/assistant')).json()).data.turns.length, 1)
+  assert.equal((await readCanvasChat(conversationDraft)).turns.length, 1)
 
   const cardDraft = await newDraft()
   await open()
@@ -1244,11 +1247,11 @@ try {
   await readOnly.getByText('潮水涌入', { exact: true }).waitFor()
   assert.equal(await readOnly.getByRole('checkbox').count(), 0)
   assert.equal(await panel.getByRole('region', { name: '修改建议' }).count(), 0)
-  const original = (await (await fetch(exactPath + '/assistant')).json()).data.turns.at(-1)
+  const original = (await readCanvasChat(exactCanvas.id)).turns.at(-1)
   assert.ok(original.preview?.id)
   await panel.getByRole('button', { name: '送审', exact: true }).click()
   await panel.getByText('此预演已送审', { exact: true }).waitFor()
-  const staged = (await (await fetch(exactPath + '/assistant')).json()).data.turns.at(-1)
+  const staged = (await readCanvasChat(exactCanvas.id)).turns.at(-1)
   assert.equal(staged.submitted_preview_id, original.preview.id)
   assert.deepEqual(staged.proposal, original.preview.proposal)
   assert.equal((await (await fetch(exactPath)).json()).data.revision, exactCanvas.revision)

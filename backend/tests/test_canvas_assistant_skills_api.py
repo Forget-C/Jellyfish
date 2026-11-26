@@ -6,6 +6,7 @@ import pytest
 
 from app.models.llm import Model, ModelSettings, Provider
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # pylint: disable=unused-import
+from tests.chat_events import observe_canvas_turn, read_canvas_chat_snapshot
 
 
 @pytest.mark.asyncio
@@ -71,14 +72,14 @@ async def test_assistant_loads_requested_professional_skills_and_retains_their_v
     url = f"/canvases/{canvas['id']}"
     for index, (question, selected) in enumerate(cases.items()):
         command = {'request_id': f'skill-{index}', 'text': question}
-        response = await canvas_client.post(url + '/assistant', json=command)
-        assert response.status_code == 200, response.text
-        result = response.json()['data']
+        response = await observe_canvas_turn(canvas_client, url, json=command)
+        assert response.receipt.status_code == 202, response.receipt.text
+        result = response.detail
         assert {entry['id'] for entry in result['skills']} == set(selected)
         assert all(entry['name'] and entry['version'] == ('1.2.0' if entry['id'] == 'video-generation' else '1.0.0') for entry in result['skills'])
         assert '景别' in result['reply']
-        assert (await canvas_client.post(url + '/assistant', json=command)).json()['data'] == result
-    turns = (await canvas_client.get(url + '/assistant')).json()['data']['turns']
+        assert (await observe_canvas_turn(canvas_client, url, json=command)).detail == result
+    turns = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['turns']
     assert [{entry['id'] for entry in turn['skills']} for turn in turns] == [set(items) for items in cases.values()]
     assert calls == list(cases.values())
     assert (await canvas_client.get(url)).json()['data']['document'] == canvas['document']

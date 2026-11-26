@@ -25,10 +25,8 @@ async def canvas_client(request, monkeypatch, canvas_file_store, tmp_path):
     if mysql:
         from tests.services.test_task_mysql import isolated_database_url
         url = isolated_database_url()
-    elif getattr(request, 'param', None) == 'app-handler-file':
-        url = f'sqlite+aiosqlite:///{tmp_path / "canvas.db"}'
     else:
-        url = 'sqlite+aiosqlite:///:memory:'
+        url = f'sqlite+aiosqlite:///{tmp_path / "canvas.db"}'
     engine = create_async_engine(url, isolation_level='READ COMMITTED' if mysql else None)
     if not mysql:
         async with engine.begin() as connection:
@@ -63,9 +61,12 @@ async def canvas_client(request, monkeypatch, canvas_file_store, tmp_path):
         app = FastAPI()
         from app.api.v1.routes.studio.chapters import router as chapters_router
         from app.api.v1.routes.studio.directing import router as directing_router
-        from tests.canvas_assistant_fixture_routes import router as assistant_fixture_router
+        from app.api.v1.routes.studio.chat_sessions import router as chat_sessions_router
+        from app.api.v1.routes.studio.session_transport import router as session_transport_router
+        from tests.chat_events import CHAT_SESSIONS
         app.include_router(router, prefix='/canvases')
-        app.include_router(assistant_fixture_router, prefix='/canvases')
+        app.include_router(chat_sessions_router, prefix=CHAT_SESSIONS)
+        app.include_router(session_transport_router, prefix=CHAT_SESSIONS)
         from app.api.v1.routes.studio.projects import router as projects_router
         app.include_router(projects_router, prefix='/projects')
         app.include_router(chapters_router, prefix='/chapters')

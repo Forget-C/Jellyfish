@@ -15,6 +15,7 @@ from app.services.generation_canvas.runs import canvas_runs
 from app.services.task_service import TaskService
 from app.task_worker import TaskWorker, WorkerLimits
 from tests.canvas_urls import seed_scene_canvas
+from tests.chat_events import observe_canvas_turn, read_canvas_chat_snapshot, read_canvas_events
 from tests.generation_canvas_reference_fixtures import reference_image_sources
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
@@ -119,7 +120,7 @@ async def _generation_recovery(client, canvas_id, path, params, state, *, respon
     command = {'request_id': 'generate-once', 'text': '生成一版', 'context': {
         'scope': 'selection', 'card_ids': ['direct'], 'draft': state['document'], 'revision': state['revision'],
     }}
-    turn = _data(await client.post(path + '/assistant', params=params, json=command))
+    turn = (await observe_canvas_turn(client, path, json=command)).detail
     assert turn['generation']['requested_count'] == 1
     submitted = []
 
@@ -134,7 +135,7 @@ async def _generation_recovery(client, canvas_id, path, params, state, *, respon
         async with _worker(client.canvas_sessions, client=transport, submit=1) as worker:
             await worker.tick()
             await asyncio.gather(*worker.jobs.values())
-        unknown = (_data(await client.get(path + '/assistant', params=params)))['turns'][-1]['generation']
+        unknown = (_data(await read_canvas_chat_snapshot(client, path, params=params)))['turns'][-1]['generation']
         original, = unknown['versions']
         assert original['state'] == ('failed' if response_body is not None else 'unknown'), unknown
         async with _worker(client.canvas_sessions, client=transport, submit=1) as restarted:
@@ -142,8 +143,8 @@ async def _generation_recovery(client, canvas_id, path, params, state, *, respon
                 await TaskService(db).interrupt_previous_workers(worker_id=restarted.worker_id)
             await restarted.tick()
             await asyncio.gather(*restarted.jobs.values())
-        _data(await client.post(path + '/assistant', params=params, json=command))
-        persisted = (_data(await client.get(path + '/assistant', params=params)))['turns'][-1]['generation']
+        assert (await observe_canvas_turn(client, path, json=command)).receipt.status_code == 202
+        persisted = (_data(await read_canvas_chat_snapshot(client, path, params=params)))['turns'][-1]['generation']
         assert persisted['versions'] == [original]
     assert len(submitted) == 1
     assert submitted[0]['prompt'].count(_DIRECT) == 1
@@ -166,14 +167,14 @@ async def test_approval_and_receipt_recover_after_disconnect(canvas_client, monk
     canvas_id, path, params, file_id = await _canvas(client, scene=scene, native=not scene)
     _control_model(monkeypatch, not scene)
     before = _data(await client.get(path, params=params))
-    turn = _data(await client.post(path + '/assistant', params=params, json={
+    turn = (await observe_canvas_turn(client, path, json={
         'request_id': 'two-shots', 'text': '采用角色图并调整两个镜头的输入',
         'context': {'scope': 'canvas', 'revision': before['revision'], 'draft': before['document']},
-    }))
+    })).detail
     first, second = turn['proposal']['groups']
     assert [first['state'], second['state']] == ['pending', 'pending']
     assert 'groups' not in turn['reply']
-    cursor = (_data(await client.get(path + '/assistant', params=params)))['cursor']
+    cursor = (_data(await read_canvas_chat_snapshot(client, path, params=params)))['cursor']
     approval_path = path + '/assistant/proposals/two-shots'
     choice = {'action': 'approve', 'expected_revision': before['revision'], 'group_ids': [first['id']],
               'decision_id': 'first-choice'}
@@ -192,7 +193,7 @@ async def test_approval_and_receipt_recover_after_disconnect(canvas_client, monk
     intermediate = _data(await client.get(path, params=params))
     assert intermediate['revision'] == before['revision'] + (loss == 'after')
     if loss != 'after':
-        signed = _data(await client.get(path + '/assistant', params=params))['turns'][-1]
+        signed = _data(await read_canvas_chat_snapshot(client, path, params=params))['turns'][-1]
         approval, = signed['approval_audit']
         assert approval['outcome'] == 'approved' and approval['group_ids'] == [first['id']]
     if loss == 'stale':
@@ -209,10 +210,10 @@ async def test_approval_and_receipt_recover_after_disconnect(canvas_client, monk
             fault.setattr(approved_edits, 'canvas_edits', lambda *args: UnavailableWriter())
         async with _worker(client.canvas_sessions) as recreated:
             await recreated.tick()
-    history = _data(await client.get(path + '/assistant', params=params))
+    history = _data(await read_canvas_chat_snapshot(client, path, params=params))
     recovered = history['turns'][-1]
     replay = _data(await client.post(approval_path, params=params, json=choice))
-    events = _data(await client.get(path + '/assistant/events', params={**params, 'after': cursor}))
+    events = await read_canvas_events(client, path, after=cursor)
     assert sum(event['type'] == 'approval.decided' and event['group_ids'] == [first['id']] for event in events) == 1
     if loss == 'execution-failure':
         assert not replay['conflicts'] and not replay['receipt']
@@ -285,33 +286,33 @@ async def test_send_the_exact_visible_read_only_preview(canvas_client, monkeypat
     _control_model(monkeypatch, not scene)
     original = _data(await canvas_client.get(path, params=params))
     context = {'scope': 'canvas', 'revision': original['revision'], 'draft': original['document']}
-    plan = _data(await canvas_client.post(path + '/assistant', params=params, json={
+    plan = (await observe_canvas_turn(canvas_client, path, json={
         'request_id': 'preview-only', 'text': '只给方案，先不要写入画布', 'context': context,
-    }))
+    })).detail
     assert plan['proposal'] is None
     preview = plan['preview']
     assert len(preview['proposal']['groups']) == 2
     assert _data(await canvas_client.get(path, params=params)) == original
-    assert (_data(await canvas_client.get(path + '/assistant', params=params)))['turns'][-1]['preview'] == preview
+    assert (_data(await read_canvas_chat_snapshot(canvas_client, path, params=params)))['turns'][-1]['preview'] == preview
     assert (await canvas_client.post(path + '/assistant/proposals/preview-only', params=params, json={
         'action': 'approve', 'expected_revision': original['revision'], 'group_ids': ['1'],
     })).status_code == 404
     command = {'request_id': 'submit-preview', 'text': '送审', 'submit_preview_id': preview['id'], 'context': context}
-    submitted = _data(await canvas_client.post(path + '/assistant', params=params, json=command))
+    submitted = (await observe_canvas_turn(canvas_client, path, json=command)).detail
     assert submitted['proposal'] == preview['proposal']
     assert submitted['submitted_preview_id'] == preview['id']
-    assert _data(await canvas_client.post(path + '/assistant', params=params, json=command)) == submitted
+    assert (await observe_canvas_turn(canvas_client, path, json=command)).detail == submitted
     assert _data(await canvas_client.get(path, params=params)) == original
-    second = _data(await canvas_client.post(path + '/assistant', params=params, json={
+    second = (await observe_canvas_turn(canvas_client, path, json={
         'request_id': 'stale-preview', 'text': '只给方案，先不要写入画布', 'context': context,
-    }))['preview']
+    })).detail['preview']
     document = {**context['draft'], 'name': '用户新保存的版本'}
     _data(await canvas_client.put(path, params=params, json={'request_id': 'new-version',
         'expected_revision': original['revision'], 'document': document}))
-    stale = await canvas_client.post(path + '/assistant', params=params, json={
+    stale = await observe_canvas_turn(canvas_client, path, json={
         **command, 'request_id': 'submit-stale', 'submit_preview_id': second['id'],
     })
-    assert stale.status_code == 409 and '重新预演' in stale.json()['detail']
+    assert stale.receipt.status_code == 409 and '重新预演' in stale.receipt.json()['detail']
 
 
 @pytest.mark.asyncio
@@ -338,11 +339,11 @@ async def test_text_model_reads_actual_compiled_input_before_answering(canvas_cl
 
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
     state = _data(await canvas_client.get(path, params=params))
-    turn = _data(await canvas_client.post(path + '/assistant', params=params, json={
+    turn = (await observe_canvas_turn(canvas_client, path, json={
         'request_id': 'input-query', 'text': '只检查第一镜实际生成输入，不要写入画布', 'context': {
             'scope': 'canvas', 'revision': state['revision'], 'draft': state['document'],
         },
-    }))
+    })).detail
     assert len(requests) == 2, (turn['reply'], turn['proposal_issues'])
     assert turn['reply'] == f'实际输入使用「{_DIRECT}」。'
     assert turn['proposal'] is None

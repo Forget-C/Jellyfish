@@ -270,6 +270,7 @@ class CanvasAssistant:
             model_id=pending['model_id'], reply=pending.get('failure_reply') or (pending.get('progress') or {}).get('reply') or '',
             stopped=True, context=pending['context'], revises=command['revises'], repairs=command.get('repairs'),
             instructions=pending.get('instructions'), revises_field=command.get('revises_field'),
+            question_answers=pending.get('answers'),
             attachments=[{'file_id': file_id, 'observation': 'unavailable'} for file_id in command['attachment_file_ids']],
         )
         session.pending_token = session.pending_until = None
@@ -347,23 +348,24 @@ class CanvasAssistant:
         return session
 
     async def answer(self, canvas_id: str, source_id: str,
-                     answer: CanvasAssistantQuestionAnswer, *, on_accepted=None) -> CanvasAssistantExchange:
+                     answer: CanvasAssistantQuestionAnswer, *, on_accepted=None) -> None:
         """Continue the original turn for a known question, or replay the accepted answer."""
         await self.store.get(canvas_id)
         session = await self._lock_session(canvas_id)
+        if await self._answer_acceptance_cursor(canvas_id, source_id, answer) is not None:
+            return
         completed = await self.db.get(CanvasAssistantTurn, (canvas_id, source_id))
         if completed:
             if answer.model_dump() in (completed.question_answers or []):
-                return await self._exchange(completed, session.approval_mode)
+                return
             raise HTTPException(409, 'The assistant question is no longer accepting answers')
         pending = session.pending_request
         if not pending or pending['command']['request_id'] != source_id:
             raise HTTPException(404, 'Canvas assistant question not found')
+        if answer.model_dump() in pending.get('answers', []):
+            return
         command = CanvasAssistantMessage.model_validate(pending['command'])
-        question = pending.get('question')
-        if question and question['id'] != answer.question_id and answer.model_dump() in pending.get('answers', []):
-            return self._question_exchange(command, session, pending, CanvasAssistantQuestion.model_validate(question))
-        return await self.send(canvas_id, command, answer=answer, on_accepted=on_accepted)
+        await self.send(canvas_id, command, answer=answer, on_accepted=on_accepted)
 
     async def turn_replay_cursor(self, canvas_id: str, turn_id: str) -> int:
         """Locate the latest attempt, or a synchronous preview submission."""
@@ -375,16 +377,31 @@ class CanvasAssistant:
                      events[-1].cursor if events else 1)
         return first - 1
 
-    async def answer_replay_cursor(self, canvas_id, turn_id, answer):
-        """Find the acceptance boundary of this answer, even after another question."""
+    async def _answer_acceptance_cursor(self, canvas_id, turn_id, answer) -> int | None:
+        """Find the original admission even if the model was stopped or interrupted."""
         events = await self.db.scalars(select(CanvasAssistantEvent).where(
             CanvasAssistantEvent.canvas_id == canvas_id, CanvasAssistantEvent.source_id == turn_id,
             CanvasAssistantEvent.kind == 'turn.accepted',
-        ).order_by(CanvasAssistantEvent.cursor.desc()))
+        ).order_by(CanvasAssistantEvent.cursor))
         payload = answer.model_dump(mode='json')
         for event in events:
             if payload in (event.payload.get('question_answers') or []):
                 return event.cursor - 1
+        return None
+
+    async def answer_replay_cursor(self, canvas_id, turn_id, answer) -> int:
+        """Replay older answers from immediately after their original question."""
+        cursor = await self._answer_acceptance_cursor(canvas_id, turn_id, answer)
+        if cursor is not None:
+            return cursor
+        cursor = await self.db.scalar(select(CanvasAssistantEvent.cursor).where(
+            CanvasAssistantEvent.canvas_id == canvas_id, CanvasAssistantEvent.source_id == turn_id,
+            CanvasAssistantEvent.kind == 'question.asked',
+            CanvasAssistantEvent.payload['question']['id'].as_string() == answer.question_id,
+        ).order_by(CanvasAssistantEvent.cursor.desc()).limit(1))
+        if cursor is not None:
+            return cursor
+        # Imported exchanges can have only their terminal event.
         return await self.turn_replay_cursor(canvas_id, turn_id)
 
     async def send(self, canvas_id: str, command: CanvasAssistantMessage, *,

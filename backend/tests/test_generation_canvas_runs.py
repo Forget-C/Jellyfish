@@ -44,9 +44,12 @@ async def runtime(tmp_path, request):
         from app.main import app
     else:
         app = FastAPI()
-        from tests.canvas_assistant_fixture_routes import router as assistant_fixture_router
+        from app.api.v1.routes.studio.chat_sessions import router as chat_sessions_router
+        from app.api.v1.routes.studio.session_transport import router as session_transport_router
+        from tests.chat_events import CHAT_SESSIONS
         app.include_router(router, prefix='/canvases')
-        app.include_router(assistant_fixture_router, prefix='/canvases')
+        app.include_router(chat_sessions_router, prefix=CHAT_SESSIONS)
+        app.include_router(session_transport_router, prefix=CHAT_SESSIONS)
         from app.api.v1.routes.studio.projects import router as projects_router
         app.include_router(projects_router, prefix='/projects')
     async def database():

@@ -13,6 +13,7 @@ import pytest
 from app.models.llm import Model, ModelSettings, Provider
 from app.services.task_service import utcnow
 from app.task_worker import TaskWorker
+from tests.chat_events import observe_canvas_turn
 from tests.test_generation_canvas_checks import connect_check, save_canvas
 from tests.test_generation_canvas_images import image_storage  # noqa: F401
 from tests.test_generation_canvas_runs import runtime  # noqa: F401
@@ -138,12 +139,12 @@ async def test_r04_sends_audio_free_video_and_validates_evidence_ranges(runtime,
 
                 with monkeypatch.context() as review:
                     review.setattr(httpx.AsyncClient, 'send', review_send)
-                    reply = await client.post(url + '/assistant', json={
+                    reply = await observe_canvas_turn(client, url, json={
                         'request_id': 'review-generated', 'text': '请看这一版成片',
                         'attachment_file_ids': [product['file_id']],
                     })
-                assert reply.status_code == 200, reply.text
-                evidence, = reply.json()['data']['attachments']
+                assert reply.receipt.status_code == 202, reply.receipt.text
+                evidence, = reply.detail['attachments']
                 assert evidence['file_id'] == product['file_id'] and evidence['observation'] == 'video_sequence'
                 assert (evidence['start_ms'], evidence['end_ms']) == (200, 3200)
                 assert len((await client.get(url + '/runtime')).json()['data']['runs']) == 1

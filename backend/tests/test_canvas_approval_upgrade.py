@@ -24,6 +24,7 @@ from app.models.task import Task
 from app.services.task_service import TaskService, utcnow
 from app.task_worker import TaskWorker
 from tests.test_approved_canvas_generation import generation_sessions, submit_video_approval  # noqa: F401
+from tests.chat_events import read_canvas_chat_snapshot, read_canvas_events
 
 
 def proposal(first_state='applied'):
@@ -95,9 +96,12 @@ async def test_upgrade_expires_held_old_proposal_and_preserves_history(generatio
     await execute_upgrade(sessions)
 
     app = FastAPI()
-    from tests.canvas_assistant_fixture_routes import router as assistant_fixture_router
+    from app.api.v1.routes.studio.chat_sessions import router as chat_sessions_router
+    from app.api.v1.routes.studio.session_transport import router as session_transport_router
+    from tests.chat_events import CHAT_SESSIONS
     app.include_router(router, prefix='/canvases')
-    app.include_router(assistant_fixture_router, prefix='/canvases')
+    app.include_router(chat_sessions_router, prefix=CHAT_SESSIONS)
+    app.include_router(session_transport_router, prefix=CHAT_SESSIONS)
 
     async def transaction():
         async with sessions.begin() as db:
@@ -112,7 +116,7 @@ async def test_upgrade_expires_held_old_proposal_and_preserves_history(generatio
         assert '已失效' in response.json()['detail']
         old_layout = await client.post(base + '/layout/old-turn', json={'action': 'claim'})
         assert old_layout.status_code == 409 and '已失效' in old_layout.json()['detail']
-        history = (await client.get(base)).json()['data']
+        history = (await read_canvas_chat_snapshot(client, base)).json()['data']
         old, new = history['turns']
         assert old['reply'] == '原正文 **保留**' and old['attachments'][0]['file_id'] == attachments[0]['file_id']
         assert [group['state'] for group in old['proposal']['groups']] == ['applied', 'superseded']
@@ -120,10 +124,10 @@ async def test_upgrade_expires_held_old_proposal_and_preserves_history(generatio
         assert new['proposal']['state'] == 'pending'
         assert history['pending_request'] is None
         assert [entry['request_id'] for entry in history['queue']] == ['queued']
-        replay = (await client.get(base + '/events?after=0')).json()['data']
+        replay = await read_canvas_events(client, base)
         assert not any(group['state'] == 'pending' for event in replay if event['turn_id'] == 'old-turn'
-                       for group in event['payload']['proposal']['groups'])
-        delta = (await client.get(base + '/events?after=2')).json()['data']
+                       for group in event['detail']['proposal']['groups'])
+        delta = await read_canvas_events(client, base, after=2)
         assert [event['type'] for event in delta].count('proposal.superseded') == 1
         assert [event['type'] for event in delta].count('layout.updated') == 1
         assert [event['type'] for event in delta].count('queue.removed') == 1

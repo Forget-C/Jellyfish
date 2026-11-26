@@ -9,6 +9,7 @@ import pytest
 
 from app.models.llm import Model
 from tests.canvas_urls import append_canvas_path, canvas_url, seed_scene_canvas
+from tests.chat_events import observe_canvas_turn, read_canvas_chat_snapshot, read_canvas_events, save_canvas_for_chat
 from tests.test_canvas_assistant_edit_api import assistant_edit_model  # pylint: disable=unused-import
 from tests.test_canvas_assistant_media_api import recorded_media_storage  # pylint: disable=unused-import
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # pylint: disable=unused-import
@@ -45,11 +46,11 @@ async def send_structure(client, url, canvas, text, *, target=None, files=None):
     context = {'draft': canvas['document'], 'revision': canvas['revision'], 'scope': 'canvas'}
     if target:
         context.update(scope='selection', card_ids=[target])
-    result = await client.post(append_canvas_path(url, '/assistant'), json={
+    result = await observe_canvas_turn(client, append_canvas_path(url, '/assistant'), json={
         'request_id': 'structure', 'text': text, 'context': context, 'attachment_file_ids': files or [],
     })
-    assert result.status_code == 200, result.text
-    return result.json()['data']
+    assert result.receipt.status_code == 202, result.receipt.text
+    return result.detail
 
 
 async def approve_structure(client, url, canvas, proposal):
@@ -99,9 +100,9 @@ async def test_write_canvas_from_chat_prepares_a_real_preview(canvas_client, mon
         command = {'request_id': request_id, 'text': message}
         if request_id == 'write':
             command['context'] = {'draft': canvas['document'], 'revision': canvas['revision'], 'scope': 'canvas'}
-        response = await canvas_client.post(assistant, json=command)
-        assert response.status_code == 200, response.text
-    turn = response.json()['data']
+        response = await observe_canvas_turn(canvas_client, assistant, json=command)
+        assert response.receipt.status_code == 202, response.receipt.text
+    turn = response.detail
     assert ('groups' in str(provider_input[-1])) and ('方案：镜头 01 用慢速推近。' in str(provider_input[-1]))
     assert '可独立编辑的镜头数' in str(provider_input[-1])
     assert turn['context']['scope'] == 'canvas'
@@ -114,9 +115,9 @@ async def test_write_canvas_from_chat_prepares_a_real_preview(canvas_client, mon
     else:
         assert '没有生成可审批的修改提案' in turn['reply']
     assert (await canvas_client.get(url)).json()['data']['revision'] == canvas['revision']
-    missing_scope = await canvas_client.post(assistant, json={'request_id': 'without-scope', 'text': '写入画布'})
-    assert missing_scope.status_code == 200, missing_scope.text
-    assert '没有收到画布范围' in missing_scope.json()['data']['reply']
+    missing_scope = await observe_canvas_turn(canvas_client, assistant, json={'request_id': 'without-scope', 'text': '写入画布'})
+    assert missing_scope.receipt.status_code == 202, missing_scope.receipt.text
+    assert '没有收到画布范围' in missing_scope.detail['reply']
     assert len(provider_input) == 2
     if structured == 'nested':
         approved = await canvas_client.post(assistant + '/proposals/write', json={
@@ -201,24 +202,24 @@ async def test_batch_proposal_edits_creates_and_connects_atomically(canvas_clien
         assert changed.status_code == 200, changed.text
         canvas = (await canvas_client.get(url)).json()['data']
 
-    snapshot = (await canvas_client.get(url + '/assistant')).json()['data']
-    creation = (await canvas_client.get(url + '/assistant/events')).json()['data']
-    assert [item['type'] for item in creation if item['type'] != 'turn.progress'] == ['turn.completed', 'proposal.created']
+    snapshot = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']
+    creation = await read_canvas_events(canvas_client, url)
+    assert [item['type'] for item in creation if item['type'] in ('turn.completed', 'proposal.created', 'approval.decided', 'execution.blocked', 'execution.succeeded')] == ['turn.completed', 'proposal.created']
     assert all(item['occurred_at'] for item in creation)
-    assert any(item['payload']['progress']['revision'] == exchange['context']['revision']
-               for item in creation if item['type'] == 'turn.progress')
-    assert creation[-1]['payload']['proposal']['state'] == 'pending'
+    assert any(item['detail']['progress']['revision'] == exchange['context']['revision']
+               for item in creation if item['type'] == 'turn.accepted')
+    assert creation[-1]['detail']['proposal']['state'] == 'pending'
 
     approved = await approve_structure(canvas_client, url, canvas, proposal)
     assert approved.status_code == 200, approved.text
-    events = (await canvas_client.get(url + '/assistant/events', params={'after': snapshot['cursor']})).json()['data']
-    assert [item['type'] for item in events if item['type'] != 'turn.progress'] == [
+    events = await read_canvas_events(canvas_client, url, after=snapshot['cursor'])
+    assert [item['type'] for item in events if item['type'] in ('turn.completed', 'proposal.created', 'approval.decided', 'execution.blocked', 'execution.succeeded')] == [
         'approval.decided', 'execution.blocked' if field_conflict else 'execution.succeeded',
     ]
     assert all(event['turn_id'] == exchange['request_id'] for event in events)
     assert all(item['subject'] == 'edit' and item['target_version'] == exchange['request_id']
                and item['group_ids'] == [proposal['groups'][0]['id']] for item in events)
-    assert events[-1]['payload']['approval_audit'][-1]['outcome'] == ('conflict' if field_conflict else 'applied')
+    assert events[-1]['detail']['approval_audit'][-1]['outcome'] == ('conflict' if field_conflict else 'applied')
     result = approved.json()['data']
     assert result['graph_resumed'] is False
     actual = (await canvas_client.get(url)).json()['data']
@@ -434,19 +435,19 @@ async def test_revise_one_duration_keeps_dependent_changes_and_independent_decis
     })
     assert approved.status_code == 200, approved.text
     canvas = (await canvas_client.get(url)).json()['data']
-    revision = await canvas_client.post(url + '/assistant', json={
+    revision = await observe_canvas_turn(canvas_client, url, json={
         'request_id': 'field-revision', 'text': '改为 6 秒', 'revises': original['request_id'],
         'revises_field': {'group_id': '1', 'change_index': 0},
         'context': {'draft': canvas['document'], 'revision': canvas['revision'], 'scope': 'selection',
                     'card_ids': ['shot']},
     })
-    assert revision.status_code == 200, revision.text
-    revised = revision.json()['data']
+    assert revision.receipt.status_code == 202, revision.receipt.text
+    revised = revision.detail
     group, = revised['proposal']['groups']
     assert [(edit['before'], edit['after']) for edit in group['edits']] == [
         ('8', '6'), ('继续推进', '减速推进'),
     ]
-    history = (await canvas_client.get(url + '/assistant')).json()['data']['turns']
+    history = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['turns']
     assert [group['state'] for group in history[0]['proposal']['groups']] == ['superseded', 'applied']
     assert (await canvas_client.post(decide, json={
         'action': 'approve', 'expected_revision': canvas['revision'], 'group_ids': ['1'],
@@ -520,11 +521,11 @@ async def test_large_canvas_proposal_recovers_from_invalid_output(canvas_client,
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
     command = {'text': '按此方案继续', 'request_id': 'large', 'stream_reply': True,
                'context': {'draft': canvas['document'], 'revision': max(canvas['revision'], 0), 'scope': 'canvas'}}
-    sending = asyncio.create_task(canvas_client.post(url, json=command))
+    sending = asyncio.create_task(observe_canvas_turn(canvas_client, url, json=command))
     try:
         await asyncio.wait_for(started.wait(), 3)
         for _ in range(50):
-            snapshot = (await canvas_client.get(url)).json()['data']
+            snapshot = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']
             progress = snapshot.get('pending_progress') or {}
             assert not snapshot['turns']
             if progress.get('phase') == 'generating_proposal':
@@ -535,18 +536,18 @@ async def test_large_canvas_proposal_recovers_from_invalid_output(canvas_client,
     finally:
         released.set()
         failed = await sending
-    assert failed.status_code == 200, failed.text
+    assert failed.receipt.status_code == 202, failed.receipt.text
     assert len(calls) == 2 and '上一份提案未通过校验' in str(calls[-1]['messages'][-1]['content'])
-    turn = failed.json()['data']
-    assert (await canvas_client.post(url, json=command)).json()['data'] == turn
+    turn = failed.detail
+    assert (await observe_canvas_turn(canvas_client, url, json=command)).detail == turn
     assert turn['reply'] == '请审批逐镜方案'
     assert turn['proposal']['state'] == 'pending'
     assert len(turn['proposal']['groups'][0]['edits']) == 59
     suffix = '?project_id=p' if surface == 'scene' else ''
     before = (await canvas_client.get(path + suffix)).json()['data']
     assert before['revision'] == canvas['revision']
-    events = (await canvas_client.get(path + '/assistant/events' + suffix)).json()['data']
-    assert any((event['payload'].get('progress') or {}).get('phase') == 'validating_proposal'
+    events = await read_canvas_events(canvas_client, path)
+    assert any((event['detail'].get('progress') or {}).get('phase') == 'validating_proposal'
                for event in events)
     approved = await canvas_client.post(path + '/assistant/proposals/large' + suffix, json={
         'action': 'approve', 'expected_revision': before['revision'], 'group_ids': ['1'],
@@ -570,8 +571,9 @@ async def test_batch_merges_references_and_preserves_independent_groups(canvas_c
         )
     suffix = '?project_id=p' if surface == 'scene' else ''
     if surface == 'draft':
-        path = f'/canvases/drafts/{uuid4()}'
-        canvas = (await canvas_client.get(path)).json()['data']
+        draft_url = f'/canvases/drafts/{uuid4()}'
+        draft = (await canvas_client.get(draft_url)).json()['data']
+        path, canvas = await save_canvas_for_chat(canvas_client, draft_url, draft['document'])
     else:
         created = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '依赖'})
                    if surface == 'scene' else await canvas_client.post('/canvases', json={'name': '依赖'}))
@@ -621,9 +623,9 @@ async def test_batch_merges_references_and_preserves_independent_groups(canvas_c
     command = {'text': '请按镜头形成修改提案', 'request_id': 'partial',
                'context': {'draft': canvas['document'], 'revision': max(canvas['revision'], 0), 'scope': 'canvas'}}
     url = path + '/assistant' + suffix
-    sent = await canvas_client.post(url, json=command)
-    assert sent.status_code == 200, sent.text
-    turn = sent.json()['data']
+    sent = await observe_canvas_turn(canvas_client, url, json=command)
+    assert sent.receipt.status_code == 202, sent.receipt.text
+    turn = sent.detail
     assert '建议按镜头推进' in turn['reply']
     assert [len(group['edits']) for group in turn['proposal']['groups']] == ([13, 7, 7, 7] if invalid else [13, 7, 7, 7, 5])
     issues = turn.get('proposal_issues')
@@ -634,11 +636,9 @@ async def test_batch_merges_references_and_preserves_independent_groups(canvas_c
     else:
         assert not issues
     assert calls == (3 if native else 1)
-    if surface == 'draft':
-        return
-    history = (await canvas_client.get(url)).json()['data']
+    history = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']
     assert history['turns'][0]['proposal_issues'] == issues
-    assert (await canvas_client.post(url, json=command)).json()['data'] == turn
+    assert (await observe_canvas_turn(canvas_client, url, json=command)).detail == turn
     decision = {'decision_id': 'same-decision', 'action': 'approve', 'expected_revision': canvas['revision'],
                 'group_ids': ['1']}
     approval_url = path + '/assistant/proposals/partial' + suffix
@@ -658,12 +658,12 @@ async def test_batch_merges_references_and_preserves_independent_groups(canvas_c
             ]},
         ]
         state = (await canvas_client.get(path + suffix)).json()['data']
-        repair = await canvas_client.post(url, json={
+        repair = await observe_canvas_turn(canvas_client, url, json={
             **command, 'request_id': 'repair', 'text': '修正未完成项', 'repairs': 'partial',
             'context': {'draft': state['document'], 'revision': state['revision'], 'scope': 'canvas'},
         })
-        assert repair.status_code == 200, repair.text
-        repaired = repair.json()['data']
+        assert repair.receipt.status_code == 202, repair.receipt.text
+        repaired = repair.detail
         assert repaired['repairs'] == 'partial'
         assert len(repaired['proposal']['groups']) == 1
         assert repaired['proposal']['groups'][0]['edits'][0]['after'] == '修正后的新镜头'
@@ -683,8 +683,9 @@ async def test_followup_reuses_applied_video_cards(canvas_client, monkeypatch, s
         )
     suffix = '?project_id=p' if surface == 'scene' else ''
     if surface == 'draft':
-        path = f'/canvases/drafts/{uuid4()}'
-        canvas = (await canvas_client.get(path)).json()['data']
+        draft_url = f'/canvases/drafts/{uuid4()}'
+        draft = (await canvas_client.get(draft_url)).json()['data']
+        path, canvas = await save_canvas_for_chat(canvas_client, draft_url, draft['document'])
     else:
         created = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '分镜'})
                    if suffix else await canvas_client.post('/canvases', json={'name': '自由'}))
@@ -719,35 +720,27 @@ async def test_followup_reuses_applied_video_cards(canvas_client, monkeypatch, s
 
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
     for key, message in [('first', '新建两张视频卡'), ('notes', '补说明并连线'), ('copies', '把两张视频卡各复制一份')]:
-        response = await canvas_client.post(path + '/assistant' + suffix, json={
+        response = await observe_canvas_turn(canvas_client, path, json={
             'request_id': key, 'text': message, 'context': {
                 'draft': canvas['document'], 'revision': max(0, canvas['revision']), 'scope': 'auto', 'card_ids': []},
         })
-        assert response.status_code == 200, response.text
-        turn = response.json()['data']
+        assert response.receipt.status_code == 202, response.receipt.text
+        turn = response.detail
         proposal = turn['proposal']
         if key == 'first' and surface == 'free':
-            competing = await canvas_client.post(path + '/assistant', json={
+            competing = await observe_canvas_turn(canvas_client, path, json={
                 'request_id': 'competing', 'text': '新建两张视频卡', 'context': {
                     'draft': canvas['document'], 'revision': canvas['revision'], 'scope': 'auto', 'card_ids': []},
             })
-            assert competing.json()['data']['proposal']
+            assert competing.detail['proposal']
         if key == 'notes':
             edits = proposal['groups'][0]['edits']
             assert [e['target']['kind'] for e in edits] == ['add_canvas_card', 'connect_cards', 'connect_cards']
             assert {e['target']['target_card'] for e in edits[1:]} == original_ids
-        if surface == 'draft' and key == 'first':
-            saved = await canvas_client.put(path, json={
-                'request_id': 'save', 'expected_revision': 0, 'document': canvas['document'], 'assistant': {'turns': [turn]},
-                'assistant_approval': {'source_id': key, 'group_ids': ['1']},
-            })
-            assert saved.status_code == 200, saved.text
-            path = f"/canvases/{canvas['id']}"
-        else:
-            saved = await canvas_client.post(path + '/assistant/proposals/' + key + suffix, json={
-                'decision_id': key, 'action': 'approve', 'group_ids': ['1'], 'expected_revision': canvas['revision'],
-            })
-            assert saved.status_code == 200, saved.text
+        saved = await canvas_client.post(path + '/assistant/proposals/' + key + suffix, json={
+            'decision_id': key, 'action': 'approve', 'group_ids': ['1'], 'expected_revision': canvas['revision'],
+        })
+        assert saved.status_code == 200, saved.text
         canvas = (await canvas_client.get(path + suffix)).json()['data']
         ids = {c['id'] for c in canvas['document']['cards'] if c['type'] == 'model.video'}
         if key == 'first':
@@ -776,13 +769,13 @@ async def test_followup_reuses_applied_video_cards(canvas_client, monkeypatch, s
             assert updated.status_code == 200, updated.text
             canvas = (await canvas_client.get(path + suffix)).json()['data']
             changes[:] = [dict(v, copy_of=sources[v['reference']]) for v in videos]
-            denied = await canvas_client.post(path + '/assistant' + suffix, json={
+            denied = await observe_canvas_turn(canvas_client, path, json={
                 'request_id': 'no-copies', 'text': '只补说明，不要复制视频卡', 'context': {
                     'draft': canvas['document'], 'revision': canvas['revision'], 'scope': 'auto', 'card_ids': []},
             })
-            assert denied.status_code == 200, denied.text
-            assert denied.json()['data']['proposal'] is None
-            assert denied.json()['data']['proposal_issues'][0]['candidate_ids'] == [sources['A']]
+            assert denied.receipt.status_code == 202, denied.receipt.text
+            assert denied.detail['proposal'] is None
+            assert denied.detail['proposal_issues'][0]['candidate_ids'] == [sources['A']]
             if surface == 'free-native':
                 changes[:] = videos
         else:
@@ -825,7 +818,9 @@ async def test_approved_video_inputs_compile_once(canvas_client, monkeypatch, su
             {'kind': 'text', 'id': 'body', 'text': '雨夜推镜'}]}} for card in ('direct', 'referenced')],
     ]
     reference_image_sources(document)
-    if surface != 'draft':
+    if surface == 'draft':
+        path, _ = await save_canvas_for_chat(client, path.replace('/canvases/', '/canvases/drafts/'), document)
+    else:
         saved = await client.put(path + query, json={'request_id': 'setup', 'expected_revision': 0, 'document': document})
         assert saved.status_code == 200, saved.text
     changes = [{'kind': 'use_video_text', 'source_card': 'desc', 'target_card': 'referenced'},
@@ -855,11 +850,9 @@ async def test_approved_video_inputs_compile_once(canvas_client, monkeypatch, su
 
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
     for key in ('apply', 'repeat'):
-        draft_turn = surface == 'draft' and key == 'apply'
-        active_path = path.replace('/canvases/', '/canvases/drafts/') if draft_turn else path
-        state = {'revision': 0, 'document': document} if draft_turn else (await client.get(path + query)).json()['data']
-        turn = (await client.post(active_path + '/assistant' + query, json={'text': '采用描述和角色图', 'request_id': key,
-            'context': {'scope': 'canvas', 'draft': state['document'], 'revision': state['revision']}})).json()['data']
+        state = (await client.get(path + query)).json()['data']
+        turn = (await observe_canvas_turn(client, path, json={'text': '采用描述和角色图', 'request_id': key,
+            'context': {'scope': 'canvas', 'draft': state['document'], 'revision': state['revision']}})).detail
         if key == 'repeat':
             assert not turn['proposal'] and not turn.get('proposal_issues'), turn
             break
@@ -867,11 +860,6 @@ async def test_approved_video_inputs_compile_once(canvas_client, monkeypatch, su
         edits = turn['proposal']['groups'][0]['edits']
         assert edits[-1]['target']['file_id'] == file_id
         assert edits[-1]['after'].count('雨夜推镜') == 1
-        if draft_turn:
-            result = await client.put(active_path, json={'request_id': 'save-inputs', 'expected_revision': 0,
-                'document': document, 'assistant': {'turns': [turn]}, 'assistant_approval': {'source_id': key, 'group_ids': ['1']}})
-            assert result.status_code == 200, result.text
-            continue
         result = await client.post(path + '/assistant/proposals/apply' + query, json={
             'action': 'approve', 'expected_revision': state['revision'], 'group_ids': ['1']})
         assert result.json()['data']['receipt'], result.text
@@ -895,10 +883,10 @@ async def test_approved_video_inputs_compile_once(canvas_client, monkeypatch, su
     changes[:] = [{'kind': 'use_video_text', 'source_card': 'desc', 'target_card': 'direct', 'replace_segment_id': 'body'}]
     state = (await client.get(path + query)).json()['data']
     async def preview(request_id):
-        response = await client.post(path + '/assistant' + query, json={'text': '采用输入', 'request_id': request_id,
+        response = await observe_canvas_turn(client, path, json={'text': '采用输入', 'request_id': request_id,
             'context': {'scope': 'canvas', 'draft': state['document'], 'revision': state['revision']}})
-        assert response.status_code == 200, response.text
-        return response.json()['data']
+        assert response.receipt.status_code == 202, response.receipt.text
+        return response.detail
 
     different = await preview('different')
     assert not different['proposal'] and '片段' in different['proposal_issues'][0]['message']

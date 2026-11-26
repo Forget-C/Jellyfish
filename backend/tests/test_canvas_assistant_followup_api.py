@@ -9,6 +9,7 @@ import pytest
 from app.models.llm import Model, ModelSettings
 from app.task_worker import TaskWorker
 from tests.test_generation_canvas_runs import runtime  # pylint: disable=unused-import
+from tests.chat_events import observe_canvas_turn, read_canvas_chat_snapshot
 from tests.test_generation_canvas_images import image_storage  # pylint: disable=unused-import
 from tests.isolated_mysql import isolated_storage_environment
 from tests.test_canvas_assistant_edit_api import _live_mysql_app
@@ -55,12 +56,12 @@ async def test_stop_keeps_accepted_run_across_worker_restart(runtime, monkeypatc
     assistant = endpoint + '/assistant' + suffix
     stop = endpoint + '/assistant/turns/review-one/stop' + suffix
     runs = endpoint + '/runtime' + suffix
-    sent = await runtime.client.post(assistant, json={
+    sent = await observe_canvas_turn(runtime.client, assistant, json={
         'request_id': 'review-one', 'text': '生成一版，完成后看看动作是否连贯',
         'context': {'draft': current['document'], 'revision': current['revision'],
                     'scope': 'selection', 'card_ids': ['m']},
     })
-    assert sent.status_code == 200, sent.text
+    assert sent.receipt.status_code == 202, sent.receipt.text
     async with httpx.AsyncClient() as transport:
         first = TaskWorker(runtime.sessions, client=transport)
         try:
@@ -97,7 +98,7 @@ async def test_stop_keeps_accepted_run_across_worker_restart(runtime, monkeypatc
             path = assistant.replace('/canvases/', '/api/v1/studio/generation-canvases/', 1)
             live_history = (await restarted.get(path)).json()['data']['turns']
             assert live_history[0]['generation']['review'] == {'state': 'stopped', 'results': []}
-    history = (await runtime.client.get(assistant)).json()['data']['turns']
+    history = (await read_canvas_chat_snapshot(runtime.client, assistant)).json()['data']['turns']
     assert len(history) == 1
     generation = history[0]['generation']
     published = (await runtime.client.get(runs)).json()['data']['runs']
@@ -178,13 +179,13 @@ async def test_worker_reviews_only_the_authorized_immutable_generation(runtime, 
         })
 
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
-    sent = await runtime.client.post(assistant, json={
+    sent = await observe_canvas_turn(runtime.client, assistant, json={
         'request_id': 'review-one', 'text': '生成一版，完成后审看构图' if followup else '生成一版',
         'context': {'draft': current['document'], 'revision': current['revision'],
                     'scope': 'selection', 'card_ids': ['review-image']},
     })
-    assert sent.status_code == 200, sent.text
-    assert bool(sent.json()['data']['generation']['review']) is followup
+    assert sent.receipt.status_code == 202, sent.receipt.text
+    assert bool(sent.detail['generation']['review']) is followup
     # The worker completes and reviews the run before the assistant conversation is reopened.
     async with httpx.AsyncClient() as transport:
         worker = TaskWorker(runtime.sessions, client=transport)
@@ -192,7 +193,7 @@ async def test_worker_reviews_only_the_authorized_immutable_generation(runtime, 
         try:
             async with asyncio.timeout(12):
                 while True:
-                    history = (await runtime.client.get(assistant)).json()['data']['turns']
+                    history = (await read_canvas_chat_snapshot(runtime.client, assistant)).json()['data']['turns']
                     generation = history[0]['generation']
                     if generation['state'] == 'completed' and (
                         not followup or generation['review']['state'] == 'completed'
