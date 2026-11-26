@@ -385,7 +385,7 @@ try {
   const verifyAnsweredQuestionReplay = async () => {
     const replayCanvas = await openConsecutiveQuestions('连续追问回放')
     const firstQuestion = await readCanvasChat(replayCanvas)
-    const sessionPath = '/api/v1/studio/chat/sessions/' + replayCanvas
+    const sessionPath = '/api/v1/studio/chat/sessions/canvas/' + replayCanvas
     const answerPath = sessionPath + '/turns/' + firstQuestion.pending_request.request_id + '/answer'
     let finished = false
     await page.route('**' + sessionPath + '/events?*', async route => {
@@ -438,14 +438,14 @@ try {
   }
   const verifyStopWhileCheckingQuestion = async () => {
     const canvasId = await openConsecutiveQuestions('停止挂起的追问核验')
-    const snapshotPath = '**/chat/sessions/canvas/' + canvasId + '?*'
-    const sessionPath = '/api/v1/studio/chat/sessions/' + canvasId
+    const snapshotPath = '**/chat/sessions/canvas/' + canvasId + '/snapshot*'
+    const sessionPath = '/api/v1/studio/chat/sessions/canvas/' + canvasId
     let notifyPending, releaseSnapshots
-    const bothPending = new Promise(resolve => { notifyPending = resolve })
+    const questionReadPending = new Promise(resolve => { notifyPending = resolve })
     const blocked = new Promise(resolve => { releaseSnapshots = resolve })
     let pendingSnapshots = 0
     const holdSnapshot = async route => {
-      if (++pendingSnapshots === 2) notifyPending()
+      if (++pendingSnapshots === 1) notifyPending()
       await blocked
       await route.continue().catch(() => {})
     }
@@ -453,10 +453,10 @@ try {
     try {
       await panel.getByRole('form', { name: '创作问题' }).getByRole('button', { name: '紧张', exact: true }).click()
       await Promise.race([
-        bothPending, delay(5000).then(() => { throw new Error('Both question checks did not reach the snapshot') }),
+        questionReadPending, delay(5000).then(() => { throw new Error('Question check did not reach the snapshot') }),
       ])
       const stopping = page.waitForResponse(response =>
-        response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/stop'))
+        response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/stop/snapshot'))
       await panel.getByRole('button', { name: '停止回复', exact: true }).click()
       assert.equal((await stopping).status(), 200)
       await panel.getByText('助手已停止', { exact: true }).waitFor()
@@ -473,9 +473,52 @@ try {
       await page.unroute(snapshotPath, holdSnapshot)
     }
   }
+  const verifyDetachedCanvasReply = async () => {
+    const response = await fetch(canvasApi, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '断线后保留画布草稿' }),
+    })
+    assert.equal(response.status, 200)
+    const canvasId = (await response.json()).data.id
+    const sessionPath = '/api/v1/studio/chat/sessions/canvas/' + canvasId
+    await page.route('**' + sessionPath + '/events?*', route => route.abort())
+    await page.goto(base + '/canvases/' + canvasId)
+    await open()
+    const composer = panel.getByRole('textbox', { name: '给画布助手发消息' })
+    const text = '流式回归关闭重开'
+    await composer.fill(text)
+    const accepted = page.waitForResponse(reply => new URL(reply.url()).pathname === sessionPath + '/turns')
+    await panel.getByRole('button', { name: '发送消息' }).click()
+    assert.equal((await accepted).status(), 202)
+    await panel.getByRole('button', { name: '停止回复', exact: true }).waitFor()
+    await composer.fill('断线期间写的下一条')
+    await panel.locator('input[aria-label="上传对话参考素材"]').setInputFiles(clipPath)
+    const attachment = panel.getByRole('button', {name:'移除 known-silent-clip', exact:true})
+    await attachment.waitFor()
+    assert.equal(await panel.getByRole('button', { name: '发送消息' }).count(), 0)
+    for (let attempt = 0; attempt < 50 && !replyGates.has(text); attempt++) await delay(30)
+    assert.ok(replyGates.has(text))
+    await panel.getByRole('button', { name: '关闭画布助手' }).click()
+    await panel.waitFor({state:'hidden'})
+    replyGates.get(text)()
+    let finished
+    for (let attempt = 0; attempt < 80 && !finished; attempt++) {
+      const snapshot = await readCanvasChat(canvasId)
+      finished = snapshot.turns.find(turn => turn.text === text)
+      if (!finished) await delay(30)
+    }
+    assert.ok(finished && !finished.stopped)
+    await page.unroute('**' + sessionPath + '/events?*')
+    await open()
+    await panel.getByRole('cell', { name: '中景' }).waitFor()
+    assert.equal(await composer.inputValue(), '断线期间写的下一条')
+    await attachment.waitFor()
+    assert.equal(await panel.getByRole('button', { name: '发送消息' }).isEnabled(), true)
+  }
   if (process.env.CANVAS_ASSISTANT_REPLAY_ONLY) {
     await verifyAnsweredQuestionReplay()
     await verifyStopWhileCheckingQuestion()
+    await verifyDetachedCanvasReply()
   } else if (process.env.CANVAS_ASSISTANT_STREAM_ONLY) {
     const sendLive = async text => {
       await panel.getByRole('textbox', { name: '给画布助手发消息' }).fill(text)
@@ -490,7 +533,7 @@ try {
       await route.abort()
     }
     async function followTurn(receipt, signal) {
-      const url = api + '/api/v1/studio/chat/sessions/' + receipt.session_id + '/events?after=' + receipt.cursor
+      const url = api + '/api/v1/studio/chat/sessions/canvas/' + receipt.session_id + '/events?after=' + receipt.cursor
       const response = await fetch(url, {signal})
       assert.ok(response.headers.get('content-type').startsWith('text/event-stream'))
       const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
@@ -527,7 +570,7 @@ try {
       await automatic.waitFor({ state: 'hidden' })
       const text = '流式回归' + name
       const waiting = panel.getByText('等待模型响应', { exact: true })
-      const requestUrl = /\/chat\/sessions\/[^/]+\/turns(?:\?|$)/
+      const requestUrl = /\/chat\/sessions\/canvas\/[^/]+\/turns(?:\?|$)/
       let observedWaiting = false
       const holdFirstReply = async route => {
         if (route.request().method() === 'POST') {
@@ -554,7 +597,7 @@ try {
       await page.unroute(requestUrl, holdFirstReply)
       assert.ok(observedWaiting, 'Think is visible while waiting for the first chunk')
       assert.equal(await panel.getByRole('table').count(), 0)
-      await page.route('**/chat/sessions/*/events?*', route => route.abort())
+      await page.route('**/chat/sessions/canvas/*/events?*', route => route.abort())
       await page.reload()
       await open()
       await first.waitFor()
@@ -563,7 +606,7 @@ try {
       stream.abort()
       await delay(550)
       assert.equal(await panel.getByRole('table').count(), 0)
-      await page.unroute('**/chat/sessions/*/events?*')
+      await page.unroute('**/chat/sessions/canvas/*/events?*')
       await panel.getByRole('cell', { name: '中景' }).waitFor()
       await page.reload()
       await open()
@@ -616,7 +659,7 @@ try {
       await input.press('Escape')
       await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '打开画布助手')
       await open()
-      const assistantUrl = /\/chat\/sessions\/[^/]+\/turns(?:\?|$)/
+      const assistantUrl = /\/chat\/sessions\/canvas\/[^/]+\/turns(?:\?|$)/
       await page.route(assistantUrl, lostReceipt)
       await ask('完成回执丢失' + name)
       await page.waitForFunction(() => document.querySelector('[aria-label="审批模式"]')?.getAttribute('aria-disabled') !== 'true')
@@ -625,7 +668,7 @@ try {
       assert.equal(await panel.getByRole('textbox', { name: '给画布助手发消息' }).inputValue(), '')
       await page.unroute(assistantUrl, lostReceipt)
       const unavailable = async route => route.request().method() === 'POST'
-        ? route.fulfill({ status: 503 })
+        ? route.fulfill({ status: 422 })
         : route.continue()
       await page.route(assistantUrl, unavailable)
       await input.fill('请求未完成')
@@ -655,7 +698,7 @@ try {
     assert.ok(await afterSaving.isDisabled())
     await draftApproval.press('Escape')
     await afterSaving.waitFor({ state: 'hidden' })
-    const draftUrl = /\/chat\/sessions\/[^/]+\/turns(?:\?|$)/
+    const draftUrl = /\/chat\/sessions\/canvas\/[^/]+\/turns(?:\?|$)/
     await page.route(draftUrl, lostReceipt)
     await ask('草稿完成回执丢失')
     await page.getByText('已保存', { exact: true }).waitFor()
@@ -1384,6 +1427,7 @@ try {
 
   await verifyAnsweredQuestionReplay()
   await verifyStopWhileCheckingQuestion()
+  await verifyDetachedCanvasReply()
   console.log('Assistant conversation persisted independently on both real canvas entries and skipped answered questions on replay.')
   }
 } finally {

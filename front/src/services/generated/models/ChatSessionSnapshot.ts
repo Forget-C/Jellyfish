@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CanvasAssistantHistory } from './CanvasAssistantHistory';
 import type { LabChatSnapshot } from './LabChatSnapshot';
 import type { TrialChatHistory } from './TrialChatHistory';
 /**
@@ -12,6 +13,6 @@ export type ChatSessionSnapshot = {
     cursor: number;
     capabilities: Array<string>;
     kind: 'canvas' | 'chat' | 'text' | 'image' | 'video';
-    history: (LabChatSnapshot | TrialChatHistory);
+    history: (CanvasAssistantHistory | LabChatSnapshot | TrialChatHistory);
 };
 

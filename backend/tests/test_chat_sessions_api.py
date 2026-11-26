@@ -117,11 +117,12 @@ async def test_canvas_turn_can_be_replayed_through_session_events(canvas_client,
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
     base = '/api/v1/studio'
     canvas = (await canvas_client.post(base + '/generation-canvases', json={'name': '新画布'})).json()['data']
-    url = f"{base}/chat/sessions/{canvas['id']}"
     canvas_url = f"{base}/chat/sessions/canvas/{canvas['id']}"
-    snapshot = await canvas_client.get(canvas_url)
+    url = canvas_url
+    snapshot = await canvas_client.get(url + '/snapshot')
     assert snapshot.status_code == 200
-    assert snapshot.json()['data']['turns'] == []
+    assert snapshot.json()['data']['kind'] == 'canvas'
+    assert snapshot.json()['data']['history']['turns'] == []
     command = {'request_id': 'test-turn', 'text': '请回答'}
     result = await canvas_client.post(url + '/turns', json=command)
     receipt = result.json()['data']
@@ -140,6 +141,14 @@ async def test_canvas_turn_can_be_replayed_through_session_events(canvas_client,
     assert len(calls) == 1
     replay = await canvas_client.get(url + '/events', params={'follow': 'false'}, headers={'Last-Event-ID': str(events[-2]['cursor'])})
     assert [json.loads(line[6:]) for line in replay.text.splitlines() if line.startswith('data: ')] == events[-1:]
+
+    stopped = await canvas_client.post(url + '/turns/test-turn/stop/snapshot')
+    assert stopped.status_code == 200, stopped.text
+    history = stopped.json()['data']
+    assert history['cursor'] > events[-1]['cursor']
+    assert history['pending_request'] is None
+    assert history['turns'][0]['stopped'] is True
+    assert (await canvas_client.get(url + '/snapshot')).json()['data']['history'] == history
 
 
 @pytest.mark.asyncio

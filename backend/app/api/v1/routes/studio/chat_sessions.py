@@ -18,6 +18,16 @@ async def canvas_snapshot(canvas_id: str, project_id: str = '', db: AsyncSession
     return success_response(await CanvasAssistant(db, project_id).history(canvas_id))
 
 
+@router.post('/canvas/{canvas_id}/turns/{source_id}/stop/snapshot',
+             response_model=ApiResponse[CanvasAssistantHistory], operation_id='chat_canvas_stop_snapshot')
+async def canvas_stop_snapshot(canvas_id: str, source_id: str, project_id: str = '',
+                               db: AsyncSession = Depends(get_db, scope='function')):
+    """Confirm the stop together with the new cursor and current assistant state."""
+    assistant = CanvasAssistant(db, project_id)
+    await assistant.stop(canvas_id, source_id)
+    return success_response(await assistant.history(canvas_id))
+
+
 # Share the existing canvas authorization, approval and execution receipts.
 router.add_api_route('/canvas/{canvas_id}/turns/{source_id}/stop', canvas_routes.stop_assistant_turn,
                      methods=['POST'], response_model=ApiResponse[CanvasAssistantExchange], operation_id='chat_canvas_stop')

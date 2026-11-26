@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SetStateAction } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUpOutlined, CommentOutlined, CloseOutlined, StopOutlined } from '@ant-design/icons'
 import { Alert, Input, Select, Spin, Typography } from 'antd'
 import { XMarkdown } from '@ant-design/x-markdown'
 import { Sender, Suggestion, Think, ThoughtChain } from '@ant-design/x'
 import { WorkbenchConversation } from '../../../components/workbench/WorkbenchConversation'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
-import { canvasPayload, chatClient, waitForTurnEvent } from '../../../services/chatSession'
+import { bindChatSession, chatClient } from '../../../services/chatSession'
+import { useChatTurnLifecycle } from '../../../services/chatTurnLifecycle'
+import { canvasAssistantLifecycle } from './canvasAssistantLifecycle'
 import { ApiError, LlmService, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasDocument, CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantFieldRevision, CanvasAssistantGroupReference, CanvasAssistantHistory, CanvasAssistantInstruction, CanvasAssistantLayout, CanvasAssistantMessage, CanvasAssistantProgress, CanvasAssistantQuestion, ChatTurnReceipt, FileRead, ModelRead } from '../../../services/generated'
+import type { CanvasDocument, CanvasAssistantDraftContext, CanvasAssistantExchange, CanvasAssistantFieldRevision, CanvasAssistantGroupReference, CanvasAssistantLayout, CanvasAssistantMessage, FileRead, ModelRead } from '../../../services/generated'
 import { AssistantEditGroups, AssistantProposal, groupIsPending } from './AssistantProposal'
 import { AssistantMarkdownTable } from './AssistantMarkdownTable'
 import { AssistantLayout } from './AssistantLayout'
@@ -27,28 +29,6 @@ function confirmationKind(text: string) {
   if (/^写入画布[。！!]?$/.test(text)) return 'write'
   if (/^确认[，,]\s*(不过|但是|但)\s*.+/.test(text)) return 'revise'
   return undefined
-}
-
-function appendExchange(turns: CanvasAssistantExchange[], incoming: CanvasAssistantExchange) {
-  if (turns.some(turn => turn.request_id === incoming.request_id)) return turns
-  const combined = [...turns, incoming]
-  const revisions = new Map<string, (CanvasAssistantFieldRevision | null)[]>()
-  for (const turn of combined) {
-    if (!turn.proposal || !turn.revises) continue
-    const changes = revisions.get(turn.revises) ?? []
-    revisions.set(turn.revises, [...changes, turn.revises_field ?? null])
-  }
-  return combined.map(turn => {
-    const revisionsForTurn = revisions.get(turn.request_id)
-    if (!turn.proposal || !revisionsForTurn || turn.proposal.state === 'superseded') return turn
-    const whole = revisionsForTurn.includes(null)
-    const groups = turn.proposal.groups?.map(group => (group.state ?? 'pending') === 'pending' &&
-      (whole || revisionsForTurn.some(revision => revision?.group_id === group.id))
-      ? { ...group, state: 'superseded' as const } : group)
-    return { ...turn, proposal: { ...turn.proposal,
-      state: groups?.some(group => (group.state ?? 'pending') === 'pending') ? 'pending' as const : 'superseded' as const,
-      groups } }
-  }).sort((left, right) => left.sequence - right.sequence)
 }
 
 /** Nonmodal conversation for one saved canvas. Closing it keeps the draft and in-flight reply. */
@@ -99,14 +79,13 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const uiText = useUiText()
   const trigger = useRef<HTMLElement>(null)
   const [open, setOpen] = useState(false)
-  const [turns, setTurnState] = useState<CanvasAssistantExchange[]>()
-  const mutationEpoch = useRef(0)
-  const setTurns = useCallback((update: SetStateAction<CanvasAssistantExchange[] | undefined>) => {
-    mutationEpoch.current += 1
-    setTurnState(update)
-  }, [])
-  const [historyError, setHistoryError] = useState(false)
+  const adapter = useMemo(() => canvasAssistantLifecycle(projectId), [projectId])
+  const lifecycle = useChatTurnLifecycle(open && !localDraft ? canvasId : undefined, adapter)
+  const {snapshot, refresh} = lifecycle
+  const [turns, setTurns] = useState<CanvasAssistantExchange[]>()
   const [retryLoad, setRetryLoad] = useState(0)
+  const historyError = !!lifecycle.error && !snapshot
+  const panelOpen = useRef(false)
   const [draft, setDraft] = useState('')
   const [repairSource, setRepairSource] = useState<string>()
   const [cardReferences, setCardReferences] = useState<string[]>([])
@@ -130,7 +109,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
   const [sendError, setSendError] = useState<AssistantSendError>()
   const [thinkingExpanded, setThinkingExpanded] = useState(false)
   const [failedReplyId, setFailedReplyId] = useState<string>()
-  const [sending, setSending] = useState(false)
+  const [preparing, setSending] = useState(false)
+  const sending = preparing || lifecycle.commandPending
+  const draftLocked = (lifecycle.busy || preparing) && !lifecycle.reconnecting && !lifecycle.uncertain
   const [stopping, setStopping] = useState<string>()
   const [stopError, setStopError] = useState(false)
   const [modelId, setModelId] = useState<string | null>(null)
@@ -156,67 +137,49 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     return !!data
   }
   const sendingNow = useRef(false)
-  const [activeRequestId, setActiveRequestId] = useState<string>()
-  const [pendingServerRequest, setPendingServerRequest] = useState<CanvasAssistantMessage>()
-  const [liveRequest, setLiveRequest] = useState<{ request_id: string; text: string }>()
-  const [progress, setProgress] = useState<CanvasAssistantProgress>()
-  const [pendingQuestion, setPendingQuestion] = useState<CanvasAssistantQuestion>()
+  const pendingServerRequest = snapshot?.pending_request
+  const liveRequest = pendingServerRequest
+  const progress = snapshot?.pending_progress
+  const pendingQuestion = snapshot?.pending_question
   const [questionAnswer, setQuestionAnswer] = useState('')
-  const [pendingInstructions, setPendingInstructions] = useState<CanvasAssistantInstruction[]>([])
-  const activeRequest = useRef<{cancel(): void}>()
-  const stoppedRequest = useRef<string>()
+  const pendingInstructions = snapshot?.pending_instructions ?? []
   const panel = useRef<HTMLElement>(null)
-  const snapshotCursor = useRef<{ canvasId: string; cursor: number }>()
   const history = useRef<HTMLDivElement>(null)
   const historyPosition = useRef({ top: 0, follow: true })
   const [readingEarlier, setReadingEarlier] = useState(false)
   const liveTurn: CanvasAssistantExchange | undefined = progress?.reply && liveRequest?.request_id === progress.request_id
     && !turns?.some(turn => turn.request_id === progress.request_id)
-    ? { ...liveRequest, sequence: 0, model_id: progress.model_id, reply: progress.reply } : undefined
+    ? { request_id: liveRequest.request_id, text: liveRequest.text, sequence: 0, model_id: progress.model_id, reply: progress.reply } : undefined
   const replyRecovered = !localDraft && !!failedReplyId && turns?.some(turn => turn.request_id === failedReplyId)
   const phaseSteps = Object.entries(progress?.phase_started_at ?? {})
     .sort(([, first], [, second]) => Date.parse(first) - Date.parse(second))
   const displayedTurns = liveTurn ? [...(turns ?? []), liveTurn] : turns
-  const runningId = activeRequestId ||
-    (progress?.streaming && !pendingQuestion ? progress.request_id : undefined)
+  const runningId = pendingQuestion ? undefined : lifecycle.stoppableTurn
+  const activeRequestId = lifecycle.commandPending ? lifecycle.stoppableTurn : undefined
   const draftText = draft.trim()
   const canSend = !!draftText && !!turns && !draftPromoting &&
     !stopping && !savingModel && !savingApproval && !uploadingReference && !referenceIsMissing &&
-    !pendingQuestion && !runningId && !sending
+    !pendingQuestion && !lifecycle.busy && !sending
   const panelId = 'canvas-assistant-' + canvasId
-  const applySnapshot = useCallback((data: CanvasAssistantHistory, epoch: number) => {
-    if (mutationEpoch.current !== epoch) return false
-    const checkpoint = snapshotCursor.current
-    if (checkpoint?.canvasId === canvasId && checkpoint.cursor > data.cursor) return false
-    snapshotCursor.current = { canvasId, cursor: data.cursor }
-    setTurns(data.turns)
-    setPendingServerRequest(data.pending_request ?? undefined)
-    setPendingQuestion(data.pending_question ?? undefined)
-    setProgress(data.pending_progress ?? undefined)
-    if (data.pending_progress?.error_code && !data.pending_progress.streaming) {
-      setFailedReplyId(data.pending_progress.request_id)
-      setSendError(assistantSendError(data.pending_progress.error_code))
-    }
-    setLiveRequest(data.pending_request ?? undefined)
-    setPendingInstructions(data.pending_instructions ?? [])
-    setModelId(data.model_id ?? null)
-    setAutomaticApproval(data.approval_mode === 'automatic')
-    return true
-  }, [canvasId, setTurns])
 
-  const isPendingQuestion = useCallback(async (turnId: string, questionId: string, cursor: number, signal: AbortSignal) => {
-    signal.throwIfAborted()
-    const request = chatClient.canvasSnapshot({ canvasId, projectId })
-    const cancel = () => request.cancel()
-    signal.addEventListener('abort', cancel, { once: true })
-    try {
-      const { data } = await request
-      if (!data || data.cursor < cursor) throw new Error('Canvas conversation snapshot is behind the question')
-      return data.pending_request?.request_id === turnId && data.pending_question?.id === questionId
-    } finally {
-      signal.removeEventListener('abort', cancel)
+  const persistedTurns = snapshot?.turns
+  useEffect(() => {
+    if (persistedTurns) setTurns(persistedTurns)
+  }, [persistedTurns])
+  const storedModel = snapshot ? snapshot.model_id ?? null : undefined
+  const storedApproval = snapshot?.approval_mode
+  useEffect(() => {
+    if (storedModel !== undefined) setModelId(storedModel)
+  }, [storedModel])
+  useEffect(() => {
+    if (storedApproval) setAutomaticApproval(storedApproval === 'automatic')
+  }, [storedApproval])
+  useEffect(() => {
+    if (progress?.error_code && !progress.streaming) {
+      setFailedReplyId(progress.request_id)
+      setSendError(assistantSendError(progress.error_code))
     }
-  }, [canvasId, projectId])
+  }, [progress])
 
   const updateDraft = (value: string) => {
     setConfirmationHint(undefined)
@@ -250,9 +213,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           turn.request_id === sourceId ? { ...turn, layout: data } : turn))
       } catch (error) {
         if (active && error instanceof ApiError && error.status === 409) {
-          const epoch = mutationEpoch.current
-          const { data } = await chatClient.canvasSnapshot({ canvasId, projectId }).catch(() => ({ data: undefined }))
-          if (active && data) applySnapshot(data, epoch)
+          await refresh()
         }
         // Retry pending work and reuse the browser receipt when delivery fails.
       }
@@ -260,108 +221,15 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     }
     const timer = window.setInterval(() => void execute(), 500)
     return () => { active = false; window.clearInterval(timer) }
-  }, [waitingLayout, approvalDisabled, canvasId, projectId, applySnapshot, setTurns])
+  }, [waitingLayout, approvalDisabled, canvasId, projectId, refresh])
 
   useEffect(() => {
-    if (localDraft) {
-      if (!open) return
-      const saved = readDraftAssistant(canvasId)
-      setTurns(saved.turns)
-      setModelId(saved.modelId)
-      setReferenceFiles(saved.references)
-      return
-    }
-    const epoch = mutationEpoch.current
-    const request = chatClient.canvasSnapshot({ canvasId, projectId })
-    let current = true
-    void request.then(response => {
-      if (!response.data) throw new Error('missing assistant history')
-      if (current) applySnapshot(response.data, epoch)
-    }).catch(() => { if (current) setHistoryError(true) })
-    return () => { current = false; request.cancel() }
-  }, [open, canvasId, projectId, retryLoad, localDraft, applySnapshot, setTurns])
-
-  useEffect(() => {
-    if (!open || localDraft) return
-    let active = true
-    const controller = new AbortController()
-    let subscribing = false
-    const timer = window.setInterval(async () => {
-      const checkpoint = snapshotCursor.current
-      if (subscribing || checkpoint?.canvasId !== canvasId) return
-      subscribing = true
-      try {
-        for await (const wire of chatClient.events(canvasId, checkpoint.cursor, controller.signal)) {
-          const update = {...wire, payload: canvasPayload(wire)}
-          if (!active) return
-          const asked = wire.type === 'question.asked' && 'question' in update.payload ? update.payload : undefined
-          const questionPending = asked?.question &&
-            await isPendingQuestion(asked.request_id, asked.question.id, wire.cursor, controller.signal)
-          if (!active) return
-          const cursor = snapshotCursor.current?.cursor ?? 0
-          const updates = [update].filter(event => event.session_id === canvasId && event.cursor > cursor)
-          if (!updates.length) continue
-          snapshotCursor.current = { canvasId, cursor: updates[updates.length - 1].cursor }
-          setTurns(turns => updates.reduce<CanvasAssistantExchange[]>((history, event) => {
-            const payload = event.payload
-            if ('message' in payload || ['turn.accepted', 'message.updated'].includes(event.type) || event.type.startsWith('tool.') || event.type === 'question.asked' || event.type === 'turn.steered' || event.type === 'turn.progress' || event.type === 'turn.interrupted') return history
-            if (event.type === 'turn.completed') return appendExchange(history, payload)
-            const existing = history.find(turn => turn.request_id === event.turn_id)
-            return existing ? history.map(turn => turn === existing ? {
-              ...turn, ...payload, generation: payload.generation ?? turn.generation,
-            } : turn) : appendExchange(history, payload)
-          }, turns ?? []))
-          for (const { type, turn_id, payload } of updates) {
-            if ((type === 'turn.accepted' || type === 'turn.progress' || type === 'message.updated' || type.startsWith('tool.')) && 'progress' in payload && payload.progress) {
-              setLiveRequest(payload)
-              setProgress(payload.progress)
-            }
-            if (type === 'turn.accepted' && 'question_answers' in payload && payload.question_answers?.length) {
-              const answered = payload.question_answers
-              setPendingQuestion(current => answered.some(answer => answer.question_id === current?.id) ? undefined : current)
-            }
-            if (type === 'turn.interrupted') {
-              const recovered = updates.some(event => event.turn_id === turn_id && event.type === 'turn.completed')
-              if (turn_id && !recovered && 'error_code' in payload && payload.error_code) {
-                setFailedReplyId(turn_id)
-                setSendError(assistantSendError(payload.error_code))
-              }
-              if (!recovered && 'progress' in payload && payload.progress?.reply) {
-                setLiveRequest(payload)
-                setProgress(payload.progress)
-              } else {
-                setProgress(current => current?.request_id !== turn_id ? current : current.reply ? { ...current, streaming: false } : undefined)
-              }
-            }
-            if (type === 'turn.steered' || type === 'question.asked' || type === 'turn.completed' || type === 'turn.stopped') {
-              setProgress(current => current?.request_id === turn_id ? undefined : current)
-            }
-          }
-          const steerUpdate = [...updates].reverse().find(event => event.type === 'turn.steered')
-          if (steerUpdate && !('message' in steerUpdate.payload)) {
-            const stillRunning = !updates.some(event => event.turn_id === steerUpdate.turn_id && event.type === 'turn.completed')
-            setPendingInstructions(stillRunning ? steerUpdate.payload.instructions ?? [] : [])
-          }
-          const completed = (id?: string) => updates.some(event => event.turn_id === id &&
-            (event.type === 'turn.completed' || event.type === 'turn.stopped'))
-          if (asked?.question && questionPending) {
-            setPendingServerRequest({ request_id: asked.request_id, text: asked.text })
-            setPendingQuestion(asked.question)
-          } else if (pendingServerRequest && completed(pendingServerRequest.request_id)) {
-            setPendingServerRequest(undefined)
-            setPendingQuestion(undefined)
-          }
-        }
-      } catch {
-        // Retry with the same cursor after loss of the connection.
-      } finally {
-        subscribing = false
-      }
-    }, activeRequestId || pendingServerRequest ? 250 : 1500)
-    return () => { active = false; window.clearInterval(timer); controller.abort() }
-  }, [open, canvasId, projectId, localDraft, pendingServerRequest, activeRequestId, isPendingQuestion, setTurns])
-
-
+    if (!open || !localDraft) return
+    const saved = readDraftAssistant(canvasId)
+    setTurns(saved.turns)
+    setModelId(saved.modelId)
+    setReferenceFiles(saved.references)
+  }, [open, canvasId, localDraft])
 
   useEffect(() => {
     if (!open) return
@@ -418,30 +286,15 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     setStopping(sourceId)
     setStopError(false)
     try {
-      const { data } = await chatClient.canvasStop({ canvasId, projectId, sourceId })
-      if (!data) throw new Error('missing assistant stop receipt')
-      setTurns(current => current?.some(turn => turn.request_id === sourceId)
-        ? current.map(turn => turn.request_id === sourceId ? data : turn) : [...(current || []), data])
-      setPendingServerRequest(request => request?.request_id === sourceId ? undefined : request)
-      setProgress(current => current?.request_id === sourceId ? undefined : current)
-      if (pendingServerRequest?.request_id === sourceId) setPendingQuestion(undefined)
-      if (pendingServerRequest?.request_id === sourceId || activeRequestId === sourceId) {
-        setPendingInstructions([])
-      }
-      if (activeRequestId === sourceId) {
-        stoppedRequest.current = sourceId
-        activeRequest.current?.cancel()
-        pending.current = undefined
-        setRevising(undefined)
-        setRevisingField(undefined)
-      }
+      const stopped = await lifecycle.stop(sourceId)
+      if (stopped === false) setStopError(true)
+      if (!stopped) return
       if (revising?.request_id === sourceId) {
         setRevising(undefined)
         setRevisingField(undefined)
         pending.current = undefined
       }
-    } catch { setStopError(true) }
-    finally { setStopping(undefined) }
+    } finally { setStopping(undefined) }
   }
 
   const decideLayout = async (sourceId: string, action: 'approve' | 'reject') => {
@@ -454,24 +307,20 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
 
   const cancelRun = async (runId: string) => {
     await Canvases.canvasCancelRun({ canvasId, projectId, runId })
-    const epoch = mutationEpoch.current
-    const { data } = await chatClient.canvasSnapshot({ canvasId, projectId })
-    if (data) applySnapshot(data, epoch)
+    await refresh()
   }
 
   const close = () => {
+    panelOpen.current = false
     setOpen(false)
     requestAnimationFrame(() => trigger.current?.focus())
   }
 
   const refreshDecision = async (sourceId: string, clearSelection = true) => {
-    const epoch = mutationEpoch.current
-    const { data } = await chatClient.canvasSnapshot({ canvasId, projectId }).catch(() => ({ data: undefined }))
-    if (!data) {
+    if (!await refresh()) {
       setRetryLoad(value => value + 1)
       return false
     }
-    applySnapshot(data, epoch)
     if (clearSelection) setSelectedGroups(current => ({ ...current, [sourceId]: [] }))
     if (revising?.request_id === sourceId) {
       pending.current = undefined
@@ -487,20 +336,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     return accepted
   }
 
-  const followCanvasTurn = (receipt: ChatTurnReceipt) => {
-    const subscription = new AbortController()
-    activeRequest.current = {cancel: () => subscription.abort()}
-    return waitForTurnEvent(receipt, async event => {
-      if (!['turn.completed', 'turn.stopped', 'turn.interrupted', 'turn.failed', 'question.asked'].includes(event.type)) return
-      const update = canvasPayload(event)
-      if (!('reply' in update)) return
-      if (event.type === 'question.asked' &&
-          (!update.question ||
-            !await isPendingQuestion(receipt.turn_id, update.question.id, event.cursor, subscription.signal))) return
-      return update
-    }, subscription.signal)
-  }
-
   const send = async (resume?: CanvasAssistantMessage, replan = false) => {
     const text = (resume?.text ?? draft).trim()
     if (!resume && /^(按此方案继续|写入画布|送审)[。！!]?$/.test(text)) {
@@ -512,7 +347,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     }
     if (draftPromoting || savingModel || savingApproval || uploadingReference || !turns || !text) return
     const intent = resume ? undefined : confirmationKind(text)
-    if (sendingNow.current || runningId || pendingQuestion) return
+    if (sendingNow.current || lifecycle.busy || pendingQuestion) return
     let revision = revising
     let fieldRevision = revisingField
     if (intent) {
@@ -576,8 +411,9 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         (!fieldRevision || group.id === fieldRevision.group_id))
         .flatMap(group => group.edits.filter(edit => edit.target.kind !== 'add_canvas_card').map(edit => edit.card_id)))]
       : revision?.proposal ? [revision.proposal.card_id] : []
-    const requestBody: CanvasAssistantMessage = resume ?? (pending.current?.text === text && pending.current.revises === revision?.request_id && pending.current.repairs === repairSource
-      ? pending.current : {
+    const requestBody: CanvasAssistantMessage = resume
+      ? { ...resume, request_id: crypto.randomUUID() }
+      : {
           text,
           request_id: crypto.randomUUID(),
           stream_reply: true,
@@ -594,7 +430,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           } : crossCanvas.length ? undefined : {
             ...readDraft(), scope: 'auto', card_ids: selectedCards,
           },
-        })
+        }
     const consumeDraft = !resume || (!!resume.submit_preview_id && draft.trim() === text) || (replan && pending.current === resume && draft.trim() === text)
     pending.current = requestBody
     if (consumeDraft) {
@@ -611,7 +447,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
     setSending(true)
     setSendError(undefined)
     setFailedReplyId(undefined)
-    setLiveRequest(requestBody)
     try {
       if (localDraft) {
         const revision = await saveForAssistant()
@@ -619,60 +454,33 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         if (requestBody.context) requestBody.context = {...requestBody.context, revision}
         if (modelId) await Canvases.canvasAssistantSetModel({canvasId, projectId, requestBody: {model_id: modelId}})
       }
-      const request = chatClient.send({sessionId: canvasId, requestBody})
-      activeRequest.current = request
-      setActiveRequestId(requestBody.request_id)
-      const turn = await request.then(followCanvasTurn).catch(async error => {
-        const { request_id: sourceId } = requestBody
-        if (stoppedRequest.current === sourceId) return undefined
-        const epoch = mutationEpoch.current
-        const receipt = await chatClient.canvasSnapshot({ canvasId, projectId }).catch(() => undefined)
-        const snapshot = receipt?.data
-        if (snapshot) {
-          applySnapshot(snapshot, epoch)
-          const completed = snapshot.turns.find(item => item.request_id === sourceId)
-          if (completed) return completed.stopped ? undefined : completed
-          const failure = snapshot.pending_progress
-          if (failure?.request_id === sourceId && failure.error_code && !failure.streaming) {
-            throw new Error(failure.error_code)
-          }
-          if (snapshot.pending_request?.request_id === sourceId &&
-            (snapshot.pending_question || snapshot.pending_progress?.streaming || snapshot.pending_instructions?.length)) return undefined
-        }
-        throw error
+      if (!panelOpen.current) return
+      const bound = bindChatSession('canvas', canvasId)
+      setSending(false)
+      const result = await lifecycle.submit(canvasId, {
+        turnId: requestBody.request_id,
+        send: () => bound.send({requestBody}),
       })
-      if (!turn || turn.stopped || stoppedRequest.current === requestBody.request_id) return
-      if (turn.error_code && !turn.proposal) throw new Error(turn.error_code)
-      if (turn.progress?.streaming) {
-        setLiveRequest(requestBody)
-        setProgress(turn.progress)
-        setPendingServerRequest(requestBody)
-        return
+      if (!result || !panelOpen.current) return
+      const turn = result.snapshot.turns.find(item => item.request_id === requestBody.request_id)
+      const failure = turn?.error_code ?? result.snapshot.pending_progress?.error_code
+      if (result.outcome === 'failed' || result.outcome === 'interrupted') throw new Error(failure ?? undefined)
+      if (pending.current === requestBody) {
+        setRevising(undefined)
+        setRevisingField(undefined)
+        pending.current = undefined
       }
-      if (turn.question) {
-        setPendingQuestion(turn.question)
-        setPendingServerRequest(requestBody)
-      } else setTurns(current => appendExchange(current || [], turn))
-      setRevising(undefined)
-      setRevisingField(undefined)
-      pending.current = undefined
-      if (!turn.question) {
-        setPendingQuestion(undefined)
-        setPendingServerRequest(undefined)
-      }
-      if (turn.automatic_approval && !approvalDisabled && turn.proposal) {
+      if (turn?.automatic_approval && !turn.stopped && !approvalDisabled && turn.proposal) {
         const groupIds = turn.proposal.groups?.map(group => group.id)
         try {
           if (!await approve(turn.request_id, groupIds, true)) setApprovalError(true)
-          const epoch = mutationEpoch.current
-          const { data } = await chatClient.canvasSnapshot({ canvasId, projectId })
-          if (data) applySnapshot(data, epoch)
+          await refresh()
         } catch {
           setApprovalError(true)
         }
       }
     } catch (error) {
-      if (stoppedRequest.current === requestBody.request_id) return
+      if (!panelOpen.current) return
       if (consumeDraft && pending.current === requestBody) {
         setDraft(text)
         setRepairSource(requestBody.repairs ?? undefined)
@@ -694,46 +502,37 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       setSendError(assistantSendError(detail))
     } finally {
       sendingNow.current = false
-      activeRequest.current = undefined
-      setActiveRequestId(undefined)
       setSending(false)
     }
   }
 
   const answerQuestion = async (answer: string) => {
-    const sourceId = pendingServerRequest?.request_id
-    if (!sourceId || !pendingQuestion || !answer.trim() || sendingNow.current) return
+    const turnId = pendingServerRequest?.request_id
+    if (!turnId || !pendingQuestion || !answer.trim() || sendingNow.current) return
+    const bound = bindChatSession('canvas', canvasId)
+    const questionId = pendingQuestion.id
     sendingNow.current = true
-    setSending(true)
     setSendError(undefined)
-    setFailedReplyId(sourceId)
-    setActiveRequestId(sourceId)
+    setFailedReplyId(turnId)
     try {
-      const request = chatClient.answer({
-        sessionId: canvasId, turnId: sourceId, requestBody: { question_id: pendingQuestion.id, answer },
+      const result = await lifecycle.submit(canvasId, {
+        turnId,
+        questionId,
+        send: () => bound.answer({turnId, requestBody: {question_id: questionId, answer}}),
       })
-      activeRequest.current = request
-      const receipt = await request
-      setPendingQuestion(undefined)
+      if (!result || !panelOpen.current) return
       setQuestionAnswer('')
-      const data = await followCanvasTurn(receipt)
-      if (data.error_code && !data.proposal) throw new Error(data.error_code)
-      setPendingQuestion(data.question ?? undefined)
-      if (!data.question) {
-        setTurns(current => appendExchange(current || [], data))
-        setPendingServerRequest(undefined)
+      if (result.outcome === 'failed' || result.outcome === 'interrupted') {
+        const failure = result.snapshot.turns.find(item => item.request_id === turnId)?.error_code
+          ?? result.snapshot.pending_progress?.error_code
+        setSendError(assistantSendError(failure))
       }
     } catch (error) {
-      if (stoppedRequest.current !== sourceId) {
-        const failure = assistantSendError(error instanceof ApiError ? error.body?.message ?? error.body?.detail : error instanceof Error ? error.message : undefined)
-        setSendError(failure)
-        if (failure === 'proposal') setPendingQuestion(undefined)
+      if (panelOpen.current) {
+        setSendError(assistantSendError(error instanceof ApiError ? error.body?.message ?? error.body?.detail : error instanceof Error ? error.message : undefined))
       }
     } finally {
-      activeRequest.current = undefined
-      setActiveRequestId(undefined)
       sendingNow.current = false
-      setSending(false)
     }
   }
 
@@ -749,7 +548,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         canvasId, projectId, requestBody: { model_id: selected || null },
       })
       if (!data) throw new Error('missing assistant model preference')
-      mutationEpoch.current += 1
       setModelId(data.model_id)
     } catch {
       setModelError(true)
@@ -767,7 +565,6 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         canvasId, projectId, requestBody: { approval_mode: enabled ? 'automatic' : 'manual' },
       })
       if (!data) throw new Error('missing assistant approval preference')
-      mutationEpoch.current += 1
       setAutomaticApproval(data.approval_mode === 'automatic')
     } catch {
       setApprovalError(true)
@@ -797,7 +594,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
       : cards.length ? ['帮我梳理画布上的素材和生成方向', '帮我检查当前画布的提示词']
         : ['帮我构思一张起始画面', '帮我拟一版图片生成提示词']
   const openDrawer = () => {
-    setHistoryError(false)
+    panelOpen.current = true
     setOpen(true)
     const cardId = selectedCards[0]
     if (!cardId || !window.matchMedia('(min-width: 801px)').matches) return
@@ -840,7 +637,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             {starters.map(starter => <WorkbenchButton key={starter} onClick={() => fillSuggestion(uiText(starter))}>{uiText(starter)}</WorkbenchButton>)}
           </div>}
         {historyError && <Alert type="error" message={uiText("暂时无法读取助手对话")}
-          action={<WorkbenchButton onClick={() => { setHistoryError(false); setRetryLoad(value => value + 1) }}>{uiText("重试")}</WorkbenchButton>} />}
+          action={<WorkbenchButton onClick={() => { void refresh() }}>{uiText("重试")}</WorkbenchButton>} />}
         {stopError && <Alert type="error" message={uiText("暂时无法停止助手")} />}
         {!turns && !historyError && <Spin aria-label={uiText("正在读取助手对话")} />}
         {displayedTurns?.map(turn => <article className="canvas-assistant-turn" data-assistant-turn={turn.request_id} key={turn.request_id}>
@@ -1076,7 +873,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
             <Input aria-label={uiText('自定义回答')} value={questionAnswer} maxLength={2000}
               onChange={event => setQuestionAnswer(event.target.value)} disabled={sending} />
             <WorkbenchButton htmlType="submit" disabled={sending || !questionAnswer.trim()}>{uiText('提交回答')}</WorkbenchButton>
-          </form> : !progress?.streaming && <WorkbenchButton variant="quiet" onClick={() => { void send(pendingServerRequest) }}>{uiText("继续回复")}</WorkbenchButton>}
+          </form> : null}
           {!runningId && <WorkbenchButton variant="quiet" loading={stopping === pendingServerRequest.request_id}
             onClick={() => { void stopTurn(pendingServerRequest.request_id) }}>{uiText("停止助手")}</WorkbenchButton>}
         </div>}
@@ -1096,7 +893,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
         </div>}
         {confirmationHint && <Alert type="warning" message={confirmationHint} />}
         {sendError && !replyRecovered && <Alert type="error" message={sendError === 'tools'
-          ? uiText("当前模型无法调用画布工具。切换支持提出画布修改的模型后，发送同一消息即可接续。")
+          ? uiText("当前模型无法调用画布工具。切换支持提出画布修改的模型后，可以重新发送。")
           : sendError === 'text' ? uiText("当前模型无法进行文字对话，请切换助手模型。")
           : sendError === 'target' ? uiText('没有找到指令中点名的镜头，请核对镜头或引用对应卡片。')
           : sendError === 'context-limit' ? uiText("内容超出当前模型的上下文上限，请缩小分析范围或切换助手模型。")
@@ -1104,14 +901,14 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
           : sendError === 'proposal' ? uiText('画布提案未通过校验，本轮未修改画布。')
           : sendError === 'timeout' ? uiText('助手处理超时，请继续或缩小本轮任务。')
           : sendError === 'media-input' ? uiText('当前模型协议无法传输本轮媒体输入，请选择支持该输入的模型或调整附件。')
-          : sendError === 'model' ? uiText('模型处理失败，可以继续本轮或切换模型。')
+          : sendError === 'model' ? uiText('模型处理失败，可以重新发送或切换模型。')
             : uiText("未收到助手回复，请检查助手模型后重试")}
           action={sendError === 'proposal' && (pendingServerRequest || pending.current) && <WorkbenchButton
-            variant="quiet" disabled={!!runningId} onClick={() => { void send(pendingServerRequest ?? pending.current, true) }}>
+            variant="quiet" disabled={!!runningId} onClick={() => { void send(pending.current ?? pendingServerRequest ?? undefined, true) }}>
             {uiText('重新规划提案')}
           </WorkbenchButton>} />}
         <CanvasAssistantAttachments projectId={projectId} files={referenceFiles} uploading={uploadingReference}
-          onReference={() => setBrowseReferences(value => !value)} setUploading={setUploadingReference} disabled={draftPromoting || sending || !turns}
+          onReference={() => setBrowseReferences(value => !value)} setUploading={setUploadingReference} disabled={draftPromoting || draftLocked || !turns}
           onChange={files => {
             setReferenceFiles(files)
             pending.current = undefined
@@ -1184,7 +981,7 @@ export function CanvasAssistant({ canvasId, projectId, storyboard, cards, cardTi
                 <Sender aria-label={uiText("给画布助手发消息")} value={draft}
                   placeholder={uiText("输入问题，或输入 / 查看提问建议")}
                   className="canvas-assistant-sender" suffix={false}
-                  autoSize={{ minRows: 2, maxRows: 4 }} disabled={draftPromoting || !!runningId || sending || !!pendingQuestion}
+                  autoSize={{ minRows: 2, maxRows: 4 }} disabled={draftPromoting || draftLocked}
                   onChange={value => {
                     updateDraft(value.slice(0, 16000))
                     if (value === '/' || suggestionsOpen) onTrigger(value === '/' ? undefined : false)
