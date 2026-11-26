@@ -1,5 +1,5 @@
 import { useUiText } from '../../../../uiText'
-import { chatClient, waitForMediaAdmission } from '../../../../services/chatSession'
+import { bindChatSession, readTrialHistory, waitForMediaAdmission } from '../../../../services/chatSession'
 import { useTrialModelPreference } from '../hooks/useTrialModelPreference'
 import { MediaTaskDetails } from '../components/MediaTaskDetails'
 import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
@@ -9,7 +9,7 @@ import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
  * 该组件只处理图片生成特有的输入、异步任务和结果呈现；会话选择及页面布局由
  * ExperimentLabPage 统一维护，从而避免图片实验室继续作为独立页面存在。
  */
-import { useRef, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { message } from 'antd'
 import {
   type MediaTaskReceipt,
@@ -114,6 +114,8 @@ function toImageLabMessage(item: ExperimentMessageRead): ImageLabMessage {
   }
 }
 
+const readHistory = (paging: Parameters<typeof readTrialHistory>[1]) => readTrialHistory('image', paging)
+
 /**
  * 呈现图片生成实验的历史、参考图输入和异步任务结果。
  *
@@ -129,13 +131,14 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
     loadTemplates, selectTemplate, confirmReplacement, applyFreeInput, replacementDialog,
   } = useExperimentTemplates(imagePromptCategories, draft, setDraft)
   const [referenceFileIds, setReferenceFileIds] = useState<string[]>([])
-  const history = useExperimentHistory(sessionId, { readPage: chatClient.mediaSnapshot })
+  const session = useMemo(() => sessionId ? bindChatSession('image', sessionId) : undefined, [sessionId])
+  const history = useExperimentHistory(sessionId, { readPage: readHistory })
   const inputSignature = (prompt: string) => JSON.stringify([prompt, selectedTemplate?.id, selectedTemplate?.version, templateValues, referenceFileIds])
   const submission = useExperimentSubmission(sessionId, history, inputSignature(draft))
   const { submitting } = submission
   useExperimentLeaveStatus(submission.dirty)
   const persistedMessages = history.messages.map(toImageLabMessage)
-  const { messages, runningTaskId, retryStatus } = useExperimentTaskResults(sessionId, history.eventCursor, persistedMessages, history.refresh, (item, result) => {
+  const { messages, runningTaskId, retryStatus } = useExperimentTaskResults(session, history.eventCursor, persistedMessages, history.refresh, (item, result) => {
     const resultUrls = (result.artifacts ?? []).filter(file => !file.deleted && file.media_type === 'image')
       .flatMap(file => buildFileDownloadUrl(file.file_id) ?? [])
     return { ...item, resultUrls: resultUrls.length ? resultUrls : item.resultUrls }
@@ -153,8 +156,9 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
     await submission.submitTask({
       ensureSession: () => sessionId ? Promise.resolve({ id: sessionId }) : ensureSession('image'),
       request: async (targetSessionId, idempotencyKey) => {
-        const response = await chatClient.send({
-          sessionId: targetSessionId, idempotencyKey,
+        const target = session ?? bindChatSession('image', targetSessionId)
+        const response = await target.send({
+          idempotencyKey,
           requestBody: {
             model_id: modelId,
             execution_prompt: currentPrompt,
@@ -164,7 +168,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
             operation_input: { kind: 'image_generation' },
           },
         })
-        return waitForMediaAdmission(response)
+        return waitForMediaAdmission(target, response)
       },
       onAccept: (attempt, targetSessionId) => {
         const unchanged = submission.acceptInput(attempt, targetSessionId, inputSignature(''))

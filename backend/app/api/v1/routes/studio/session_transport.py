@@ -11,7 +11,7 @@ from app.core.contracts.generation import GenerationSubmitRequest, GenerationMod
 from app.dependencies import get_db
 from app.models.experiment_sessions import ExperimentSession
 from app.models.generation_canvas import GenerationCanvas
-from app.schemas.chat import ChatEvent, ChatSessionKind, ChatSessionSnapshot, ChatTurnReceipt
+from app.schemas.chat import ChatEvent, ChatSessionKind, ChatSessionSnapshot, ChatTurnReceipt, TrialChatHistory
 from app.schemas.canvas_assistant import CanvasAssistantMessage, CanvasAssistantQuestionAnswer
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.interaction import InteractionRequestHeader
@@ -22,7 +22,7 @@ from app.services.chat.admission import admit_turn
 from app.services.chat.stream import session_event_stream
 from app.services.generation_canvas.assistant import CanvasAssistant
 from app.services.studio import text_trials
-from app.services.studio.media_trials import media_event_page, submit_media_trial
+from app.services.studio.media_trials import media_event_page, media_snapshot, submit_media_trial
 from app.services.studio.session_events import session_event_page, turn_replay_cursor
 
 router = APIRouter()
@@ -162,6 +162,8 @@ async def send_bound_turn(kind: ChatSessionKind, session_id: str, body: Command,
                           db: Database, idempotency_key: InteractionRequestHeader = None):
     """Admit a turn in the session identified by the path."""
     owner = await typed_session_owner(db, kind, session_id)
+    if kind in ('image', 'video') and not idempotency_key:
+        raise HTTPException(422, 'Idempotency-Key required')
     return await _send_turn(session_id, body, db, idempotency_key, owner)
 
 
@@ -190,6 +192,10 @@ async def bound_snapshot(kind: ChatSessionKind, session_id: str, db: Database,
                          page_size: Annotated[int, Query(ge=1, le=100)] = 50):
     """Return the public checkpoint and history for the bound session."""
     await typed_session_owner(db, kind, session_id)
+    if kind in ('image', 'video'):
+        messages, state = await media_snapshot(db, session_id, page, page_size)
+        return success_response(ChatSessionSnapshot(kind=kind, **state.model_dump(),
+                                                     history=TrialChatHistory(messages=messages)))
     if kind != 'chat':
         raise HTTPException(404, 'Chat snapshot not available')
     history = await laboratory.snapshot(db, session_id)

@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { MediaTaskReceipt } from '../../../../services/generated'
-import { chatClient } from '../../../../services/chatSession'
+import { bindChatSession } from '../../../../services/chatSession'
 
 type TaskMessage = { taskId?: string; status?: string; receipt?: MediaTaskReceipt }
 const isTerminal = (status?: string) => status === 'succeeded' || status === 'failed' || status === 'cancelled'
 
 /** Replay committed receipts and overlay them on the paginated, authoritative history. */
 export function useExperimentTaskResults<T extends TaskMessage>(
-  sessionId: string | undefined, snapshotCursor: number | undefined, messages: T[],
+  session: ReturnType<typeof bindChatSession> | undefined, snapshotCursor: number | undefined, messages: T[],
   refreshHistory: () => Promise<void>, projectMedia: (message: T, receipt: MediaTaskReceipt) => T,
 ) {
   const [reads, setReads] = useState<Record<string, MediaTaskReceipt>>({})
@@ -17,15 +17,14 @@ export function useExperimentTaskResults<T extends TaskMessage>(
   useEffect(() => {
     setReads({})
     setFailed(false)
-    if (!sessionId) return
-    const id = sessionId
+    if (!session) return
     const abort = new AbortController()
     let timer: number | undefined
     let cursor = snapshotCursor ?? 0
 
     const consume = async () => {
       try {
-        for await (const event of chatClient.events(id, cursor, abort.signal)) {
+        for await (const event of session.events(cursor, abort.signal)) {
           if (abort.signal.aborted) return
           cursor = event.cursor
           if (event.category !== 'task') continue
@@ -43,7 +42,7 @@ export function useExperimentTaskResults<T extends TaskMessage>(
       abort.abort()
       window.clearTimeout(timer)
     }
-  }, [sessionId, snapshotCursor, refreshHistory, retry])
+  }, [session, snapshotCursor, refreshHistory, retry])
 
   const currentMessages = messages.map(item => {
     const observed = item.taskId ? reads[item.taskId] : undefined

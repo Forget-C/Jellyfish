@@ -1,4 +1,4 @@
-import { mediaTurnReceipt, mediaAdmissionStream } from './text-trial-events.mjs'
+import { mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
@@ -79,12 +79,13 @@ try {
       ? route.fulfill({ status: 503 })
       : route.fulfill({ body: referenceVideo, contentType: 'video/mp4' })
     if (url.pathname.endsWith('/download')) return route.fulfill({ body: png, contentType: 'image/png' })
-    const run = url.pathname.match(/\/chat\/sessions\/([^/]+)\/turns$/)
+    const run = url.pathname.match(/\/chat\/sessions\/video\/([^/]+)\/turns$/)
     if (run) {
       submissions.push({ session: run[1], body: request.postDataJSON() })
       const taskId = `task-${submissions.length}`
       return respond(mediaTurnReceipt(route, { task_id: taskId, messages: [{ id: taskId, session_id: run[1], role: 'task', content: '已完成', sequence: submissions.length, task_id: taskId, status: 'succeeded', created_at: timestamp, updated_at: timestamp }] }))
     }
+    if (/\/chat\/sessions\/video\/[^/]+\/snapshot$/.test(url.pathname)) return respond(boundTrialSnapshot(url, []))
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])
   })

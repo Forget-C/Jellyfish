@@ -29,6 +29,7 @@ export interface ExperimentHistoryState {
   /** 是否已经成功读取过本会话，包括成功返回空列表。 */
   hasLoadedHistory: boolean
   eventCursor?: number
+  readLatest: (targetSessionId: string) => ReturnType<NonNullable<UseExperimentHistoryOptions['readPage']>>
   /** 分页错误重试原页，避免重试时重置已经加载的历史。 */
   errorOnLoadMore: boolean
   /** 从第一页重新读取当前会话历史。 */
@@ -222,6 +223,7 @@ export function useExperimentHistory(
     hasLoadedHistory: isCurrentHistory && hasLoadedHistory,
     errorOnLoadMore,
     refresh,
+    readLatest: targetSessionId => readPage({sessionId: targetSessionId, page: 1, pageSize}),
     loadMore,
     adoptCanonicalMessages,
     clearLocalHistory,

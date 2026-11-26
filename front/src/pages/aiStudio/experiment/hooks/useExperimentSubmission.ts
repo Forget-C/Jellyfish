@@ -128,9 +128,7 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
           return
         }
       }
-      const response = await StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet({
-        sessionId: uncertain.sessionId, page: 1, pageSize: 50,
-      })
+      const response = await history.readLatest(uncertain.sessionId)
       if (uncertainRef.current !== uncertain || !isCurrent(uncertain.attempt)) return
       if (!Array.isArray(response.data)) throw new Error(uiText("未返回会话历史"))
       const messages: ExperimentMessageRead[] = response.data.filter(item => item.session_id === uncertain.sessionId)
