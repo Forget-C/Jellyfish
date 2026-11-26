@@ -17,6 +17,7 @@ class TrialChatHistory(BaseModel):
     """A page of persistent messages from one single-modality trial."""
 
     messages: list[ExperimentMessageRead]
+    active_turn_ids: list[str] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class ChatSessionSnapshot(InteractionSnapshot):

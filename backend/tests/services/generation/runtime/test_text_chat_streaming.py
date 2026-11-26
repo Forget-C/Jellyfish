@@ -244,11 +244,14 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
             assert '独立的本轮输入' not in stream_after_paging.text
             assert '并发请求只运行一次' in stream_after_paging.text
             first_delta = asyncio.Event()
+            release_followup = asyncio.Event()
 
             class InterruptedTextModel:
                 async def stream(self, _messages):
                     yield ProviderChatEvent(kind='delta', text='已经送达的前缀')
                     first_delta.set()
+                    await release_followup.wait()
+                    yield ProviderChatEvent(kind='delta', text='快照后的后缀')
                     await asyncio.Future()
 
             monkeypatch.setattr(text_chat_streaming, 'build_laboratory_chat', AsyncMock(return_value=InterruptedTextModel()))
@@ -262,11 +265,18 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
             execution, = text_trials._executions
             try:
                 await asyncio.wait_for(first_delta.wait(), timeout=5)
-                await wait_for_chat_event(client, session_url, turn_id, 'message.updated')
+                delta = await wait_for_chat_event(client, session_url, turn_id, 'message.updated')
+                active = (await client.get(session_url + '/snapshot')).json()['data']
+                assert active['history']['active_turn_ids'] == [turn_id]
+                assert active['cursor'] == delta['cursor']
+                release_followup.set()
+                appended = await wait_for_chat_event(client, session_url, turn_id, 'message.updated', after=active['cursor'])
+                assert appended['payload']['text'] == '快照后的后缀'
                 monkeypatch.setattr(text_chat_streaming, '_runtime', TextStreamingRuntime())
                 checkpoint = (await client.get(session_url + '/snapshot')).json()['data']
                 pending = next(item for item in checkpoint['history']['messages'] if item['content'] == interrupted_body['content'])
-                assert pending['payload']['partial_text'] == '已经送达的前缀'
+                assert not checkpoint['history'].get('active_turn_ids')
+                assert pending['payload']['partial_text'] == '已经送达的前缀快照后的后缀'
                 assert '_stream_partial' not in pending['payload']
                 recovered = await client.post(url, json=interrupted_body, headers=interrupted)
                 assert recovered.status_code == 202

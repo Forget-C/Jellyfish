@@ -130,7 +130,7 @@ export async function readTrialHistory(
   if (!data || data.kind !== kind || !('messages' in data.history) || 'models' in data.history) {
     throw new Error('Invalid trial history snapshot')
   }
-  return {data: data.history.messages, meta: {cursor: data.cursor}}
+  return {data: data.history.messages, meta: {cursor: data.cursor, activeTurnIds: data.history.active_turn_ids}}
 }
 
 /** Follow one admitted turn, resuming after the last event if the connection drops. */

@@ -1,4 +1,4 @@
-import { textTrialFrame, mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot, textTrialSnapshot } from './text-trial-events.mjs'
+import { textTrialFrame, mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -23,34 +23,42 @@ const histories = new Map()
 const generationRequests = []
 const stopRequests = []
 const deleteRequests = []
-const streams = new Set()
+const streams = new Map()
+const frames = new Map()
 let live
-let holdAcceptance = false
-let releaseCreation
-let creationGate
 let stopBehavior = 'reject'
-let heldStop
 const message = (session_id, id, role, content, sequence, fields = {}) => ({
   id, session_id, role, content, sequence, created_at: timestamp, updated_at: timestamp, ...fields,
 })
 const saveMessages = (sessionId, ...items) => histories.set(sessionId, [...(histories.get(sessionId) ?? []), ...items])
-const writeFrame = (run, event, data) => {
-  const sequence = ++run.sequence
-  const kind = { accepted: 'turn.accepted', completed: 'turn.completed', cancelled: 'turn.stopped' }[event]
-  run.response.write(textTrialFrame(run.sessionId, run.taskId, sequence, kind, data))
+const publish = (run, type, payload) => {
+  const events = frames.get(run.sessionId) ?? []
+  const cursor = events.length + 1
+  const frame = textTrialFrame(run.sessionId, run.taskId, cursor, type, payload)
+  frames.set(run.sessionId, [...events, frame])
+  for (const [response, sessionId] of streams) if (sessionId === run.sessionId) response.write(frame)
 }
 const accept = run => {
-  const user = message(run.sessionId, run.taskId + '-user', 'user', run.prompt, run.historySequence + 1)
+  const user = message(run.sessionId, run.taskId + '-user', 'user', run.prompt, run.historySequence + 1,
+    {payload: {interaction_run_id: run.taskId}})
   saveMessages(run.sessionId, user)
-  writeFrame(run, 'accepted', { user_message: user })
+  publish(run, 'turn.accepted', {user_message: user})
+}
+const delta = (run, text) => {
+  const user = histories.get(run.sessionId).find(item => item.id === run.taskId + '-user')
+  user.payload.partial_text = (user.payload.partial_text ?? '') + text
+  publish(run, 'message.updated', {text_delta: text})
 }
 const finish = (run, event) => {
+  const user = histories.get(run.sessionId).find(item => item.id === run.taskId + '-user')
+  delete user.payload.partial_text
+  run.finished = true
   if (event === 'completed') {
-    const assistant = message(run.sessionId, run.taskId + '-assistant', 'assistant', '同时收到的完整结果', run.historySequence + 2)
+    const assistant = message(run.sessionId, run.taskId + '-assistant', 'assistant', '同时收到的完整结果', run.historySequence + 2,
+      {payload: {interaction_run_id: run.taskId}})
     saveMessages(run.sessionId, assistant)
-    writeFrame(run, event, { assistant_message: assistant, result: { text: assistant.content, model_id: 'text-model', provider_request_id: null, input_tokens: null, output_tokens: null } })
-  } else writeFrame(run, event, { reason: 'user_cancelled' })
-  run.response.end()
+    publish(run, 'turn.completed', {assistant_message: assistant})
+  } else publish(run, 'turn.stopped', {reason: 'user_cancelled'})
 }
 async function liveTextFixture(request, response, next) {
   const path = request.url?.split('?')[0] ?? ''
@@ -65,20 +73,22 @@ async function liveTextFixture(request, response, next) {
     generationRequests.push(input)
     live = { sessionId: send[1], taskId: 'run-' + generationRequests.length, sequence: 0,
       prompt: input.content, historySequence: (histories.get(send[1]) ?? []).at(-1)?.sequence ?? 0 }
-    response.writeHead(200, { 'Content-Type': 'application/json' })
-    response.end(JSON.stringify({ data: { session_id: live.sessionId, turn_id: live.taskId, cursor: 0 } }))
+    const cursor = frames.get(live.sessionId)?.length ?? 0
+    accept(live)
+    response.writeHead(202, { 'Content-Type': 'application/json' })
+    response.end(JSON.stringify({ data: { session_id: live.sessionId, turn_id: live.taskId, cursor } }))
     return
   }
   if (stream) {
-    live.response = response
     response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' })
     response.flushHeaders()
-    streams.add(response)
+    streams.set(response, stream[1])
     response.once('close', () => streams.delete(response))
-    if (!holdAcceptance) accept(live)
+    const after = Number(new URL(request.url, origin).searchParams.get('after') ?? 0)
+    for (const frame of (frames.get(stream[1]) ?? []).slice(after)) response.write(frame)
     return
   }
-  stopRequests.push({ sessionId: stop[1], taskId: stop[2], connected: streams.has(live.response), body: JSON.parse(body) })
+  stopRequests.push({ sessionId: stop[1], taskId: stop[2], connected: [...streams.values()].includes(live.sessionId), body: JSON.parse(body) })
   const acknowledge = (status = 'cancelled') => {
     response.writeHead(200, { 'Content-Type': 'application/json' })
     response.end(JSON.stringify({ success: true, data: { task_id: stop[2], status } }))
@@ -86,8 +96,7 @@ async function liveTextFixture(request, response, next) {
   if (stopBehavior === 'reject') {
     response.writeHead(503, { 'Content-Type': 'application/json' })
     response.end(JSON.stringify({ detail: '停止请求暂不可用' }))
-  } else if (stopBehavior === 'hold') heldStop = acknowledge
-  else acknowledge()
+  } else acknowledge()
 }
 const server = await createServer({
   root,
@@ -99,8 +108,7 @@ const server = await createServer({
 let browser
 let page
 const cleanup = browserCleanup(() => {
-  for (const response of streams) response.end()
-  heldStop?.()
+  for (const response of streams.keys()) response.end()
   return { browser, server }
 })
 
@@ -119,11 +127,15 @@ try {
     const turn = url.pathname.match(/\/chat\/sessions\/text\/([^/]+)\/(events|turns)$/)
     if ((turn && sessions.some(session => session.id === turn[1] && session.lab_type === 'text')) ||
         /\/chat\/sessions\/text\/[^/]+\/turns\/[^/]+\/stop$/.test(url.pathname)) return route.continue()
-    if (/\/chat\/sessions\/text\/[^/]+\/snapshot$/.test(url.pathname)) return textTrialSnapshot(route, histories.get(url.pathname.split('/').at(-2)) ?? [])
+    if (/\/chat\/sessions\/text\/[^/]+\/snapshot$/.test(url.pathname)) {
+      const sessionId = url.pathname.split('/').at(-2)
+      const data = boundTrialSnapshot(url, histories.get(sessionId) ?? [], frames.get(sessionId)?.length ?? 0)
+      data.history.active_turn_ids = live?.sessionId === sessionId && !live.finished ? [live.taskId] : []
+      return route.fulfill({json: {success: true, data}})
+    }
     if (url.pathname.endsWith('/experiment-sessions')) {
       if (request.method() === 'POST') {
         const body = request.postDataJSON()
-        await creationGate
         const session = { id: 'first-draft', lab_type: body.lab_type, title: body.title, created_at: timestamp, updated_at: timestamp }
         sessions.push(session)
         return respond(session)
@@ -222,94 +234,52 @@ try {
   assert.equal(await textInput.inputValue(), '')
   assert.equal(new URL(page.url()).searchParams.get('mode'), 'text')
 
-  // Keep a real SSE connection open while the stop request is pending or rejected.
+  // Leave a running trial and recover its original SSE activity without a new send.
   await selectModel('文本')
   await textInput.fill('首次草稿提交保持运行')
-  holdAcceptance = true
-  creationGate = new Promise(resolve => { releaseCreation = resolve })
   await page.getByRole('button', { name: /^发\s*送$/ }).click()
-  await page.getByRole('link', { name: '首页', exact: true }).click()
-  const activeLeave = page.getByRole('dialog', { name: '文本正在生成' })
-  const stopAndLeave = activeLeave.getByRole('button', { name: '停止生成并离开' })
-  await activeLeave.getByText('等待服务端接收后可请求停止。').waitFor()
-  assert.equal(await stopAndLeave.isDisabled(), true)
-  assert.equal(stopRequests.length, 0)
-  const streamStarted = page.waitForResponse(response => response.url().includes('/first-draft/events?'))
-  releaseCreation()
-  await page.getByRole('heading', { name: '实验室 · 文本 · 新文本会话' }).waitFor()
-  assert.equal(await activeLeave.isVisible(), true)
-  assert.equal(new URL(page.url()).searchParams.get('mode'), 'text')
-  await activeLeave.getByRole('button', { name: '继续等待' }).click()
-  await page.waitForURL(url => url.searchParams.get('session') === 'first-draft')
-  await streamStarted
-  holdAcceptance = false
-  accept(live)
   await page.getByRole('button', { name: /^停\s*止$/ }).waitFor()
-  const currentActions = page.getByRole('button', { name: '新文本会话 更多操作', exact: true })
+  const currentActions = page.getByRole('button', {name: '新文本会话 更多操作', exact: true})
   await currentActions.focus()
   await currentActions.press('Enter')
-  const removeCurrent = page.getByRole('menuitem', { name: /^删除会话/ })
+  const removeCurrent = page.getByRole('menuitem', {name: /^删除会话/})
   await removeCurrent.waitFor()
   assert.equal(await removeCurrent.getAttribute('aria-disabled'), 'true')
   assert.deepEqual(deleteRequests, [])
-  assert.equal(streams.has(live.response), true)
   await page.keyboard.press('Escape')
-  await page.getByRole('link', { name: '首页', exact: true }).click()
-  await activeLeave.getByRole('button', { name: '继续等待' }).click()
+  delta(live, '离开前的部分回复')
+  await page.getByText('离开前的部分回复', {exact: true}).waitFor()
+  await type('图片').click()
+  await page.getByRole('heading', {name: '实验室 · 图片 · 新会话'}).waitFor()
   assert.equal(stopRequests.length, 0)
-  assert.equal(streams.has(live.response), true)
-  await type('图片').click()
-  await stopAndLeave.click()
-  await activeLeave.getByText('停止生成请求失败，已保留当前会话。请重试或继续等待。').waitFor()
-  assert.deepEqual(stopRequests[0], { sessionId: 'first-draft', taskId: live.taskId, connected: true, body: { reason: 'user_cancelled' } })
-  assert.equal(streams.has(live.response), true)
-  assert.equal(new URL(page.url()).searchParams.get('session'), 'first-draft')
-  await page.screenshot({ path: join(output, 'stop-failure.png'), animations: 'disabled' })
-  await activeLeave.getByRole('button', { name: '继续等待' }).click()
-
-  // Acknowledgement is distinct from a terminal SSE event.
-  stopBehavior = 'acknowledge'
-  await page.getByRole('button', { name: /^停\s*止$/ }).click()
-  await page.getByText('已请求停止，等待本轮结束。', { exact: true }).waitFor()
-  assert.equal(streams.has(live.response), true)
-  assert.equal(await page.getByText('已取消', { exact: true }).count(), 0)
-  finish(live, 'cancelled')
-  await page.getByText('已取消', { exact: true }).waitFor()
-  await textInput.fill('终态与停止响应竞态')
-  await page.getByRole('button', { name: /^发\s*送$/ }).click()
-  await page.getByText('终态与停止响应竞态', { exact: true }).waitFor()
-  stopBehavior = 'hold'
-  await type('图片').click()
-  await stopAndLeave.click()
-  // The terminal event may arrive before the stop HTTP request finishes.
-  await expectRequestCount(3)
+  delta(live, '离开后的文字')
+  await page.goto(origin + '/lab?session=first-draft')
+  await page.getByText('离开前的部分回复离开后的文字', {exact: true}).waitFor()
+  delta(live, '重开后的增量')
+  await page.getByText('离开前的部分回复离开后的文字重开后的增量', {exact: true}).waitFor()
   finish(live, 'completed')
-  heldStop('succeeded')
-  heldStop = undefined
-  await page.getByRole('heading', { name: '实验室 · 图片 · 新会话' }).waitFor()
-  assert.equal(stopRequests.every(request => request.connected), true)
-  await type('文本').click()
-  await page.getByRole('button', { name: '新文本会话', exact: true }).click()
-  await page.getByText('同时收到的完整结果', { exact: true }).waitFor()
+  await page.getByText('同时收到的完整结果', {exact: true}).waitFor()
+  assert.equal(generationRequests.length, 1)
 
-  async function expectRequestCount(count) {
-    const expires = Date.now() + 5000
-    while (stopRequests.length < count && Date.now() < expires) await new Promise(resolve => setTimeout(resolve, 20))
-    assert.equal(stopRequests.length, count)
-  }
-
-  // A confirmed stop also permits leaving a still-live stream after acknowledgement.
   await selectModel('文本')
-  await textInput.fill('确认停止后离开')
-  await page.getByRole('button', { name: /^发\s*送$/ }).click()
-  await page.getByText('确认停止后离开', { exact: true }).waitFor()
+  await textInput.fill('显式停止生成')
+  await page.getByRole('button', {name: /^发\s*送$/}).click()
+  await page.getByText('显式停止生成', {exact: true}).waitFor()
+  const stopButton = page.getByRole('button', {name: /^停\s*止$/})
+  await stopButton.click()
+  await page.getByText('停止生成请求失败，请重试。', {exact: true}).waitFor()
   stopBehavior = 'acknowledge'
-  await type('图片').click()
-  await stopAndLeave.click()
-  await page.getByRole('heading', { name: '实验室 · 图片 · 新会话' }).waitFor()
-  assert.equal(stopRequests[3].connected, true)
+  await stopButton.click()
+  await page.getByText('已请求停止，等待本轮结束。', {exact: true}).waitFor()
+  assert.equal(await page.getByText('已取消', {exact: true}).count(), 0)
+  finish(live, 'cancelled')
+  await page.getByText('已取消', {exact: true}).waitFor()
+  assert.equal(stopRequests.length, 2)
+  assert.equal(stopRequests.every(request => request.connected), true)
 
   // Temporary media edits block Back, and cancelling them removes their guard.
+  await type('图片').click()
+  await page.getByRole('heading', {name: '实验室 · 图片 · 新会话'}).waitFor()
   await page.getByRole('button', { name: '图片历史', exact: true }).click()
   await page.getByRole('heading', { name: '实验室 · 图片 · 图片历史' }).waitFor()
   await selectModel('图片')
@@ -351,7 +321,7 @@ try {
   await type('图片').click()
   await page.getByRole('button', { name: '图片历史', exact: true }).click()
   await page.getByText(/请求已接收/).waitFor()
-  assert.equal(stopRequests.length, 4, '图片和视频离开不请求取消')
+  assert.equal(stopRequests.length, 2, '图片和视频离开不请求取消')
 
   // A clean submitted template gains a guard only while its variables have unapplied changes.
   await page.getByRole('button', { name: '图片模板历史', exact: true }).click()
@@ -404,7 +374,7 @@ try {
   assert.equal(await videoInput.inputValue(), '')
   console.log('实验室离开保护验收通过', output)
 } catch (error) {
-  console.error('Browser state:', page?.url(), await page?.locator('body').innerText().catch(() => ''), generationRequests.length, live?.response.destroyed)
+  console.error('Browser state:', page?.url(), await page?.locator('body').innerText().catch(() => ''), generationRequests.length, streams.size)
   if (page) await page.screenshot({ path: join(output, 'failure.png'), animations: 'disabled' }).catch(() => {})
   throw error
 } finally {

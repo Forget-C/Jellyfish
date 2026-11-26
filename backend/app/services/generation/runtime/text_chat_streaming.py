@@ -27,7 +27,7 @@ from app.core.contracts.streaming import (
 from app.core.contracts.model_provider import TextModelProvider
 from app.core.db import async_session_maker
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
-from app.services.generation.runtime.text_streaming import TextStreamRunNotFoundError, TextStreamingRuntime
+from app.services.generation.runtime.text_streaming import TextStreamRunNotFoundError, TextStreamRunState, TextStreamingRuntime
 from app.services.llm.resolver import build_laboratory_chat
 from app.services.studio.session_events import append_session_event
 from app.schemas.studio.text_lab import TextLabRunRequest
@@ -119,6 +119,19 @@ async def admit_text_interaction(db, session_id, body: TextLabRunRequest, reques
         db, session_id=session_id, model_id=body.model_id, content=body.content, request_id=request_id, publish_events=True,
     )
     return TextInteractionAdmission(task_id, True)
+
+
+async def active_text_run_ids(session_id):
+    """Identify runs this process can still confirm as executing."""
+    candidates = [run_id for run_id, source in _stream_inputs.items() if source.session_id == session_id]
+    active = []
+    for run_id in candidates:
+        try:
+            if await _runtime.state_of(run_id) is TextStreamRunState.streaming:
+                active.append(run_id)
+        except TextStreamRunNotFoundError:
+            continue
+    return active
 
 
 def _recovered_text_events(user, result, task_id, partial=None):

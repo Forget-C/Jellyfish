@@ -10,7 +10,7 @@ export interface UseExperimentHistoryOptions {
   /** 单页消息数量；服务端允许的范围为 1 到 100。 */
   pageSize?: number
   readPage?: (options: {sessionId: string; page: number; pageSize: number}) =>
-    Promise<{data?: ExperimentMessageRead[] | null; meta?: {cursor?: unknown} | null}>
+    Promise<{data?: ExperimentMessageRead[] | null; meta?: {cursor?: unknown; activeTurnIds?: string[] | null} | null}>
 }
 
 /** 共享历史 Hook 暴露给实验室模态组件的状态和操作。 */
@@ -30,6 +30,7 @@ export interface ExperimentHistoryState {
   /** 是否已经成功读取过本会话，包括成功返回空列表。 */
   hasLoadedHistory: boolean
   eventCursor?: number
+  activeTurnIds?: string[]
   readLatest: (targetSessionId: string) => ReturnType<NonNullable<UseExperimentHistoryOptions['readPage']>>
   /** 分页错误重试原页，避免重试时重置已经加载的历史。 */
   errorOnLoadMore: boolean
@@ -85,6 +86,7 @@ export function useExperimentHistory(
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [eventCursor, setEventCursor] = useState<number>()
+  const [activeTurnIds, setActiveTurnIds] = useState<string[]>()
   const [hasLoadedHistory, setHasLoadedHistory] = useState(false)
   const [errorOnLoadMore, setErrorOnLoadMore] = useState(false)
   const requestVersionRef = useRef(0)
@@ -110,6 +112,7 @@ export function useExperimentHistory(
     requestVersionRef.current += 1
     setMessages([])
     setEventCursor(undefined)
+    setActiveTurnIds(undefined)
     setHasLoadedHistory(false)
     historyPageRef.current = 1
     setHistoryPage(1)
@@ -145,6 +148,7 @@ export function useExperimentHistory(
 
       const items = response.data ?? []
       setEventCursor(typeof response.meta?.cursor === 'number' ? response.meta.cursor : 0)
+      setActiveTurnIds(response.meta?.activeTurnIds ?? [])
       const adopted = adoptedMessagesBySession.get(sessionId) ?? []
       // 刷新第一页时保留已分页读取的更早消息，避免读者失去当前位置。
       const preserveEarlier = items.length === pageSize && historyPageRef.current > 1
@@ -206,6 +210,7 @@ export function useExperimentHistory(
     historyPageRef.current = 1
     setMessages(sessionId ? adoptedMessagesBySession.get(sessionId) ?? [] : [])
     setEventCursor(undefined)
+    setActiveTurnIds(undefined)
     setHasLoadedHistory(false)
     setHistoryPage(1)
     setHasMoreHistory(false)
@@ -217,6 +222,7 @@ export function useExperimentHistory(
     messages: isCurrentHistory ? messages : emptyHistory,
     historyPage,
     eventCursor: isCurrentHistory ? eventCursor : undefined,
+    activeTurnIds: isCurrentHistory ? activeTurnIds : undefined,
     hasMoreHistory: isCurrentHistory && hasMoreHistory,
     loading: isCurrentHistory ? loading : Boolean(sessionId),
     loadingMore: isCurrentHistory && loadingMore,

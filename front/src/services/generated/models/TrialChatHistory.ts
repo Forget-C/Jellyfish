@@ -8,4 +8,5 @@ import type { ExperimentMessageRead } from './ExperimentMessageRead';
  */
 export type TrialChatHistory = {
     messages: Array<ExperimentMessageRead>;
+    active_turn_ids?: (Array<string> | null);
 };
