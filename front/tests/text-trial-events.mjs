@@ -46,3 +46,11 @@ export function mediaAdmissionStream(route, url) {
   return route.fulfill({contentType: 'text/event-stream',
     body: 'id: ' + event.cursor + '\nevent: task.accepted\ndata: ' + JSON.stringify(event) + '\n\n'})
 }
+
+export function textTrialSnapshot(route, messages, cursor = 0) {
+  const sessionId = new URL(route.request().url()).pathname.split('/').at(-2)
+  return route.fulfill({json: {success: true, data: {
+    kind: 'text', session_id: sessionId, cursor, capabilities: ['snapshot', 'send', 'events', 'stop'],
+    history: {messages},
+  }}})
+}

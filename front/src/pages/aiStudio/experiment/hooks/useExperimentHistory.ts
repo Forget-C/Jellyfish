@@ -9,7 +9,8 @@ import {
 export interface UseExperimentHistoryOptions {
   /** 单页消息数量；服务端允许的范围为 1 到 100。 */
   pageSize?: number
-  readPage?: typeof StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet
+  readPage?: (options: {sessionId: string; page: number; pageSize: number}) =>
+    Promise<{data?: ExperimentMessageRead[] | null; meta?: {cursor?: unknown} | null}>
 }
 
 /** 共享历史 Hook 暴露给实验室模态组件的状态和操作。 */

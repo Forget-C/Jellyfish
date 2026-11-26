@@ -132,6 +132,18 @@ export function bindChatSession(kind: BoundSend['kind'], sessionId: string) {
   }
 }
 
+/** Read one trial history page without changing the active event cursor. */
+export async function readTrialHistory(
+  kind: 'text' | 'image' | 'video',
+  {sessionId, ...paging}: Omit<BoundSnapshot, 'kind'>,
+) {
+  const {data} = await bindChatSession(kind, sessionId).snapshot(paging)
+  if (!data || data.kind !== kind || !('messages' in data.history) || 'models' in data.history) {
+    throw new Error('Invalid trial history snapshot')
+  }
+  return {data: data.history.messages, meta: {cursor: data.cursor}}
+}
+
 /** Follow one admitted turn, resuming after the last event if the connection drops. */
 export async function waitForTurnEvent<T>(
   receipt: ChatTurnReceipt, select: (event: ChatEvent) => T | undefined | Promise<T | undefined>,

@@ -1,4 +1,4 @@
-import { mediaTurnReceipt, mediaAdmissionStream } from './text-trial-events.mjs'
+import { mediaTurnReceipt, mediaAdmissionStream, textTrialSnapshot } from './text-trial-events.mjs'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -74,15 +74,15 @@ try {
     if (url.pathname.endsWith('/experiment-sessions')) {
       return respond(sessions.filter(entry => entry.lab_type === url.searchParams.get('lab_type')))
     }
-    if (url.pathname.endsWith('/chat/sessions/text/text-history')) {
+    if (url.pathname.endsWith('/chat/sessions/text/text-history/snapshot')) {
       textHistoryReads++
       if (failTextHistory) return route.fulfill({ status: 503, json: { detail: '历史服务暂不可用' } })
-      return respond([item('text-answer', 'text-history', 'assistant', '历史回复', 2), item('text-prompt', 'text-history', 'user', '短提示词', 1)])
+      return textTrialSnapshot(route, [item('text-answer', 'text-history', 'assistant', '历史回复', 2), item('text-prompt', 'text-history', 'user', '短提示词', 1)])
     }
-    if (url.pathname.endsWith('/chat/sessions/text/text-long')) {
+    if (url.pathname.endsWith('/chat/sessions/text/text-long/snapshot')) {
       const earlier = url.searchParams.get('page') === '2'
       if (earlier && failEarlier) return route.fulfill({ status: 503, json: { detail: '更早消息暂不可用' } })
-      return respond(Array.from({ length: 50 }, (_, index) => {
+      return textTrialSnapshot(route, Array.from({ length: 50 }, (_, index) => {
         const sequence = (earlier ? 50 : 100) - index
         return item('long-' + sequence, 'text-long', 'assistant', `第 ${sequence} 条历史`, sequence)
       }))
