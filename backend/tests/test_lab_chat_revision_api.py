@@ -21,7 +21,8 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
     from app.task_worker import TaskWorker
 
     sid = (await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})).json()['data']['id']
-    url = '/api/v1/studio/chat/sessions/' + sid
+    compatibility_url = '/api/v1/studio/chat/sessions/' + sid
+    url = '/api/v1/studio/chat/sessions/chat/' + sid
     lab_url = '/api/v1/studio/chat/sessions/lab/' + sid
     originals = []
     async with canvas_client.canvas_sessions.begin() as db:
@@ -136,7 +137,8 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
             assert stopped.json()['data']['active_turn'] is None
             for path, body, saved in (('/turns', command, first), ('/turns/revision/answer', decision, response),
                                       ('/turns/revision/answer', second_decision, answer_two)):
-                assert (await canvas_client.post(url + path, json=body)).json() == saved.json()
+                for session_url in (url, compatibility_url):
+                    assert (await canvas_client.post(session_url + path, json=body)).json() == saved.json()
             assert (await canvas_client.post(endpoint, json={**second_decision, 'file_id': originals[1]})).status_code == 409
             assert len(model_calls) == 3
             assert len(responses) == 2

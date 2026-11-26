@@ -24,7 +24,7 @@ export function canvasPayload(event: ChatEvent) {
 
 /** Consume committed SSE records with the same authentication as generated requests. */
 async function* sessionEvents(
-  request: ReturnType<typeof ChatService.chatSessionEvents>, sessionId: string, after: number, signal: AbortSignal,
+  request: ReturnType<typeof ChatService.chatBoundEvents>, sessionId: string, after: number, signal: AbortSignal,
   connected?: () => void,
 ): AsyncGenerator<ChatEvent> {
   const cancel = () => request.cancel()
@@ -73,7 +73,7 @@ async function* sessionEvents(
 
 
 function receiveTurn(
-  request: ReturnType<typeof ChatService.chatSessionSend>, sessionId: string, turnId?: string,
+  request: ReturnType<typeof ChatService.chatBoundSend>, sessionId: string, turnId?: string,
 ): CancelablePromise<ChatTurnReceipt> {
   return new CancelablePromise((resolve, reject, onCancel) => {
     onCancel(() => request.cancel())
@@ -88,25 +88,13 @@ function receiveTurn(
 }
 
 export const chatClient = {
-  send(command: Parameters<typeof ChatService.chatSessionSend>[0]) {
-    return receiveTurn(ChatService.chatSessionSend(command), command.sessionId)
-  },
-  answer(command: Parameters<typeof ChatService.chatSessionAnswer>[0]) {
-    return receiveTurn(ChatService.chatSessionAnswer(command), command.sessionId, command.turnId)
-  },
-  events(sessionId: string, after = 0, signal = new AbortController().signal) {
-    return sessionEvents(ChatService.chatSessionEvents({sessionId, after}), sessionId, after, signal)
-  },
   canvasStopSnapshot: ChatService.chatCanvasStopSnapshot,
   canvasDecide: ChatService.chatCanvasDecide,
   canvasLayout: ChatService.chatCanvasLayout,
   canvasGeneration: ChatService.chatCanvasGeneration,
-  labSnapshot: ChatService.chatLabSnapshot,
   labModels: ChatService.chatLabModels,
   labStop: ChatService.chatLabStop,
-  textSnapshot: ChatService.chatTextSnapshot,
   textStop: ChatService.chatTextStop,
-  mediaSnapshot: ChatService.chatMediaSnapshot,
 }
 
 type BoundSend = Parameters<typeof ChatService.chatBoundSend>[0]
@@ -146,16 +134,15 @@ export async function readTrialHistory(
 }
 
 /** Follow one admitted turn, resuming after the last event if the connection drops. */
-export async function waitForTurnEvent<T>(
-  receipt: ChatTurnReceipt, select: (event: ChatEvent) => T | undefined | Promise<T | undefined>,
-  signal = new AbortController().signal,
-  events: ReturnType<typeof bindChatSession>['events'] = (after, abort) => chatClient.events(receipt.session_id, after, abort),
+async function waitForTurnEvent<T>(
+  session: ReturnType<typeof bindChatSession>, receipt: ChatTurnReceipt,
+  select: (event: ChatEvent) => T | undefined, signal: AbortSignal,
 ): Promise<T> {
   let cursor = receipt.cursor
   for (let attempt = 0; attempt < 3 && !signal.aborted; attempt++) {
     try {
-      for await (const event of events(cursor, signal)) {
-        const result = event.turn_id === receipt.turn_id ? await select(event) : undefined
+      for await (const event of session.events(cursor, signal)) {
+        const result = event.turn_id === receipt.turn_id ? select(event) : undefined
         if (signal.aborted) signal.throwIfAborted()
         cursor = event.cursor
         if (result !== undefined) return result
@@ -168,9 +155,9 @@ export async function waitForTurnEvent<T>(
 }
 
 export function waitForMediaAdmission(session: ReturnType<typeof bindChatSession>, receipt: ChatTurnReceipt) {
-  return waitForTurnEvent(receipt, event => {
+  return waitForTurnEvent(session, receipt, event => {
     if (event.category !== 'task' || event.type !== 'task.accepted') return
     const {task_id, messages} = event.payload
     return {task_id, messages: messages ?? []}
-  }, AbortSignal.timeout(8000), session.events)
+  }, AbortSignal.timeout(8000))
 }

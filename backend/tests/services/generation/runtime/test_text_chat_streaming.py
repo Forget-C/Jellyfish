@@ -195,6 +195,12 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
                                       headers={'Last-Event-ID': str(completed['cursor'] - 1)})
             assert 'event: message.updated' not in replay.text
             assert 'event: turn.completed' in replay.text and '第一段第二段' in replay.text
+            compatibility = '/api/v1/studio/chat/sessions/sse-replay'
+            compatibility_retry = await client.post(compatibility + '/turns', json=body, headers=headers)
+            assert compatibility_retry.json() == first.json()
+            compat_stream = await client.get(compatibility + '/events',
+                                             params={'follow': False, 'after': completed['cursor'] - 1})
+            assert compat_stream.text == replay.text
             # Historical rows written before the unified event log can still be retried.
             from sqlalchemy import delete
             from app.models.experiment_sessions import ExperimentSessionEvent

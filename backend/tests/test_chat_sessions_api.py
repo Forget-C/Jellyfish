@@ -11,6 +11,47 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
+@pytest.mark.parametrize(('kind', 'compatibility_kind', 'history_field'), [
+    ('canvas', 'canvas', 'turns'),
+    ('chat', 'lab', 'messages'),
+    ('text', 'text', 'messages'),
+    ('image', 'media', 'messages'),
+    ('video', 'media', 'messages'),
+])
+async def test_public_snapshots_bind_each_session_kind(canvas_client, kind, compatibility_kind, history_field):
+    base = '/api/v1/studio'
+    if kind == 'canvas':
+        created = await canvas_client.post(base + '/generation-canvases', json={'name': '统一交互会话'})
+    else:
+        created = await canvas_client.post(base + '/experiment-sessions', json={'lab_type': kind})
+    assert created.is_success, created.text
+    session_id = created.json()['data']['id']
+    sessions = base + '/chat/sessions'
+    bound = await canvas_client.get(f'{sessions}/{kind}/{session_id}/snapshot')
+    assert bound.status_code == 200, bound.text
+    snapshot = bound.json()['data']
+    assert (snapshot['kind'], snapshot['session_id'], snapshot['cursor']) == (kind, session_id, 0)
+    assert {'snapshot', 'send', 'events'}.issubset(snapshot['capabilities'])
+    assert snapshot['history'][history_field] == []
+
+    compatibility = await canvas_client.get(f'{sessions}/{compatibility_kind}/{session_id}')
+    assert compatibility.status_code == 200, compatibility.text
+    legacy = compatibility.json()
+    if isinstance(legacy['data'], list):
+        assert legacy['data'] == snapshot['history']['messages']
+        assert legacy['meta']['cursor'] == snapshot['cursor']
+    else:
+        assert legacy['data'] == snapshot['history']
+
+    other_kind = 'chat' if kind != 'chat' else 'text'
+    wrong = f'{sessions}/{other_kind}/{session_id}'
+    assert (await canvas_client.get(wrong + '/snapshot')).status_code == 404
+    assert (await canvas_client.get(wrong + '/events', params={'follow': False})).status_code == 404
+    assert (await canvas_client.post(wrong + '/turns', json={})).status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
 async def test_typed_lab_session_snapshot_bridges_admission_and_event_subscription(canvas_client, monkeypatch):
     import asyncio
     from app.models.llm import Model
@@ -62,7 +103,11 @@ async def test_typed_lab_session_snapshot_bridges_admission_and_event_subscripti
         release.set()
 
     await wait_for_chat_event(canvas_client, url, 'first', 'turn.completed')
-    stream = await canvas_client.get(url + '/events', params={'follow': False, 'after': snapshot['cursor']})
+    params = {'follow': False, 'after': snapshot['cursor']}
+    stream = await canvas_client.get(url + '/events', params=params)
+    compatibility_url = f'{session_base}/{sid}'
+    assert (await canvas_client.post(compatibility_url + '/turns', json=command)).json() == sent.json()
+    assert (await canvas_client.get(compatibility_url + '/events', params=params)).text == stream.text
     assert 'event: turn.accepted' not in stream.text
     assert 'event: turn.completed' in stream.text
     recovered = (await canvas_client.get(url + '/snapshot')).json()['data']
@@ -130,7 +175,11 @@ async def test_canvas_turn_can_be_replayed_through_session_events(canvas_client,
     assert set(receipt) == {'session_id', 'turn_id', 'cursor'}
     await wait_for_chat_event(canvas_client, url, command['request_id'], 'turn.completed')
     assert (await canvas_client.post(url + '/turns', json=command)).json()['data'] == result.json()['data']
-    stream = await canvas_client.get(url + '/events', params={'follow': 'false', 'after': receipt['cursor']})
+    params = {'follow': False, 'after': receipt['cursor']}
+    stream = await canvas_client.get(url + '/events', params=params)
+    compatibility_url = f"{base}/chat/sessions/{canvas['id']}"
+    assert (await canvas_client.post(compatibility_url + '/turns', json=command)).json() == result.json()
+    assert (await canvas_client.get(compatibility_url + '/events', params=params)).text == stream.text
     assert stream.headers['content-type'].startswith('text/event-stream')
     events = [json.loads(line[6:]) for line in stream.text.splitlines() if line.startswith('data: ')]
     assert events[0]['type'] == 'turn.accepted'
