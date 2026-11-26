@@ -32,10 +32,24 @@ try {
   let markBlocked
   const streamBlocked = new Promise(resolve => { markBlocked = resolve })
   let selected
-  await page.route('**/api/**', route => {
+  let exerciseRecovery = false
+  const repeated = []
+  let closeDuringSend = false
+  const unacknowledged = []
+  let uploadCalls = 0
+  let returnRetry
+  const retryReady = new Promise(resolve => { returnRetry = resolve })
+  let secondReply
+  const acknowledgeRetry = new Promise(resolve => { secondReply = resolve })
+  await page.route('**/api/**', async route => {
     const url = new URL(route.request().url())
+    if (url.pathname.endsWith('/files/upload')) {
+      uploadCalls++
+      return route.fulfill({json:{data:{id:'attachment', name:'参考.png', media_type:'image'}}})
+    }
     if (url.pathname.endsWith('/events')) {
       assert.equal(url.pathname, '/api/v1/studio/chat/sessions/chat/chat/events')
+      if (exerciseRecovery || closeDuringSend) return route.fulfill({contentType: 'text/event-stream', body: ': keep-alive\n\n'})
       if (exerciseStop && !failureFrames) {
         markBlocked()
         return blocked.then(() => route.fulfill({contentType: 'text/event-stream', body: failureFrames}))
@@ -65,6 +79,18 @@ try {
       assert.equal(url.pathname, '/api/v1/studio/chat/sessions/chat/chat/turns')
       const command = route.request().postDataJSON()
       requests.push(command.request_id)
+      if (closeDuringSend) {
+        unacknowledged.push(command)
+        // Simulate a server that has the request before the browser navigates.
+        return
+      }
+      if (exerciseRecovery) {
+        repeated.push(command)
+        if (repeated.length === 1) return route.abort('failed')
+        returnRetry()
+        await acknowledgeRetry
+        return route.fulfill({status: 202, json: {data: {...turnReceipt(route), cursor: cursor - 1}}})
+      }
       if (exerciseStop) {
         active = true
         activeId = command.request_id
@@ -99,7 +125,7 @@ try {
   await page.goto('http://127.0.0.1:4917/lab?session=chat')
   const stop = page.getByRole('button', {name: '停止回复'})
   await stop.waitFor()
-  assert.equal(await page.getByRole('textbox', {name: '聊天消息'}).isDisabled(), true)
+  assert.equal(await page.getByRole('button', {name:'发送', exact:true}).count(), 0)
   await page.reload()
   await stop.click()
   const composer = page.getByRole('textbox', {name: '聊天消息'})
@@ -162,6 +188,71 @@ try {
   await page.reload()
   await toolError.waitFor()
   await turnError.waitFor()
+
+  // When the command response is lost, a later edit cannot become its retry body.
+  exerciseRecovery = true
+  await page.reload()
+  await composer.fill('原始请求')
+  const picker = page.locator('input[type="file"]')
+  const reference = page.getByRole('button', {name:'参考.png ×', exact:true})
+  const upload = () => picker.setInputFiles({name:'参考.png', mimeType:'image/png', buffer:Buffer.from('test image')})
+  await upload()
+  await reference.waitFor()
+  await page.getByRole('button', {name:'发送', exact:true}).click()
+  await Promise.race([retryReady, new Promise((_, reject) => setTimeout(() => reject(Error('Missing safe retry')), 3500))])
+  await composer.fill('下一条草稿')
+  await composer.fill('原始请求')
+  await reference.click()
+  await upload()
+  await reference.waitFor()
+  assert.equal(uploadCalls, 2)
+  assert.deepEqual(repeated[1], repeated[0])
+  assert.deepEqual(repeated[0].file_ids, ['attachment'])
+  await composer.press('Enter')
+  assert.equal(repeated.length, 2)
+  savedFailure = [...savedFailure, {
+    id: 'recovered-reply', role: 'assistant', status: 'completed', sequence: 5,
+    content: '原始请求已完成', payload: {turn_id: repeated[0].request_id},
+  }]
+  cursor++
+  await page.getByText('原始请求已完成').waitFor()
+  const lateReceipt = page.waitForResponse(response => response.url().endsWith('/turns') && response.status() === 202)
+  secondReply()
+  await lateReceipt
+  assert.equal(await composer.inputValue(), '原始请求')
+  await reference.waitFor()
+  assert.equal(await page.getByRole('button', {name:'发送', exact:true}).isEnabled(), true)
+
+  exerciseRecovery = false
+  closeDuringSend = true
+  const newSend = () => page.getByRole('button', {name:'发送', exact:true}).click()
+  await composer.fill('关闭前已受理')
+  const delivered = page.waitForRequest(request => request.url().endsWith('/turns'))
+  await newSend()
+  await delivered
+  while (!unacknowledged.length) await new Promise(resolve => setTimeout(resolve, 10))
+  const stopCount = requests.length
+  savedFailure = [...savedFailure, {
+    id:'accepted-before-close', role:'user', sequence:6,
+    content:'关闭前已受理', payload:{turn_id:unacknowledged[0].request_id},
+  }]
+  activeId = unacknowledged[0].request_id
+  active = true
+  cursor++
+  await page.reload()
+  await page.getByText('关闭前已受理', {exact:true}).waitFor()
+  await stop.waitFor()
+  assert.equal(requests.length, stopCount)
+  active = false
+  cursor++
+  await page.reload()
+  await composer.fill('关闭前尚未受理')
+  const sent = page.waitForRequest(request => request.url().endsWith('/turns'))
+  await newSend()
+  await sent
+  await page.reload()
+  await page.getByText('关闭前已受理', {exact:true}).waitFor()
+  assert.equal(requests.length, stopCount + 1)
 } finally {
   await cleanup()
 }
