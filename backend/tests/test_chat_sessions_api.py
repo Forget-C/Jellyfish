@@ -11,6 +11,33 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
+async def test_session_events_can_open_with_one_database_connection(canvas_client, monkeypatch):
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from app.dependencies import get_db
+    from app.main import app
+
+    created = await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})
+    session_id = created.json()['data']['id']
+    engine = create_async_engine(canvas_client.canvas_sessions.kw['bind'].url,
+                                 pool_size=1, max_overflow=0, pool_timeout=1)
+    sessions = async_sessionmaker(engine)
+
+    async def database():
+        async with sessions() as db:
+            yield db
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setitem(app.dependency_overrides, get_db, database)
+            response = await canvas_client.get(f'/api/v1/studio/chat/sessions/{session_id}/events',
+                                               params={'follow': False})
+        assert response.status_code == 200 and response.text == ''
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
 async def test_canvas_turn_can_be_replayed_through_session_events(canvas_client, monkeypatch):
     async with canvas_client.canvas_sessions.begin() as db:
         (await db.get(Provider, 'canvas-provider')).api_key = 'local'

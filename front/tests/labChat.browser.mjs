@@ -22,10 +22,23 @@ try {
   let question
   const requests = []
   let failedTurn
+  let exerciseStop = false
+  let cursor = 1
+  let activeId = 'active'
+  let failureFrames = ''
+  let savedFailure = []
+  let releaseStream
+  const blocked = new Promise(resolve => { releaseStream = resolve })
+  let markBlocked
+  const streamBlocked = new Promise(resolve => { markBlocked = resolve })
   let selected
   await page.route('**/api/**', route => {
     const url = new URL(route.request().url())
     if (url.pathname.endsWith('/events')) {
+      if (exerciseStop && !failureFrames) {
+        markBlocked()
+        return blocked.then(() => route.fulfill({contentType: 'text/event-stream', body: failureFrames}))
+      }
       if (selected && Number(url.searchParams.get('after')) < 4) {
         const event = {category: 'turn', type: 'turn.completed', cursor: 4, session_id: existing.id,
           turn_id: 'active', payload: {text: '续答已完成', message: {
@@ -49,13 +62,18 @@ try {
     if (url.pathname.endsWith('/turns') && route.request().method() === 'POST') {
       const command = route.request().postDataJSON()
       requests.push(command.request_id)
+      if (exerciseStop) {
+        active = true
+        activeId = command.request_id
+        return route.fulfill({status: 202, json: {data: {...turnReceipt(route), cursor: cursor++}}})
+      }
       if (requests.length === 1) {
         failedTurn = command.request_id
         return route.fulfill({status:422,json:{message:'测试失败'}})
       }
     }
-    if (url.pathname.endsWith('/stop')) active = false
-    const snapshot = {question, session_id: existing.id, cursor: 1, models: {text: 'T', image: 'I'}, messages: failedTurn ? [{id:'failed', role:'assistant', content:'失败', status:'failed', payload:{turn_id:failedTurn}}] : [], capabilities: [], active_turn: active ? 'active' : null}
+    if (url.pathname.endsWith('/stop')) { active = false; if (exerciseStop) cursor++ }
+    const snapshot = {question, session_id: existing.id, cursor, models: {text: 'T', image: 'I'}, messages: savedFailure.length ? savedFailure : failedTurn ? [{id:'failed', role:'assistant', content:'失败', status:'failed', payload:{turn_id:failedTurn}}] : [], capabilities: [], active_turn: active ? activeId : null}
     const data = url.pathname.endsWith('/experiment-sessions') ? (hasHistory && url.searchParams.get('lab_type') === 'chat' ? [existing] : [])
       : url.pathname.endsWith('/turns') ? turnReceipt(route)
       : url.pathname.includes('/chat/sessions/lab/chat') ? snapshot
@@ -102,6 +120,43 @@ try {
   await page.getByRole('button', {name: /雨夜二/}).click()
   await page.getByText('续答已完成', {exact: true}).waitFor()
   assert.deepEqual(selected, {question_id: 'pick', file_id: 'v2'})
+
+  // Leave the session feed pending after admission. The stop snapshot alone must
+  // release the local composer and permit a new request on the same session.
+  exerciseStop = true
+  cursor = 5
+  await page.reload()
+  await streamBlocked
+  await composer.fill('挂起后停止')
+  await page.getByRole('button', {name:'发送', exact:true}).click()
+  await stop.click()
+  await composer.fill('停止后继续', {timeout: 2000})
+  const nextSend = page.waitForResponse(r => r.url().endsWith('/turns') && r.status() === 202)
+  await page.getByRole('button', {name:'发送', exact:true}).click()
+  await nextSend
+  assert.equal(requests.length, 4)
+  const toolMessage = {id: 'tool-error', role: 'assistant', status: 'failed', sequence: 3, content: '引用文件不可用',
+    payload: {tool_error: true, tool: 'generate_video', tool_call_id: 'video-1', turn_id: activeId}}
+  const turnMessage = {id: 'turn-error', role: 'assistant', status: 'failed', sequence: 4, content: '',
+    payload: {error_code: 'CHAT_VIDEO_MODEL_REQUIRED', turn_id: activeId}}
+  const frame = (category, type, payload) => {
+    const event = {session_id: existing.id, turn_id: activeId, cursor: ++cursor, category, type, payload}
+    return 'id: ' + cursor + '\nevent: ' + type + '\ndata: ' + JSON.stringify(event) + '\n\n'
+  }
+  failureFrames = frame('tool', 'tool.failed', {tool_call_id: 'video-1', tool: 'generate_video',
+    state: 'failed', error: toolMessage.content, message: toolMessage}) +
+    frame('turn', 'turn.failed', {text: '', error: 'CHAT_VIDEO_MODEL_REQUIRED', message: turnMessage})
+  active = false
+  releaseStream()
+  const toolError = page.getByText('generate_video · video-1 · 引用文件不可用', {exact:true})
+  const turnError = page.getByText('请先选择视频模型', {exact:true})
+  await toolError.waitFor()
+  await turnError.waitFor()
+  assert.equal(await composer.inputValue(), '停止后继续')
+  savedFailure = [toolMessage, turnMessage]
+  await page.reload()
+  await toolError.waitFor()
+  await turnError.waitFor()
 } finally {
   await cleanup()
 }

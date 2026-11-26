@@ -153,10 +153,14 @@ def observe_rejected_tool(media):
             model_id = {'generate_image': media.models.image, 'generate_video': media.models.video}.get(name)
             identity = {'tool_call_id': call['id'], 'tool': name, 'model_id': model_id, 'parameters': call.get('args', {})}
             await append_session_event(db, media.session_id, media.turn_id, 'tool.started', identity)
-            await append_session_event(db, media.session_id, media.turn_id, 'tool.failed', {**identity, 'error': detail})
-            await append_experiment_messages(db, session_id=media.session_id, drafts=[ExperimentMessageDraft(
+            messages = await append_experiment_messages(db, session_id=media.session_id, drafts=[ExperimentMessageDraft(
                 role='assistant', content=detail, status='failed',
                 payload={**identity, 'turn_id': media.turn_id, 'tool_error': True})])
+            await db.flush()
+            failed, = await read_experiment_messages(db, messages)
+            await append_session_event(db, media.session_id, media.turn_id, 'tool.failed', {
+                **identity, 'error': detail, 'message': failed.model_dump(mode='json'),
+            })
 
     @wrap_tool_call
     async def observe(request, handler):

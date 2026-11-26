@@ -368,14 +368,16 @@ class CanvasAssistant:
         await self.send(canvas_id, command, answer=answer, on_accepted=on_accepted)
 
     async def turn_replay_cursor(self, canvas_id: str, turn_id: str) -> int:
-        """Locate the latest attempt, or a synchronous preview submission."""
-        rows = await self.db.execute(select(CanvasAssistantEvent.cursor, CanvasAssistantEvent.kind).where(
-            CanvasAssistantEvent.canvas_id == canvas_id, CanvasAssistantEvent.source_id == turn_id,
-        ).order_by(CanvasAssistantEvent.cursor.desc()))
-        events = rows.all()
-        first = next((cursor for cursor, kind in events if kind == 'turn.accepted'),
-                     events[-1].cursor if events else 1)
-        return first - 1
+        """Replay the latest send attempt independently of follow-up answer admissions."""
+        turn_filter = (CanvasAssistantEvent.canvas_id == canvas_id, CanvasAssistantEvent.source_id == turn_id)
+        cursor = await self.db.scalar(select(func.max(CanvasAssistantEvent.cursor)).where(
+            *turn_filter, CanvasAssistantEvent.kind == 'turn.accepted',
+            CanvasAssistantEvent.payload[('question_answers', 0, 'question_id')].as_string().is_(None),
+        ))
+        if cursor is None:
+            # Synchronous preview submissions and imported turns may have only a terminal event.
+            cursor = await self.db.scalar(select(func.min(CanvasAssistantEvent.cursor)).where(*turn_filter))
+        return (cursor or 1) - 1
 
     async def _answer_acceptance_cursor(self, canvas_id, turn_id, answer) -> int | None:
         """Find the original admission even if the model was stopped or interrupted."""

@@ -477,6 +477,8 @@ async def test_creative_question_resumes_original_turn_and_replays_answer(canvas
         await asyncio.wait_for(resumed.wait(), 4)
         replay = await canvas_client.get(url + '/events', params={'after': receipt['cursor'], 'follow': False})
         assert 'event: turn.accepted' in replay.text and 'event: turn.completed' not in replay.text
+        original_retry = await canvas_client.post(url + '/turns', json={'request_id': 'same-turn', 'text': '设置场景情绪'})
+        assert original_retry.status_code == 202 and original_retry.json() == started.json()
         assert (await canvas_client.post(endpoint, json=body)).json() == accepted.json()
         if outcome == 'stopped':
             stop = await canvas_client.post(f"{base}/chat/sessions/canvas/{canvas['id']}/turns/same-turn/stop")

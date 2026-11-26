@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ExperimentMessageRead } from './ExperimentMessageRead';
 export type ToolUpdate = {
     tool_call_id: string;
     tool: string;
@@ -9,4 +10,5 @@ export type ToolUpdate = {
     parameters: Record<string, any>;
     model_id: (string | null);
     error: (string | null);
+    message?: (ExperimentMessageRead | null);
 };

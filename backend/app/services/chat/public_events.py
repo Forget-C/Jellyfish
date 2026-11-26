@@ -22,6 +22,8 @@ def public_event(event):
                    'state': kind.split('.')[1], 'model_id': source.get('model_id'),
                    'parameters': call.get('parameters') or source.get('parameters') or {},
                    'error': source.get('error') if isinstance(source.get('error'), str) else None}
+        if source.get('message'):
+            payload['message'] = source['message']
     elif kind in ('turn.accepted', 'turn.completed', 'turn.failed', 'turn.stopped'):
         category = 'turn'
         error = source.get('error')

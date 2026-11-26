@@ -8,7 +8,7 @@ import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
  *
  * 页面壳负责会话选择和布局；本组件只保留视频特有的帧输入、异步任务轮询和结果展示。
  */
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, InputNumber, Select, Tag, message } from 'antd'
 import {
@@ -165,7 +165,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   const { models, modelsLoading, modelsFailed, loadModels } = useExperimentModels('video', setSoleModel)
 
   /** 以请求代次关联当前模型，晚到的能力响应不能覆盖新选择。 */
-  const loadCapability = async (nextModelId?: string) => {
+  const loadCapability = useCallback(async (nextModelId?: string) => {
     const request = ++capabilityRequest.current
     setCapability(undefined)
     if (!nextModelId) {
@@ -182,7 +182,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     } catch {
       if (request === capabilityRequest.current) setCapabilityState('failed')
     }
-  }
+  }, [uiText])
 
   const selectModel = (nextModelId?: string) => {
     setModelId(nextModelId)
@@ -190,7 +190,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     setSeconds(undefined)
   }
 
-  useEffect(() => { void loadCapability(modelId) }, [modelId])
+  useEffect(() => { void loadCapability(modelId) }, [loadCapability, modelId])
 
   /** 先保证会话落库，再经固定统一入口创建视频任务，避免草稿态产生空会话。 */
   const submit = async () => {

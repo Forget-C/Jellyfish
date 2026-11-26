@@ -119,6 +119,7 @@ async def subscribe(session_id: str, db: Database, after: Annotated[int, Query(g
                     last_event_id: Annotated[int, Header(ge=0)] = 0, follow: bool = True):
     kind, project = await session_owner(db, session_id)
     sessions = async_sessionmaker(db.bind, expire_on_commit=False)
+    await db.rollback()  # Release the lookup connection before opening a page reader.
 
     async def read_page(cursor):
         async with sessions() as reader:

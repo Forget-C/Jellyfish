@@ -85,6 +85,8 @@ async def test_chat_admission_stop_and_independent_session(canvas_client, monkey
         await asyncio.wait_for(entered.wait(), 8)
         admitted = await asyncio.wait_for(asyncio.shield(active), 2)
         assert set(admitted.json()['data']) == {'session_id', 'turn_id', 'cursor'}
+        # A paused provider must leave the database pool available to SSE and stop requests.
+        assert canvas_client.canvas_sessions.kw['bind'].pool.checkedout() == 0
         stream = await canvas_client.get(first + '/events', params={
             'follow': False, 'after': admitted.json()['data']['cursor']})
         assert 'event: turn.accepted' in stream.text
@@ -204,6 +206,10 @@ async def test_chat_model_submits_requested_image_and_receives_task_receipt(canv
         failed, = [m for m in snapshot['messages'] if m['payload'].get('tool_error')]
         assert failed['content'] == 'Unknown image reference'
         assert failed['payload']['tool_call_id'] == 'rain-one'
+        failure, = [event for event in tool_events if event['type'] == 'tool.failed']
+        assert failure['payload']['message'] == failed
+        started, = [event for event in tool_events if event['type'] == 'tool.started']
+        assert 'message' not in started['payload']
         return
     if action != 'submit':
         async with asyncio.timeout(8):
@@ -336,6 +342,8 @@ async def test_chat_video_uses_attached_first_frame(canvas_client, monkeypatch, 
         assert response.status_code == 202, response.text
         event = await wait_for_chat_event(canvas_client, url, 'film', 'turn.failed')
         assert event['payload']['error_code'] == 'ASSISTANT_MODEL_INPUT_UNSUPPORTED'
+        snapshot = (await canvas_client.get(lab_url)).json()['data']
+        assert snapshot['messages'][-1]['payload']['error_code'] == event['payload']['error_code']
         return
     sending = asyncio.create_task(canvas_client.post(url + '/turns', json=body))
     async with asyncio.timeout(8):

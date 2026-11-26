@@ -28,6 +28,7 @@ class ToolUpdate(BaseModel):
     parameters: dict
     model_id: str | None
     error: str | None
+    message: ExperimentMessageRead | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class TurnUpdate(BaseModel):

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Suggestion } from '@ant-design/x'
 import { Alert, Button, Input, Upload } from 'antd'
 import { WorkbenchConversation } from '../../../../components/workbench/WorkbenchConversation'
-import { applyReply, chatClient, waitForTurnEvent } from '../../../../services/chatSession'
-import { ApiError, FilmService, LlmService, type ChatEvent, type ExperimentMessageRead, type ExperimentSessionRead, type LabChatSnapshot, type LabModels, type FileRead } from '../../../../services/generated'
+import { applyReply, chatClient } from '../../../../services/chatSession'
+import { ApiError, FilmService, LlmService, type ChatEvent, type ChatTurnReceipt, type ExperimentMessageRead, type ExperimentSessionRead, type LabChatSnapshot, type LabModels, type FileRead } from '../../../../services/generated'
 import { useUiText } from '../../../../uiText'
 import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
 import { MediaTaskDetails } from '../components/MediaTaskDetails'
@@ -45,6 +45,7 @@ function mergeMessages(previous: ExperimentMessageRead[], updates: ExperimentMes
 }
 
 function applyChatEvent(snapshot: LabChatSnapshot, event: ChatEvent): LabChatSnapshot {
+  if (event.cursor <= snapshot.cursor) return snapshot
   const next = {...snapshot, cursor: event.cursor}
   if (event.category === 'message') {
     next.partial_reply = applyReply(snapshot.partial_reply ?? '', event.payload)
@@ -53,6 +54,8 @@ function applyChatEvent(snapshot: LabChatSnapshot, event: ChatEvent): LabChatSna
     next.partial_reply = ''
     next.question = null
     if (event.payload.message) next.messages = mergeMessages(snapshot.messages, [event.payload.message])
+  } else if (event.category === 'tool' && event.payload.message) {
+    next.messages = mergeMessages(snapshot.messages, [event.payload.message])
   } else if (event.category === 'task') {
     const {messages, ...receipt} = event.payload
     next.messages = mergeMessages(snapshot.messages, messages ?? []).map(message =>
@@ -74,20 +77,21 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
   const [text, setText] = useState('')
   const [files, setFiles] = useState<FileRead[]>([])
   const [error, setError] = useState('')
-  const [sending, setSending] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [admission, setAdmission] = useState<ChatTurnReceipt>()
   const [saving, setSaving] = useState(false)
   const inFlight = useRef(false)
   const pending = useRef<{ key: string; id: string }>()
   const initialized = useRef(false)
   const upload = useExperimentReferenceUpload<string>(() => {}, uiText('上传失败'))
-  const report = (failure: unknown) => {
-    const detail = failure instanceof ApiError ? failure.body?.message : undefined
-    setError(detail === 'ASSISTANT_MODEL_INPUT_UNSUPPORTED' ? uiText('主聊天模型无法理解此素材，请更换模型后发送') :
+  const errorText = useCallback((detail?: string) => detail === 'ASSISTANT_MODEL_INPUT_UNSUPPORTED' ? uiText('主聊天模型无法理解此素材，请更换模型后发送') :
       detail === 'CHAT_TOOL_MODEL_REQUIRED' ? uiText('请选择支持工具调用的主聊天模型') :
       detail === 'CHAT_IMAGE_MODEL_REQUIRED' ? uiText('请先选择图片模型') :
       detail === 'CHAT_VIDEO_MODEL_REQUIRED' ? uiText('请先选择视频模型') :
-      detail || (failure instanceof Error ? failure.message : uiText('请求失败')))
-  }
+      detail || uiText('请求失败'), [uiText])
+  const report = useCallback((failure: unknown) => {
+    setError(errorText(failure instanceof ApiError ? failure.body?.message : failure instanceof Error ? failure.message : undefined))
+  }, [errorText])
 
   useEffect(() => {
     let current = true
@@ -98,7 +102,10 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     }
     void load().catch(e => { if (current) report(e) })
     return () => { current = false }
-  }, [])
+  }, [report])
+
+  const restore = (data: LabChatSnapshot) => setSnapshot(previous =>
+    previous?.session_id === data.session_id && previous.cursor > data.cursor ? previous : data)
 
   useEffect(() => {
     if (!sessionId) return
@@ -109,7 +116,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
         const data = (await chatClient.labSnapshot({ sessionId })).data
         if (!data || abort.signal.aborted) return
         cursor = data.cursor
-        setSnapshot(data)
+        restore(data)
         if (!initialized.current) { initialized.current = true; setModels(data.models) }
       }
       while (!abort.signal.aborted) {
@@ -129,8 +136,23 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     }
     void watch()
     return () => abort.abort()
-  }, [sessionId])
+  }, [report, sessionId])
 
+  // HTTP acknowledges the command. The session subscription or a newer snapshot
+  // releases its composer once that same turn finishes or asks for input.
+  useEffect(() => {
+    if (!admission || !snapshot || snapshot.session_id !== admission.session_id || snapshot.cursor <= admission.cursor) return
+    if (snapshot.active_turn === admission.turn_id && !snapshot.question) return
+    if (pending.current?.id === admission.turn_id) {
+      const failed = snapshot.messages.some(row => row.payload?.turn_id === admission.turn_id &&
+        row.status === 'failed' && !row.payload.tool_error)
+      if (!failed) { setText(''); setFiles([]) }
+      pending.current = undefined
+    }
+    setAdmission(undefined)
+  }, [snapshot, admission])
+
+  const sending = submitting || Boolean(admission)
   useExperimentLeaveStatus(!sending && Boolean(text.trim() || files.length))
 
   const selectModel = async (kind: ModelKind, value: string) => {
@@ -148,7 +170,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
   const send = async () => {
     if (!text.trim() || busy || inFlight.current) return
     inFlight.current = true
-    setSending(true)
+    setSubmitting(true)
     setError('')
     const fileIds = files.map(file => file.id)
     const key = JSON.stringify([text, fileIds, models])
@@ -161,49 +183,43 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
       const receipt = await chatClient.send({ sessionId: session.id, requestBody: {
         request_id: pending.current.id, text, file_ids: fileIds,
       } })
-      const event = await waitForTurnEvent(receipt, event => {
-        if (['turn.completed', 'turn.failed', 'turn.stopped', 'question.asked'].includes(event.type)) return event
-      })
-      if (event.type === 'turn.failed') {
-        pending.current = undefined
-        setError(uiText('生成失败'))
-        return
-      }
-      setText('')
-      setFiles([])
-      pending.current = undefined
+      setAdmission(receipt)
     } catch (e) {
       report(e)
       if (acceptedSession && pending.current) {
         const id = pending.current.id
         const recovered = await chatClient.labSnapshot({sessionId: acceptedSession}).catch(() => undefined)
         if (recovered?.data) {
-          setSnapshot(recovered.data)
+          restore(recovered.data)
           if (recovered.data.messages?.some(row => row.status === 'failed' && !row.payload?.tool_error && row.payload?.turn_id === id)) pending.current = undefined
         }
       }
-    } finally { inFlight.current = false; setSending(false) }
+    } finally { inFlight.current = false; setSubmitting(false) }
   }
+  const stoppableTurn = snapshot?.active_turn ?? admission?.turn_id
   const stop = async () => {
-    if (!sessionId || !snapshot?.active_turn) return
+    if (!sessionId || !stoppableTurn) return
     try {
-      const response = await chatClient.labStop({sessionId, turnId: snapshot.active_turn})
-      if (response.data) setSnapshot(response.data)
+      const response = await chatClient.labStop({sessionId, turnId: stoppableTurn})
+      if (response.data) restore(response.data)
     } catch (e) { report(e) }
   }
   const question = snapshot?.question
   const answer = async (fileId: string) => {
     if (!sessionId || !snapshot?.active_turn || !question || inFlight.current) return
     inFlight.current = true
-    setSending(true)
+    setSubmitting(true)
     try {
       const receipt = await chatClient.answer({sessionId, turnId: snapshot.active_turn,
         requestBody: {question_id: question.id, file_id: fileId}})
-      const event = await waitForTurnEvent(receipt, event => {
-        if (['turn.completed', 'turn.failed', 'turn.stopped', 'question.asked'].includes(event.type)) return event
-      })
-      if (event.type === 'turn.failed') setError(uiText('生成失败'))
-    } catch (e) { report(e) } finally { inFlight.current = false; setSending(false) }
+      setAdmission(receipt)
+    } catch (e) { report(e) } finally { inFlight.current = false; setSubmitting(false) }
+  }
+  const messageText = (row: ExperimentMessageRead) => {
+    if (row.payload?.tool_error) return [row.payload.tool, row.payload.tool_call_id, row.content].join(' · ')
+    if (row.status !== 'failed') return row.content || ''
+    const reason = row.payload?.error_code ? errorText(row.payload.error_code) : uiText('生成失败')
+    return [row.content, reason].filter(Boolean).join('\n')
   }
   const items = (snapshot?.messages ?? []).map(row => ({
     ...(row.media_receipt ? { contentRender: () => {
@@ -220,7 +236,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
           }).catch(report)}>{uiText('取消生成')}</Button>}
       </>
     }} : {}),
-    key: row.id, role: row.role, content: row.payload?.tool_error ? [row.payload.tool, row.payload.tool_call_id, row.content].join(' · ') : row.content || (row.status === 'failed' ? uiText('生成失败') : ''), placement: row.role === 'user' ? 'end' as const : 'start' as const,
+    key: row.id, role: row.role, content: messageText(row), placement: row.role === 'user' ? 'end' as const : 'start' as const,
   }))
   if (question) items.push({key: 'question-' + question.id, role: 'assistant', placement: 'start', content: '',
     contentRender: () => <section aria-label={uiText('选择要修订的产物')}>
@@ -234,7 +250,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     composer: <ExperimentComposer options={modelSelect('text')} onSubmit={() => void send()}
       submitting={sending} submitDisabled={busy || !text.trim() || saving || upload.uploading}
       contextActions={<details><summary>{uiText('模态配置')}</summary>{modelSelect('image')} {modelSelect('video')}</details>}
-      secondaryAction={snapshot?.active_turn && <Button onClick={() => void stop()}>{uiText('停止回复')}</Button>}
+      secondaryAction={stoppableTurn && <Button onClick={() => void stop()}>{uiText('停止回复')}</Button>}
       feedback={(error || upload.uploadError) && <Alert type="error" message={error || upload.uploadError?.message} />}>
       <Suggestion block items={['/imagegen', '/videogen'].map(value => ({ label: value, value }))} onSelect={value => setText(value + ' ')}>
         {({ onTrigger, onKeyDown, open }) => <Input.TextArea aria-label={uiText('聊天消息')} disabled={busy} value={text}

@@ -150,8 +150,11 @@ async def finish(db, session_id, turn_id, status, text='', owner=None, error_cod
     released = await db.execute(update(ExperimentSession).where(*matching).values(
         active_turn=None, chat_execution=None, chat_lease_until=None))
     if released.rowcount:
+        message_payload = {'turn_id': turn_id}
+        if error_code:
+            message_payload['error_code'] = error_code
         messages = await append_experiment_messages(db, session_id=session_id, drafts=[
-            ExperimentMessageDraft(role='assistant', content=text, status=status, payload={'turn_id': turn_id})])
+            ExperimentMessageDraft(role='assistant', content=text, status=status, payload=message_payload)])
         await db.flush()
         reply, = await read_experiment_messages(db, messages)
         payload = {'text': text, 'assistant_message': reply.model_dump(mode='json')}
@@ -222,7 +225,8 @@ async def send(db, session_id, body, *, recovering=None, on_accepted=None):
     try:
         conversation = [(HumanMessage if m.role == 'user' else AIMessage)(content=m.content)
                         for m in history if m.role in ('user', 'assistant') and m.content]
-        artifacts = await historical_artifacts(db, session_id, body.request_id)
+        async with sessions() as reader:
+            artifacts = await historical_artifacts(reader, session_id, body.request_id)
         if artifacts:
             catalog = json.dumps([a.model_dump() for a in artifacts], ensure_ascii=False)
             conversation.append(HumanMessage(content='本会话此前归档的产物（仅元数据）：' + catalog))
