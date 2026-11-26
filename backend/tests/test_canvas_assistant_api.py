@@ -323,6 +323,13 @@ async def test_resending_interrupted_assistant_turn_returns_original_receipt(can
     assert refreshed['pending_request'] is None
     assert [(turn['request_id']) for turn in refreshed['turns']] == ['resume-turn', 'new-turn', 'another-turn']
     assert '模型未能完成回复' in refreshed['turns'][0]['reply']
+    assert refreshed['turns'][0]['error_code'] == outcome.event['detail']['error_code']
+    replay = await canvas_client.get(url + '/events', params={'after': outcome.receipt.json()['data']['cursor'], 'follow': False})
+    events = [json.loads(line[6:]) for line in replay.text.splitlines() if line.startswith('data: ')]
+    original_events = [event for event in events if event['turn_id'] == command['request_id']]
+    assert original_events[-2]['type'] == 'turn.interrupted'
+    assert original_events[-1]['type'] == 'turn.archived'
+    assert original_events[-1]['detail']['error_code'] == refreshed['turns'][0]['error_code']
     assert calls == [False, True, False, True, False, True]
     assert (await canvas_client.post(url + '/turns', json=command)).json() == outcome.receipt.json()
     assert calls == [False, True, False, True, False, True]

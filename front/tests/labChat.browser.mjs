@@ -32,6 +32,7 @@ try {
   let markBlocked
   const streamBlocked = new Promise(resolve => { markBlocked = resolve })
   let selected
+  let replayAnsweredQuestion = false
   let exerciseRecovery = false
   const repeated = []
   let closeDuringSend = false
@@ -53,6 +54,20 @@ try {
       if (exerciseStop && !failureFrames) {
         markBlocked()
         return blocked.then(() => route.fulfill({contentType: 'text/event-stream', body: failureFrames}))
+      }
+      if (replayAnsweredQuestion) {
+        replayAnsweredQuestion = false
+        const askedAt = cursor + 1
+        const event = {category: 'scene', type: 'question.asked', cursor: askedAt, session_id: existing.id,
+          turn_id: activeId, payload: null, detail: {id:'obsolete', options:[
+            {file_id:'past', name:'已回答的选择', prompt:'前进', sequence:1, ordinal:0},
+          ]}}
+        cursor = askedAt + 2
+        active = false
+        savedFailure = [{id:'replay-terminal', role:'assistant', content:'跨标签页回答已恢复', sequence:3,
+          status:'completed', payload:{turn_id:activeId}}]
+        return route.fulfill({contentType:'text/event-stream',
+          body:'id: ' + askedAt + '\nevent: question.asked\ndata: ' + JSON.stringify(event) + '\n\n'})
       }
       if (selected && Number(url.searchParams.get('after')) < 4) {
         const event = {category: 'turn', type: 'turn.completed', cursor: 4, session_id: existing.id,
@@ -152,10 +167,27 @@ try {
   await page.getByText('续答已完成', {exact: true}).waitFor()
   assert.deepEqual(selected, {question_id: 'pick', file_id: 'v2'})
 
+  // Another page answers after the first snapshot, before this feed catches up.
+  await page.addInitScript(() => {
+    window.staleLabQuestionShown = false
+    new MutationObserver(() => {
+      if ([...document.querySelectorAll('button')].some(button => button.textContent?.includes('已回答的选择'))) {
+        window.staleLabQuestionShown = true
+      }
+    }).observe(document, {childList: true, subtree: true, characterData: true})
+  })
+  active = true
+  cursor = 4
+  replayAnsweredQuestion = true
+  await page.reload()
+  await page.getByText('跨标签页回答已恢复', {exact:true}).waitFor()
+  assert.equal(await page.evaluate(() => window.staleLabQuestionShown), false)
+  savedFailure = []
+
   // Leave the session feed pending after admission. The stop snapshot alone must
   // release the local composer and permit a new request on the same session.
   exerciseStop = true
-  cursor = 5
+  cursor++
   await page.reload()
   await streamBlocked
   await composer.fill('挂起后停止')

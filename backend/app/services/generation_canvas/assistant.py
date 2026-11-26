@@ -137,16 +137,25 @@ class CanvasAssistant:
         self.db = db
         self.store = CanvasStore(db, project_id)
 
-    async def _turns(self, canvas_id: str) -> list[CanvasAssistantTurn]:
+    async def _turns(self, canvas_id: str, *, refresh: bool = False) -> list[CanvasAssistantTurn]:
         return list(await self.db.scalars(select(CanvasAssistantTurn).where(
             CanvasAssistantTurn.canvas_id == canvas_id,
-        ).order_by(CanvasAssistantTurn.sequence)))
+        ).order_by(CanvasAssistantTurn.sequence).execution_options(populate_existing=refresh)))
 
     async def history(self, canvas_id: str) -> CanvasAssistantHistory:
         """Read the current conversation without initializing a model or session."""
         await self.store.get(canvas_id)
-        session = await self.db.get(CanvasAssistantSession, canvas_id)
-        turns = await self._turns(canvas_id)
+        cursor_query = select(CanvasAssistantSession.event_cursor).where(CanvasAssistantSession.canvas_id == canvas_id)
+        for _ in range(4):
+            session = await self.db.get(CanvasAssistantSession, canvas_id, populate_existing=True)
+            snapshot = await self._history_at(canvas_id, session)
+            # A commit during projection could mix the old cursor with new turns.
+            if snapshot.cursor == (await self.db.scalar(cursor_query) or 0):
+                return snapshot
+        raise HTTPException(503, 'Canvas conversation changed while reading its snapshot')
+
+    async def _history_at(self, canvas_id: str, session: CanvasAssistantSession | None) -> CanvasAssistantHistory:
+        turns = await self._turns(canvas_id, refresh=True)
         pending = session.pending_request['command'] if session and session.pending_request else None
         if pending and any(turn.request_id == pending['request_id'] for turn in turns):
             pending = None
@@ -207,12 +216,15 @@ class CanvasAssistant:
     async def _exchange(self, turn: CanvasAssistantTurn, approval_mode='manual') -> CanvasAssistantExchange:
         exchange = CanvasAssistantExchange.model_validate(turn)
         calls = {}
-        for payload in await self.db.scalars(select(CanvasAssistantEvent.payload).where(
+        for kind, payload in (await self.db.execute(select(CanvasAssistantEvent.kind, CanvasAssistantEvent.payload).where(
             CanvasAssistantEvent.canvas_id == turn.canvas_id, CanvasAssistantEvent.source_id == turn.request_id,
-            CanvasAssistantEvent.kind.in_(('tool.started', 'tool.failed', 'tool.completed')),
-        ).order_by(CanvasAssistantEvent.cursor)):
-            call = ChatToolCall.model_validate(payload['progress']['tool_call'])
-            calls[call.id] = call
+            CanvasAssistantEvent.kind.in_(('tool.started', 'tool.failed', 'tool.completed', 'turn.archived')),
+        ).order_by(CanvasAssistantEvent.cursor))).all():
+            if kind == 'turn.archived':
+                exchange.error_code = payload.get('error_code')
+            else:
+                call = ChatToolCall.model_validate(payload['progress']['tool_call'])
+                calls[call.id] = call
         exchange.tool_calls = list(calls.values())
         exchange.generation = await read_generation(self.db, turn.canvas_id, turn.request_id)
         if approval_mode == 'automatic' and not (exchange.instructions or exchange.canvas_references) and exchange.proposal and exchange.proposal.state == 'pending':
@@ -803,7 +815,9 @@ class CanvasAssistant:
         )
         self.db.add(turn)
         await self.db.flush()
-        publish_events(self.db, session, await self._exchange(turn), 'turn.completed')
+        exchange = await self._exchange(turn)
+        exchange.error_code = pending.get('error_code')
+        publish_events(self.db, session, exchange, 'turn.archived')
         await complete_queued_turn(self.db, session, turn.request_id)
 
     async def _interrupt_reply(self, canvas_id, command, token, model_id, error):

@@ -2,12 +2,12 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import SkipValidation, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.core.contracts.generation import GenerationSubmitRequest, GenerationModality
+from app.core.contracts.generation import GenerationSubmitRequest
 from app.dependencies import get_db
 from app.models.experiment_sessions import ExperimentSession
 from app.models.generation_canvas import GenerationCanvas
@@ -17,13 +17,12 @@ from app.schemas.common import ApiResponse, success_response
 from app.schemas.interaction import InteractionRequestHeader
 from app.schemas.studio.lab_chat import ArtifactAnswer, LabChatCommand
 from app.schemas.studio.text_lab import TextLabRunRequest
-from app.services.chat import laboratory
-from app.services.chat.admission import admit_turn
+from app.services.chat import commands, laboratory
 from app.services.chat.stream import session_event_stream
 from app.services.generation_canvas.assistant import CanvasAssistant
 from app.services.studio import text_trials
-from app.services.studio.media_trials import media_event_page, media_snapshot, submit_media_trial
-from app.services.studio.session_events import session_event_page, turn_replay_cursor
+from app.services.studio.media_trials import media_event_page, media_snapshot
+from app.services.studio.session_events import session_event_page
 
 router = APIRouter()
 Database = Annotated[AsyncSession, Depends(get_db, scope='function')]
@@ -68,36 +67,15 @@ async def send_turn(session_id: str, body: Command, db: Database,
 
 
 async def _send_turn(session_id, body, db, idempotency_key, owner):
-    kind, project = owner
-    if kind == 'canvas':
-        if isinstance(body, dict) and 'turns' in body:
-            raise HTTPException(409, 'The draft has already been saved')
-        command = command_for(CanvasAssistantMessage, body)
-        turn_id = command.request_id
-        await db.rollback()
-        cursor = await admit_turn(db.bind, lambda worker_db, accept: CanvasAssistant(worker_db, project or '').send(
-            session_id, command, on_accepted=accept))
-        if cursor is None:
-            cursor = await CanvasAssistant(db, project or '').turn_replay_cursor(session_id, turn_id)
-    elif kind == 'chat':
-        command = command_for(LabChatCommand, body)
-        turn_id = command.request_id
-        await db.rollback()
-        await admit_turn(db.bind, lambda worker_db, accept: laboratory.send(
-            worker_db, session_id, command, on_accepted=accept))
-        cursor = await turn_replay_cursor(db, session_id, turn_id)
-    elif kind == 'text':
-        if not idempotency_key:
-            raise HTTPException(422, 'Idempotency-Key required')
-        accepted = await text_trials.send(db, session_id, command_for(TextLabRunRequest, body), idempotency_key)
-        turn_id, cursor = accepted.turn_id, accepted.cursor
-    else:
-        command = command_for(GenerationSubmitRequest, body)
-        result = await submit_media_trial(db, session_id, GenerationModality(kind), command, idempotency_key)
-        turn_id = idempotency_key or result.messages[-1].id
-        cursor = await turn_replay_cursor(db, session_id, turn_id)
-    return success_response(ChatTurnReceipt(session_id=session_id, turn_id=turn_id, cursor=cursor),
-                            code=202)
+    kind, _ = owner
+    if kind == 'canvas' and isinstance(body, dict) and 'turns' in body:
+        raise HTTPException(409, 'The draft has already been saved')
+    if kind == 'text' and not idempotency_key:
+        raise HTTPException(422, 'Idempotency-Key required')
+    schemas = {'canvas': CanvasAssistantMessage, 'chat': LabChatCommand, 'text': TextLabRunRequest}
+    command = command_for(schemas.get(kind, GenerationSubmitRequest), body)
+    receipt = await commands.send(db, session_id, owner, command, idempotency_key)
+    return success_response(receipt, code=202)
 
 
 @router.post('/{session_id}/turns/{turn_id}/answer', operation_id='chat_session_answer',
@@ -109,21 +87,12 @@ async def answer_turn(session_id: str, turn_id: str, body: Answer, db: Database)
 
 
 async def _answer_turn(session_id, turn_id, body, db, owner):
-    kind, project = owner
-    await db.rollback()
-    if kind == 'canvas':
-        command = command_for(CanvasAssistantQuestionAnswer, body)
-        cursor = await admit_turn(db.bind, lambda worker_db, accept: CanvasAssistant(worker_db, project or '').answer(
-            session_id, turn_id, command, on_accepted=accept))
-        if cursor is None:
-            cursor = await CanvasAssistant(db, project or '').answer_replay_cursor(session_id, turn_id, command)
-    elif kind == 'chat':
-        command = command_for(ArtifactAnswer, body)
-        cursor = await admit_turn(db.bind, lambda worker_db, accept: laboratory.answer_turn(
-            worker_db, session_id, turn_id, command, on_accepted=accept))
-    else:
+    kind, _ = owner
+    schema = {'canvas': CanvasAssistantQuestionAnswer, 'chat': ArtifactAnswer}.get(kind)
+    if schema is None:
         raise HTTPException(404, 'Chat session does not accept answers')
-    return success_response(ChatTurnReceipt(session_id=session_id, turn_id=turn_id, cursor=cursor), code=202)
+    receipt = await commands.answer(db, session_id, turn_id, owner, command_for(schema, body))
+    return success_response(receipt, code=202)
 
 
 EVENT_RESPONSES = {200: {'content': {'text/event-stream': {'itemSchema': {
@@ -187,10 +156,11 @@ async def subscribe_bound(kind: ChatSessionKind, session_id: str, db: Database,
 
 @router.get('/{kind}/{session_id}/snapshot', operation_id='chat_bound_snapshot',
             response_model=ApiResponse[ChatSessionSnapshot])
-async def bound_snapshot(kind: ChatSessionKind, session_id: str, db: Database,
+async def bound_snapshot(kind: ChatSessionKind, session_id: str, db: Database, response: Response,
                          page: Annotated[int, Query(ge=1)] = 1,
                          page_size: Annotated[int, Query(ge=1, le=100)] = 50):
     """Return the public checkpoint and history for the bound session."""
+    response.headers['Cache-Control'] = 'no-store'
     _, project = await typed_session_owner(db, kind, session_id)
     if kind in ('text', 'image', 'video'):
         read_snapshot = text_trials.snapshot if kind == 'text' else media_snapshot

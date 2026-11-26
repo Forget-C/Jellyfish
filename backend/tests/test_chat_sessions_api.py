@@ -11,6 +11,63 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
+async def test_canvas_snapshot_projects_history_at_its_committed_cursor(canvas_client, monkeypatch):
+    import asyncio
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from app.models.canvas_assistant import CanvasAssistantSession
+
+    async with canvas_client.canvas_sessions.begin() as db:
+        (await db.get(Provider, 'canvas-provider')).api_key = 'local'
+        db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
+
+    provider_ready, release_provider = asyncio.Event(), asyncio.Event()
+    snapshot_read, project_history = asyncio.Event(), asyncio.Event()
+    send = httpx.AsyncClient.send
+    read = AsyncSession.get
+    reading = None
+
+    async def respond(client, request, **kwargs):
+        if request.url.host != 'example.test':
+            return await send(client, request, **kwargs)
+        provider_ready.set()
+        await release_provider.wait()
+        return httpx.Response(200, request=request, json={'choices': [{
+            'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': '竞态中的回复'},
+        }]})
+
+    async def read_session(session, entity, identity, **kwargs):
+        result = await read(session, entity, identity, **kwargs)
+        if entity is CanvasAssistantSession and asyncio.current_task() is reading and not snapshot_read.is_set():
+            snapshot_read.set()
+            await project_history.wait()
+        return result
+
+    monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
+    monkeypatch.setattr(AsyncSession, 'get', read_session)
+    base = '/api/v1/studio'
+    created = await canvas_client.post(base + '/generation-canvases', json={'name': '快照一致性'})
+    url = f"{base}/chat/sessions/canvas/{created.json()['data']['id']}"
+    receipt = await canvas_client.post(url + '/turns', json={'request_id': 'first', 'text': '你好'})
+    assert receipt.status_code == 202, receipt.text
+    await asyncio.wait_for(provider_ready.wait(), 5)
+    reading = asyncio.create_task(canvas_client.get(url + '/snapshot'))
+    try:
+        await asyncio.wait_for(snapshot_read.wait(), 5)
+        release_provider.set()
+        completed = await wait_for_chat_event(canvas_client, url, 'first', 'turn.completed')
+    finally:
+        project_history.set()
+        release_provider.set()
+
+    snapshot = (await asyncio.wait_for(reading, 5)).json()['data']
+    assert snapshot['history']['turns'][0]['reply'] == '竞态中的回复'
+    assert snapshot['cursor'] == completed['cursor']
+    assert not (await canvas_client.get(url + '/events',
+        params={'after': snapshot['cursor'], 'follow': False})).text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
 @pytest.mark.parametrize(('kind', 'compatibility_kind', 'history_field'), [
     ('canvas', 'canvas', 'turns'),
     ('chat', 'lab', 'messages'),
