@@ -103,7 +103,6 @@ try {
     if (/\/chat\/sessions\/text\/[^/]+\/snapshot$/.test(url.pathname)) return textTrialSnapshot(route, persisted.get(url.pathname.split('/').at(-2)) ?? [])
     if (url.pathname.endsWith('/chat/sessions/image/image-1/snapshot') && imageLookupPending) prematureImageMessages.push(url.pathname)
     if (/\/chat\/sessions\/(image|video)\/[^/]+\/snapshot$/.test(url.pathname)) return respond(boundTrialSnapshot(url, persisted.get(url.pathname.split('/').at(-2)) ?? []))
-    if (url.pathname.endsWith('/messages')) return respond(persisted.get(url.pathname.split('/').at(-2)) ?? [])
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])
   })

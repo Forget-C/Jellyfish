@@ -9,7 +9,7 @@ import pytest
 from app.models.llm import Model, ModelSettings
 from app.task_worker import TaskWorker
 from tests.test_generation_canvas_runs import runtime  # pylint: disable=unused-import
-from tests.chat_events import observe_canvas_turn, read_canvas_chat_snapshot
+from tests.chat_events import canvas_chat_url, observe_canvas_turn, read_canvas_chat_snapshot
 from tests.test_generation_canvas_images import image_storage  # pylint: disable=unused-import
 from tests.isolated_mysql import isolated_storage_environment
 from tests.test_canvas_assistant_edit_api import _live_mysql_app
@@ -54,7 +54,7 @@ async def test_stop_keeps_accepted_run_across_worker_restart(runtime, monkeypatc
     endpoint, _, query = runtime.url.partition('?')
     suffix = '?' + query if query else ''
     assistant = endpoint + '/assistant' + suffix
-    stop = endpoint + '/assistant/turns/review-one/stop' + suffix
+    stop = canvas_chat_url(assistant) + '/turns/review-one/stop/snapshot' + suffix
     runs = endpoint + '/runtime' + suffix
     sent = await observe_canvas_turn(runtime.client, assistant, json={
         'request_id': 'review-one', 'text': '生成一版，完成后看看动作是否连贯',
@@ -75,7 +75,7 @@ async def test_stop_keeps_accepted_run_across_worker_restart(runtime, monkeypatc
             else:
                 stopped = await runtime.client.post(stop)
                 assert stopped.status_code == 200, stopped.text
-                status = stopped.json()['data']
+                status = stopped.json()['data']['turns'][-1]
                 assert status['generation']['review']['state'] == 'stopped'
                 assert status['generation']['versions'][0]['state'] == 'running'
         finally:
@@ -95,10 +95,10 @@ async def test_stop_keeps_accepted_run_across_worker_restart(runtime, monkeypatc
     if action == 'stop' and request.node.callspec.params['runtime'] == 'mysql':
         async with _live_mysql_app(tmp_path, isolated_storage_environment()) as restarted:
             await asyncio.sleep(1.1)
-            path = assistant.replace('/canvases/', '/api/v1/studio/generation-canvases/', 1)
-            live_history = (await restarted.get(path)).json()['data']['turns']
+            path = canvas_chat_url(assistant) + '/snapshot'
+            live_history = (await restarted.get(path)).json()['data']['history']['turns']
             assert live_history[0]['generation']['review'] == {'state': 'stopped', 'results': []}
-    history = (await read_canvas_chat_snapshot(runtime.client, assistant)).json()['data']['turns']
+    history = (await read_canvas_chat_snapshot(runtime.client, assistant)).json()['data']['history']['turns']
     assert len(history) == 1
     generation = history[0]['generation']
     published = (await runtime.client.get(runs)).json()['data']['runs']
@@ -193,7 +193,7 @@ async def test_worker_reviews_only_the_authorized_immutable_generation(runtime, 
         try:
             async with asyncio.timeout(12):
                 while True:
-                    history = (await read_canvas_chat_snapshot(runtime.client, assistant)).json()['data']['turns']
+                    history = (await read_canvas_chat_snapshot(runtime.client, assistant)).json()['data']['history']['turns']
                     generation = history[0]['generation']
                     if generation['state'] == 'completed' and (
                         not followup or generation['review']['state'] == 'completed'

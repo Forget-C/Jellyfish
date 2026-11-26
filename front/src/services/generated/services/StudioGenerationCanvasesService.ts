@@ -3,9 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ApiResponse_CanvasAssistantApprovalSetting_ } from '../models/ApiResponse_CanvasAssistantApprovalSetting_';
-import type { ApiResponse_CanvasAssistantExchange_ } from '../models/ApiResponse_CanvasAssistantExchange_';
 import type { ApiResponse_CanvasAssistantGenerationRead_ } from '../models/ApiResponse_CanvasAssistantGenerationRead_';
-import type { ApiResponse_CanvasAssistantHistory_ } from '../models/ApiResponse_CanvasAssistantHistory_';
 import type { ApiResponse_CanvasAssistantLayout_ } from '../models/ApiResponse_CanvasAssistantLayout_';
 import type { ApiResponse_CanvasAssistantModelSelection_ } from '../models/ApiResponse_CanvasAssistantModelSelection_';
 import type { ApiResponse_CanvasAssistantProposalResult_ } from '../models/ApiResponse_CanvasAssistantProposalResult_';
@@ -265,33 +263,6 @@ export class StudioGenerationCanvasesService {
         });
     }
     /**
-     * Get Assistant History
-     * Read the saved conversation for the requested canvas.
-     * @returns ApiResponse_CanvasAssistantHistory_ Successful Response
-     * @throws ApiError
-     */
-    public static canvasAssistantHistory({
-        canvasId,
-        projectId = '',
-    }: {
-        canvasId: string,
-        projectId?: string,
-    }): CancelablePromise<ApiResponse_CanvasAssistantHistory_> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant',
-            path: {
-                'canvas_id': canvasId,
-            },
-            query: {
-                'project_id': projectId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
      * Set Assistant Model
      * Set the assistant model for this canvas independently of card generation.
      * @returns ApiResponse_CanvasAssistantModelSelection_ Successful Response
@@ -348,36 +319,6 @@ export class StudioGenerationCanvasesService {
             },
             body: requestBody,
             mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Stop Assistant Turn
-     * Stop the remaining assistant work without canceling any accepted runs.
-     * @returns ApiResponse_CanvasAssistantExchange_ Successful Response
-     * @throws ApiError
-     */
-    public static canvasAssistantStop({
-        canvasId,
-        sourceId,
-        projectId = '',
-    }: {
-        canvasId: string,
-        sourceId: string,
-        projectId?: string,
-    }): CancelablePromise<ApiResponse_CanvasAssistantExchange_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/turns/{source_id}/stop',
-            path: {
-                'canvas_id': canvasId,
-                'source_id': sourceId,
-            },
-            query: {
-                'project_id': projectId,
-            },
             errors: {
                 422: `Validation Error`,
             },

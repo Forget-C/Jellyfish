@@ -43,7 +43,7 @@ async def test_first_assistant_save_opens_shared_chat(canvas_client, monkeypatch
         result = await observe_canvas_turn(canvas_client, path, json={'request_id': f'turn-{index}', 'text': text})
         assert result.receipt.status_code == 202 and result.detail['reply'] == expected
 
-    history = (await read_canvas_chat_snapshot(canvas_client, path)).json()['data']['turns']
+    history = (await read_canvas_chat_snapshot(canvas_client, path)).json()['data']['history']['turns']
     assert [(turn['request_id'], turn['text'], turn['sequence']) for turn in history] == [
         ('turn-0', '先讨论', 1), ('turn-1', '继续讨论', 2),
     ]
@@ -70,7 +70,7 @@ async def test_old_browser_proposal_cannot_write_but_plain_history_promotes(canv
     assert saved.status_code == 200, saved.text
     current = (await canvas_client.get(url)).json()['data']['document']
     assert current['cards'] == []
-    history = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['turns']
+    history = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['history']['turns']
     assert history[0]['reply'] == '原普通正文'
     assert history[0]['proposal'] is None
 
@@ -166,7 +166,7 @@ async def test_first_save_migrates_selected_legacy_approval_groups(canvas_client
     assert (result['edges'][0]['source_card'], result['edges'][0]['target_card']) == tuple(
         card['id'] for card in result['cards'][:2]
     )
-    history = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['turns']
+    history = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['history']['turns']
     assert len(history) == len(turns)
     assert all([attachment['file_id'] for attachment in turn['attachments']] == [file_id] for turn in history)
     assert len((await canvas_client.get(file_url)).json()['data']['usages']) == 1

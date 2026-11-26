@@ -79,7 +79,7 @@ async def test_assistant_loads_requested_professional_skills_and_retains_their_v
         assert all(entry['name'] and entry['version'] == ('1.2.0' if entry['id'] == 'video-generation' else '1.0.0') for entry in result['skills'])
         assert '景别' in result['reply']
         assert (await observe_canvas_turn(canvas_client, url, json=command)).detail == result
-    turns = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['turns']
+    turns = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['history']['turns']
     assert [{entry['id'] for entry in turn['skills']} for turn in turns] == [set(items) for items in cases.values()]
     assert calls == list(cases.values())
     assert (await canvas_client.get(url)).json()['data']['document'] == canvas['document']

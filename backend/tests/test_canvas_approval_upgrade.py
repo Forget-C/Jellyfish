@@ -116,7 +116,7 @@ async def test_upgrade_expires_held_old_proposal_and_preserves_history(generatio
         assert '已失效' in response.json()['detail']
         old_layout = await client.post(base + '/layout/old-turn', json={'action': 'claim'})
         assert old_layout.status_code == 409 and '已失效' in old_layout.json()['detail']
-        history = (await read_canvas_chat_snapshot(client, base)).json()['data']
+        history = (await read_canvas_chat_snapshot(client, base)).json()['data']['history']
         old, new = history['turns']
         assert old['reply'] == '原正文 **保留**' and old['attachments'][0]['file_id'] == attachments[0]['file_id']
         assert [group['state'] for group in old['proposal']['groups']] == ['applied', 'superseded']

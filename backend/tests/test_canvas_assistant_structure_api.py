@@ -202,7 +202,7 @@ async def test_batch_proposal_edits_creates_and_connects_atomically(canvas_clien
         assert changed.status_code == 200, changed.text
         canvas = (await canvas_client.get(url)).json()['data']
 
-    snapshot = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']
+    snapshot = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['history']
     creation = await read_canvas_events(canvas_client, url)
     assert [item['type'] for item in creation if item['type'] in ('turn.completed', 'proposal.created', 'approval.decided', 'execution.blocked', 'execution.succeeded')] == ['turn.completed', 'proposal.created']
     assert all(item['occurred_at'] for item in creation)
@@ -447,7 +447,7 @@ async def test_revise_one_duration_keeps_dependent_changes_and_independent_decis
     assert [(edit['before'], edit['after']) for edit in group['edits']] == [
         ('8', '6'), ('继续推进', '减速推进'),
     ]
-    history = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['turns']
+    history = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['history']['turns']
     assert [group['state'] for group in history[0]['proposal']['groups']] == ['superseded', 'applied']
     assert (await canvas_client.post(decide, json={
         'action': 'approve', 'expected_revision': canvas['revision'], 'group_ids': ['1'],
@@ -525,7 +525,7 @@ async def test_large_canvas_proposal_recovers_from_invalid_output(canvas_client,
     try:
         await asyncio.wait_for(started.wait(), 3)
         for _ in range(50):
-            snapshot = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']
+            snapshot = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['history']
             progress = snapshot.get('pending_progress') or {}
             assert not snapshot['turns']
             if progress.get('phase') == 'generating_proposal':
@@ -636,7 +636,7 @@ async def test_batch_merges_references_and_preserves_independent_groups(canvas_c
     else:
         assert not issues
     assert calls == (3 if native else 1)
-    history = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']
+    history = (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['history']
     assert history['turns'][0]['proposal_issues'] == issues
     assert (await observe_canvas_turn(canvas_client, url, json=command)).detail == turn
     decision = {'decision_id': 'same-decision', 'action': 'approve', 'expected_revision': canvas['revision'],

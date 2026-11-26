@@ -35,7 +35,7 @@ def test_public_contract_and_task_registry_keep_new_flow():
     paths = app.openapi()['paths']
     assert not any('/shots' in path or '/shot-details' in path for path in paths)
     assert any('/directing/' in path or '/sequences/' in path for path in paths)
-    assert 'post' in paths['/api/v1/studio/chat/sessions/{session_id}/turns']
+    assert 'post' in paths['/api/v1/studio/chat/sessions/{kind}/{session_id}/turns']
     assert not any('/generation-tasks/labs/' in path for path in paths)
     assert any('/generation-prompts/assets/' in path for path in paths)
     assert not {'script_divide', 'script_extract', 'script_merge', 'script_variant'} & TASK_KINDS

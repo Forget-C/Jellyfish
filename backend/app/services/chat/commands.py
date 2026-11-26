@@ -1,4 +1,4 @@
-"""Use one admission and replay implementation for bound and compatibility chat routes."""
+"""Admission, receipt lookup, and replay for bound chat sessions."""
 from fastapi import HTTPException
 
 from app.core.contracts.generation import GenerationModality
@@ -32,8 +32,8 @@ async def send(db, session_id, owner, command, idempotency_key):
         receipt = await text_trials.send(db, session_id, command, idempotency_key)
         turn_id, cursor = receipt.turn_id, receipt.cursor
     else:
-        result = await submit_media_trial(db, session_id, GenerationModality(kind), command, idempotency_key)
-        turn_id = idempotency_key or result.messages[-1].id
+        await submit_media_trial(db, session_id, GenerationModality(kind), command, idempotency_key)
+        turn_id = idempotency_key
         cursor = await turn_replay_cursor(db, session_id, turn_id)
     return ChatTurnReceipt(session_id=session_id, turn_id=turn_id, cursor=cursor)
 

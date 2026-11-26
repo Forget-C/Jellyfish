@@ -190,7 +190,7 @@ async def test_assistant_edit_requires_approval_and_replays_original_save(canvas
     if grouped:
         groups = proposal.detail['proposal']['groups']
         assert [item['title'] for item in groups] == ['运镜', '灯光']
-        assert (await read_canvas_chat_snapshot(canvas_client, assistant)).json()['data']['turns'][0]['proposal']['groups'] == groups
+        assert (await read_canvas_chat_snapshot(canvas_client, assistant)).json()['data']['history']['turns'][0]['proposal']['groups'] == groups
         card['prompt']['segments'][0]['text'] = '手动环绕'
         change = await canvas_client.put(url, json={
             'request_id': 'manual', 'expected_revision': revision, 'document': {**draft, 'name': '手动改名'},
@@ -345,7 +345,7 @@ async def _restart_and_replay(tmp_path, url, decision, groups):
     storage_env = isolated_storage_environment()
     path = '/api/v1/studio/generation-canvases/' + url.rsplit('/', 1)[-1] + '/assistant'
     async with _live_mysql_app(tmp_path, storage_env) as client:
-        history = (await read_canvas_chat_snapshot(client, path)).json()['data']['turns']
+        history = (await read_canvas_chat_snapshot(client, path)).json()['data']['history']['turns']
         assert history[0]['proposal']['groups'] == groups
 
     decision_url = path + '/proposals/edit-speed'
@@ -373,14 +373,14 @@ async def test_canvas_approval_mode_is_persisted_per_canvas(canvas_client):
     second = (await canvas_client.post('/canvases', json={'name': '第二张'})).json()['data']['id']
     first_url = f'/canvases/{first}/assistant'
     second_url = f'/canvases/{second}/assistant'
-    assert (await read_canvas_chat_snapshot(canvas_client, first_url)).json()['data']['approval_mode'] == 'manual'
+    assert (await read_canvas_chat_snapshot(canvas_client, first_url)).json()['data']['history']['approval_mode'] == 'manual'
     enabled = await canvas_client.patch(first_url + '/approval', json={'approval_mode': 'automatic'})
     assert enabled.status_code == 200, enabled.text
-    assert (await read_canvas_chat_snapshot(canvas_client, first_url)).json()['data']['approval_mode'] == 'automatic'
-    assert (await read_canvas_chat_snapshot(canvas_client, second_url)).json()['data']['approval_mode'] == 'manual'
+    assert (await read_canvas_chat_snapshot(canvas_client, first_url)).json()['data']['history']['approval_mode'] == 'automatic'
+    assert (await read_canvas_chat_snapshot(canvas_client, second_url)).json()['data']['history']['approval_mode'] == 'manual'
     disabled = await canvas_client.patch(first_url + '/approval', json={'approval_mode': 'manual'})
     assert disabled.status_code == 200, disabled.text
-    assert (await read_canvas_chat_snapshot(canvas_client, first_url)).json()['data']['approval_mode'] == 'manual'
+    assert (await read_canvas_chat_snapshot(canvas_client, first_url)).json()['data']['history']['approval_mode'] == 'manual'
 
 
 @pytest.mark.asyncio
@@ -486,7 +486,7 @@ async def test_auto_approval_follows_user_words_and_preserves_conflicts(canvas_c
         assert saved.status_code == 200, saved.text
     approval = await canvas_client.post(assistant + '/proposals/explicit', json=decision)
     assert approval.status_code == (409 if conflict else 200), approval.text
-    turn = (await read_canvas_chat_snapshot(canvas_client, assistant)).json()['data']['turns'][1]
+    turn = (await read_canvas_chat_snapshot(canvas_client, assistant)).json()['data']['history']['turns'][1]
     if conflict:
         assert turn['approval_audit'] is None and turn['proposal']['state'] == 'pending'
     else:
@@ -590,5 +590,5 @@ async def test_independent_review_does_not_override_user_or_canvas_changes(canva
         })).json()['data']['proposal']['state'] == 'applied'
     else:
         assert result.status_code == 409, result.text
-        proposal = (await read_canvas_chat_snapshot(canvas_client, assistant)).json()['data']['turns'][0]['proposal']
+        proposal = (await read_canvas_chat_snapshot(canvas_client, assistant)).json()['data']['history']['turns'][0]['proposal']
         assert proposal['state'] == ('rejected' if case == 'reject' else 'pending')

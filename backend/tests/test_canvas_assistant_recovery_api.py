@@ -135,7 +135,7 @@ async def _generation_recovery(client, canvas_id, path, params, state, *, respon
         async with _worker(client.canvas_sessions, client=transport, submit=1) as worker:
             await worker.tick()
             await asyncio.gather(*worker.jobs.values())
-        unknown = (_data(await read_canvas_chat_snapshot(client, path, params=params)))['turns'][-1]['generation']
+        unknown = (_data(await read_canvas_chat_snapshot(client, path, params=params))['history'])['turns'][-1]['generation']
         original, = unknown['versions']
         assert original['state'] == ('failed' if response_body is not None else 'unknown'), unknown
         async with _worker(client.canvas_sessions, client=transport, submit=1) as restarted:
@@ -144,7 +144,7 @@ async def _generation_recovery(client, canvas_id, path, params, state, *, respon
             await restarted.tick()
             await asyncio.gather(*restarted.jobs.values())
         assert (await observe_canvas_turn(client, path, json=command)).receipt.status_code == 202
-        persisted = (_data(await read_canvas_chat_snapshot(client, path, params=params)))['turns'][-1]['generation']
+        persisted = (_data(await read_canvas_chat_snapshot(client, path, params=params))['history'])['turns'][-1]['generation']
         assert persisted['versions'] == [original]
     assert len(submitted) == 1
     assert submitted[0]['prompt'].count(_DIRECT) == 1
@@ -174,7 +174,7 @@ async def test_approval_and_receipt_recover_after_disconnect(canvas_client, monk
     first, second = turn['proposal']['groups']
     assert [first['state'], second['state']] == ['pending', 'pending']
     assert 'groups' not in turn['reply']
-    cursor = (_data(await read_canvas_chat_snapshot(client, path, params=params)))['cursor']
+    cursor = (_data(await read_canvas_chat_snapshot(client, path, params=params))['history'])['cursor']
     approval_path = path + '/assistant/proposals/two-shots'
     choice = {'action': 'approve', 'expected_revision': before['revision'], 'group_ids': [first['id']],
               'decision_id': 'first-choice'}
@@ -193,7 +193,7 @@ async def test_approval_and_receipt_recover_after_disconnect(canvas_client, monk
     intermediate = _data(await client.get(path, params=params))
     assert intermediate['revision'] == before['revision'] + (loss == 'after')
     if loss != 'after':
-        signed = _data(await read_canvas_chat_snapshot(client, path, params=params))['turns'][-1]
+        signed = _data(await read_canvas_chat_snapshot(client, path, params=params))['history']['turns'][-1]
         approval, = signed['approval_audit']
         assert approval['outcome'] == 'approved' and approval['group_ids'] == [first['id']]
     if loss == 'stale':
@@ -210,7 +210,7 @@ async def test_approval_and_receipt_recover_after_disconnect(canvas_client, monk
             fault.setattr(approved_edits, 'canvas_edits', lambda *args: UnavailableWriter())
         async with _worker(client.canvas_sessions) as recreated:
             await recreated.tick()
-    history = _data(await read_canvas_chat_snapshot(client, path, params=params))
+    history = _data(await read_canvas_chat_snapshot(client, path, params=params))['history']
     recovered = history['turns'][-1]
     replay = _data(await client.post(approval_path, params=params, json=choice))
     events = await read_canvas_events(client, path, after=cursor)
@@ -293,7 +293,7 @@ async def test_send_the_exact_visible_read_only_preview(canvas_client, monkeypat
     preview = plan['preview']
     assert len(preview['proposal']['groups']) == 2
     assert _data(await canvas_client.get(path, params=params)) == original
-    assert (_data(await read_canvas_chat_snapshot(canvas_client, path, params=params)))['turns'][-1]['preview'] == preview
+    assert (_data(await read_canvas_chat_snapshot(canvas_client, path, params=params))['history'])['turns'][-1]['preview'] == preview
     assert (await canvas_client.post(path + '/assistant/proposals/preview-only', params=params, json={
         'action': 'approve', 'expected_revision': original['revision'], 'group_ids': ['1'],
     })).status_code == 404

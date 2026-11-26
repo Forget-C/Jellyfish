@@ -18,8 +18,8 @@ const webPort = Number(process.env.CANVAS_ASSISTANT_TEST_WEB_PORT || 4462)
 const api = 'http://127.0.0.1:' + apiPort
 const canvasApi = api + '/api/v1/studio/generation-canvases'
 const readCanvasChat = async (id, query = '') => (
-  await (await fetch(api + '/api/v1/studio/chat/sessions/canvas/' + id + query)).json()
-).data
+  await (await fetch(api + '/api/v1/studio/chat/sessions/canvas/' + id + '/snapshot' + query)).json()
+).data.history
 const journey = '把镜头三的推近放慢并整理目标卡片布局，生成一版，再审看'
 const consecutiveQuestions = '/plan 依次确认情绪和视角'
 const replayedQuestion = '这一段要用哪种视角？'

@@ -76,7 +76,7 @@ async def test_chain_uses_archived_image_as_video_frame(canvas_client, monkeypat
             return httpx.Response(400, json={'error': '拒绝生成'})
         return httpx.Response(200, json={'task_id': 'remote-video'})
     created = await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})
-    url = '/api/v1/studio/chat/sessions/' + created.json()['data']['id']
+    url = '/api/v1/studio/chat/sessions/chat/' + created.json()['data']['id']
     lab_url = '/api/v1/studio/chat/sessions/lab/' + created.json()['data']['id']
     body = {'request_id': 'rainy-street', 'text': '先画雨夜街景，再用这张图做一个 5 秒推进镜头'}
     sending = asyncio.create_task(canvas_client.post(url + '/turns', json=body))
@@ -86,7 +86,7 @@ async def test_chain_uses_archived_image_as_video_frame(canvas_client, monkeypat
             async with asyncio.timeout(12):
                 while True:
                     await asyncio.sleep(.05)
-                    state = (await canvas_client.get(lab_url)).json()['data']
+                    state = (await canvas_client.get(url + '/snapshot')).json()['data']['history']
                     tasks = [m for m in state['messages'] if m['role'] == 'task']
                     if tasks and interruption == 'lease-takeover' and not takeover:
                         # Simulate an unresponsive HTTP process. The worker owns recovery after the lease expires.

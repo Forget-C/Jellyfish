@@ -68,14 +68,14 @@ async def test_canvas_snapshot_projects_history_at_its_committed_cursor(canvas_c
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
-@pytest.mark.parametrize(('kind', 'compatibility_kind', 'history_field'), [
-    ('canvas', 'canvas', 'turns'),
-    ('chat', 'lab', 'messages'),
-    ('text', 'text', 'messages'),
-    ('image', 'media', 'messages'),
-    ('video', 'media', 'messages'),
+@pytest.mark.parametrize(('kind', 'history_field'), [
+    ('canvas', 'turns'),
+    ('chat', 'messages'),
+    ('text', 'messages'),
+    ('image', 'messages'),
+    ('video', 'messages'),
 ])
-async def test_public_snapshots_bind_each_session_kind(canvas_client, kind, compatibility_kind, history_field):
+async def test_public_snapshots_bind_each_session_kind(canvas_client, kind, history_field):
     base = '/api/v1/studio'
     if kind == 'canvas':
         created = await canvas_client.post(base + '/generation-canvases', json={'name': '统一交互会话'})
@@ -90,15 +90,6 @@ async def test_public_snapshots_bind_each_session_kind(canvas_client, kind, comp
     assert (snapshot['kind'], snapshot['session_id'], snapshot['cursor']) == (kind, session_id, 0)
     assert {'snapshot', 'send', 'events'}.issubset(snapshot['capabilities'])
     assert snapshot['history'][history_field] == []
-
-    compatibility = await canvas_client.get(f'{sessions}/{compatibility_kind}/{session_id}')
-    assert compatibility.status_code == 200, compatibility.text
-    legacy = compatibility.json()
-    if isinstance(legacy['data'], list):
-        assert legacy['data'] == snapshot['history']['messages']
-        assert legacy['meta']['cursor'] == snapshot['cursor']
-    else:
-        assert legacy['data'] == snapshot['history']
 
     other_kind = 'chat' if kind != 'chat' else 'text'
     wrong = f'{sessions}/{other_kind}/{session_id}'
@@ -162,9 +153,7 @@ async def test_typed_lab_session_snapshot_bridges_admission_and_event_subscripti
     await wait_for_chat_event(canvas_client, url, 'first', 'turn.completed')
     params = {'follow': False, 'after': snapshot['cursor']}
     stream = await canvas_client.get(url + '/events', params=params)
-    compatibility_url = f'{session_base}/{sid}'
-    assert (await canvas_client.post(compatibility_url + '/turns', json=command)).json() == sent.json()
-    assert (await canvas_client.get(compatibility_url + '/events', params=params)).text == stream.text
+    assert (await canvas_client.post(url + '/turns', json=command)).json() == sent.json()
     assert 'event: turn.accepted' not in stream.text
     assert 'event: turn.completed' in stream.text
     recovered = (await canvas_client.get(url + '/snapshot')).json()['data']
@@ -192,7 +181,7 @@ async def test_session_events_can_open_with_one_database_connection(canvas_clien
     try:
         with monkeypatch.context() as patch:
             patch.setitem(app.dependency_overrides, get_db, database)
-            response = await canvas_client.get(f'/api/v1/studio/chat/sessions/{session_id}/events',
+            response = await canvas_client.get(f'/api/v1/studio/chat/sessions/chat/{session_id}/events',
                                                params={'follow': False})
         assert response.status_code == 200 and response.text == ''
     finally:
@@ -234,9 +223,6 @@ async def test_canvas_turn_can_be_replayed_through_session_events(canvas_client,
     assert (await canvas_client.post(url + '/turns', json=command)).json()['data'] == result.json()['data']
     params = {'follow': False, 'after': receipt['cursor']}
     stream = await canvas_client.get(url + '/events', params=params)
-    compatibility_url = f"{base}/chat/sessions/{canvas['id']}"
-    assert (await canvas_client.post(compatibility_url + '/turns', json=command)).json() == result.json()
-    assert (await canvas_client.get(compatibility_url + '/events', params=params)).text == stream.text
     assert stream.headers['content-type'].startswith('text/event-stream')
     events = [json.loads(line[6:]) for line in stream.text.splitlines() if line.startswith('data: ')]
     assert events[0]['type'] == 'turn.accepted'
@@ -288,8 +274,7 @@ async def test_read_card_tool_is_identified_before_reply(canvas_client, monkeypa
     monkeypatch.setattr(httpx.AsyncClient, 'send', respond)
     base = '/api/v1/studio'
     canvas = (await canvas_client.post(base + '/generation-canvases', json={'name': '画布'})).json()['data']
-    url = f"{base}/chat/sessions/{canvas['id']}"
-    canvas_url = f"{base}/chat/sessions/canvas/{canvas['id']}"
+    url = f"{base}/chat/sessions/canvas/{canvas['id']}"
     draft = dict(canvas['document'], cards=[{'id': 'note', 'type': 'content.text', 'text': '实际卡片文字'}])
     body = {'request_id': 'read-card', 'text': '读一下这张卡', 'stream_reply': True,
             'context': {'draft': draft, 'revision': canvas['revision'], 'scope': 'selection', 'card_ids': ['note']}}
@@ -302,7 +287,7 @@ async def test_read_card_tool_is_identified_before_reply(canvas_client, monkeypa
     assert [(e['type'], e['payload']['tool_call_id']) for e in tool_events] == [
         ('tool.started', 'read-note'), ('tool.completed', 'read-note')]
     assert tool_events[-1]['cursor'] < events[-1]['cursor']
-    snapshot = (await canvas_client.get(canvas_url)).json()['data']
+    snapshot = (await canvas_client.get(url + '/snapshot')).json()['data']['history']
     tool, = snapshot['turns'][0]['tool_calls']
     assert (tool['id'], tool['name'], tool['state']) == ('read-note', 'read_canvas', 'completed')
     assert snapshot['turns'][0]['model_id'] == 'canvas-text'
@@ -327,7 +312,7 @@ async def test_first_save_uses_the_same_chat_session(canvas_client, monkeypatch)
     monkeypatch.setattr(httpx.AsyncClient, 'send', reply)
     canvas_id = str(uuid4())
     base = '/api/v1/studio'
-    url = f'{base}/chat/sessions/{canvas_id}'
+    url = f'{base}/chat/sessions/canvas/{canvas_id}'
     draft_url = f'{base}/generation-canvases/drafts/{canvas_id}'
     command = {'request_id': 'first-turn', 'text': 'hello'}
     assert (await canvas_client.post(url + '/turns', json=command)).status_code == 404
@@ -340,8 +325,8 @@ async def test_first_save_uses_the_same_chat_session(canvas_client, monkeypatch)
     assert accepted.status_code == 202, accepted.text
     event = await wait_for_chat_event(canvas_client, url, 'first-turn', 'turn.completed')
     assert event['payload']['text'] == 'saved canvas reply'
-    history = await canvas_client.get(f'{base}/chat/sessions/canvas/{canvas_id}')
-    assert history.json()['data']['turns'][0]['request_id'] == 'first-turn'
+    history = await canvas_client.get(url + '/snapshot')
+    assert history.json()['data']['history']['turns'][0]['request_id'] == 'first-turn'
 
 
 @pytest.mark.asyncio
@@ -350,8 +335,8 @@ async def test_session_type_controls_dispatch_even_for_a_valid_foreign_command(c
     base = '/api/v1/studio'
     created = await canvas_client.post(base + '/experiment-sessions', json={'lab_type': 'image'})
     session_id = created.json()['data']['id']
-    url = f'{base}/chat/sessions/{session_id}'
-    rejected = await canvas_client.post(url + '/turns', json={
+    url = f'{base}/chat/sessions/image/{session_id}'
+    rejected = await canvas_client.post(url + '/turns', headers={'Idempotency-Key': 'foreign-kind'}, json={
         'execution_prompt': 'test', 'operation_input': {'kind': 'video_generation', 'seconds': 5, 'ratio': '16:9'},
     })
     assert rejected.status_code == 422
@@ -360,16 +345,18 @@ async def test_session_type_controls_dispatch_even_for_a_valid_foreign_command(c
     assert stream.status_code == 200 and not stream.text
 
 
-def test_typed_and_legacy_chat_routes_share_public_receipt_and_event_contracts():
+def test_bound_chat_routes_are_the_public_receipt_and_event_contracts():
     from app.main import app
 
     paths = app.openapi()['paths']
     sessions = '/api/v1/studio/chat/sessions/'
-    for scope in ('{session_id}', '{kind}/{session_id}'):
-        stream = paths[sessions + scope + '/events']['get']['responses']['200']['content']['text/event-stream']
-        assert stream['itemSchema']['properties']['data']['contentSchema'] == {'$ref': '#/components/schemas/ChatEvent'}
-        responses = paths[sessions + scope + '/turns']['post']['responses']
-        assert responses['202']['content']['application/json']['schema']['$ref'].endswith('/ApiResponse_ChatTurnReceipt_')
+    scope = '{kind}/{session_id}'
+    stream = paths[sessions + scope + '/events']['get']['responses']['200']['content']['text/event-stream']
+    assert stream['itemSchema']['properties']['data']['contentSchema'] == {'$ref': '#/components/schemas/ChatEvent'}
+    responses = paths[sessions + scope + '/turns']['post']['responses']
+    assert responses['202']['content']['application/json']['schema']['$ref'].endswith('/ApiResponse_ChatTurnReceipt_')
+    for suffix in ('turns', 'events', 'turns/{turn_id}/answer'):
+        assert sessions + '{session_id}/' + suffix not in paths
 
 
 @pytest.mark.asyncio
@@ -393,3 +380,27 @@ async def test_retired_chat_routes_cannot_execute_or_subscribe(canvas_client):
     canvas_id = canvas.json()['data']['id']
     events = await canvas_client.get(f'{base}/generation-canvases/{canvas_id}/assistant/events')
     assert events.status_code == 404
+
+    image = (await canvas_client.post(base + '/experiment-sessions', json={'lab_type': 'image'})).json()['data']['id']
+    lab = (await canvas_client.post(base + '/experiment-sessions', json={'lab_type': 'chat'})).json()['data']['id']
+    text = (await canvas_client.post(base + '/experiment-sessions', json={'lab_type': 'text'})).json()['data']['id']
+    retired_reads = (
+        f'/chat/sessions/{canvas_id}/events?follow=false',
+        f'/chat/sessions/canvas/{canvas_id}',
+        f'/chat/sessions/lab/{lab}',
+        f'/chat/sessions/text/{text}',
+        f'/chat/sessions/media/{image}',
+        f'/generation-canvases/{canvas_id}/assistant',
+        f'/experiment-sessions/{image}/messages',
+        f'/experiment-sessions/{image}/interaction/requests/prior-command',
+    )
+    for path in retired_reads:
+        assert (await canvas_client.get(base + path)).status_code in (404, 405), path
+    retired_writes = (
+        (f'/chat/sessions/{canvas_id}/turns', {'request_id': 'ordinary-turn', 'text': '你好'}),
+        (f'/chat/sessions/{canvas_id}/turns/ordinary-turn/answer', {'question_id': 'question', 'answer': '回答'}),
+        (f'/chat/sessions/canvas/{canvas_id}/turns/ordinary-turn/stop', {}),
+        (f'/generation-canvases/{canvas_id}/assistant/turns/ordinary-turn/stop', {}),
+    )
+    for path, body in retired_writes:
+        assert (await canvas_client.post(base + path, json=body)).status_code in (404, 405), path

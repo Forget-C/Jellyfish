@@ -74,7 +74,7 @@ async def test_assistant_sends_and_retains_only_the_selected_reference_images(re
     blocks = requests[0][-1]['content']
     assert len([block for block in blocks if block['type'] == 'image_url']) == 2
     assert left in str(blocks) and right in str(blocks)
-    assert (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['turns'] == [result]
+    assert (await read_canvas_chat_snapshot(canvas_client, url)).json()['data']['history']['turns'] == [result]
     assert (await observe_canvas_turn(canvas_client, url, json=command)).detail == result
     assert len(requests) == 1
     assert (await observe_canvas_turn(canvas_client, url, json=dict(command, attachment_file_ids=[right]))).receipt.status_code == 409
@@ -83,7 +83,7 @@ async def test_assistant_sends_and_retains_only_the_selected_reference_images(re
     assert {usage['usage_kind'] for usage in file_details['usages']} == {'canvas_assistant_attachment'}
     other = (await canvas_client.post('/canvases', json={'name': '另一张画布'})).json()['data']
     other_url = f"/canvases/{other['id']}/assistant"
-    assert (await read_canvas_chat_snapshot(canvas_client, other_url)).json()['data']['turns'] == []
+    assert (await read_canvas_chat_snapshot(canvas_client, other_url)).json()['data']['history']['turns'] == []
     await observe_canvas_turn(canvas_client, other_url, json={'request_id': 'message', 'text': '不用参考素材'})
     assert requests[-1][-1]['content'] == '不用参考素材'
 
