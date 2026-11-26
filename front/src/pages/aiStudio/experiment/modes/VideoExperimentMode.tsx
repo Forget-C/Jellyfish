@@ -1,5 +1,5 @@
 import { useUiText } from '../../../../uiText'
-import { mediaTrial } from '../../../../services/mediaTrial'
+import { chatClient, waitForMediaAdmission } from '../../../../services/chatSession'
 import { useTrialModelPreference } from '../hooks/useTrialModelPreference'
 import { MediaTaskDetails } from '../components/MediaTaskDetails'
 import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
@@ -107,7 +107,7 @@ type VideoExperimentModeProps = {
 /** 组合视频模态的输入、历史和任务轮询，并交给统一实验室页面壳渲染。 */
 export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMessages, render }: VideoExperimentModeProps) {
   const uiText = useUiText()
-  const history = useExperimentHistory(sessionId, { readPage: mediaTrial.snapshot })
+  const history = useExperimentHistory(sessionId, { readPage: chatClient.mediaSnapshot })
   const { files, libraryState, loadLibrary, onUploaded } = useExperimentLibrary('video')
   const [modelId, setModelId, setSoleModel] = useTrialModelPreference('video', sessionId)
   const [draft, setDraft] = useState('')
@@ -200,7 +200,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     await submission.submitTask({
       ensureSession: () => sessionId ? Promise.resolve({ id: sessionId }) : ensureSession('video'),
       request: async (targetSessionId, idempotencyKey) => {
-        const response = await mediaTrial.send({
+        const response = await chatClient.send({
           sessionId: targetSessionId, idempotencyKey,
           requestBody: {
             model_id: modelId,
@@ -219,7 +219,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
             operation_input: { kind: 'video_generation', ratio, ...(resolutions.length ? { resolution, seconds } : {}) },
           },
         })
-        return response.data
+        return waitForMediaAdmission(response)
       },
       onAccept: (attempt, targetSessionId) => {
         const unchanged = submission.acceptInput(attempt, targetSessionId, inputSignature(''))

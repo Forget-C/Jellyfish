@@ -24,7 +24,6 @@ import type { ApiResponse_CanvasRunRead_ } from '../models/ApiResponse_CanvasRun
 import type { ApiResponse_CanvasSaved_ } from '../models/ApiResponse_CanvasSaved_';
 import type { ApiResponse_CanvasSnapshot_ } from '../models/ApiResponse_CanvasSnapshot_';
 import type { ApiResponse_CanvasStreamConnection_ } from '../models/ApiResponse_CanvasStreamConnection_';
-import type { ApiResponse_DraftAssistantReply_ } from '../models/ApiResponse_DraftAssistantReply_';
 import type { ApiResponse_ImageContentCard_ } from '../models/ApiResponse_ImageContentCard_';
 import type { ApiResponse_list_CanvasCheckProduct__ } from '../models/ApiResponse_list_CanvasCheckProduct__';
 import type { ApiResponse_list_CanvasCheckReportRead__ } from '../models/ApiResponse_list_CanvasCheckReportRead__';
@@ -174,56 +173,6 @@ export class StudioGenerationCanvasesService {
             },
             body: requestBody,
             mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Read Draft Reply
-     * Reconnect to one in-flight browser-owned reply.
-     * @returns ApiResponse_DraftAssistantReply_ Successful Response
-     * @throws ApiError
-     */
-    public static canvasDraftAssistantReply({
-        canvasId,
-        sourceId,
-    }: {
-        canvasId: string,
-        sourceId: string,
-    }): CancelablePromise<ApiResponse_DraftAssistantReply_> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/studio/generation-canvases/drafts/{canvas_id}/assistant/turns/{source_id}',
-            path: {
-                'canvas_id': canvasId,
-                'source_id': sourceId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Stop Draft Reply
-     * Stop an unsaved draft's active reply and return its visible prefix.
-     * @returns ApiResponse_DraftAssistantReply_ Successful Response
-     * @throws ApiError
-     */
-    public static canvasDraftAssistantStop({
-        canvasId,
-        sourceId,
-    }: {
-        canvasId: string,
-        sourceId: string,
-    }): CancelablePromise<ApiResponse_DraftAssistantReply_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/generation-canvases/drafts/{canvas_id}/assistant/turns/{source_id}/stop',
-            path: {
-                'canvas_id': canvasId,
-                'source_id': sourceId,
-            },
             errors: {
                 422: `Validation Error`,
             },

@@ -1,5 +1,5 @@
 import { useUiText } from '../../../../uiText'
-import { mediaTrial } from '../../../../services/mediaTrial'
+import { chatClient, waitForMediaAdmission } from '../../../../services/chatSession'
 import { useTrialModelPreference } from '../hooks/useTrialModelPreference'
 import { MediaTaskDetails } from '../components/MediaTaskDetails'
 import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
@@ -129,7 +129,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
     loadTemplates, selectTemplate, confirmReplacement, applyFreeInput, replacementDialog,
   } = useExperimentTemplates(imagePromptCategories, draft, setDraft)
   const [referenceFileIds, setReferenceFileIds] = useState<string[]>([])
-  const history = useExperimentHistory(sessionId, { readPage: mediaTrial.snapshot })
+  const history = useExperimentHistory(sessionId, { readPage: chatClient.mediaSnapshot })
   const inputSignature = (prompt: string) => JSON.stringify([prompt, selectedTemplate?.id, selectedTemplate?.version, templateValues, referenceFileIds])
   const submission = useExperimentSubmission(sessionId, history, inputSignature(draft))
   const { submitting } = submission
@@ -153,7 +153,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
     await submission.submitTask({
       ensureSession: () => sessionId ? Promise.resolve({ id: sessionId }) : ensureSession('image'),
       request: async (targetSessionId, idempotencyKey) => {
-        const response = await mediaTrial.send({
+        const response = await chatClient.send({
           sessionId: targetSessionId, idempotencyKey,
           requestBody: {
             model_id: modelId,
@@ -164,7 +164,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
             operation_input: { kind: 'image_generation' },
           },
         })
-        return response.data
+        return waitForMediaAdmission(response)
       },
       onAccept: (attempt, targetSessionId) => {
         const unchanged = submission.acceptInput(attempt, targetSessionId, inputSignature(''))

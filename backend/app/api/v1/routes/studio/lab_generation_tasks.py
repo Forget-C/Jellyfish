@@ -6,11 +6,11 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.generation import (
     GenerationCommand,
@@ -26,7 +26,6 @@ from app.core.contracts.generation import (
 from app.core.contracts.media import ImageMediaInput, VideoMediaInput
 from app.dependencies import get_db
 from app.models.experiment_sessions import ExperimentSession, ExperimentSessionEvent
-from app.services.chat.stream import session_event_stream
 from app.services.studio.media_receipts import publish_media_fact
 from app.schemas.common import ApiResponse, created_response, success_response
 from app.schemas.interaction import InteractionRequestHeader
@@ -84,6 +83,7 @@ async def _submit_lab_task(
     modality: GenerationModality,
     body: GenerationSubmitRequest,
     request_id: str | None = None,
+    include_admission_messages: bool = False,
 ) -> ApiResponse[ExperimentTaskCreated]:
     """原子写入实验室消息和快照任务，并在提交成功后再投递 Worker。"""
 
@@ -121,17 +121,19 @@ async def _submit_lab_task(
         ],
     )
     await db.flush()
-    await publish_media_fact(db, accepted.task_id, session_id)
+    messages = None
+    if include_admission_messages:
+        messages = await read_experiment_messages(db, [user_message, task_message], include_media_receipts=True)
+        await publish_media_fact(db, accepted.task_id, session_id, messages=messages)
+    else:
+        await publish_media_fact(db, accepted.task_id, session_id)
     session.updated_at = func.now()
     await db.commit()
-    await db.refresh(user_message)
-    await db.refresh(task_message)
-    return created_response(
-        ExperimentTaskCreated(
-            task_id=accepted.task_id,
-            messages=await read_experiment_messages(db, [user_message, task_message], include_media_receipts=True),
-        )
-    )
+    if messages is None:
+        await db.refresh(user_message)
+        await db.refresh(task_message)
+        messages = await read_experiment_messages(db, [user_message, task_message], include_media_receipts=True)
+    return created_response(ExperimentTaskCreated(task_id=accepted.task_id, messages=messages))
 
 
 @router.post(
@@ -173,14 +175,11 @@ async def submit_video_lab_generation_task(
 chat_router = APIRouter()
 
 
-@chat_router.post('/media/{session_id}/turns', response_model=ApiResponse[ExperimentTaskCreated],
-                  status_code=201, operation_id='chat_media_send')
-async def send_media_turn(session_id: str, body: GenerationSubmitRequest, db: AsyncSession = Depends(get_db),
-                          idempotency_key: InteractionRequestHeader = None):
-    """Submit one direct trial; the bound session must match the operation and media."""
-    modality = GenerationModality.image if isinstance(body.operation_input, ImageGenerationOperationInput) else GenerationModality.video
+async def submit_media_trial(db, session_id, modality, body, idempotency_key):
+    """Validate the request against the session's registered trial modality."""
     _require_operation_request(body, modality=modality)
-    return await _submit_lab_task(db, session_id=session_id, modality=modality, body=body, request_id=idempotency_key)
+    return await _submit_lab_task(db, session_id=session_id, modality=modality, body=body, request_id=idempotency_key,
+                                  include_admission_messages=True)
 
 
 async def _media_session(db, session_id):
@@ -200,20 +199,3 @@ async def media_snapshot(session_id: str, page: int = Query(1, ge=1), page_size:
     return success_response(await read_experiment_page(db, session_id, page, page_size, include_media_receipts=True), meta={
         'session_id': session_id, 'cursor': cursor or 0, 'capabilities': ('snapshot', 'send', 'events', 'task_receipt'),
     })
-
-
-@chat_router.get('/media/{session_id}/events', operation_id='chat_media_events',
-                 responses={200: {'content': {'text/event-stream': {}}}})
-async def media_events(session_id: str, after: Annotated[int, Query(ge=0)] = 0, follow: bool = True,
-                       last_event_id: Annotated[int, Header(ge=0)] = 0,
-                       db: AsyncSession = Depends(get_db, scope='function')):
-    """Replay task facts committed after the client's cursor, then follow new events."""
-    from app.services.studio.session_events import session_event_page
-    await _media_session(db, session_id)
-    sessions = async_sessionmaker(db.bind, expire_on_commit=False)
-
-    async def page(cursor):
-        async with sessions() as session:
-            return await session_event_page(session, session_id, cursor)
-
-    return await session_event_stream(page, max(after, last_event_id), follow=follow)

@@ -210,7 +210,7 @@ class CanvasStore:
         from app.services.generation_canvas.assistant_draft import attach_draft_conversation, prepare_draft_approval
         document = await prepare_draft_approval(self, canvas, command)
         write = command.model_copy(update={'document': document}) if document is not None else command
-        receipt = await self._write(canvas, write, digest, creating=not bool(command.assistant and command.assistant.turns),
+        receipt = await self._write(canvas, write, digest, creating=not (command.start_assistant or bool(command.assistant and command.assistant.turns)),
                                     include_document=document is not None)
         await attach_draft_conversation(self, command, receipt)
         return receipt

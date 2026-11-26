@@ -1,64 +1,43 @@
 """Project stored scene records onto the product's shared SSE contract."""
-from typing import Literal
-
-from pydantic import BaseModel
-
 from app.schemas.canvas_assistant import CanvasAssistantExchange
-
-
-class ReplyUpdate(BaseModel):
-    text: str
-    mode: Literal['append', 'replace']
-
-
-class ToolUpdate(BaseModel):
-    tool_call_id: str
-    tool: str
-    state: Literal['started', 'completed', 'failed']
-    parameters: dict
-    model_id: str | None
-    error: str | None
-
-
-class TurnUpdate(BaseModel):
-    text: str
-    error: str | None
-    reason: str | None
+from app.schemas.chat import ChatEvent
 
 
 def public_event(event):
-    """Use the same public payload for a fact, preserving scene receipts separately."""
-    result = event.model_dump(mode='json')
-    source = result['payload']
+    record = event.model_dump(mode='json')
+    source = record['payload']
     canvas = isinstance(event.payload, CanvasAssistantExchange)
     progress = (source.get('progress') or {}) if canvas else {}
-    if canvas:
-        result['canvas'] = source
-    if event.type == 'message.updated':
+    detail = source if canvas else None
+    kind = event.type
+    if kind == 'message.updated':
+        category = 'message'
         delta = 'text_delta' in source
-        result['payload'] = ReplyUpdate(
-            mode='append' if delta else 'replace',
-            text=source['text_delta'] if delta else (progress.get('reply') if canvas else source['text']) or '',
-        ).model_dump()
-    elif event.type in ('tool.started', 'tool.completed', 'tool.failed'):
+        payload = {'mode': 'append' if delta else 'replace',
+                   'text': source['text_delta'] if delta else (progress.get('reply') if canvas else source['text']) or ''}
+    elif kind in ('tool.started', 'tool.completed', 'tool.failed'):
+        category = 'tool'
         call = progress.get('tool_call') or {}
+        payload = {'tool_call_id': call.get('id') or source['tool_call_id'], 'tool': call.get('name') or source['tool'],
+                   'state': kind.split('.')[1], 'model_id': source.get('model_id'),
+                   'parameters': call.get('parameters') or source.get('parameters') or {},
+                   'error': source.get('error') if isinstance(source.get('error'), str) else None}
+    elif kind in ('turn.accepted', 'turn.completed', 'turn.failed', 'turn.stopped'):
+        category = 'turn'
         error = source.get('error')
-        result['payload'] = ToolUpdate(
-            tool_call_id=call.get('id') or source['tool_call_id'],
-            tool=call.get('name') or source['tool'], state=event.type.split('.')[1],
-            model_id=source.get('model_id'), parameters=call.get('parameters') or source.get('parameters') or {},
-            error=error if isinstance(error, str) else None,
-        ).model_dump()
-    elif event.type in ('turn.accepted', 'turn.completed', 'turn.failed', 'turn.stopped'):
-        if not canvas:
-            result['receipt'] = source
-        error = source.get('error')
-        result['payload'] = TurnUpdate(
-            text=(source.get('reply') if canvas else source.get('text') or
-                  (source.get('assistant_message') or {}).get('content')) or '',
-            error=source.get('error_code') or (error.get('message') if isinstance(error, dict) else error),
-            reason=source.get('reason'),
-        ).model_dump()
-    elif canvas:
-        result.pop('canvas')
-    return result
+        message = source.get('user_message') or source.get('assistant_message')
+        text = source.get('reply') if canvas else source.get('text')
+        if message and kind == 'turn.completed':
+            text = text or message.get('content')
+        payload = {'text': text or '',
+                   'error': source.get('error_code') or (error.get('message') if isinstance(error, dict) else error),
+                   'reason': source.get('reason')}
+        if message:
+            payload['message'] = message
+        if isinstance(error, dict):
+            payload['error_code'] = error.get('code')
+    elif kind.startswith('task.') or kind == 'artifact.created':
+        category, payload = 'task', source
+    else:
+        category, payload, detail = 'scene', None, source
+    return ChatEvent.model_validate({**record, 'category': category, 'payload': payload, 'detail': detail})

@@ -8,8 +8,8 @@ from app.dependencies import get_db
 from app.schemas.interaction import InteractionEvent
 from app.schemas.canvas_assistant import (CanvasAssistantApprovalSetting, CanvasAssistantExchange, CanvasAssistantHistory, CanvasAssistantMessage,
                                           CanvasAssistantModelSelection)
-from app.schemas.canvas_assistant_draft import CanvasDraftSave, CanvasDraftSaved, DraftAssistantMessage, DraftAssistantReply
-from app.services.generation_canvas.assistant_draft import DraftCanvasAssistant, draft_reply_snapshot
+from app.schemas.canvas_assistant_draft import CanvasDraftSave, CanvasDraftSaved, DraftAssistantMessage
+from app.services.generation_canvas.assistant_draft import DraftCanvasAssistant
 from app.schemas.common import PaginatedData, paginated_response, ApiResponse, created_response, empty_response, success_response
 from app.schemas.generation_canvas import CanvasRename, CanvasSummary, CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError, CanvasModelCapability, CanvasCompiledInput
 from app.services.generation_canvas.lifecycle import canvas_lifecycle, free_canvas_lifecycle
@@ -62,20 +62,6 @@ async def send_draft_assistant_message(canvas_id: UUID, body: DraftAssistantMess
                                        db: AsyncSession = Depends(get_db, scope='function')):
     """Reply to a browser-owned free canvas conversation without saving it."""
     return success_response(await DraftCanvasAssistant(db, '').reply_to_draft(str(canvas_id), body))
-
-
-@router.get('/drafts/{canvas_id}/assistant/turns/{source_id}', response_model=ApiResponse[DraftAssistantReply],
-            operation_id='canvas_draft_assistant_reply')
-async def read_draft_reply(canvas_id: UUID, source_id: str):
-    """Reconnect to one in-flight browser-owned reply."""
-    return success_response(draft_reply_snapshot(str(canvas_id), source_id))
-
-
-@router.post('/drafts/{canvas_id}/assistant/turns/{source_id}/stop', response_model=ApiResponse[DraftAssistantReply],
-             operation_id='canvas_draft_assistant_stop')
-async def stop_draft_reply(canvas_id: UUID, source_id: str):
-    """Stop an unsaved draft's active reply and return its visible prefix."""
-    return success_response(draft_reply_snapshot(str(canvas_id), source_id, stop=True))
 
 
 @router.patch('/{canvas_id}/name', response_model=ApiResponse[CanvasRead], operation_id='canvas_rename')

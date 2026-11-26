@@ -1,4 +1,4 @@
-import { successfulTextTrial } from './text-trial-events.mjs'
+import { successfulTextTrial, turnReceipt, mediaTurnReceipt, mediaAdmissionStream } from './text-trial-events.mjs'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -45,6 +45,8 @@ try {
   await page.route('**/api/**', async route => {
     const request = route.request()
     const url = new URL(request.url())
+    const admission = mediaAdmissionStream(route, url)
+    if (admission) return admission
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (url.pathname.endsWith('/experiment-sessions')) {
       if (request.method() === 'POST') {
@@ -75,8 +77,8 @@ try {
       deleteAttempts += 1
       return respond(null)
     }
-    const mediaRun = url.pathname.match(/\/chat\/sessions\/media\/([^/]+)\/turns$/)
-    if (mediaRun) {
+    const mediaRun = url.pathname.match(/\/chat\/sessions\/([^/]+)\/turns$/)
+    if (mediaRun && request.postDataJSON().operation_input) {
       const sessionId = mediaRun[1]
       const body = request.postDataJSON()
       const mode = body.operation_input.kind.split('_')[0]
@@ -86,13 +88,13 @@ try {
         { ...message(mode + '-result', sessionId, 'assistant', mode + ' 已提交', 2), task_id: mode + '-task', status: 'succeeded' },
       ]
       persisted.set(sessionId, messages)
-      return respond({ task_id: mode + '-task', messages })
+      return respond(mediaTurnReceipt(route, { task_id: mode + '-task', messages }))
     }
-    if (url.pathname.endsWith('/chat/sessions/text/new-text/turns')) {
+    if (url.pathname.endsWith('/chat/sessions/new-text/turns')) {
       const user = message('user-1', 'new-text', 'user', request.postDataJSON().content, 1)
       const assistant = message('assistant-1', 'new-text', 'assistant', '验收回复', 2)
       persisted.set('new-text', [user, assistant])
-      return respond({ turn_id: 'lab-run', cursor: 0 })
+      return respond(turnReceipt(route, 'lab-run'))
     }
     if (url.pathname.endsWith('/new-text/events')) {
       const [user, assistant] = persisted.get('new-text')

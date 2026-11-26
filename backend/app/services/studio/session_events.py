@@ -1,5 +1,5 @@
 """Serialize public experiment events with their business transaction."""
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from app.models.experiment_sessions import ExperimentSession, ExperimentSessionEvent
 from app.schemas.interaction import InteractionEvent
@@ -26,3 +26,10 @@ async def session_event_page(db, session_id, after):
         ExperimentSessionEvent.session_id == session_id, ExperimentSessionEvent.cursor > after,
     ).order_by(ExperimentSessionEvent.cursor).limit(100))
     return [_read(row) for row in rows]
+
+
+async def turn_replay_cursor(db, session_id, turn_id):
+    """Start before the first committed event for the turn, including after a retry."""
+    first = await db.scalar(select(func.min(ExperimentSessionEvent.cursor)).where(
+        ExperimentSessionEvent.session_id == session_id, ExperimentSessionEvent.turn_id == turn_id))
+    return first - 1 if first is not None else 0

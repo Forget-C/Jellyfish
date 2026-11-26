@@ -365,6 +365,30 @@ try {
       assert.ok(receipt.ok())
       await route.abort()
     }
+    async function followTurn(receipt, signal) {
+      const url = api + '/api/v1/studio/chat/sessions/' + receipt.session_id + '/events?after=' + receipt.cursor
+      const response = await fetch(url, {signal})
+      assert.ok(response.headers.get('content-type').startsWith('text/event-stream'))
+      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+      let buffer = ''
+      return async type => {
+        for (;;) {
+          const separator = buffer.indexOf('\n\n')
+          if (separator !== -1) {
+            const frame = buffer.slice(0, separator)
+            buffer = buffer.slice(separator + 2)
+            const data = frame.split('\n').find(line => line.startsWith('data: '))
+            if (!data) continue
+            const event = JSON.parse(data.slice(6))
+            if (event.turn_id === receipt.turn_id && event.type === type) return event
+            continue
+          }
+          const {value, done} = await reader.read()
+          assert.ok(!done, 'SSE closed while waiting for ' + type)
+          buffer += value
+        }
+      }
+    }
     const first = panel.getByRole('heading', { name: '已到达的首段' })
     for (const [path, name] of [[base + '/canvases/' + free.id, '自由'], [base + storyboardCanvasPath(scene), '分镜']]) {
       await page.goto(path)
@@ -379,7 +403,7 @@ try {
       await automatic.waitFor({ state: 'hidden' })
       const text = '流式回归' + name
       const waiting = panel.getByText('等待模型响应', { exact: true })
-      const requestUrl = /\/chat\/sessions\/canvas\/[^/]+\/turns(?:\?|$)/
+      const requestUrl = /\/chat\/sessions\/[^/]+\/turns(?:\?|$)/
       let observedWaiting = false
       const holdFirstReply = async route => {
         if (route.request().method() === 'POST') {
@@ -391,21 +415,31 @@ try {
         await route.continue()
       }
       await page.route(requestUrl, holdFirstReply)
+      const accepted = page.waitForResponse(response => requestUrl.test(response.url()) &&
+        response.request().method() === 'POST' && response.status() === 202)
       await sendLive(text)
+      const receipt = (await (await accepted).json()).data
+      assert.deepEqual(Object.keys(receipt).sort(), ['cursor', 'session_id', 'turn_id'])
+      const stream = new AbortController()
+      const next = await followTurn(receipt, AbortSignal.any([stream.signal, AbortSignal.timeout(20000)]))
+      await next('turn.accepted')
+      assert.match((await next('message.updated')).payload.text, /已到达的首段/)
       await first.waitFor()
       assert.equal(await panel.getByText('已接收本轮上下文', { exact: true }).count(), 0)
       await waiting.waitFor({ state: 'hidden' })
       await page.unroute(requestUrl, holdFirstReply)
       assert.ok(observedWaiting, 'Think is visible while waiting for the first chunk')
       assert.equal(await panel.getByRole('table').count(), 0)
-      await page.route('**/chat/sessions/canvas/*/events?*', route => route.abort())
+      await page.route('**/chat/sessions/*/events?*', route => route.abort())
       await page.reload()
       await open()
       await first.waitFor()
       replyGates.get(text)()
+      assert.match((await next('turn.completed')).payload.text, /中景/)
+      stream.abort()
       await delay(550)
       assert.equal(await panel.getByRole('table').count(), 0)
-      await page.unroute('**/chat/sessions/canvas/*/events?*')
+      await page.unroute('**/chat/sessions/*/events?*')
       await panel.getByRole('cell', { name: '中景' }).waitFor()
       await page.reload()
       await open()
@@ -458,7 +492,7 @@ try {
       await input.press('Escape')
       await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '打开画布助手')
       await open()
-      const assistantUrl = /\/chat\/sessions\/canvas\/[^/]+\/turns(?:\?|$)/
+      const assistantUrl = /\/chat\/sessions\/[^/]+\/turns(?:\?|$)/
       await page.route(assistantUrl, lostReceipt)
       await ask('完成回执丢失' + name)
       await page.waitForFunction(() => document.querySelector('[aria-label="审批模式"]')?.getAttribute('aria-disabled') !== 'true')
@@ -497,9 +531,10 @@ try {
     assert.ok(await afterSaving.isDisabled())
     await draftApproval.press('Escape')
     await afterSaving.waitFor({ state: 'hidden' })
-    const draftUrl = /\/chat\/sessions\/draft\/[^/]+\/turns(?:\?|$)/
+    const draftUrl = /\/chat\/sessions\/[^/]+\/turns(?:\?|$)/
     await page.route(draftUrl, lostReceipt)
     await ask('草稿完成回执丢失')
+    await page.getByText('已保存', { exact: true }).waitFor()
     await panel.getByRole('button', { name: '发送消息' }).waitFor()
     assert.equal(await panel.getByText('未收到助手回复，请检查助手模型后重试', { exact: true }).count(), 0)
     await page.unroute(draftUrl, lostReceipt)
@@ -540,6 +575,7 @@ try {
   assert.equal(await panel.getByRole('button', { name: '排到下一轮' }).count(), 0)
   releaseSceneSource()
   await panel.getByText('答复 分镜准备中', { exact: true }).waitFor()
+  await panel.getByRole('button', { name: '发送消息' }).waitFor()
   assert.equal(await sceneComposer.isEnabled(), true)
   await page.goto(base + '/canvases/' + free.id)
   await open()
@@ -560,7 +596,7 @@ try {
   assert.ok(rename.ok, await rename.clone().text())
   acceptSlowReply()
   await askWhileEditing
-  assert.equal(await busyComposer.isEnabled(), true)
+  await busyComposer.and(page.locator(':enabled')).waitFor()
   assert.deepEqual(prompts, [['自由一'], ['分镜一'], ['自由一', '自由二']])
   await page.screenshot({ path: join(output, 'assistant-desktop.png') })
   for (const [theme, expected] of [
@@ -1115,8 +1151,6 @@ try {
   await page.reload()
   await open()
   await panel.getByText('答复 草稿里先聊', { exact: true }).waitFor()
-  assert.equal(await totalCanvases(), beforeDrafts)
-  await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByText('已保存', { exact: true }).waitFor()
   assert.equal(await totalCanvases(), beforeDrafts + 1)
   assert.equal((await (await fetch(canvasApi + '/' + conversationDraft + '/assistant')).json()).data.turns.length, 1)
@@ -1130,23 +1164,9 @@ try {
   await panel.getByRole('button', { name: '发送消息' }).click()
   const draftProposal = panel.getByRole('region', { name: '修改建议' })
   await draftProposal.getByText('潮水涌入', { exact: true }).last().waitFor()
-  assert.equal(await totalCanvases(), beforeDrafts + 1)
-  const draftSave = '**/generation-canvases/drafts/' + cardDraft
-  let lostSave = false
-  await page.route(draftSave, async route => {
-    if (route.request().method() !== 'PUT' || lostSave) {
-      return route.continue()
-    }
-    const saved = await route.fetch()
-    assert.ok(saved.ok(), await saved.text())
-    lostSave = true
-    await route.abort()
-  })
+  assert.equal(await totalCanvases(), beforeDrafts + 2)
   await draftProposal.getByRole('checkbox', { name: '新建文本', exact: false }).check()
   await draftProposal.getByRole('button', { name: '写入所选 1 组' }).click()
-  await page.getByText('请求结果未知，请重试核实原请求', { exact: true }).waitFor()
-  await page.getByRole('button', { name: '保存画布', exact: true }).click()
-  await page.getByText('已保存', { exact: true }).waitFor()
   await draftProposal.getByText('已写入画布', { exact: true }).waitFor()
   const storedDraft = (await (await fetch(canvasApi + '/' + cardDraft)).json()).data
   assert.equal(storedDraft.document.cards.filter(card => card.text === '潮水涌入').length, 1)

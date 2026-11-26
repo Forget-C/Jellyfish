@@ -1,4 +1,4 @@
-import { textTrialFrame } from './text-trial-events.mjs'
+import { textTrialFrame, turnReceipt, mediaTurnReceipt, mediaAdmissionStream } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -41,6 +41,8 @@ try {
   await page.route('**/api/**', async route => {
     const request = route.request()
     const url = new URL(request.url())
+    const admission = mediaAdmissionStream(route, url)
+    if (admission) return admission
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (url.pathname.endsWith('/experiment-sessions')) return respond(sessions.filter(item => item.lab_type === url.searchParams.get('lab_type')))
     if (url.pathname.endsWith('/models')) {
@@ -59,17 +61,17 @@ try {
       variables: ['主体'], variable_defaults: { 主体: '雪松' }, category: 'video_prompt',
       created_at: timestamp, updated_at: timestamp,
     }] : [] })
-    if (url.pathname.endsWith('/chat/sessions/text/text-session/turns')) {
+    if (url.pathname.endsWith('/chat/sessions/text-session/turns')) {
       writes.push(request.postDataJSON())
       requestHeaders.push(request.headers())
-      return respond({ turn_id: writes.at(-1).content.includes('断开') ? 'disconnect-run' : 'text-run', cursor: 0 })
+      return respond(turnReceipt(route, writes.at(-1).content.includes('断开') ? 'disconnect-run' : 'text-run'))
     }
     if (url.pathname.endsWith('/text-session/events')) return submission(route)
     if (url.pathname.endsWith('/chat/sessions/text/text-session')) {
       historyReads += 1
       return respond(histories.get('text-session') ?? [])
     }
-    if (/\/chat\/sessions\/media\/[^/]+\/turns$/.test(url.pathname)) {
+    if (/\/chat\/sessions\/[^/]+\/turns$/.test(url.pathname)) {
       writes.push(request.postDataJSON())
       requestHeaders.push(request.headers())
       return submission(route)
@@ -142,7 +144,7 @@ try {
       historyMessage(imageSession, 'new-user', 'user', prompt, 3),
       historyMessage(imageSession, 'new-task', 'task', '本轮图片结果', 4, { task_id: 'known-image-task', status: 'succeeded' }),
     ])
-    return route.fulfill({ json: { success: true, data: { task_id: 'known-image-task' } } })
+    return route.fulfill({ json: { success: true, data: mediaTurnReceipt(route, { task_id: 'known-image-task' }) } })
   }
   await imageSubmit.click()
   await page.getByText('本轮图片结果', { exact: true }).waitFor()
@@ -246,9 +248,9 @@ try {
   submission = async route => {
     lateEntered()
     await lateGate
-    return route.fulfill({ json: { success: true, data: { task_id: 'late-task', messages: [
+    return route.fulfill({ json: { success: true, data: mediaTurnReceipt(route, { task_id: 'late-task', messages: [
       historyMessage(imageSession, 'late-msg', 'task', '迟到的旧会话结果', 5, { task_id: 'late-task', status: 'succeeded' }),
-    ] } } })
+    ] }) } })
   }
   await imageSubmit.dblclick()
   await lateRequest
@@ -291,9 +293,9 @@ try {
   assert.equal(await template.getByRole('textbox', { name: '主体', exact: true }).inputValue(), '海鸥')
   await page.keyboard.press('Escape')
   await template.waitFor({ state: 'hidden' })
-  submission = route => route.fulfill({ json: { success: true, data: { task_id: 'video-ok', messages: [
+  submission = route => route.fulfill({ json: { success: true, data: mediaTurnReceipt(route, { task_id: 'video-ok', messages: [
     historyMessage('video-session', 'video-ok', 'task', '视频任务已接收', 1, { task_id: 'video-ok', status: 'succeeded' }),
-  ] } } })
+  ] }) } })
   await videoSubmit.click()
   await page.getByText('视频任务已接收', { exact: true }).waitFor()
   assert.equal(writes.at(-1).execution_prompt, '保留 海鸥')

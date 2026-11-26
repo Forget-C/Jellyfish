@@ -1,3 +1,4 @@
+import { turnReceipt } from './text-trial-events.mjs'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -24,7 +25,13 @@ try {
   let selected
   await page.route('**/api/**', route => {
     const url = new URL(route.request().url())
-    if (url.pathname.endsWith('/events')) return route.fulfill({contentType: 'text/event-stream', body: ': keep-alive\n\n'})
+    if (url.pathname.endsWith('/events')) {
+      const turn = !question && requests.length > 1 && Number(url.searchParams.get('after')) < 2 ? requests.at(-1) : undefined
+      const event = {category: 'turn', type: 'turn.completed', cursor: 2, session_id: existing.id,
+        turn_id: turn, payload: {text: '', error: null, reason: null}}
+      const body = turn ? 'id: 2\nevent: turn.completed\ndata: ' + JSON.stringify(event) + '\n\n' : ': keep-alive\n\n'
+      return route.fulfill({contentType: 'text/event-stream', body})
+    }
     if (url.pathname.endsWith('/answer')) {
       selected = route.request().postDataJSON()
       question = undefined
@@ -41,6 +48,7 @@ try {
     if (url.pathname.endsWith('/stop')) active = false
     const snapshot = {question, session_id: existing.id, cursor: 1, models: {text: 'T', image: 'I'}, messages: failedTurn ? [{id:'failed', role:'assistant', content:'失败', status:'failed', payload:{turn_id:failedTurn}}] : [], capabilities: [], active_turn: active ? 'active' : null}
     const data = url.pathname.endsWith('/experiment-sessions') ? (hasHistory && url.searchParams.get('lab_type') === 'chat' ? [existing] : [])
+      : url.pathname.endsWith('/turns') ? turnReceipt(route)
       : url.pathname.includes('/chat/sessions/lab/chat') ? snapshot
       : url.pathname.endsWith('/model-settings') ? {default_text_model_id: 'T', default_image_model_id: 'I'}
       : url.pathname.endsWith('/models') ? {items: [{id: 'T', name: '主模型T'}, {id: 'I', name: '图片模型I'}]} : []

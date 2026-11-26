@@ -2,10 +2,11 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-/**
- * Cursor immediately preceding this accepted turn, stable across retries.
- */
-export type TextTrialReceipt = {
+export type ChatTurnReceipt = {
+    session_id: string;
     turn_id: string;
+    /**
+     * Subscribe after this cursor to replay the submitted turn.
+     */
     cursor: number;
 };

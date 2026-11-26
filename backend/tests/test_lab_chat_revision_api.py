@@ -10,17 +10,19 @@ from app.models.llm import Model, ModelSettings, Provider
 from app.models.studio_prompts_files_timeline import FileItem
 from app.models.task import Task, TaskOutput
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
+from tests.chat_events import wait_for_chat_event
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # pylint: disable=unused-import
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('canvas_client', ['app-handler'], indirect=True)
+@pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
 @pytest.mark.parametrize('count', [1, 2])
 async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, count):
     from app.task_worker import TaskWorker
 
     sid = (await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})).json()['data']['id']
-    url = '/api/v1/studio/chat/sessions/lab/' + sid
+    url = '/api/v1/studio/chat/sessions/' + sid
+    lab_url = '/api/v1/studio/chat/sessions/lab/' + sid
     originals = []
     async with canvas_client.canvas_sessions.begin() as db:
         (await db.get(Provider, 'canvas-provider')).api_key = 'local'
@@ -66,18 +68,20 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
     response = await canvas_client.post(url + '/turns', json=command)
     assert response.is_success, response.text
     if count > 1:
-        state = (await canvas_client.get(url)).json()['data']
+        await wait_for_chat_event(canvas_client, url, 'revision', 'question.asked')
+        state = (await canvas_client.get(lab_url)).json()['data']
         question = state['question']
         assert state['active_turn'] == 'revision'
         assert [opt['file_id'] for opt in question['options']] == originals
         assert not responses and len([m for m in state['messages'] if m['role'] == 'task']) == count
-        endpoint = url + '/turns/revision/answer'
+        endpoint = lab_url + '/turns/revision/answer'
         invalid = await canvas_client.post(endpoint, json={'question_id': question['id'], 'file_id': 'foreign'})
         assert invalid.status_code in (409, 422)
         decision = {'question_id': question['id'], 'file_id': originals[-1]}
         response = await canvas_client.post(endpoint, json=decision)
         assert response.is_success, response.text
         assert (await canvas_client.post(endpoint, json=decision)).is_success
+    await wait_for_chat_event(canvas_client, url, 'revision', 'turn.completed')
     receipt, = responses
     assert receipt['model_id'] == 'canvas-video' and receipt['parameters']['ratio'] == '16:9'
     assert receipt['parameters']['seconds'] == 4 and receipt['source_file_id'] == originals[-1]
@@ -106,7 +110,7 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
     new, = submissions
     assert new['prompt'] == f'original camera move {count - 1}' and new['duration'] == 4
     assert new['aspect_ratio'] == '16:9' and new['model'] == 'viduq2'
-    history = (await canvas_client.get(url)).json()['data']['messages']
+    history = (await canvas_client.get(lab_url)).json()['data']['messages']
     task_rows = [m for m in history if m['role'] == 'task']
     assert [m['media_receipt']['artifacts'][0]['file_id'] for m in task_rows[:-1]] == originals
     assert task_rows[-1]['payload']['source_file_id'] == originals[-1]
@@ -114,7 +118,7 @@ async def test_revise_original_video_in_same_turn(canvas_client, monkeypatch, co
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('canvas_client', ['app-handler'], indirect=True)
+@pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
 async def test_historical_video_analysis_checks_main_model_capability(canvas_client, monkeypatch):
     sid = (await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})).json()['data']['id']
     file_id, task_id = uuid4().hex, uuid4().hex
@@ -140,6 +144,7 @@ async def test_historical_video_analysis_checks_main_model_capability(canvas_cli
         return httpx.Response(200, request=request, json={'choices': [{'index': 0,
             'message': {'role': 'assistant', 'tool_calls': [call]}, 'finish_reason': 'tool_calls'}]})
     monkeypatch.setattr(httpx.AsyncClient, 'send', language)
-    result = await canvas_client.post(f'/api/v1/studio/chat/sessions/lab/{sid}/turns',
+    result = await canvas_client.post(f'/api/v1/studio/chat/sessions/{sid}/turns',
                                       json={'request_id': 'look', 'text': '分析刚才视频的运镜'})
-    assert result.status_code == 422 and 'ASSISTANT_MODEL_INPUT_UNSUPPORTED' in result.text
+    assert result.status_code == 202
+    await wait_for_chat_event(canvas_client, f'/api/v1/studio/chat/sessions/{sid}', 'look', 'turn.failed')

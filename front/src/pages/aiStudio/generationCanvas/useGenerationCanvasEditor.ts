@@ -4,7 +4,7 @@ import { createCanvasOperations } from './canvasOperations'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasCatalog, CanvasDiagnostic, CanvasDocument, CanvasDraftSave, CanvasRead, CanvasSave, StoryboardApplication, StoryboardCandidate } from '../../../services/generated'
-import { clearDraftAssistant, draftAssistantSnapshot, draftingAssistantReply, readDraftAssistant } from './draftAssistant'
+import { clearDraftAssistant, draftAssistantSnapshot } from './draftAssistant'
 import { cleanObjectSources } from './objectSourceCleanup'
 import { generationCanvasEditScope, useCanvasEditOwnership } from './useCanvasEditOwnership'
 
@@ -13,7 +13,7 @@ export const canvasRecoveryKey = (projectId: string, canvasId: string | null) =>
 
 export type StoryboardScope = { chapterId: string; sequenceId: string; taskId: string }
 type SceneChange = StoryboardScope & ({ action: 'apply'; choices: StoryboardApplication } | { action: 'undo' | 'redo' })
-export type PendingSave = CanvasSave & { scene?: SceneChange; assistantProposalId?: string; assistantDecisionId?: string; assistantGroupIds?: string[]; assistantAutomatic?: boolean; assistantApproveLayout?: boolean; draftAssistant?: CanvasDraftSave['assistant']; draftAssistantApproval?: CanvasDraftSave['assistant_approval'] }
+export type PendingSave = CanvasSave & { scene?: SceneChange; assistantProposalId?: string; assistantDecisionId?: string; assistantGroupIds?: string[]; assistantAutomatic?: boolean; assistantApproveLayout?: boolean; startAssistant?: boolean; draftAssistant?: CanvasDraftSave['assistant']; draftAssistantApproval?: CanvasDraftSave['assistant_approval'] }
 type StoryboardApplicationReceipt = { taskId: string; before: CanvasDocument }
 export type StoryboardReviewPreparation = { revision: number; appliedTaskId?: string }
 export type CanvasSettingsChanges = Partial<Pick<CanvasDocument, 'name' | 'cover_file_id'>>
@@ -234,7 +234,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     if (canvas.revision === -1) {
       const { data } = await Canvases.canvasDraftSave({ canvasId: canvas.id, requestBody: {
         request_id: command.request_id, expected_revision: 0, document: command.document,
-        assistant: command.draftAssistant, assistant_approval: command.draftAssistantApproval,
+        start_assistant: command.startAssistant, assistant: command.draftAssistant, assistant_approval: command.draftAssistantApproval,
       } })
       if (!data || data.request_id !== command.request_id || data.canvas_id !== canvas.id) throw new Error('invalid draft receipt')
       clearDraftAssistant(canvas.id)
@@ -244,18 +244,14 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     if (!data || data.request_id !== command.request_id || data.canvas_id !== canvas.id) throw new Error('invalid receipt')
     return { ...canvas, revision: data.revision, document: cleanObjectSources(command.document as CanvasDocument) }
   }
-  const save = (explicit = false): Promise<boolean> => {
+  const save = (explicit = false, create = false): Promise<boolean> => {
     if (inFlight.current) return inFlight.current
     const s = state.current
     if (!ownership.canEdit() || !s.current || !s.document || s.recovery || s.conflict) return Promise.resolve(false)
     if (s.current.revision === -1) {
-      if (draftingAssistantReply.has(s.current.id) || readDraftAssistant(s.current.id).live) {
-        if (explicit) setError(uiText("请等待助手回复后再保存画布"))
-        return Promise.resolve(false)
-      }
       const conversation = draftAssistantSnapshot(s.current.id)
-      if (explicit && !s.pending && conversation?.turns?.length) {
-        s.pending = { request_id: crypto.randomUUID(), expected_revision: -1, document: structuredClone(s.document) }
+      if (!s.pending && (create || (explicit && conversation?.turns?.length))) {
+        s.pending = { request_id: crypto.randomUUID(), expected_revision: -1, document: structuredClone(s.document), startAssistant: create || undefined }
       }
       if (s.pending && !('draftAssistant' in s.pending)) s.pending.draftAssistant = conversation ?? null
     }
@@ -529,6 +525,11 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     setInitialApplying(true); persist()
     return save()
   }
+  const saveForAssistant = async () => {
+    const s = state.current
+    if (s.current?.revision === -1 && !await save(true, true)) return undefined
+    if (s === state.current && s.current && s.current.revision >= 0) return s.current.revision
+  }
   const requestLeave = async () => {
     const s = state.current
     if (s.recovery) return false
@@ -563,6 +564,6 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   }
   const past = history.current.past
   const lastChange = history.current.scope === key ? past[past.length - 1] : undefined
-  return { assistantUndone: undoLabels?.key === key ? undoLabels.ids : [], handoffStoryboardApplication, canUndoArrangement: !!lastChange && 'document' in lastChange && !!lastChange.arrangement, saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saving, initialApplying, storyboardApplication, applyInitialCandidate, applyReviewedCandidate, prepareReview, prepareCommittedEdit, commitVisualContinuity, commitAssistantLayoutGroup, commitAssistantProposal, dirty, error: error === '此画布已不可用' ? uiText(error) : error, storageError: storageError === '本地恢复记录无法读取；未覆盖服务器内容' ? uiText(storageError) : storageError, recovery, conflict, restore, reload, ownership, requestLeave, needsLeaveProtection, renameSceneCanvas, pendingRename, commitSettings, pendingSettings, settingsDraft, clearSettingsDraft: () => setSettingsDraft(undefined),
+  return { assistantUndone: undoLabels?.key === key ? undoLabels.ids : [], handoffStoryboardApplication, canUndoArrangement: !!lastChange && 'document' in lastChange && !!lastChange.arrangement, saveDiagnostic, configureCatalog, current, document, edit, recordAction, save, saveForAssistant, saving, initialApplying, storyboardApplication, applyInitialCandidate, applyReviewedCandidate, prepareReview, prepareCommittedEdit, commitVisualContinuity, commitAssistantLayoutGroup, commitAssistantProposal, dirty, error: error === '此画布已不可用' ? uiText(error) : error, storageError: storageError === '本地恢复记录无法读取；未覆盖服务器内容' ? uiText(storageError) : storageError, recovery, conflict, restore, reload, ownership, requestLeave, needsLeaveProtection, renameSceneCanvas, pendingRename, commitSettings, pendingSettings, settingsDraft, clearSettingsDraft: () => setSettingsDraft(undefined),
     undo: () => travel('past'), redo: () => travel('future'), canUndo: history.current.scope === key && !!history.current.past.length, canRedo: history.current.scope === key && !!history.current.future.length }
 }

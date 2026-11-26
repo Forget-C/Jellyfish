@@ -1,3 +1,4 @@
+import { mediaTurnReceipt, mediaAdmissionStream } from './text-trial-events.mjs'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -66,6 +67,8 @@ try {
   await page.route('**/api/**', async route => {
     const request = route.request()
     const url = new URL(request.url())
+    const admission = mediaAdmissionStream(route, url)
+    if (admission) return admission
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (request.method() !== 'GET') writes.push(url.pathname)
     if (url.pathname.endsWith('/experiment-sessions')) {
@@ -89,7 +92,7 @@ try {
       return respond([imageTask, imagePrompt])
     }
     if (url.pathname.endsWith('/models')) return respond({ items: [{ id: 'image-model', name: '验收图片模型', category: 'image' }] })
-    if (url.pathname.endsWith('/image-stale-poll/turns')) return respond({ task_id: 'stale-run', messages: [staleTask, stalePrompt] })
+    if (url.pathname.endsWith('/image-stale-poll/turns')) return respond(mediaTurnReceipt(route, { task_id: 'stale-run', messages: [staleTask, stalePrompt] }))
     if (url.pathname.endsWith('/chat/sessions/media/image-stale-poll')) {
       if (!staleHistoryAvailable) return route.fulfill({ status: 503 })
       return respond([{ ...staleTask, status: 'succeeded', payload: { result: { images: [{ url: imageUrls[0] }] } } }, stalePrompt])
@@ -113,7 +116,7 @@ try {
       }
       return route.fulfill({ contentType: 'video/webm', body: portraitVideo })
     }
-    if (url.pathname.includes('/chat/sessions/media/') && url.pathname.endsWith('/events')) {
+    if (url.pathname.includes('/chat/sessions/') && url.pathname.endsWith('/events')) {
       const id = url.pathname.split('/').at(-2)
       const stale = id === 'image-stale-poll'
       const image = id === 'image-history'
@@ -126,7 +129,7 @@ try {
       const payload = { task_id: stale ? 'stale-run' : image ? 'image-run' : 'video-run',
         model_id: 'trial-model', model_name: 'Trial Provider Model', stage: status, status, artifacts,
         progress: stale ? 29 : image ? 38 : 42, error: '' }
-      const frame = `id: ${cursor}\nevent: ${type}\ndata: ${JSON.stringify({ session_id: id, turn_id: 'turn', cursor, type, payload })}\n\n`
+      const frame = `id: ${cursor}\nevent: ${type}\ndata: ${JSON.stringify({ session_id: id, turn_id: 'turn', cursor, type, category: 'task', detail: null, payload })}\n\n`
       return route.fulfill({ contentType: 'text/event-stream', body: cursor > Number(url.searchParams.get('after')) ? frame + frame : ': heartbeat\n\n' })
     }
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
@@ -262,7 +265,7 @@ try {
   await history.getByRole('button', { name: '查看图片 1' }).waitFor()
   assert.equal(await history.getByText('状态暂不可用', { exact: true }).count(), 0)
   assert.equal(await generate.isEnabled(), true)
-  assert.deepEqual(writes, ['/api/v1/studio/chat/sessions/media/image-stale-poll/turns'])
+  assert.deepEqual(writes, ['/api/v1/studio/chat/sessions/image-stale-poll/turns'])
   console.log(`Experiment result browser acceptance passed. Evidence: ${output}`)
 } finally {
   await cleanup()

@@ -1,6 +1,6 @@
 """Exchange and promotion of a browser-owned free canvas conversation."""
 
-from typing import Annotated, Literal
+from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 
@@ -36,13 +36,6 @@ class DraftAssistantMessage(CanvasAssistantMessage, DraftAssistantConversation):
     """Reply without storing a conversation or requiring a saved canvas."""
 
 
-class DraftAssistantReply(BaseModel):
-    """Short-lived reply snapshot while the transcript belongs to the browser."""
-
-    state: Literal['running', 'completed', 'stopped', 'interrupted']
-    turn: CanvasAssistantExchange
-
-
 class DraftAssistantApproval(BaseModel):
     """An explicit selection of a card creation proposal during the first save."""
 
@@ -54,6 +47,7 @@ class CanvasDraftSave(CanvasSave):
     """Include the local conversation in the ordinary idempotent first save."""
 
     assistant: DraftAssistantConversation | None = Field(default=None, exclude_if=lambda value: value is None)
+    start_assistant: bool = Field(default=False, exclude_if=lambda value: not value)
     assistant_approval: DraftAssistantApproval | None = Field(default=None, exclude_if=lambda value: value is None)
 
 

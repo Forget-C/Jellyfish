@@ -217,16 +217,17 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         body = {"execution_prompt": "按参考图生成", "media": media, "operation_input": operation}
         if explicit_model:
             body["model_id"] = "lab-model"
-        submit_url = base + (f"/chat/sessions/media/{session_id}/turns" if unified else
+        submit_url = base + (f"/chat/sessions/{session_id}/turns" if unified else
                              f"/generation-tasks/labs/{modality}/sessions/{session_id}/tasks")
         headers = {"Idempotency-Key": "same-lab-request"}
         submitted = await client.post(submit_url, json=body, headers=headers)
-        assert submitted.status_code == 201, submitted.text
+        assert submitted.status_code == (202 if unified else 201), submitted.text
         reconnected = await client.get(base + f"/experiment-sessions/{session_id}/interaction/requests/same-lab-request")
         assert reconnected.status_code == 200, reconnected.text
-        assert reconnected.json()["data"] == submitted.json()["data"]
+        created_task = reconnected.json()["data"] if unified else submitted.json()["data"]
+        assert reconnected.json()["data"] == created_task
         replayed = await client.post(submit_url, json=body, headers=headers)
-        assert replayed.status_code == 201 and replayed.json()["data"] == submitted.json()["data"]
+        assert replayed.status_code == submitted.status_code and replayed.json()["data"] == submitted.json()["data"]
         changed = await client.post(submit_url, json={**body, "execution_prompt": "更换请求正文"}, headers=headers)
         assert changed.status_code == 409, changed.text
         history = await client.get(base + (f"/chat/sessions/media/{session_id}" if unified else
@@ -234,7 +235,7 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         assert history.status_code == 200
         user, task = history.json()["data"]
         snapshot = user["payload"]["input_snapshot"]
-        assert submitted.json()["data"]["messages"][0]["payload"]["input_snapshot"] == snapshot
+        assert created_task["messages"][0]["payload"]["input_snapshot"] == snapshot
         assert snapshot["version"] == 1
         assert snapshot["prompt"] == "按参考图生成" and snapshot["model_id"] == "lab-model"
         for field, value in operation.items():
@@ -243,16 +244,20 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
             assert snapshot["media"]["references"] == media["references"]
         else:
             assert snapshot["media"]["frames"]["first"] == media["frames"]["first"]
-        assert task["task_id"] == submitted.json()["data"]["task_id"] and task["status"] == "queued"
+        assert task["task_id"] == created_task["task_id"] and task["status"] == "queued"
         assert "private-key" not in history.text
         if unified:
-            event_url = base + f"/chat/sessions/media/{session_id}/events"
-            events = await client.get(event_url, params={"follow": "false"})
+            event_url = base + f"/chat/sessions/{session_id}/events"
+            receipt = submitted.json()["data"]
+            assert receipt["session_id"] == session_id and receipt["turn_id"] == "same-lab-request"
+            events = await client.get(event_url, params={"follow": "false", "after": receipt["cursor"]})
             assert events.status_code == 200
             import json
             observed = [json.loads(line[6:]) for line in events.text.splitlines() if line.startswith("data: ")]
             assert [item["type"] for item in observed] == ["task.accepted"]
+            assert observed[0]["category"] == "task" and observed[0]["turn_id"] == receipt["turn_id"]
             receipt = observed[0]["payload"]
+            assert receipt.pop("messages") == created_task["messages"]
             assert receipt["task_id"] == task["task_id"]
             assert receipt["model_id"] == "lab-model" and receipt["model_name"] == model
             assert receipt["references"][0]["file_id"] == "input"
@@ -260,10 +265,10 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
             assert task["media_receipt"] == receipt
             assert not (await client.get(event_url, params={"after": observed[0]["cursor"], "follow": "false"})).text
             if explicit_model:
-                await complete_media_trial(sessions, client, event_url, modality, model, monkeypatch)
+                await complete_media_trial(sessions, client, event_url, history.request.url, modality, model, monkeypatch)
 
 
-async def complete_media_trial(sessions, api, url, modality, model, monkeypatch):
+async def complete_media_trial(sessions, api, url, snapshot_url, modality, model, monkeypatch):
     """Run the real worker against controlled HTTP/storage edges and replay its archived files."""
     import asyncio
     import base64
@@ -317,6 +322,6 @@ async def complete_media_trial(sessions, api, url, modality, model, monkeypatch)
     receipt = items[-1]["payload"]
     assert len(posts) == 1 and uploads == ([b"v"] if modality == "video" else [b"a", b"b"])
     assert len({item["file_id"] for item in receipt["artifacts"]}) == len(uploads)
-    snapshot = await api.get(url.removesuffix("/events"))
+    snapshot = await api.get(snapshot_url)
     assert snapshot.json()["data"][-1]["media_receipt"] == receipt
     assert snapshot.json()["meta"]["cursor"] == items[-1]["cursor"]

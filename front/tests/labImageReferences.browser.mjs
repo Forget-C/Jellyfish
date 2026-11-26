@@ -1,3 +1,4 @@
+import { mediaTurnReceipt, mediaAdmissionStream } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -37,6 +38,8 @@ try {
   await page.route('**/api/**', async route => {
     const request = route.request()
     const url = new URL(request.url())
+    const admission = mediaAdmissionStream(route, url)
+    if (admission) return admission
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (request.method() === 'DELETE') deletions.push(url.pathname)
     if (url.pathname.endsWith('/experiment-sessions')) return respond(url.searchParams.get('lab_type') === 'image' ? sessions : [])
@@ -60,12 +63,12 @@ try {
       if (url.pathname.includes('/file-6/')) return route.fulfill({ status: 404 })
       return route.fulfill({ body: png, contentType: 'image/png' })
     }
-    const run = url.pathname.match(/\/chat\/sessions\/media\/([^/]+)\/turns$/)
+    const run = url.pathname.match(/\/chat\/sessions\/([^/]+)\/turns$/)
     if (run) {
       const body = request.postDataJSON()
       submissions.push({ session: run[1], body })
       const taskId = `task-${submissions.length}`
-      return respond({ task_id: taskId, messages: [{ id: taskId, session_id: run[1], role: 'task', content: '已完成', sequence: 1, task_id: taskId, status: 'succeeded', created_at: timestamp, updated_at: timestamp }] })
+      return respond(mediaTurnReceipt(route, { task_id: taskId, messages: [{ id: taskId, session_id: run[1], role: 'task', content: '已完成', sequence: 1, task_id: taskId, status: 'succeeded', created_at: timestamp, updated_at: timestamp }] }))
     }
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])
@@ -103,7 +106,7 @@ try {
   await page.keyboard.press('Escape')
   await page.getByRole('textbox', { name: '图片提示词', exact: true }).fill('参考图次序验证')
   await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/media/image-a/turns')),
+    page.waitForResponse(response => response.url().endsWith('/sessions/image-a/turns')),
     page.getByRole('button', { name: /^发\s*送$/, exact: true }).click(),
   ])
   assert.deepEqual(submissions.map(({ session, body }) => [session, body.media.references]), [[
@@ -243,7 +246,7 @@ try {
   assert.equal(await page.getByRole('textbox', { name: 'Image prompt', exact: true }).inputValue(), '应用已上传的参考图')
   await page.getByRole('button', { name: 'View all media (6)', exact: true }).waitFor()
   await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/media/image-a/turns')),
+    page.waitForResponse(response => response.url().endsWith('/sessions/image-a/turns')),
     page.getByRole('button', { name: 'Send', exact: true }).click(),
   ])
   assert.equal(submissions[1].body.execution_prompt, '应用已上传的参考图')

@@ -76,7 +76,8 @@ async def test_chain_uses_archived_image_as_video_frame(canvas_client, monkeypat
             return httpx.Response(400, json={'error': '拒绝生成'})
         return httpx.Response(200, json={'task_id': 'remote-video'})
     created = await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})
-    url = '/api/v1/studio/chat/sessions/lab/' + created.json()['data']['id']
+    url = '/api/v1/studio/chat/sessions/' + created.json()['data']['id']
+    lab_url = '/api/v1/studio/chat/sessions/lab/' + created.json()['data']['id']
     body = {'request_id': 'rainy-street', 'text': '先画雨夜街景，再用这张图做一个 5 秒推进镜头'}
     sending = asyncio.create_task(canvas_client.post(url + '/turns', json=body))
     async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as http:
@@ -85,7 +86,7 @@ async def test_chain_uses_archived_image_as_video_frame(canvas_client, monkeypat
             async with asyncio.timeout(12):
                 while True:
                     await asyncio.sleep(.05)
-                    state = (await canvas_client.get(url)).json()['data']
+                    state = (await canvas_client.get(lab_url)).json()['data']
                     tasks = [m for m in state['messages'] if m['role'] == 'task']
                     if tasks and interruption == 'lease-takeover' and not takeover:
                         # Simulate an unresponsive HTTP process. The worker owns recovery after the lease expires.
@@ -94,30 +95,31 @@ async def test_chain_uses_archived_image_as_video_frame(canvas_client, monkeypat
                         clock = turn_recovery.now
                         monkeypatch.setattr(turn_recovery, 'now', lambda: clock() + timedelta(minutes=2))
                         takeover = True
-                    if (tasks and not sending.done() and (
-                            interruption == 'image-accepted' or interruption == 'before-video' and at_handoff.is_set())):
-                        sending.cancel()
-                        with pytest.raises(asyncio.CancelledError):
-                            await sending
-                        # Drop the HTTP runner and create a fresh worker over the same durable storage.
-                        worker.text_pool.shutdown(wait=True)
-                        worker = TaskWorker(sessions, client=http)
+                    if tasks and not takeover and (
+                            interruption == 'image-accepted' or interruption == 'before-video' and at_handoff.is_set()):
+                        # Force the durable lease to expire while the detached execution is paused.
+                        from datetime import timedelta
+                        from app.services.chat import turn_recovery
+                        clock = turn_recovery.now
+                        monkeypatch.setattr(turn_recovery, 'now', lambda: clock() + timedelta(minutes=2))
+                        takeover = True
+                        assert (await sending).status_code == 202
                         retry = await canvas_client.post(url + '/turns', json=body)
-                        assert retry.json()['data']['active_turn'] == 'rainy-street'
+                        assert retry.json()['data']['turn_id'] == 'rainy-street'
                     if (interruption == 'acceptance-unknown' and tasks
                             and tasks[-1]['media_receipt']['stage'] == 'submission_unknown'):
                         retry = await canvas_client.post(url + '/turns', json=body)
-                        assert retry.json()['data']['active_turn'] == 'rainy-street'
+                        assert retry.json()['data']['turn_id'] == 'rainy-street'
                         worker.text_pool.shutdown(wait=True)
                         worker = TaskWorker(sessions, client=http)
                         await worker.tick()
                         await asyncio.gather(*list(worker.jobs.values()))
-                        await canvas_client.post(url + '/turns/rainy-street/stop')
+                        await canvas_client.post(lab_url + '/turns/rainy-street/stop')
                         assert [p['model'] for p in posts] == ['canvas-image', 'viduq2']
                         assert (await sending).is_success
                         return
                     if interruption == 'stop' and tasks and state['active_turn']:
-                        await canvas_client.post(url + '/turns/rainy-street/stop')
+                        await canvas_client.post(lab_url + '/turns/rainy-street/stop')
                     if not state['active_turn'] and tasks and all(m['status'] in ('succeeded', 'failed') for m in tasks):
                         break
                     if sending.done() and not sending.cancelled():

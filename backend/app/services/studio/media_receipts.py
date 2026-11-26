@@ -42,7 +42,7 @@ async def media_task_receipts(db, results):
     return receipts
 
 
-async def publish_media_fact(db, task_id, session_id):
+async def publish_media_fact(db, task_id, session_id, *, messages=None):
     """Persist a direct trial event in the same transaction as its task transition."""
     from app.services.studio.session_events import append_session_event
 
@@ -61,6 +61,8 @@ async def publish_media_fact(db, task_id, session_id):
         TaskStatus.succeeded: 'task.completed',
     }[receipt.status]
     public = receipt.model_dump(mode='json')
+    if messages is not None:
+        public['messages'] = [item.model_dump(mode='json') for item in messages]
     if 'tool_call_id' in message.payload:
         public['tool_call_id'] = message.payload['tool_call_id']
     if receipt.artifacts and receipt.status == TaskStatus.succeeded:

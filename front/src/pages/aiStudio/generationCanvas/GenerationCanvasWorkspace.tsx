@@ -319,7 +319,7 @@ export function GenerationCanvasWorkspace({
         <CanvasAssistant key={scope} assistantUndone={editor.assistantUndone} document={document} highlight={assistantHighlight}
           onHighlight={value => { storeAssistantHighlight(scope, value); setAssistantMarks({ scope, value }) }}
           onLocate={cardId => setAssistantTarget({ scope, cardId, serial: Date.now() })}
-          canvasId={canvasId} projectId={projectId} storyboard={Boolean(projectId)} cards={document.cards ?? []} localDraft={uncreated} draftPromoting={uncreated && saving}
+          canvasId={canvasId} projectId={projectId} storyboard={Boolean(projectId)} cards={document.cards ?? []} localDraft={uncreated} saveForAssistant={editor.saveForAssistant} draftPromoting={uncreated && saving}
           cardTitles={Object.fromEntries((catalog.current?.cards ?? []).map(card => [card.type, card.title]))}
           applyLayout={applyAssistantLayout}
           openRun={runId => setAssistantHistoryTarget({ canvasId, runId })}

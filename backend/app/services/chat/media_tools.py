@@ -13,7 +13,7 @@ from app.core.contracts.media import ImageMediaInput, MediaReference, VideoFrame
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession, ExperimentSessionEvent
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.submission import GenerationSubmitter
-from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
+from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, read_experiment_messages
 from app.services.studio.media_receipts import media_task_receipts, publish_media_fact
 from app.services.studio.session_events import append_session_event
 from app.services.task_queries import TaskQueries
@@ -59,11 +59,12 @@ class LaboratoryMediaTools:
                     request=request)
                 accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(db, args)
                 task_id = accepted.task_id
-                await append_experiment_messages(db, session_id=self.session_id, drafts=[ExperimentMessageDraft(
+                messages = await append_experiment_messages(db, session_id=self.session_id, drafts=[ExperimentMessageDraft(
                     role='task', task_id=task_id, content=name,
                     payload={**identity, 'modality': modality.value, 'submit_only': submit_only})])
                 await db.flush()
-                await publish_media_fact(db, task_id, self.session_id)
+                rows = await read_experiment_messages(db, messages, include_media_receipts=True)
+                await publish_media_fact(db, task_id, self.session_id, messages=rows)
             else:
                 task_id = row.task_id
                 completed = await db.scalar(select(ExperimentSessionEvent).where(

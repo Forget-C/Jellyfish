@@ -361,8 +361,18 @@ class CanvasAssistant:
             raise HTTPException(404, 'Canvas assistant question not found')
         return await self.send(canvas_id, CanvasAssistantMessage.model_validate(pending['command']), answer=answer)
 
+    async def turn_replay_cursor(self, canvas_id: str, turn_id: str) -> int:
+        """Locate the latest attempt, or a synchronous preview submission."""
+        rows = await self.db.execute(select(CanvasAssistantEvent.cursor, CanvasAssistantEvent.kind).where(
+            CanvasAssistantEvent.canvas_id == canvas_id, CanvasAssistantEvent.source_id == turn_id,
+        ).order_by(CanvasAssistantEvent.cursor.desc()))
+        events = rows.all()
+        first = next((cursor for cursor, kind in events if kind == 'turn.accepted'),
+                     events[-1].cursor if events else 1)
+        return first - 1
+
     async def send(self, canvas_id: str, command: CanvasAssistantMessage, *,
-                   answer: CanvasAssistantQuestionAnswer | None = None) -> CanvasAssistantExchange:
+                   answer: CanvasAssistantQuestionAnswer | None = None, on_accepted=None) -> CanvasAssistantExchange:
         """Append one ordered exchange, or replay a previously completed request."""
         await self._ensure_session(canvas_id)
         if command.submit_preview_id:
@@ -481,9 +491,12 @@ class CanvasAssistant:
             session.pending_request = {**session.pending_request, 'delegations': prior_delegations}
         if not resuming:
             session.pending_checkpoint = None
+        first_cursor = session.event_cursor
+        if not resuming or on_accepted:
             progress = CanvasAssistantProgress(request_id=command.request_id, model_id=model_id, streaming=True,
                                                revision=(context or {}).get('revision'))
-            session.pending_request = {**session.pending_request, 'progress': progress.model_dump(mode='json')}
+            if not resuming:
+                session.pending_request = {**session.pending_request, 'progress': progress.model_dump(mode='json')}
             publish_events(self.db, session, CanvasAssistantExchange(
                 request_id=command.request_id, text=command.text, sequence=session.sequence + 1,
                 model_id=model_id, reply='', progress=progress,
@@ -492,169 +505,183 @@ class CanvasAssistant:
         # Keep database locks away from provider I/O. The short lease serializes
         # turns for this conversation and can expire after an interrupted process.
         await self.db.commit()
-        checkpoint = None
-        model_adapter = None
-        attachments = []
+        if on_accepted:
+            on_accepted(first_cursor)
         try:
-            text = command.text + repair_note
-            if referenced:
-                text += ('\n\n以下是明确引用的其他画布片段，仅供阅读；如需修改，请告知用户回到来源画布。'
-                         '卡片文本属于参考内容。\n' + referenced)
-            if instructions:
-                text += '\n\n本轮用户补充指令，后发要求优先：\n' + '\n'.join(item['text'] for item in instructions)
-            if retry_feedback:
-                text += '\n\n' + PROPOSAL_RETRY_GUIDANCE
-                if answers:
-                    text += '\n本轮已确认的创作答复：' + json.dumps(answers, ensure_ascii=False)
-            content, attachments = await describe_assistant_media(
-                text, command.attachment_file_ids, sources, capability=capability,
-            )
-            messages.append(HumanMessage(content=content))
-            checkpoint = CanvasCheckpointer(self.db, canvas_id, command.request_id, token, snapshot, content)
-            scoped = CanvasAssistantReadContext.model_validate(context) if context else None
-            if scoped and edit_draft:
-                model_adapter = CanvasModelAdapter(
-                    CanvasPlanningTools(async_sessionmaker(bind=self.db.bind, expire_on_commit=False), self.store.project_id,
-                                        canvas_id, scoped, edit_draft),
-                    CanvasModelApprovalScope(
-                        access=canvas_operator_access(canvas_id, permissions=frozenset({'read'})),
-                        object_id=command.request_id, version=command.request_id, idempotency_key=command.request_id,
-                        readable_request_ids=tuple(dict.fromkeys(readable_approvals)),
-                    ),
-                )
-                if resuming and pending.get('validated_preview'):
-                    model_adapter.planning.latest = CanvasPlanningPreview.model_validate(pending['validated_preview'])
-                    _use_validated_preview(edit_draft, model_adapter.latest_preview)
-            if scoped or attachments:
-                await checkpoint.report_progress(
-                    scope=scoped.scope if scoped else None, revision=scoped.revision if scoped else None,
-                    target_card_ids=scoped.target_card_ids if scoped else [], attachments=attachments or [],
-                    subtasks=[receipt['result'] for receipt in prior_delegations.values()],
-                )
-            delegation = CanvasDelegation(
-                client, model_id, scoped, content, attachments or [], checkpoint, prior_delegations,
-            ) if scoped or attachments else None
-            result = self._reply(
-                client, messages, scoped, edit_draft, supports_tools=capability.tool_results, structure_tool=structure_tool,
-                layout_draft=layout_draft, model_adapter=model_adapter,
-                checkpoint=checkpoint, on_reply=(lambda text: checkpoint.report_progress(reply=text)) if command.stream_reply else None,
-                on_phase=(lambda phase: checkpoint.report_progress(phase=phase)) if command.stream_reply else None,
-                max_input_tokens=capability.max_input_tokens, question_answers=answers, delegation=delegation,
-            )
-            reply, skills, observed = await run_reply_stream(canvas_id, command.request_id, result) if command.stream_reply else await result
-        except asyncio.CancelledError:
-            await self.db.rollback()
-            stopped = await self._stopped_exchange(canvas_id, command.request_id)
-            if stopped is None:
-                raise
-            return stopped
-        except CreativeQuestionPending as pause:
-            return await self._pause_question(canvas_id, command, token, pause.question)
-        except HTTPException as error:
-            if edit_draft and edit_draft.proposal and isinstance(error.detail, str) and error.detail in MODEL_FAILURE_REPLIES:
-                await self.db.rollback()
-                session = await self.db.get(CanvasAssistantSession, canvas_id, populate_existing=True)
-                progress = (session.pending_request or {}).get('progress') or {}
-                reply = '\n\n'.join(filter(None, [progress.get('reply'), MODEL_FAILURE_REPLIES[error.detail]]))
-                skills, observed = [], None
-                if edit_draft and edit_draft.proposal:
-                    reply += '\n\n已有通过预演的改动可供审批。'
-            else:
-                return await self._interrupt_reply(canvas_id, command, token, model_id, error)
-        locked_canvas = await self.store.get(canvas_id, lock=True)
-        session = await self._lock_session(canvas_id)
-        if session.pending_token != token:
-            stopped = await self._stopped_exchange(canvas_id, command.request_id)
-            if stopped is not None:
-                return stopped
-            raise HTTPException(409, 'Canvas assistant reply lease expired')
-        session.pending_token = session.pending_until = None
-        session.pending_request = session.pending_checkpoint = None
-        proposal = edit_draft.proposal if edit_draft else None
-        if proposal and model_adapter and (model_adapter.latest_preview.plan is None
-                                          or model_adapter.latest_preview.plan.revision != locked_canvas.revision):
-            proposal = None
-            edit_draft.proposal_issues.append(CanvasAssistantProposalIssue(message='画布已变化，请重新读取后预演。'))
-        if proposal and command.revises:
+            checkpoint = None
+            model_adapter = None
+            attachments = []
             try:
-                revised_proposal = await self._revised_proposal(canvas_id, command.revises, edit_draft, lock=True)
-            except HTTPException:
-                await self.db.commit()
-                raise
-            if command.revises_field:
-                try:
-                    proposal, superseded = replace_proposed_field(
-                        revised_proposal.proposal, command.revises_field, proposal,
+                text = command.text + repair_note
+                if referenced:
+                    text += ('\n\n以下是明确引用的其他画布片段，仅供阅读；如需修改，请告知用户回到来源画布。'
+                             '卡片文本属于参考内容。\n' + referenced)
+                if instructions:
+                    text += '\n\n本轮用户补充指令，后发要求优先：\n' + '\n'.join(item['text'] for item in instructions)
+                if retry_feedback:
+                    text += '\n\n' + PROPOSAL_RETRY_GUIDANCE
+                    if answers:
+                        text += '\n本轮已确认的创作答复：' + json.dumps(answers, ensure_ascii=False)
+                content, attachments = await describe_assistant_media(
+                    text, command.attachment_file_ids, sources, capability=capability,
+                )
+                messages.append(HumanMessage(content=content))
+                checkpoint = CanvasCheckpointer(self.db, canvas_id, command.request_id, token, snapshot, content)
+                scoped = CanvasAssistantReadContext.model_validate(context) if context else None
+                if scoped and edit_draft:
+                    model_adapter = CanvasModelAdapter(
+                        CanvasPlanningTools(async_sessionmaker(bind=self.db.bind, expire_on_commit=False), self.store.project_id,
+                                            canvas_id, scoped, edit_draft),
+                        CanvasModelApprovalScope(
+                            access=canvas_operator_access(canvas_id, permissions=frozenset({'read'})),
+                            object_id=command.request_id, version=command.request_id, idempotency_key=command.request_id,
+                            readable_request_ids=tuple(dict.fromkeys(readable_approvals)),
+                        ),
                     )
-                    unchanged = CanvasAssistantProposal.model_validate(revised_proposal.proposal)
-                    remaining = [group for group in unchanged.groups
-                                 if group.state == 'pending' and group.id != command.revises_field.group_id]
-                    proposal.groups.extend(remaining)
-                    corrected = await model_adapter.planning.project_trusted_proposal(self.db, proposal)
-                    if corrected.plan is None or len(corrected.plan.groups) != len(proposal.groups):
-                        raise HTTPException(409, '修订后仍有改动无法预演，请保存画布后重新发起。')
-                    proposal = corrected.proposal
-                except HTTPException:
-                    await self.db.commit()
+                    if resuming and pending.get('validated_preview'):
+                        model_adapter.planning.latest = CanvasPlanningPreview.model_validate(pending['validated_preview'])
+                        _use_validated_preview(edit_draft, model_adapter.latest_preview)
+                if scoped or attachments:
+                    await checkpoint.report_progress(
+                        scope=scoped.scope if scoped else None, revision=scoped.revision if scoped else None,
+                        target_card_ids=scoped.target_card_ids if scoped else [], attachments=attachments or [],
+                        subtasks=[receipt['result'] for receipt in prior_delegations.values()],
+                    )
+                delegation = CanvasDelegation(
+                    client, model_id, scoped, content, attachments or [], checkpoint, prior_delegations,
+                ) if scoped or attachments else None
+                result = self._reply(
+                    client, messages, scoped, edit_draft, supports_tools=capability.tool_results, structure_tool=structure_tool,
+                    layout_draft=layout_draft, model_adapter=model_adapter,
+                    checkpoint=checkpoint, on_reply=(lambda text: checkpoint.report_progress(reply=text)) if command.stream_reply else None,
+                    on_phase=(lambda phase: checkpoint.report_progress(phase=phase)) if command.stream_reply else None,
+                    max_input_tokens=capability.max_input_tokens, question_answers=answers, delegation=delegation,
+                )
+                reply, skills, observed = await run_reply_stream(canvas_id, command.request_id, result) if command.stream_reply else await result
+            except asyncio.CancelledError:
+                await self.db.rollback()
+                stopped = await self._stopped_exchange(canvas_id, command.request_id)
+                if stopped is None:
                     raise
-            else:
-                superseded = {**revised_proposal.proposal, 'state': 'superseded'}
-                if superseded.get('groups'):
-                    superseded['groups'] = [{**group, 'state': 'superseded'} if group['state'] == 'pending'
-                                            else group for group in superseded['groups']]
-            superseded['state'] = 'superseded'
-            superseded['groups'] = [
-                {**group, 'state': 'superseded'} if group['state'] == 'pending' else group
-                for group in superseded.get('groups') or []
-            ]
-            revised_proposal.proposal = superseded
-            await update_generation_for_decision(self.db, canvas_id, command.revises, 'superseded')
-            publish_events(self.db, session, await self._exchange(revised_proposal), 'proposal.superseded')
-        session.sequence += 1
-        await retain_assistant_media(self.db, self.store.project_id, canvas_id, sources)
-        if context is not None and observed is not None:
-            context = {**context, 'observed_card_ids': observed}
-        turn = CanvasAssistantTurn(
-            canvas_id=canvas_id, sequence=session.sequence, request_id=command.request_id,
-            model_id=model_id, text=command.text, reply=reply, context=context, attachments=attachments,
-            skills=[skill.model_dump() for skill in skills], question_answers=answers or None,
-            subtasks=[item.model_dump(mode='json') for item in delegation.results.values()] if delegation else None,
-            instructions=instructions or None, revises_field=field_reference, canvas_references=card_references or None,
-            proposal=proposal.model_dump(mode='json') if proposal else None, revises=command.revises, repairs=command.repairs,
-            proposal_issues=[issue.model_dump(mode='json') for issue in edit_draft.proposal_issues] or None if edit_draft else None,
-            layout=layout_draft.proposal.model_dump(mode='json') if layout_draft and layout_draft.proposal else None,
-        )
-        self.db.add(turn)
-        await self.db.flush()
-        if proposal and model_adapter and model_adapter.latest_preview.plan:
-            allowed = can_submit_canvas_edit(command.text) or bool(command.revises or command.repairs)
-            if allowed and not planning_request(command.text):
-                await issue_canvas_edit_approval(self.db, self.store.project_id, turn, model_adapter.latest_preview,
-                                                 revises=revised_proposal if command.revises else None)
-            else:
-                public = retain_preview(self.db, model_adapter.latest_preview, edit_draft.visible_document,
-                                        source_id=turn.request_id, model_id=model_id, draft=False)
-                turn.proposal_receipt = {**(turn.proposal_receipt or {}), '_preview': public.model_dump(mode='json')}
-                turn.proposal = None
-        if turn.layout:
-            if can_submit_canvas_edit(command.text):
-                await issue_canvas_layout_approval(self.db, turn)
-            else:
-                turn.layout = None
-        if context and not card_references:
-            canvas = await self.store.get(canvas_id)
-            authorization = generation_authorization(turn, CanvasDocument.model_validate(canvas.document), canvas.revision)
-            if authorization is not None:
-                self.db.add(authorization)
-                await self.db.flush()
-                if authorization.state == 'queued':
-                    await freeze_generation_basis(self.db, self.store.project_id, authorization)
-        exchange = await self._exchange(turn, session.approval_mode)
-        publish_events(self.db, session, exchange, 'turn.completed')
-        if exchange.proposal:
-            publish_events(self.db, session, exchange, 'proposal.created')
-        await complete_queued_turn(self.db, session, turn.request_id)
-        return exchange
+                return stopped
+            except CreativeQuestionPending as pause:
+                return await self._pause_question(canvas_id, command, token, pause.question)
+            except HTTPException as error:
+                if edit_draft and edit_draft.proposal and isinstance(error.detail, str) and error.detail in MODEL_FAILURE_REPLIES:
+                    await self.db.rollback()
+                    session = await self.db.get(CanvasAssistantSession, canvas_id, populate_existing=True)
+                    progress = (session.pending_request or {}).get('progress') or {}
+                    reply = '\n\n'.join(filter(None, [progress.get('reply'), MODEL_FAILURE_REPLIES[error.detail]]))
+                    skills, observed = [], None
+                    if edit_draft and edit_draft.proposal:
+                        reply += '\n\n已有通过预演的改动可供审批。'
+                else:
+                    return await self._interrupt_reply(canvas_id, command, token, model_id, error)
+            locked_canvas = await self.store.get(canvas_id, lock=True)
+            session = await self._lock_session(canvas_id)
+            if session.pending_token != token:
+                stopped = await self._stopped_exchange(canvas_id, command.request_id)
+                if stopped is not None:
+                    return stopped
+                raise HTTPException(409, 'Canvas assistant reply lease expired')
+            session.pending_token = session.pending_until = None
+            session.pending_request = session.pending_checkpoint = None
+            proposal = edit_draft.proposal if edit_draft else None
+            if proposal and model_adapter and (model_adapter.latest_preview.plan is None
+                                              or model_adapter.latest_preview.plan.revision != locked_canvas.revision):
+                proposal = None
+                edit_draft.proposal_issues.append(CanvasAssistantProposalIssue(message='画布已变化，请重新读取后预演。'))
+            if proposal and command.revises:
+                try:
+                    revised_proposal = await self._revised_proposal(canvas_id, command.revises, edit_draft, lock=True)
+                except HTTPException:
+                    if not on_accepted:
+                        await self.db.commit()
+                    raise
+                if command.revises_field:
+                    try:
+                        proposal, superseded = replace_proposed_field(
+                            revised_proposal.proposal, command.revises_field, proposal,
+                        )
+                        unchanged = CanvasAssistantProposal.model_validate(revised_proposal.proposal)
+                        remaining = [group for group in unchanged.groups
+                                     if group.state == 'pending' and group.id != command.revises_field.group_id]
+                        proposal.groups.extend(remaining)
+                        corrected = await model_adapter.planning.project_trusted_proposal(self.db, proposal)
+                        if corrected.plan is None or len(corrected.plan.groups) != len(proposal.groups):
+                            raise HTTPException(409, '修订后仍有改动无法预演，请保存画布后重新发起。')
+                        proposal = corrected.proposal
+                    except HTTPException:
+                        if not on_accepted:
+                            await self.db.commit()
+                        raise
+                else:
+                    superseded = {**revised_proposal.proposal, 'state': 'superseded'}
+                    if superseded.get('groups'):
+                        superseded['groups'] = [{**group, 'state': 'superseded'} if group['state'] == 'pending'
+                                                else group for group in superseded['groups']]
+                superseded['state'] = 'superseded'
+                superseded['groups'] = [
+                    {**group, 'state': 'superseded'} if group['state'] == 'pending' else group
+                    for group in superseded.get('groups') or []
+                ]
+                revised_proposal.proposal = superseded
+                await update_generation_for_decision(self.db, canvas_id, command.revises, 'superseded')
+                publish_events(self.db, session, await self._exchange(revised_proposal), 'proposal.superseded')
+            session.sequence += 1
+            await retain_assistant_media(self.db, self.store.project_id, canvas_id, sources)
+            if context is not None and observed is not None:
+                context = {**context, 'observed_card_ids': observed}
+            turn = CanvasAssistantTurn(
+                canvas_id=canvas_id, sequence=session.sequence, request_id=command.request_id,
+                model_id=model_id, text=command.text, reply=reply, context=context, attachments=attachments,
+                skills=[skill.model_dump() for skill in skills], question_answers=answers or None,
+                subtasks=[item.model_dump(mode='json') for item in delegation.results.values()] if delegation else None,
+                instructions=instructions or None, revises_field=field_reference, canvas_references=card_references or None,
+                proposal=proposal.model_dump(mode='json') if proposal else None, revises=command.revises, repairs=command.repairs,
+                proposal_issues=[issue.model_dump(mode='json') for issue in edit_draft.proposal_issues] or None if edit_draft else None,
+                layout=layout_draft.proposal.model_dump(mode='json') if layout_draft and layout_draft.proposal else None,
+            )
+            self.db.add(turn)
+            await self.db.flush()
+            if proposal and model_adapter and model_adapter.latest_preview.plan:
+                allowed = can_submit_canvas_edit(command.text) or bool(command.revises or command.repairs)
+                if allowed and not planning_request(command.text):
+                    await issue_canvas_edit_approval(self.db, self.store.project_id, turn, model_adapter.latest_preview,
+                                                     revises=revised_proposal if command.revises else None)
+                else:
+                    public = retain_preview(self.db, model_adapter.latest_preview, edit_draft.visible_document,
+                                            source_id=turn.request_id, model_id=model_id, draft=False)
+                    turn.proposal_receipt = {**(turn.proposal_receipt or {}), '_preview': public.model_dump(mode='json')}
+                    turn.proposal = None
+            if turn.layout:
+                if can_submit_canvas_edit(command.text):
+                    await issue_canvas_layout_approval(self.db, turn)
+                else:
+                    turn.layout = None
+            if context and not card_references:
+                canvas = await self.store.get(canvas_id)
+                authorization = generation_authorization(turn, CanvasDocument.model_validate(canvas.document), canvas.revision)
+                if authorization is not None:
+                    self.db.add(authorization)
+                    await self.db.flush()
+                    if authorization.state == 'queued':
+                        await freeze_generation_basis(self.db, self.store.project_id, authorization)
+            exchange = await self._exchange(turn, session.approval_mode)
+            publish_events(self.db, session, exchange, 'turn.completed')
+            if exchange.proposal:
+                publish_events(self.db, session, exchange, 'proposal.created')
+            await complete_queued_turn(self.db, session, turn.request_id)
+            return exchange
+        except Exception as error:
+            if not on_accepted:
+                raise
+            await self.db.rollback()
+            interrupted = await self.db.get(CanvasAssistantSession, canvas_id, populate_existing=True)
+            if interrupted is not None and interrupted.pending_token == token:
+                reason = error if isinstance(error, HTTPException) else HTTPException(500, MODEL_FAILED)
+                return await self._interrupt_reply(canvas_id, command, token, model_id, reason)
+            raise
 
     async def _submit_read_only_preview(self, canvas_id, command):
         """Submit exactly the reviewed snapshot without running a second creative turn."""

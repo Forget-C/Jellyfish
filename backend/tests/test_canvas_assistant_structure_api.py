@@ -470,7 +470,15 @@ async def test_large_canvas_proposal_recovers_from_invalid_output(canvas_client,
     async with canvas_client.canvas_sessions.begin() as db:
         (await db.get(Model, 'canvas-text')).capability_profile = None
     if surface == 'draft':
-        path = f'/canvases/drafts/{uuid4()}'
+        canvas_id = str(uuid4())
+        draft_path = f'/canvases/drafts/{canvas_id}'
+        draft = (await canvas_client.get(draft_path)).json()['data']
+        saved = await canvas_client.put(draft_path, json={
+            'request_id': 'first-assistant-save', 'expected_revision': 0,
+            'start_assistant': True, 'document': draft['document'],
+        })
+        assert saved.is_success, saved.text
+        path = f'/canvases/{canvas_id}'
         canvas = (await canvas_client.get(path)).json()['data']
     elif surface == 'scene':
         from tests.test_generation_canvas_api import seed_scene_canvas
@@ -516,14 +524,9 @@ async def test_large_canvas_proposal_recovers_from_invalid_output(canvas_client,
     try:
         await asyncio.wait_for(started.wait(), 3)
         for _ in range(50):
-            if surface == 'draft':
-                snapshot = (await canvas_client.get(url + '/turns/large')).json()['data']['turn']
-                progress = snapshot.get('progress') or {}
-                assert not snapshot['reply']
-            else:
-                snapshot = (await canvas_client.get(url)).json()['data']
-                progress = snapshot.get('pending_progress') or {}
-                assert not snapshot['turns']
+            snapshot = (await canvas_client.get(url)).json()['data']
+            progress = snapshot.get('pending_progress') or {}
+            assert not snapshot['turns']
             if progress.get('phase') == 'generating_proposal':
                 break
             await asyncio.sleep(.02)
@@ -539,19 +542,18 @@ async def test_large_canvas_proposal_recovers_from_invalid_output(canvas_client,
     assert turn['reply'] == '请审批逐镜方案'
     assert turn['proposal']['state'] == 'pending'
     assert len(turn['proposal']['groups'][0]['edits']) == 59
-    if surface != 'draft':
-        suffix = '?project_id=p' if surface == 'scene' else ''
-        before = (await canvas_client.get(path + suffix)).json()['data']
-        assert before['revision'] == canvas['revision']
-        events = (await canvas_client.get(path + '/assistant/events' + suffix)).json()['data']
-        assert any((event['payload'].get('progress') or {}).get('phase') == 'validating_proposal'
-                   for event in events)
-        approved = await canvas_client.post(path + '/assistant/proposals/large' + suffix, json={
-            'action': 'approve', 'expected_revision': before['revision'], 'group_ids': ['1'],
-        })
-        assert approved.status_code == 200, approved.text
-        saved = (await canvas_client.get(path + suffix)).json()['data']
-        assert len(saved['document']['cards']) == len(before['document']['cards']) + 59
+    suffix = '?project_id=p' if surface == 'scene' else ''
+    before = (await canvas_client.get(path + suffix)).json()['data']
+    assert before['revision'] == canvas['revision']
+    events = (await canvas_client.get(path + '/assistant/events' + suffix)).json()['data']
+    assert any((event['payload'].get('progress') or {}).get('phase') == 'validating_proposal'
+               for event in events)
+    approved = await canvas_client.post(path + '/assistant/proposals/large' + suffix, json={
+        'action': 'approve', 'expected_revision': before['revision'], 'group_ids': ['1'],
+    })
+    assert approved.status_code == 200, approved.text
+    saved = (await canvas_client.get(path + suffix)).json()['data']
+    assert len(saved['document']['cards']) == len(before['document']['cards']) + 59
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures('assistant_edit_model')

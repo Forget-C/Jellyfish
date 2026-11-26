@@ -12,5 +12,6 @@ export type CanvasDraftSave = {
     expected_revision: number;
     document: any;
     assistant?: (DraftAssistantConversation | null);
+    start_assistant?: boolean;
     assistant_approval?: (DraftAssistantApproval | null);
 };

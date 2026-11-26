@@ -29,7 +29,8 @@ import { useExperimentModels } from '../hooks/useExperimentModels'
 import { useExperimentTemplates } from '../hooks/useExperimentTemplates'
 import { focusExperimentPromptEditor, readExperimentInputSnapshot, type ExperimentInputSnapshot } from '../experimentInputSnapshot'
 import { applyReply } from '../../../../services/chatSession'
-import { textTrial } from '../../../../services/textTrialSession'
+import { chatClient } from '../../../../services/chatSession'
+import { followTextTrial } from '../../../../services/textTrialSession'
 import { useTrialModelPreference } from '../hooks/useTrialModelPreference'
 
 /** 文本实验室可使用的提示词模板类别。 */
@@ -122,7 +123,7 @@ export function TextExperimentMode({
     loadTemplates, selectTemplate, confirmReplacement, applyFreeInput, replacementDialog,
   } = useExperimentTemplates(textPromptCategories, draft, setDraft)
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([])
-  const historyState = useExperimentHistory(sessionId, { readPage: textTrial.snapshot })
+  const historyState = useExperimentHistory(sessionId, { readPage: chatClient.textSnapshot })
   const inputSignature = (prompt: string) => JSON.stringify([prompt, selectedTemplate?.id, selectedTemplate?.version, templateValues])
   const submission = useExperimentSubmission(sessionId, historyState, inputSignature(draft))
   const { submitting } = submission
@@ -207,40 +208,41 @@ export function TextExperimentMode({
       controller = new AbortController()
       streamAbortRef.current = controller
       streamSessionIdRef.current = session.id
-      for await (const event of textTrial.send(session.id, { model_id: modelId, content: currentPrompt },
-        attempt.requestId, controller.signal)) {
+      for await (const event of followTextTrial(session.id, () => chatClient.send({
+        sessionId: session.id, requestBody: { model_id: modelId, content: currentPrompt }, idempotencyKey: attempt.requestId,
+      }), controller.signal)) {
         if (!submission.isCurrent(attempt)) {
           controller.abort()
           break
         }
-        if (event.type === 'turn.accepted') {
-          if (acceptedTaskId || event.payload.user_message.session_id !== session.id) {
+        if (event.category === 'turn' && event.type === 'turn.accepted') {
+          if (!event.turn_id || acceptedTaskId || event.payload.message?.session_id !== session.id) {
             throw new Error(uiText("文本接收回执与本轮会话不符"))
           }
           acceptedTaskId = event.turn_id
           streamTaskIdRef.current = acceptedTaskId
           const unchanged = submission.acceptInput(attempt, session.id, inputSignature(''))
           if (unchanged && !selectedTemplate) setDraft(current => current === draft ? '' : current)
-          historyState.adoptCanonicalMessages(session.id, [event.payload.user_message])
+          historyState.adoptCanonicalMessages(session.id, [event.payload.message])
           setLocalMessages(current => [...current, { id: assistantId, role: 'assistant', content: '', status: 'running' }])
           continue
         }
         if (!acceptedTaskId || event.turn_id !== acceptedTaskId) {
           throw new Error(uiText("文本流未返回可核对的任务身份"))
         }
-        if (event.type === 'message.updated') {
+        if (event.category === 'message') {
           setLocalMessages(current => current.map(item => (
             item.id === assistantId ? { ...item, content: applyReply(item.content, event.payload) } : item
           )))
         } else if (event.type === 'turn.completed') {
-          if (event.payload.assistant_message.session_id !== session.id) throw new Error(uiText("文本结果与本轮会话不符"))
+          if (event.payload.message?.session_id !== session.id) throw new Error(uiText("文本结果与本轮会话不符"))
           terminal = true
           terminalRunRef.current = acceptedTaskId
-          historyState.adoptCanonicalMessages(session.id, [event.payload.assistant_message])
+          historyState.adoptCanonicalMessages(session.id, [event.payload.message])
           setLocalMessages(current => current.filter(item => item.id !== assistantId))
           void historyState.refresh()
         } else if (event.type === 'turn.failed') {
-          if (event.payload.error.code === 'stream_result_unknown') {
+          if (event.payload.error_code === 'stream_result_unknown') {
             setLocalMessages(current => current.filter(item => item.id !== assistantId))
             await historyState.refresh()
             break
@@ -248,7 +250,7 @@ export function TextExperimentMode({
           terminal = true
           terminalRunRef.current = acceptedTaskId
           setLocalMessages(current => current.map(item => (
-            item.id === assistantId ? { ...item, status: 'failed', error: event.payload.error.message } : item
+            item.id === assistantId ? { ...item, status: 'failed', error: event.payload.error ?? undefined } : item
           )))
           restoreInput()
         } else if (event.type === 'turn.stopped') {
@@ -298,7 +300,7 @@ export function TextExperimentMode({
     stopPending.current = true
     setStopState('requesting')
     try {
-      const response = await textTrial.stop({
+      const response = await chatClient.textStop({
         sessionId: activeSessionId,
         taskId,
         requestBody: { reason: 'user_cancelled' },

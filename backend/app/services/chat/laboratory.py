@@ -142,7 +142,7 @@ def inspection_tool(media, artifacts):
     return inspect_artifact
 
 
-async def finish(db, session_id, turn_id, status, text='', owner=None):
+async def finish(db, session_id, turn_id, status, text='', owner=None, error_code=None):
     """A late model response cannot overwrite a stopped or superseded turn."""
     matching = [ExperimentSession.id == session_id, ExperimentSession.active_turn == turn_id]
     if owner is not None:
@@ -150,9 +150,14 @@ async def finish(db, session_id, turn_id, status, text='', owner=None):
     released = await db.execute(update(ExperimentSession).where(*matching).values(
         active_turn=None, chat_execution=None, chat_lease_until=None))
     if released.rowcount:
-        await append_experiment_messages(db, session_id=session_id, drafts=[
+        messages = await append_experiment_messages(db, session_id=session_id, drafts=[
             ExperimentMessageDraft(role='assistant', content=text, status=status, payload={'turn_id': turn_id})])
-        await append_session_event(db, session_id, turn_id, 'turn.' + status, {'text': text})
+        await db.flush()
+        reply, = await read_experiment_messages(db, messages)
+        payload = {'text': text, 'assistant_message': reply.model_dump(mode='json')}
+        if error_code:
+            payload['error'] = {'code': error_code, 'message': error_code}
+        await append_session_event(db, session_id, turn_id, 'turn.' + status, payload)
     await db.commit()
 
 
@@ -179,7 +184,7 @@ async def recover_turn(sessions, session_id, turn_id):
                 raise
 
 
-async def send(db, session_id, body, *, recovering=None):
+async def send(db, session_id, body, *, recovering=None, on_accepted=None):
     session = await session_for(db, session_id, lock=True)
     history = await messages_for(db, session_id)
     prior = next((m for m in history if m.role == 'user' and m.payload.get('turn_id') == body.request_id), None)
@@ -209,21 +214,26 @@ async def send(db, session_id, body, *, recovering=None):
         ).values(active_turn=body.request_id, chat_execution=execution, chat_lease_until=turn_recovery.lease_end()))
         if not acquired.rowcount:
             raise HTTPException(409, 'Chat turn active')
-        await append_experiment_messages(db, session_id=session_id, drafts=[ExperimentMessageDraft(
+        messages = await append_experiment_messages(db, session_id=session_id, drafts=[ExperimentMessageDraft(
             role='user', content=body.text, payload={'turn_id': body.request_id, 'file_ids': body.file_ids,
                                                     'models': choices.model_dump()})])
-        await append_session_event(db, session_id, body.request_id, 'turn.accepted', {})
+        await db.flush()
+        user, = await read_experiment_messages(db, messages)
+        await append_session_event(db, session_id, body.request_id, 'turn.accepted',
+                                   {'user_message': user.model_dump(mode='json')})
         await db.commit()
-    conversation = [(HumanMessage if m.role == 'user' else AIMessage)(content=m.content)
-                    for m in history if m.role in ('user', 'assistant') and m.content]
-    artifacts = await historical_artifacts(db, session_id, body.request_id)
-    if artifacts:
-        catalog = json.dumps([a.model_dump() for a in artifacts], ensure_ascii=False)
-        conversation.append(HumanMessage(content='本会话此前归档的产物（仅元数据）：' + catalog))
-    conversation.append(HumanMessage(content=content))
+        if on_accepted:
+            on_accepted()
     text = ''
     sessions = async_sessionmaker(db.bind, expire_on_commit=False)
     try:
+        conversation = [(HumanMessage if m.role == 'user' else AIMessage)(content=m.content)
+                        for m in history if m.role in ('user', 'assistant') and m.content]
+        artifacts = await historical_artifacts(db, session_id, body.request_id)
+        if artifacts:
+            catalog = json.dumps([a.model_dump() for a in artifacts], ensure_ascii=False)
+            conversation.append(HumanMessage(content='本会话此前归档的产物（仅元数据）：' + catalog))
+        conversation.append(HumanMessage(content=content))
         async with turn_recovery.heartbeat(sessions, session_id, body.request_id, owner):
             media = LaboratoryMediaTools(sessions,
                                         session_id, body.request_id, choices, [*body.file_ids, *(a.file_id for a in artifacts)], owner)
@@ -260,7 +270,7 @@ async def send(db, session_id, body, *, recovering=None):
         await db.rollback()
     except UnsupportedModelInput as error:
         await db.rollback()
-        await finish(db, session_id, body.request_id, 'failed', text, owner)
+        await finish(db, session_id, body.request_id, 'failed', text, owner, error_code='ASSISTANT_MODEL_INPUT_UNSUPPORTED')
         raise HTTPException(422, 'ASSISTANT_MODEL_INPUT_UNSUPPORTED') from error
     except asyncio.CancelledError:
         await db.rollback()
@@ -270,9 +280,11 @@ async def send(db, session_id, body, *, recovering=None):
         ).values(chat_lease_until=turn_recovery.now()))
         await db.commit()
         raise
-    except Exception:
+    except Exception as error:
         await db.rollback()
-        await finish(db, session_id, body.request_id, 'failed', text, owner)
+        detail = getattr(error, 'detail', None) if isinstance(error, HTTPException) else None
+        await finish(db, session_id, body.request_id, 'failed', text, owner,
+                     error_code=detail if isinstance(detail, str) else None)
         raise
     return await snapshot(db, session_id)
 

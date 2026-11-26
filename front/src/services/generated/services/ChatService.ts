@@ -7,20 +7,17 @@ import type { ApiResponse_CanvasAssistantGenerationRead_ } from '../models/ApiRe
 import type { ApiResponse_CanvasAssistantHistory_ } from '../models/ApiResponse_CanvasAssistantHistory_';
 import type { ApiResponse_CanvasAssistantLayout_ } from '../models/ApiResponse_CanvasAssistantLayout_';
 import type { ApiResponse_CanvasAssistantProposalResult_ } from '../models/ApiResponse_CanvasAssistantProposalResult_';
-import type { ApiResponse_DraftAssistantReply_ } from '../models/ApiResponse_DraftAssistantReply_';
-import type { ApiResponse_ExperimentTaskCreated_ } from '../models/ApiResponse_ExperimentTaskCreated_';
+import type { ApiResponse_ChatTurnReceipt_ } from '../models/ApiResponse_ChatTurnReceipt_';
 import type { ApiResponse_LabChatSnapshot_ } from '../models/ApiResponse_LabChatSnapshot_';
 import type { ApiResponse_LabModels_ } from '../models/ApiResponse_LabModels_';
 import type { ApiResponse_list_ExperimentMessageRead__ } from '../models/ApiResponse_list_ExperimentMessageRead__';
 import type { ApiResponse_TextLabRunStatus_ } from '../models/ApiResponse_TextLabRunStatus_';
-import type { ApiResponse_TextTrialReceipt_ } from '../models/ApiResponse_TextTrialReceipt_';
 import type { ArtifactAnswer } from '../models/ArtifactAnswer';
 import type { CanvasAssistantGenerationApproval } from '../models/CanvasAssistantGenerationApproval';
 import type { CanvasAssistantLayoutDecision } from '../models/CanvasAssistantLayoutDecision';
 import type { CanvasAssistantMessage } from '../models/CanvasAssistantMessage';
 import type { CanvasAssistantProposalDecision } from '../models/CanvasAssistantProposalDecision';
 import type { CanvasAssistantQuestionAnswer } from '../models/CanvasAssistantQuestionAnswer';
-import type { DraftAssistantMessage } from '../models/DraftAssistantMessage';
 import type { GenerationSubmitRequest } from '../models/GenerationSubmitRequest';
 import type { LabChatCommand } from '../models/LabChatCommand';
 import type { LabModels } from '../models/LabModels';
@@ -30,37 +27,6 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ChatService {
-    /**
-     * Send Media Turn
-     * Submit one direct trial; the bound session must match the operation and media.
-     * @returns ApiResponse_ExperimentTaskCreated_ Successful Response
-     * @throws ApiError
-     */
-    public static chatMediaSend({
-        sessionId,
-        requestBody,
-        idempotencyKey,
-    }: {
-        sessionId: string,
-        requestBody: GenerationSubmitRequest,
-        idempotencyKey?: (string | null),
-    }): CancelablePromise<ApiResponse_ExperimentTaskCreated_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/chat/sessions/media/{session_id}/turns',
-            path: {
-                'session_id': sessionId,
-            },
-            headers: {
-                'Idempotency-Key': idempotencyKey,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
     /**
      * Media Snapshot
      * Restore submitted parameters, references and current task receipts.
@@ -85,41 +51,6 @@ export class ChatService {
             query: {
                 'page': page,
                 'page_size': pageSize,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Media Events
-     * Replay task facts committed after the client's cursor, then follow new events.
-     * @returns any Successful Response
-     * @throws ApiError
-     */
-    public static chatMediaEvents({
-        sessionId,
-        after,
-        follow = true,
-        lastEventId,
-    }: {
-        sessionId: string,
-        after?: number,
-        follow?: boolean,
-        lastEventId?: number,
-    }): CancelablePromise<any> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/studio/chat/sessions/media/{session_id}/events',
-            path: {
-                'session_id': sessionId,
-            },
-            headers: {
-                'last-event-id': lastEventId,
-            },
-            query: {
-                'after': after,
-                'follow': follow,
             },
             errors: {
                 422: `Validation Error`,
@@ -162,31 +93,6 @@ export class ChatService {
         return __request(OpenAPI, {
             method: 'PATCH',
             url: '/api/v1/studio/chat/sessions/lab/{session_id}/models',
-            path: {
-                'session_id': sessionId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Lab Send
-     * @returns ApiResponse_LabChatSnapshot_ Successful Response
-     * @throws ApiError
-     */
-    public static chatLabSend({
-        sessionId,
-        requestBody,
-    }: {
-        sessionId: string,
-        requestBody: LabChatCommand,
-    }): CancelablePromise<ApiResponse_LabChatSnapshot_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/chat/sessions/lab/{session_id}/turns',
             path: {
                 'session_id': sessionId,
             },
@@ -251,40 +157,6 @@ export class ChatService {
         });
     }
     /**
-     * Lab Events
-     * @returns any Successful Response
-     * @throws ApiError
-     */
-    public static chatLabEvents({
-        sessionId,
-        after,
-        follow = true,
-        lastEventId,
-    }: {
-        sessionId: string,
-        after?: number,
-        follow?: boolean,
-        lastEventId?: number,
-    }): CancelablePromise<any> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/studio/chat/sessions/lab/{session_id}/events',
-            path: {
-                'session_id': sessionId,
-            },
-            headers: {
-                'last-event-id': lastEventId,
-            },
-            query: {
-                'after': after,
-                'follow': follow,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
      * Text Snapshot
      * Read existing or newly accepted trial messages in their original session.
      * @returns ApiResponse_list_ExperimentMessageRead__ Successful Response
@@ -308,72 +180,6 @@ export class ChatService {
             query: {
                 'page': page,
                 'page_size': pageSize,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Text Send
-     * Enroll a direct provider call; SSE subscribers do not own its lifetime.
-     * @returns ApiResponse_TextTrialReceipt_ Successful Response
-     * @throws ApiError
-     */
-    public static chatTextSend({
-        sessionId,
-        idempotencyKey,
-        requestBody,
-    }: {
-        sessionId: string,
-        idempotencyKey: string,
-        requestBody: TextLabRunRequest,
-    }): CancelablePromise<ApiResponse_TextTrialReceipt_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/chat/sessions/text/{session_id}/turns',
-            path: {
-                'session_id': sessionId,
-            },
-            headers: {
-                'idempotency-key': idempotencyKey,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Text Events
-     * Replay committed text trial events in session cursor order.
-     * @returns any Successful Response
-     * @throws ApiError
-     */
-    public static chatTextEvents({
-        sessionId,
-        after,
-        follow = true,
-        lastEventId,
-    }: {
-        sessionId: string,
-        after?: number,
-        follow?: boolean,
-        lastEventId?: number,
-    }): CancelablePromise<any> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/studio/chat/sessions/text/{session_id}/events',
-            path: {
-                'session_id': sessionId,
-            },
-            headers: {
-                'last-event-id': lastEventId,
-            },
-            query: {
-                'after': after,
-                'follow': follow,
             },
             errors: {
                 422: `Validation Error`,
@@ -410,6 +216,70 @@ export class ChatService {
         });
     }
     /**
+     * Send Turn
+     * @returns ApiResponse_ChatTurnReceipt_ Successful Response
+     * @throws ApiError
+     */
+    public static chatSessionSend({
+        sessionId,
+        requestBody,
+        idempotencyKey,
+    }: {
+        sessionId: string,
+        requestBody: (CanvasAssistantMessage | LabChatCommand | TextLabRunRequest | GenerationSubmitRequest),
+        idempotencyKey?: (string | null),
+    }): CancelablePromise<ApiResponse_ChatTurnReceipt_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/chat/sessions/{session_id}/turns',
+            path: {
+                'session_id': sessionId,
+            },
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Subscribe
+     * @returns string Successful Response
+     * @throws ApiError
+     */
+    public static chatSessionEvents({
+        sessionId,
+        after,
+        follow = true,
+        lastEventId,
+    }: {
+        sessionId: string,
+        after?: number,
+        follow?: boolean,
+        lastEventId?: number,
+    }): CancelablePromise<string> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/chat/sessions/{session_id}/events',
+            path: {
+                'session_id': sessionId,
+            },
+            headers: {
+                'last-event-id': lastEventId,
+            },
+            query: {
+                'after': after,
+                'follow': follow,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Canvas Snapshot
      * Open the canvas conversation at its latest committed cursor.
      * @returns ApiResponse_CanvasAssistantHistory_ Successful Response
@@ -429,75 +299,6 @@ export class ChatService {
                 'canvas_id': canvasId,
             },
             query: {
-                'project_id': projectId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Canvas Send
-     * Accept a turn or return its existing receipt on retry.
-     * @returns ApiResponse_CanvasAssistantExchange_ Successful Response
-     * @throws ApiError
-     */
-    public static chatCanvasSend({
-        canvasId,
-        requestBody,
-        projectId = '',
-    }: {
-        canvasId: string,
-        requestBody: CanvasAssistantMessage,
-        projectId?: string,
-    }): CancelablePromise<ApiResponse_CanvasAssistantExchange_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/chat/sessions/canvas/{canvas_id}/turns',
-            path: {
-                'canvas_id': canvasId,
-            },
-            query: {
-                'project_id': projectId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Canvas Events
-     * Subscribe or replay committed updates from a client cursor.
-     * @returns any Successful Response
-     * @throws ApiError
-     */
-    public static chatCanvasEvents({
-        canvasId,
-        after,
-        follow = true,
-        projectId = '',
-        lastEventId,
-    }: {
-        canvasId: string,
-        after?: number,
-        follow?: boolean,
-        projectId?: string,
-        lastEventId?: number,
-    }): CancelablePromise<any> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/studio/chat/sessions/canvas/{canvas_id}/events',
-            path: {
-                'canvas_id': canvasId,
-            },
-            headers: {
-                'last-event-id': lastEventId,
-            },
-            query: {
-                'after': after,
-                'follow': follow,
                 'project_id': projectId,
             },
             errors: {
@@ -666,120 +467,6 @@ export class ChatService {
             },
             body: requestBody,
             mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Send Draft Assistant Message
-     * Reply to a browser-owned free canvas conversation without saving it.
-     * @returns ApiResponse_CanvasAssistantExchange_ Successful Response
-     * @throws ApiError
-     */
-    public static chatDraftSend({
-        canvasId,
-        requestBody,
-    }: {
-        canvasId: string,
-        requestBody: DraftAssistantMessage,
-    }): CancelablePromise<ApiResponse_CanvasAssistantExchange_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/chat/sessions/draft/{canvas_id}/turns',
-            path: {
-                'canvas_id': canvasId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Read Draft Reply
-     * Reconnect to one in-flight browser-owned reply.
-     * @returns ApiResponse_DraftAssistantReply_ Successful Response
-     * @throws ApiError
-     */
-    public static chatDraftSnapshot({
-        canvasId,
-        sourceId,
-    }: {
-        canvasId: string,
-        sourceId: string,
-    }): CancelablePromise<ApiResponse_DraftAssistantReply_> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/studio/chat/sessions/draft/{canvas_id}/turns/{source_id}',
-            path: {
-                'canvas_id': canvasId,
-                'source_id': sourceId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Stop Draft Reply
-     * Stop an unsaved draft's active reply and return its visible prefix.
-     * @returns ApiResponse_DraftAssistantReply_ Successful Response
-     * @throws ApiError
-     */
-    public static chatDraftStop({
-        canvasId,
-        sourceId,
-    }: {
-        canvasId: string,
-        sourceId: string,
-    }): CancelablePromise<ApiResponse_DraftAssistantReply_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/studio/chat/sessions/draft/{canvas_id}/turns/{source_id}/stop',
-            path: {
-                'canvas_id': canvasId,
-                'source_id': sourceId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Draft Events
-     * Subscribe to an unsaved draft without creating a canvas.
-     * @returns any Successful Response
-     * @throws ApiError
-     */
-    public static chatDraftEvents({
-        canvasId,
-        sourceId,
-        after,
-        follow = true,
-        lastEventId,
-    }: {
-        canvasId: string,
-        sourceId: string,
-        after?: number,
-        follow?: boolean,
-        lastEventId?: number,
-    }): CancelablePromise<any> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/studio/chat/sessions/draft/{canvas_id}/turns/{source_id}/events',
-            path: {
-                'canvas_id': canvasId,
-                'source_id': sourceId,
-            },
-            headers: {
-                'last-event-id': lastEventId,
-            },
-            query: {
-                'after': after,
-                'follow': follow,
-            },
             errors: {
                 422: `Validation Error`,
             },

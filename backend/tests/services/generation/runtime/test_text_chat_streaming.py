@@ -68,13 +68,14 @@ async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, res
                          provider_id="custom", capability_profile={"native_streaming": {"declaration": "unsupported"}} if responses == "disabled" else {}, params={"temperature": 0.4, "use_responses_api": bool(responses)}))
             db.add(ExperimentSession(id="gateway-session", lab_type="text"))
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            base = "/api/v1/studio/chat/sessions/text/gateway-session"
+            base = "/api/v1/studio/chat/sessions/gateway-session"
             url = base + "/turns" if unified else "/api/v1/studio/labs/text/sessions/gateway-session/stream"
             body = {"model_id": "custom-text", "content": "你好"}
             response = await client.post(url, json=body, headers={"Idempotency-Key": "gateway-trial"})
             if unified and responses != "disabled":
-                assert response.status_code == 200, response.text
+                assert response.status_code == 202, response.text
                 receipt = response.json()['data']
+                assert receipt['session_id'] == 'gateway-session' and 'result' not in receipt
                 retry = await client.post(url, json=body, headers={"Idempotency-Key": "gateway-trial"})
                 assert retry.json()['data'] == receipt
                 for _ in range(100):
@@ -84,11 +85,12 @@ async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, res
                     await asyncio.sleep(.02)
                 events = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
                 assert events[0]['type'] == 'turn.accepted'
+                assert events[0]['category'] == 'turn' and events[0]['payload']['message']['content'] == '你好'
                 assert {e['turn_id'] for e in events} == {receipt['turn_id']}
                 assert [(e['payload']['mode'], e['payload']['text']) for e in events if e['type'] == 'message.updated'] == [('append', '第一段'), ('append', '第二段')]
                 replay = await client.get(base + "/events", params={"after": events[-2]['cursor'], "follow": False})
                 assert replay.text.count("data: ") == 1
-                snapshot = await client.get(base)
+                snapshot = await client.get("/api/v1/studio/chat/sessions/text/gateway-session")
                 assert snapshot.json()['data'][0]['content'] == '你好'
         if responses == "disabled":
             assert response.status_code == 422 and not requests

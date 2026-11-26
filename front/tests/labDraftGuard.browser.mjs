@@ -1,4 +1,4 @@
-import { textTrialFrame } from './text-trial-events.mjs'
+import { textTrialFrame, mediaTurnReceipt, mediaAdmissionStream } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -54,8 +54,8 @@ const finish = (run, event) => {
 }
 async function liveTextFixture(request, response, next) {
   const path = request.url?.split('?')[0] ?? ''
-  const send = path.match(/\/chat\/sessions\/text\/([^/]+)\/turns$/)
-  const stream = path.match(/\/chat\/sessions\/text\/([^/]+)\/events$/)
+  const send = path.match(/\/chat\/sessions\/([^/]+)\/turns$/)
+  const stream = path.match(/\/chat\/sessions\/([^/]+)\/events$/)
   const stop = path.match(/\/chat\/sessions\/text\/([^/]+)\/turns\/([^/]+)\/stop$/)
   if (!send && !stream && !stop) return next()
   let body = ''
@@ -66,7 +66,7 @@ async function liveTextFixture(request, response, next) {
     live = { sessionId: send[1], taskId: 'run-' + generationRequests.length, sequence: 0,
       prompt: input.content, historySequence: (histories.get(send[1]) ?? []).at(-1)?.sequence ?? 0 }
     response.writeHead(200, { 'Content-Type': 'application/json' })
-    response.end(JSON.stringify({ data: { turn_id: live.taskId, cursor: 0 } }))
+    response.end(JSON.stringify({ data: { session_id: live.sessionId, turn_id: live.taskId, cursor: 0 } }))
     return
   }
   if (stream) {
@@ -113,8 +113,12 @@ try {
   await page.route('**/api/**', async route => {
     const request = route.request()
     const url = new URL(request.url())
+    const admission = mediaAdmissionStream(route, url)
+    if (admission) return admission
     const respond = data => route.fulfill({ json: { success: true, data } })
-    if (/\/chat\/sessions\/text\/[^/]+\/(events|turns|turns\/[^/]+\/stop)$/.test(url.pathname)) return route.continue()
+    const turn = url.pathname.match(/\/chat\/sessions\/([^/]+)\/(events|turns)$/)
+    if ((turn && sessions.some(session => session.id === turn[1] && session.lab_type === 'text')) ||
+        /\/chat\/sessions\/text\/[^/]+\/turns\/[^/]+\/stop$/.test(url.pathname)) return route.continue()
     if (url.pathname.includes('/chat/sessions/text/')) return respond(histories.get(url.pathname.split('/').at(-1)) ?? [])
     if (url.pathname.endsWith('/experiment-sessions')) {
       if (request.method() === 'POST') {
@@ -142,7 +146,7 @@ try {
     }] : [] })
     if (url.pathname.endsWith('/files')) return respond({ items: [{ id: 'file-a', name: '测试参考图', type: 'image' }] })
     if (url.pathname.endsWith('/video-generation-options')) return respond({ model_id: 'video-model', allowed_ratios: ['16:9'] })
-    const media = url.pathname.match(/\/chat\/sessions\/media\/([^/]+)\/turns$/)
+    const media = url.pathname.match(/\/chat\/sessions\/([^/]+)\/turns$/)
     if (media && request.method() === 'POST') {
       const input = request.postDataJSON()
       generationRequests.push(input)
@@ -154,7 +158,7 @@ try {
         message(sessionId, taskId + '-task', 'task', '请求已接收', 2, { task_id: taskId, status }),
       ]
       saveMessages(sessionId, ...items)
-      return respond({ task_id: taskId, messages: items })
+      return respond(mediaTurnReceipt(route, { task_id: taskId, messages: items }))
     }
     const result = url.pathname.match(/\/film\/tasks\/([^/]+)\/result$/)
     if (result) return respond({ task_id: result[1], status: 'running', progress: 25 })
@@ -331,7 +335,7 @@ try {
   await page.getByText('首帧图片 · 保护模板 · v1', { exact: true }).click()
   await page.getByRole('heading', { name: '实验室 · 图片 · 图片历史' }).click()
   await page.getByRole('button', { name: /^发\s*送$/, exact: true }).click()
-  await page.getByText('请求已接收', { exact: true }).waitFor()
+  await page.getByText(/请求已接收/).waitFor()
   await type('视频').click()
   await page.getByRole('heading', { name: '实验室 · 视频 · 新会话' }).waitFor()
   assert.equal(await leave.isVisible(), false)
@@ -343,10 +347,10 @@ try {
   await leave.getByRole('button', { name: '继续编辑' }).click()
   assert.equal(await videoInput.inputValue(), '视频草稿')
   await page.getByRole('button', { name: /^发\s*送$/, exact: true }).click()
-  await page.getByText('请求已接收', { exact: true }).waitFor()
+  await page.getByText(/请求已接收/).waitFor()
   await type('图片').click()
   await page.getByRole('button', { name: '图片历史', exact: true }).click()
-  await page.getByText('请求已接收', { exact: true }).waitFor()
+  await page.getByText(/请求已接收/).waitFor()
   assert.equal(stopRequests.length, 4, '图片和视频离开不请求取消')
 
   // A clean submitted template gains a guard only while its variables have unapplied changes.

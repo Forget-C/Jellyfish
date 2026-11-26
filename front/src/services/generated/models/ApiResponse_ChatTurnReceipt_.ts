@@ -2,8 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { TextTrialReceipt } from './TextTrialReceipt';
-export type ApiResponse_TextTrialReceipt_ = {
+import type { ChatTurnReceipt } from './ChatTurnReceipt';
+export type ApiResponse_ChatTurnReceipt_ = {
     /**
      * 与 HTTP 状态码一致
      */
@@ -15,7 +15,7 @@ export type ApiResponse_TextTrialReceipt_ = {
     /**
      * 实际数据
      */
-    data?: (TextTrialReceipt | null);
+    data?: (ChatTurnReceipt | null);
     /**
      * 附加元信息
      */

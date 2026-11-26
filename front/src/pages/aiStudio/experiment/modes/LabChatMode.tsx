@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Suggestion } from '@ant-design/x'
 import { Alert, Button, Input, Upload } from 'antd'
 import { WorkbenchConversation } from '../../../../components/workbench/WorkbenchConversation'
-import { applyReply, laboratoryChat } from '../../../../services/chatSession'
-import { ApiError, FilmService, LlmService, type ExperimentSessionRead, type LabChatSnapshot, type LabModels, type FileRead } from '../../../../services/generated'
+import { applyReply, chatClient, waitForTurnEvent } from '../../../../services/chatSession'
+import { ApiError, FilmService, LlmService, type ChatEvent, type ExperimentMessageRead, type ExperimentSessionRead, type LabChatSnapshot, type LabModels, type FileRead } from '../../../../services/generated'
 import { useUiText } from '../../../../uiText'
 import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
 import { MediaTaskDetails } from '../components/MediaTaskDetails'
@@ -36,6 +36,34 @@ function ChatModelChoice({kind, value, disabled, onChange}: {
       {({modelControl}) => modelControl}
     </ExperimentOptionBar>
   </label>
+}
+
+function mergeMessages(previous: ExperimentMessageRead[], updates: ExperimentMessageRead[]) {
+  const rows = new Map(previous.map(message => [message.id, message]))
+  for (const message of updates) rows.set(message.id, message)
+  return [...rows.values()].sort((first, second) => first.sequence - second.sequence)
+}
+
+function applyChatEvent(snapshot: LabChatSnapshot, event: ChatEvent): LabChatSnapshot {
+  const next = {...snapshot, cursor: event.cursor}
+  if (event.category === 'message') {
+    next.partial_reply = applyReply(snapshot.partial_reply ?? '', event.payload)
+  } else if (event.category === 'turn') {
+    next.active_turn = event.type === 'turn.accepted' ? event.turn_id : null
+    next.partial_reply = ''
+    next.question = null
+    if (event.payload.message) next.messages = mergeMessages(snapshot.messages, [event.payload.message])
+  } else if (event.category === 'task') {
+    const {messages, ...receipt} = event.payload
+    next.messages = mergeMessages(snapshot.messages, messages ?? []).map(message =>
+      message.task_id === receipt.task_id && message.role === 'task'
+        ? {...message, media_receipt: receipt, status: receipt.status} : message)
+  } else if (event.type === 'question.asked' && event.detail && 'options' in event.detail) {
+    next.question = event.detail
+  } else if (event.type === 'question.answered') {
+    next.question = null
+  }
+  return next
 }
 
 /** One composer for the lab chat profile. Server snapshots own admission and history. */
@@ -78,7 +106,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     const watch = async () => {
       let cursor = 0
       const refresh = async () => {
-        const data = (await laboratoryChat.snapshot({ sessionId })).data
+        const data = (await chatClient.labSnapshot({ sessionId })).data
         if (!data || abort.signal.aborted) return
         cursor = data.cursor
         setSnapshot(data)
@@ -87,13 +115,11 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
       while (!abort.signal.aborted) {
         try {
           await refresh()
-          for await (const event of laboratoryChat.events(sessionId, cursor, abort.signal)) {
+          for await (const event of chatClient.events(sessionId, cursor, abort.signal)) {
             if (abort.signal.aborted) return
             if (event.cursor <= cursor) continue
             cursor = event.cursor
-            if (event.type === 'message.updated') {
-              setSnapshot(previous => previous ? { ...previous, cursor, partial_reply: applyReply(previous.partial_reply ?? '', event.payload) } : previous)
-            } else await refresh()
+            setSnapshot(previous => previous && applyChatEvent(previous, event))
           }
         } catch (e) {
           if (!abort.signal.aborted) report(e)
@@ -112,7 +138,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     if (!sessionId) { setModels(old => ({ ...old, [kind]: value })); return }
     setSaving(true)
     try {
-      const selected = await laboratoryChat.models({ sessionId, requestBody: { [kind]: value } })
+      const selected = await chatClient.labModels({ sessionId, requestBody: { [kind]: value } })
       if (selected.data) setModels(selected.data)
     } catch (e) { report(e) } finally { setSaving(false) }
   }
@@ -131,12 +157,14 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     try {
       const session = await ensureSession('chat')
       acceptedSession = session.id
-      if (!sessionId) await laboratoryChat.models({sessionId: session.id, requestBody: models})
-      const result = await laboratoryChat.send({ sessionId: session.id, requestBody: {
+      if (!sessionId) await chatClient.labModels({sessionId: session.id, requestBody: models})
+      const receipt = await chatClient.send({ sessionId: session.id, requestBody: {
         request_id: pending.current.id, text, file_ids: fileIds,
       } })
-      if (result.data) setSnapshot(result.data)
-      if (result.data?.messages?.some(row => row.status === 'failed' && !row.payload?.tool_error && row.payload?.turn_id === pending.current?.id)) {
+      const event = await waitForTurnEvent(receipt, event => {
+        if (['turn.completed', 'turn.failed', 'turn.stopped', 'question.asked'].includes(event.type)) return event
+      })
+      if (event.type === 'turn.failed') {
         pending.current = undefined
         setError(uiText('生成失败'))
         return
@@ -148,7 +176,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
       report(e)
       if (acceptedSession && pending.current) {
         const id = pending.current.id
-        const recovered = await laboratoryChat.snapshot({sessionId: acceptedSession}).catch(() => undefined)
+        const recovered = await chatClient.labSnapshot({sessionId: acceptedSession}).catch(() => undefined)
         if (recovered?.data) {
           setSnapshot(recovered.data)
           if (recovered.data.messages?.some(row => row.status === 'failed' && !row.payload?.tool_error && row.payload?.turn_id === id)) pending.current = undefined
@@ -159,7 +187,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
   const stop = async () => {
     if (!sessionId || !snapshot?.active_turn) return
     try {
-      const response = await laboratoryChat.stop({sessionId, turnId: snapshot.active_turn})
+      const response = await chatClient.labStop({sessionId, turnId: snapshot.active_turn})
       if (response.data) setSnapshot(response.data)
     } catch (e) { report(e) }
   }
@@ -169,7 +197,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     inFlight.current = true
     setSending(true)
     try {
-      const result = await laboratoryChat.answer({sessionId, turnId: snapshot.active_turn,
+      const result = await chatClient.labAnswer({sessionId, turnId: snapshot.active_turn,
         requestBody: {question_id: question.id, file_id: fileId}})
       if (result.data) setSnapshot(result.data)
     } catch (e) { report(e) } finally { inFlight.current = false; setSending(false) }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { MediaTaskReceipt } from '../../../../services/generated'
-import { mediaTrial } from '../../../../services/mediaTrial'
+import { chatClient } from '../../../../services/chatSession'
 
 type TaskMessage = { taskId?: string; status?: string; receipt?: MediaTaskReceipt }
 const isTerminal = (status?: string) => status === 'succeeded' || status === 'failed' || status === 'cancelled'
@@ -25,9 +25,10 @@ export function useExperimentTaskResults<T extends TaskMessage>(
 
     const consume = async () => {
       try {
-        for await (const event of mediaTrial.events(id, cursor, abort.signal)) {
+        for await (const event of chatClient.events(id, cursor, abort.signal)) {
           if (abort.signal.aborted) return
           cursor = event.cursor
+          if (event.category !== 'task') continue
           setFailed(false)
           setReads(current => ({ ...current, [event.payload.task_id]: event.payload }))
           if (event.type === 'task.accepted' || isTerminal(event.payload.status)) void refreshHistory()
