@@ -135,32 +135,3 @@ export async function readTrialHistory(
   }
   return {data: data.history.messages, meta: {cursor: data.cursor, activeTurnIds: data.history.active_turn_ids}}
 }
-
-/** Follow one admitted turn, resuming after the last event if the connection drops. */
-async function waitForTurnEvent<T>(
-  session: ReturnType<typeof bindChatSession>, receipt: ChatTurnReceipt,
-  select: (event: ChatEvent) => T | undefined, signal: AbortSignal,
-): Promise<T> {
-  let cursor = receipt.cursor
-  for (let attempt = 0; attempt < 3 && !signal.aborted; attempt++) {
-    try {
-      for await (const event of session.events(cursor, signal)) {
-        const result = event.turn_id === receipt.turn_id ? select(event) : undefined
-        if (signal.aborted) signal.throwIfAborted()
-        cursor = event.cursor
-        if (result !== undefined) return result
-      }
-    } catch (error) {
-      if (signal.aborted || attempt === 2) throw error
-    }
-  }
-  throw new Error('Chat turn event stream closed before the expected event')
-}
-
-export function waitForMediaAdmission(session: ReturnType<typeof bindChatSession>, receipt: ChatTurnReceipt) {
-  return waitForTurnEvent(session, receipt, event => {
-    if (event.category !== 'task' || event.type !== 'task.accepted') return
-    const {task_id, messages} = event.payload
-    return {task_id, messages: messages ?? []}
-  }, AbortSignal.timeout(8000))
-}
