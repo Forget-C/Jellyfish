@@ -106,7 +106,7 @@ function ModelCapabilityFields({ defaults, model }: { defaults: CapabilityProfil
   }
   function row(label: string, controls: ReactNode, action?: ReactNode) {
     return <div className="model-cap-row" role="group" aria-label={uiText(label)}>
-      <span className="font-medium">{uiText(label)}</span><div className="model-cap-options">{controls}</div>{action}
+      <span className="model-cap-label">{uiText(label)}</span><div className="model-cap-options">{controls}</div>{action}
     </div>
   }
   const modelId = model?.category === 'text' ? model.id : undefined
@@ -123,7 +123,7 @@ function ModelCapabilityFields({ defaults, model }: { defaults: CapabilityProfil
     {row('结构化输出', <>{field('json_object','JSON 模式')}{field('json_schema','JSON Schema 约束输出')}</>)}
     {row('响应方式', <>{field('non_streaming','非流式响应')}{field('native_streaming','原生流式响应')}</>)}
     {row('结果返回',field('direct_result','直接返回结果'))}
-    <div><strong>{uiText('Token 限额')}</strong><div className="model-cap-limits">{TOKEN_LIMITS.map(([key,label]) =>
+    <div><span className="model-cap-subheading">{uiText('Token 限额')}</span><div className="model-cap-limits">{TOKEN_LIMITS.map(([key,label]) =>
       <Form.Item key={key} name={['capability_profile',key]} label={uiText(label)}
         getValueProps={value => { const tokens = value === undefined ? defaults[key] : value; return { value: tokens > 0 ? tokens / 1000 : null } }}
         normalize={value => value === null || value === undefined ? null : Math.round(value * 1000)}
@@ -1003,17 +1003,20 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
               </Form.Item>
             </details>
           </section>
-          {selectedFormCategory && <section className="project-settings-group model-cap-section">
-            <header><h2>{uiText('模型能力')}</h2><CapabilityReset key={JSON.stringify([selectedFormProviderId,selectedFormCategory,editedName,selectedNames])} defaults={defaults} loading={formCatalogLoading} editing={!!modelEditing} /></header>
-            {selectedFormCategory === 'text' && <ModelCapabilityFields defaults={defaults} model={modelEditing} />}
-            {selectedFormCategory === 'image' && <ImageCapabilityFields model={modelEditing} providerKey={selectedFormProvider?.provider_key} defaults={defaults} />}
-            {selectedFormCategory === 'video' && <VideoCapabilityFields model={modelEditing} providerKey={selectedFormProvider?.provider_key} defaults={defaults} />}
+          {selectedFormCategory && <section className="project-settings-group">
+            <details className="model-cap-disclosure">
+              <summary><h2>{uiText('模型能力')} <DownOutlined aria-hidden="true" /></h2></summary>
+              <div className="model-cap-actions"><CapabilityReset key={JSON.stringify([selectedFormProviderId,selectedFormCategory,editedName,selectedNames])} defaults={defaults} loading={formCatalogLoading} editing={!!modelEditing} /></div>
+              {selectedFormCategory === 'text' && <ModelCapabilityFields defaults={defaults} model={modelEditing} />}
+              {selectedFormCategory === 'image' && <ImageCapabilityFields model={modelEditing} providerKey={selectedFormProvider?.provider_key} defaults={defaults} />}
+              {selectedFormCategory === 'video' && <VideoCapabilityFields model={modelEditing} providerKey={selectedFormProvider?.provider_key} defaults={defaults} />}
+              {(selectedFormCategory === 'image' || selectedFormCategory === 'video') && selectedFormProvider?.provider_key === 'vidu' &&
+                <Form.Item name={['capability_profile', 'remote_cancel']} label={uiText('远端取消')}
+                  valuePropName="checked" getValueProps={value => ({ checked: value ?? defaults.remote_cancel ?? false })}>
+                  <Switch size="small" />
+                </Form.Item>}
+            </details>
           </section>}
-          {(selectedFormCategory === 'image' || selectedFormCategory === 'video') && selectedFormProvider?.provider_key === 'vidu' &&
-            <Form.Item name={['capability_profile', 'remote_cancel']} label={uiText('远端取消')}
-              valuePropName="checked" getValueProps={value => ({ checked: value ?? defaults.remote_cancel ?? false })}>
-              <Switch size="small" />
-            </Form.Item>}
 
           {modelEditing && <Typography.Text type="secondary">{uiText("创建人")} · {modelEditing.created_by || '—'}</Typography.Text>}
         </Form>

@@ -1,5 +1,14 @@
-.model-cap-section > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-.model-cap-section > header h2 { margin: 0; font-size: 16px; }
+.model-cap-disclosure { position: relative; }
+.model-cap-disclosure > summary { cursor: pointer; list-style: none; }
+.model-cap-disclosure > summary::-webkit-details-marker { display: none; }
+.model-cap-disclosure > summary h2 { display: flex; align-items: center; gap: 8px; min-height: 32px; margin: 0; }
+.model-cap-disclosure > summary .anticon { font-size: 12px; transform: rotate(-90deg); }
+.model-cap-disclosure[open] > summary { margin-bottom: 16px; }
+.model-cap-disclosure[open] > summary .anticon { transform: none; }
+.model-cap-actions { position: absolute; inset-block-start: 0; inset-inline-end: 0; }
+.model-cap-label, .model-cap-subheading { font-size: 13px; }
+.model-cap-subheading { font-weight: 500; }
+.model-cap-limits .ant-input-number-suffix { color: var(--app-muted); }
 .model-cap-fields { display: grid; gap: 16px; font-size: 14px; }
 .model-cap-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; }
 .model-cap-options { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
