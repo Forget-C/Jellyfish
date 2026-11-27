@@ -11,7 +11,10 @@ const output = await browserOutput('jellyfish-lab-results-')
 const origin = 'http://127.0.0.1:4805'
 const timestamp = '2026-09-15T00:00:00Z'
 const session = (id, lab_type, title) => ({ id, lab_type, title, updated_at: timestamp, created_at: timestamp })
-const sessions = [session('text-history', 'text', '文本历史'), session('text-long', 'text', '长会话'), session('image-history', 'image', '图片历史'), session('image-stale-poll', 'image', '轮询过期会话'), session('video-history', 'video', '视频历史'), session('portrait-history', 'video', '竖视频历史')]
+const sessions = [session('text-history', 'text', '文本历史'), session('text-long', 'text', '长会话'), session('image-history', 'image', '图片历史'), session('image-failed', 'image', '图片失败历史'), session('image-stale-poll', 'image', '轮询过期会话'), session('video-history', 'video', '视频历史'), session('portrait-history', 'video', '竖视频历史')]
+const longReply = '一段需要自然换行的模型回复。'.repeat(12)
+const longLink = 'https://example.test/' + 'x'.repeat(140)
+const manualBreak = '人工换行前\n人工换行后'
 const item = (id, session_id, role, content, sequence, extra = {}) => ({
   id, session_id, role, content, sequence, created_at: timestamp, updated_at: timestamp, ...extra,
 })
@@ -117,7 +120,13 @@ try {
     if (url.pathname.endsWith('/chat/sessions/text/text-history/snapshot')) {
       textHistoryReads++
       if (failTextHistory) return route.fulfill({ status: 503, json: { detail: '历史服务暂不可用' } })
-      return textTrialSnapshot(route, [item('text-answer', 'text-history', 'assistant', '历史回复', 2), item('text-prompt', 'text-history', 'user', '短提示词', 1)])
+      return textTrialSnapshot(route, [
+        item('text-prompt', 'text-history', 'user', '短提示词', 1),
+        item('text-answer', 'text-history', 'assistant', '历史回复', 2),
+        item('text-link', 'text-history', 'user', longLink, 3),
+        item('text-long-answer', 'text-history', 'assistant', longReply, 4),
+        item('text-break', 'text-history', 'user', manualBreak, 5),
+      ])
     }
     if (url.pathname.endsWith('/chat/sessions/text/text-long/snapshot')) {
       const earlier = url.searchParams.get('page') === '2'
@@ -126,6 +135,11 @@ try {
         const sequence = (earlier ? 50 : 100) - index
         return item('long-' + sequence, 'text-long', 'assistant', `第 ${sequence} 条历史`, sequence)
       }))
+    }
+    if (url.pathname.endsWith('/chat/sessions/image/image-failed/snapshot')) {
+      return respond(boundTrialSnapshot(url, [item('failed-image', 'image-failed', 'task', '', 1, {
+        task_id: 'failed-run', status: 'failed', payload: { error: '图片任务失败原因' },
+      })]))
     }
     if (url.pathname.endsWith('/chat/sessions/image/image-history/snapshot')) {
       if (imageReadsFail) return route.fulfill({ status: 503, json: { detail: '历史服务暂不可用' } })
@@ -199,7 +213,34 @@ try {
   await history.getByText('历史回复', { exact: true }).waitFor()
   assert.equal(await input.inputValue(), '未发送的提示词')
   assert.equal(textHistoryReads, readsBeforeRetry + 1)
-  assert.ok((await history.getByRole('article').filter({ hasText: '短提示词' }).boundingBox()).width < 200)
+  const messageLineCount = content => content.evaluate(element => {
+    const range = document.createRange()
+    range.selectNodeContents(element)
+    return new Set(Array.from(range.getClientRects(), rect => rect.top)).size
+  })
+  const messageBody = value => history.getByRole('article').filter({ hasText: value }).locator('.experiment-message-body')
+  const assertResultSpacing = (region, title) => region.getByRole('article').filter({ has: page.getByText(title, { exact: true }) })
+    .evaluate(article => {
+      const header = article.querySelector('header').getBoundingClientRect()
+      const card = article.querySelector('.experiment-message-body').getBoundingClientRect()
+      if (Math.abs(header.left - card.left) >= 1 || Math.abs(card.top - header.bottom - 8) >= 1) {
+        throw new Error('Result title must align with the card and sit 8px above it')
+      }
+    })
+  for (const width of [1440, 375]) {
+    await page.setViewportSize({ width, height: 900 })
+    if (width === 375) await page.getByRole('button', { name: '会话导航', exact: true }).waitFor()
+    assert.equal(await messageLineCount(messageBody('短提示词')), 1)
+    assert.equal(await messageLineCount(messageBody(manualBreak)), 2)
+    assert.ok(await messageLineCount(messageBody(longLink)) > 1)
+    const reply = await messageBody(longReply).boundingBox()
+    const composer = await page.locator('.experiment-composer').boundingBox()
+    assert.ok(Math.abs(reply.x - composer.x) < 1 && Math.abs(reply.width - composer.width) < 1)
+    const link = await messageBody(longLink).boundingBox()
+    assert.ok(link.width <= composer.width * (width === 375 ? 0.9 : 0.75) + 1)
+    assert.ok(Math.abs(link.x + link.width - composer.x - composer.width) < 1)
+  }
+  await page.setViewportSize({ width: 1440, height: 900 })
   assert.deepEqual(writes, [])
 
   await page.goto(origin + '/lab?session=image-history')
@@ -213,6 +254,7 @@ try {
   imageStatus = 'running'
   await englishHistory.getByRole('button', { name: 'Retry loading status' }).click()
   await englishHistory.getByText('Generating 38%', { exact: true }).waitFor()
+  await assertResultSpacing(englishHistory, 'Image generation')
   await englishHistory.evaluate(region => { region.scrollTop = 0 })
   await englishHistory.getByRole('button', { name: 'Load earlier messages' }).click()
   await englishHistory.getByText('更早的图片提示词', { exact: true }).waitFor()
@@ -235,6 +277,11 @@ try {
   const firstPreview = history.getByRole('button', { name: '查看图片 1' })
   const secondPreview = history.getByRole('button', { name: '查看图片 2' })
   await secondPreview.waitFor()
+  await assertResultSpacing(history, '图片生成')
+  await page.setViewportSize({ width: 375, height: 812 })
+  await page.getByRole('button', { name: '会话导航', exact: true }).waitFor()
+  await assertResultSpacing(history, '图片生成')
+  await page.setViewportSize({ width: 1440, height: 900 })
   assert.ok((await firstPreview.boundingBox()).width <= 480)
   assert.equal(Math.round((await firstPreview.boundingBox()).y), Math.round((await secondPreview.boundingBox()).y))
   await page.screenshot({ path: output + '/mist-image-results.png', animations: 'disabled' })
@@ -247,6 +294,10 @@ try {
   await page.keyboard.press('Escape')
   await imageDialog.waitFor({ state: 'hidden' })
   await firstPreview.and(page.locator(':focus')).waitFor()
+
+  await page.goto(origin + '/lab?session=image-failed')
+  await history.getByText('图片任务失败原因', { exact: true }).waitFor()
+  await assertResultSpacing(history, '图片生成')
 
   await page.goto(origin + '/lab?session=video-history')
   await history.getByText('状态暂不可用', { exact: true }).waitFor()
@@ -300,6 +351,7 @@ try {
   await page.getByRole('menuitemradio', { name: '雾蓝纯色', exact: true }).click()
   for (const [width, height] of [[1440, 900], [1024, 440], [375, 812]]) {
     await page.setViewportSize({ width, height })
+    await assertResultSpacing(history, '视频生成')
     const preview = await videoPreview.boundingBox()
     assert.ok(preview.width <= Math.min(480, width) && preview.height <= 280)
     assert.deepEqual(await videoPreview.locator('video').evaluate(video => [

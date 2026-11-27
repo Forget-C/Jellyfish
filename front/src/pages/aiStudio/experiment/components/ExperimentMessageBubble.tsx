@@ -1,6 +1,6 @@
 import { MessageOutlined, UserOutlined } from '@ant-design/icons'
 import type { ReactNode } from 'react'
-import { WorkbenchConversation } from '../../../../components/workbench/WorkbenchConversation'
+import { Bubble } from '@ant-design/x'
 
 type ExperimentMessageBubbleProps = {
   children?: ReactNode
@@ -8,18 +8,16 @@ type ExperimentMessageBubbleProps = {
   identity: string
   tone: 'assistant' | 'user'
   status?: ReactNode
+  result?: boolean
 }
 
-/** 统一身份、正文和轻量操作的顺序，正文宽度随消息内容收缩。 */
-export function ExperimentMessageBubble({ children, footer, identity, tone, status }: ExperimentMessageBubbleProps) {
+/** 统一身份、正文和轻量操作的顺序，用户气泡和结果卡片随内容收缩。 */
+export function ExperimentMessageBubble({ children, footer, identity, tone, status, result }: ExperimentMessageBubbleProps) {
   const Icon = tone === 'user' ? UserOutlined : MessageOutlined
-  return <article className={`experiment-message experiment-message-${tone}`}>
+  return <article className={`experiment-message experiment-message-${tone}${result ? ' experiment-message-result' : ''}`}>
     <header className="experiment-message-header"><span><Icon aria-hidden="true" /> {identity}</span>{status}</header>
-    {children ? <WorkbenchConversation gap={0} items={[{
-      key: 'body', role: tone === 'assistant' ? 'ai' : 'user', placement: tone === 'user' ? 'end' : 'start',
-      variant: 'borderless', content: children, classNames: { content: 'experiment-message-body' },
-      styles: { content: { background: tone === 'user' ? 'var(--app-selected)' : 'white', padding: '8px 12px' } },
-    }]} /> : null}
+    {children ? <Bubble content={children} placement={tone === 'user' ? 'end' : 'start'}
+      variant="borderless" classNames={{ content: 'experiment-message-body' }} /> : null}
     {footer ? <footer className="experiment-message-footer">{footer}</footer> : null}
   </article>
 }

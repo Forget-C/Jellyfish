@@ -213,6 +213,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
           identity={isUser ? uiText("你") : uiText("图片生成")}
           status={item.taskId ? <ExperimentTaskStatus status={item.status} progress={item.progress} unavailable={item.unavailable} onRetry={item.taskId === runningTaskId ? retryStatus : undefined} /> : null}
           tone={isUser ? 'user' : 'assistant'}
+          result={!isUser}
         >
             {isUser || item.content !== '图片生成任务已提交，正在等待生成结果。' ? item.content : null}
             {isUser ? <ExperimentHistoryReferences files={files} references={(item.referenceFileIds ?? []).map((id) => ({ id, label: uiText("参考图") }))} /> : null}

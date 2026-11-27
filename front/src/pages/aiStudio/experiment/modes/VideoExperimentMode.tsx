@@ -261,6 +261,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
         identity={isUser ? uiText("你") : uiText("视频生成")}
         status={item.taskId ? <ExperimentTaskStatus status={item.status} progress={item.progress} unavailable={item.unavailable} onRetry={item.taskId === runningTaskId ? retryStatus : undefined} /> : null}
         tone={isUser ? 'user' : 'assistant'}
+        result={!isUser}
       >
           {isUser || item.content !== '视频生成任务已提交，正在等待生成结果。' ? item.content : null}
           {isUser ? <><ExperimentHistoryReferences files={files} references={[...(['first', 'last', 'key'] as FrameSlot[]).flatMap((slot) => item.frameFileIds?.[slot] ? [{ id: item.frameFileIds[slot]!, label: uiText(frameLabels[slot]) }] : []), ...(item.subjectReferences ?? []).flatMap((subject) => subject.media.filter(file => file.kind === 'image').map(({ id }) => ({ id, label: uiText("{{name}}图片", { name: subject.name }) })))]} />{(item.subjectReferences ?? []).flatMap((subject) => subject.media.filter(file => file.kind === 'video').map(({ id }) => <Tag key={`${subject.id}:${id}`} className="mt-1">{subject.name}{uiText("视频：")}{files.find((file) => file.id === id)?.name ?? id}</Tag>))}{item.ratio ? <div className="mt-2 text-xs text-slate-500">{uiText("画幅：")}{item.ratio}</div> : null}</> : null}

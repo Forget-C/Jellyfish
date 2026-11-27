@@ -272,32 +272,47 @@
 
 .experiment-history-loading { padding: 12px; color: var(--app-muted); font-size: 13px; }
 .experiment-message {
-  width: fit-content;
-  max-width: min(100%, 80ch);
+  min-width: 0;
+  max-width: 100%;
   color: var(--app-text);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 16px;
+  line-height: 26px;
 }
-.experiment-message-user { margin-inline-start: auto; }
+.experiment-message-user,
+.experiment-message-result { width: fit-content; }
+.experiment-message-user { max-width: 75%; margin-inline-start: auto; }
+
+@media (max-width: 767px) {
+  .experiment-message-user { max-width: 90%; }
+}
+
 .experiment-message-header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 8px;
-  margin-block-end: 4px;
+  margin-block-end: 8px;
   color: var(--app-muted);
   font-size: 12px;
+  line-height: 1.5;
 }
 .experiment-message-user .experiment-message-header { justify-content: flex-end; }
-.experiment-message-body {
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: white;
+.experiment-message .experiment-message-body {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  word-break: normal;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 .experiment-message-body:empty { display: none; }
+.experiment-message-user .experiment-message-body,
+.experiment-message-result .experiment-message-body {
+  padding: 8px 12px;
+  border-radius: 12px;
+}
 .experiment-message-user .experiment-message-body { background: var(--app-selected); }
+.experiment-message-result .experiment-message-body { background: white; }
 .experiment-message-footer { display: flex; justify-content: flex-end; margin-block-start: 4px; }
 .experiment-task-status,
 .experiment-task-read-state { display: inline-flex; align-items: center; gap: 4px; }

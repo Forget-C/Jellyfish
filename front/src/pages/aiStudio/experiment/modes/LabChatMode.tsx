@@ -250,7 +250,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     history: <ExperimentHistory messageCount={messages.length || Number(hasMessages)} emptyDescription={uiText('暂无会话消息')}>
       {messages.map(row => <ExperimentMessageBubble key={row.id}
         identity={row.role === 'user' ? uiText('你') : uiText('模型')}
-        tone={row.role === 'user' ? 'user' : 'assistant'}>
+        tone={row.role === 'user' ? 'user' : 'assistant'} result={Boolean(row.media_receipt)}>
         {renderMessage(row)}
       </ExperimentMessageBubble>)}
       {snapshot?.partial_reply && <ExperimentMessageBubble identity={uiText('模型')} tone="assistant">
