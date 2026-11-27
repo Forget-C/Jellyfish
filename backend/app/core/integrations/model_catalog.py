@@ -74,44 +74,55 @@ def _parse_remote_catalog(provider: str, payload: dict[str, Any]) -> ProviderMod
         name = str(row.get("id") or row.get("model") or row.get("name") or "").strip()
         if not name or any(part in name.lower() for part in ("embedding", "whisper", "transcribe", "moderation", "tts-", "rerank")):
             continue
-        modality = row.get("modalities") or row.get("inference_metadata") or row
-        values = {}
-        for side, alias in (("input", "request"), ("output", "response")):
-            kinds = modality.get(side + "_modalities", modality.get(alias + "_modality"))
-            if isinstance(kinds, list) and kinds:
-                kinds = {str(kind).lower() for kind in kinds}
-                for kind in ("text", "image", "video", "audio"):
-                    values[f"{kind}_{side}s"] = kind in kinds
+        values = _catalog_capabilities(provider, row)
+        domain = {"ImageGeneration": "image", "VideoGeneration": "video", "LLM": "text", "VLM": "text"}.get(row.get("domain"))
+        tags = row.get("capabilities") or []
+        if not domain:
+            domain = next((kind for tag, kind in (("VG", "video"), ("IG", "image"), ("TG", "text")) if tag in tags), None)
         category = next((kind for kind in ("video", "image", "text") if values.get(kind + "_outputs")),
-                        _infer_category(name))
+                        domain or _infer_category(name))
         if row.get("domain") in {"Embedding", "Audio", "3DGeneration"} or (
             "text_outputs" in values and not any(values[k + "_outputs"] for k in ("text", "video", "image"))
         ):
             continue
-        if provider == "volcengine" and category == "text" or provider == "aliyun_bailian" and category != "text":
+        if (provider == "volcengine" and category == "text") or (provider == "aliyun_bailian" and category != "text"):
             continue
-        features = row.get("features")
-        if isinstance(features, dict):
-            tools = features.get("tools") or {}
-            structured = features.get("structured_outputs") or {}
-            for key, flag in (("tool_calling", tools.get("function_calling")),
-                              ("json_schema", structured.get("json_schema")), ("json_object", structured.get("json_object"))):
-                if isinstance(flag, bool):
-                    values[key] = flag
-        elif isinstance(features, list) and provider == "aliyun_bailian":
-            values["tool_calling"] = "function-calling" in features
-        limits = row.get("token_limits") or row.get("model_info") or row
-        for key, alias in (("context_window", "context_window"), ("max_input_tokens", "max_input_token_length"),
-                           ("max_output_tokens", "max_output_token_length")):
-            value = limits.get(key, limits.get(alias))
-            if isinstance(value, int) and not isinstance(value, bool) and value > 0:
-                values[key] = value
         candidates[name, category] = ProviderModelCandidate(
             name=name, category=category, description=row.get("description") or "",
             capability_profile=model_profile(provider, name, category, ModelCapabilityProfile.model_validate(values)),
         )
     return ProviderModelCatalog(provider_key=provider, source="provider_api",
                                 models=[candidates[key] for key in sorted(candidates)])
+
+
+
+def _catalog_capabilities(provider: str, row: dict[str, Any]) -> dict:
+    """Read only published fields and leave omissions for model defaults."""
+    modality = row.get("modalities") or row.get("inference_metadata") or row
+    values = {}
+    for side, alias in (("input", "request"), ("output", "response")):
+        kinds = modality.get(side + "_modalities", modality.get(alias + "_modality"))
+        if isinstance(kinds, list) and kinds:
+            kinds = {str(kind).lower() for kind in kinds}
+            for kind in ("text", "image", "video", "audio"):
+                values[f"{kind}_{side}s"] = kind in kinds
+    features = row.get("features")
+    if isinstance(features, dict):
+        tools = features.get("tools") or {}
+        structured = features.get("structured_outputs") or {}
+        for key, flag in (("tool_calling", tools.get("function_calling")),
+                          ("json_schema", structured.get("json_schema")), ("json_object", structured.get("json_object"))):
+            if isinstance(flag, bool):
+                values[key] = flag
+    elif isinstance(features, list) and provider == "aliyun_bailian":
+        values["tool_calling"] = "function-calling" in features
+    limits = row.get("token_limits") or row.get("model_info") or row
+    for key, alias in (("context_window", "context_window"), ("max_input_tokens", "max_input_token_length"),
+                       ("max_output_tokens", "max_output_token_length")):
+        value = limits.get(key, limits.get(alias, row.get(key)))
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+            values[key] = value
+    return values
 
 
 def _infer_category(model_name: str) -> ModelCategoryKey:

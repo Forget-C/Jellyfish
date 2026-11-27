@@ -679,7 +679,7 @@ async def test_followup_reuses_applied_video_cards(canvas_client, monkeypatch, s
 
     async with canvas_client.canvas_sessions.begin() as db:
         (await db.get(Model, 'canvas-text')).capability_profile = (
-            {'tool_calling': {'declaration': 'supported'}} if surface == 'free-native' else None
+            {'tool_calling': {'declaration': 'supported'}} if surface == 'free-native' else {'tool_calling': False}
         )
     suffix = '?project_id=p' if surface == 'scene' else ''
     if surface == 'draft':
@@ -795,7 +795,7 @@ async def test_approved_video_inputs_compile_once(canvas_client, monkeypatch, su
     client = canvas_client
     async with client.canvas_sessions.begin() as db:
         (await db.get(Model, 'canvas-text')).capability_profile = (
-            {'tool_calling': {'declaration': 'supported'}} if surface == 'free-native' else None)
+            {'tool_calling': {'declaration': 'supported'}} if surface == 'free-native' else {'tool_calling': False})
         db.add(Provider(id='subject-provider', provider_key='vidu', name='vidu', base_url='https://video.test'))
         await db.flush()
         model = await db.get(Model, 'canvas-video')

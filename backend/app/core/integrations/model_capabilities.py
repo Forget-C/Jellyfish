@@ -72,12 +72,23 @@ def model_profile(provider: str, model: str, category: str,
         })
     mode_key = "image_modes" if image else "video_modes"
     modes = defaults[mode_key]
-    if not model:
+    known_families = {
+        "openai": ("gpt-image-", "dall-e-", "sora-"),
+        "volcengine": ("doubao-seedream-", "doubao-seedance-"),
+        "vidu": ("viduq1", "viduq2", "viduq3", "vidu2.0"),
+        "kling": ("kling-v3", "kling-3.0"),
+    }
+    if not model.lower().startswith(known_families.get(provider, ())):
         for name, mode in modes.items():
             mode.supported = name in {"text_to_image", "text_to_video"}
+            for field in type(mode).model_fields:
+                if field != "supported" and isinstance(getattr(mode, field), bool):
+                    setattr(mode, field, False)
     for name, options in values.pop(mode_key, {}).items():
         if name in modes:
-            modes[name] = type(modes[name]).model_validate({**modes[name].model_dump(), **options})
+            inherited = modes[name].model_dump()
+            inherited.update({key: value for key, value in options.items() if value is not None})
+            modes[name] = type(modes[name]).model_validate(inherited)
     defaults["image_inputs"] = any(mode.supported for key, mode in modes.items()
                                    if key not in {"text_to_image", "text_to_video"})
     return ModelCapabilityProfile.model_validate({**defaults, **values})

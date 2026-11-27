@@ -302,8 +302,8 @@ async def test_reference_capabilities_use_model_and_adapter_rules(tmp_path):
             assert data["subject_images"] and data["max_images_per_subject"] == 3
             assert data["max_subjects"] == 7 and not data["combine_subjects_and_frames"]
             data = (await client.get(base + "o1/reference-capabilities")).json()["data"]
-            assert not data["subject_images"] and data["max_frames"] == 1
-            assert data["frame_roles"] == ["first_frame"]
+            assert not data["subject_images"] and data["max_frames"] == 0
+            assert data["frame_roles"] == []
             assert data["max_subjects"] is None
             data = (await client.get(base + "k1/reference-capabilities")).json()["data"]
             assert data["frame_roles"] == []

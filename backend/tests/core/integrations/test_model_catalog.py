@@ -66,7 +66,7 @@ async def test_kling_catalog_uses_static_model_map_without_network() -> None:
 async def test_catalog_preserves_explicit_provider_values_and_fills_gaps():
     async def handler(request):
         return httpx.Response(200, json={"data": [{"id": "custom-chat", "input_modalities": ["text", "image"],
-            "max_output_tokens": 4096, "context_window": 8192, "features": {"tools": {"function_calling": False}}}]})
+            "max_output_tokens": 4096, "context_window": 8192, "token_limits": {"max_input_token_length": 7000}, "features": {"tools": {"function_calling": False}}}]})
     catalog = await list_provider_models(
         ModelProviderConfig(provider="openai", api_key="test", base_url="https://gateway.test/v1"),
         client_factory=lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)))
@@ -91,3 +91,15 @@ async def test_bailian_native_catalog_follows_pages_and_reads_features():
         client_factory=lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)))
     assert [row.capability_profile.tool_calling for row in catalog.models] == [True, False]
     assert catalog.models[1].capability_profile.max_input_tokens == 1024
+
+
+@pytest.mark.asyncio
+async def test_unknown_image_alias_uses_only_text_generation_mode():
+    catalog = await list_provider_models(
+        ModelProviderConfig(provider="openai", api_key="test", base_url="https://gateway.test/v1"),
+        client_factory=lambda: httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(
+            200, json={"data": [{"id": "private-image-alias"}]}))))
+    profile = catalog.models[0].capability_profile
+    assert profile.image_modes["text_to_image"].supported
+    assert not profile.image_modes["edit"].supported
+    assert not profile.image_inputs

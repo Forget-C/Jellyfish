@@ -17,7 +17,7 @@ const model = {
   description: '完整说明' + '，用于验证长文本的浏览和换行'.repeat(20),
   created_by: '验收创建人',
   params: { long_value: 'abcdefghijklmnopqrstuvwxyz'.repeat(35) },
-  capability_profile: { tool_calling: true, native_streaming: true },
+  capability_profile: { tool_calling: true, native_streaming: true, remote_task: false },
   storyboard_inspection_capabilities: { image_inputs: true, video_inputs: false },
 }
 const provider = { provider_key: 'openai', id: 'provider1', name: '验收供应商', base_url: 'https://example.invalid' }
@@ -75,6 +75,7 @@ try {
     if (pathname.endsWith('/models/model1') && route.request().method() === 'PATCH') {
       const body = route.request().postDataJSON()
       assert.equal(body.description, '更新后的完整描述')
+      assert.equal(body.capability_profile.remote_task, false)
       assert.equal(body.provider_id, provider.id)
       assert.equal(body.category, 'text')
       if (editFails) return route.fulfill({ status: 500, json: { detail: '编辑失败' } })
@@ -383,6 +384,14 @@ try {
   assert.equal(createRequests, 0)
   await json.fill('{}')
   await add.locator('summary').getByText('模型能力', { exact: true }).click()
+  const contextLimit = add.getByRole('spinbutton', { name: '上下文窗口（tokens）' })
+  await contextLimit.fill('0')
+  await add.locator('summary').getByText('模型能力', { exact: true }).click()
+  await submit.click()
+  await add.getByText('请输入正整数或 -1').waitFor()
+  await contextLimit.fill('4096')
+  await add.getByRole('button', { name: '恢复默认值' }).click()
+  assert.equal(await contextLimit.inputValue(), '-1')
   await add.getByRole('switch', { name: '工具调用', exact: true }).click()
   await submit.click()
   await add.waitFor({ state: 'hidden' })

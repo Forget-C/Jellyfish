@@ -96,7 +96,7 @@ function ModelCapabilityFields({ defaults, model }: { defaults: CapabilityProfil
   const rows = MODEL_CAPABILITIES.map(([key, label]) => {
     const disabled = (['tool_results', 'parallel_tool_calls', 'streaming_tool_arguments'].includes(key) && !tools)
       || (key === 'streaming_tool_arguments' && !streaming)
-    return <Form.Item key={key} label={uiText(label)} name={['capability_profile', key]}
+    return <Form.Item key={key} layout="horizontal" className="[&_.ant-form-item-control-input-content]:text-right" label={uiText(label)} name={['capability_profile', key]}
       extra={model?.capability_profile?.[key] && model.effective_capabilities?.[key] === false
         ? uiText('当前对话接入无法使用此能力') : undefined}
       getValueProps={value => ({ checked: !disabled && (value ?? defaults[key] ?? false) })}
@@ -182,8 +182,7 @@ function VideoCapabilityFields({ model, providerKey, defaults }: { model: ModelR
   const modes = Form.useWatch(['capability_profile', 'video_modes'], Form.useFormInstance())
   return VIDEO_MODES.map(([mode, label]) => {
     const enabled = modes?.[mode]?.supported ?? defaults.video_modes?.[mode]?.supported
-    return (
-    <fieldset key={mode} className="mb-4">
+    return (<fieldset key={mode} className="mb-4">
       <legend className="mb-2 text-sm">{uiText(label)}</legend>
       {model?.effective_video_modes?.[mode] && <p className="mb-2 text-xs">
         {uiText('当前接入可用')} · {uiText(model.effective_video_modes[mode].supported ? '支持' : '不支持')}
@@ -225,8 +224,8 @@ function VideoCapabilityFields({ model, providerKey, defaults }: { model: ModelR
         } }]}>
         <Input.TextArea rows={2} placeholder='{"720p":{"min_seconds":5,"max_seconds":15},"1080p":[5,10]}' />
       </Form.Item>}
-    </fieldset>
-  )})
+    </fieldset>)
+  })
 }
 
 /** 选择器读取完整目录，独立于表格的搜索条件和当前页。 */
@@ -522,12 +521,12 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
     setSavingModel(true)
     try {
       const params = values.params?.trim() ? JSON.parse(values.params) as Record<string, unknown> : {}
-      let capabilities = values.capability_profile
+      let capabilities: CapabilityProfile | undefined = form.getFieldValue('capability_profile')
       if (values.category === 'video' && values.videoDurationRules) {
         const modes = { ...capabilities?.video_modes }
         for (const [mode] of VIDEO_MODES) {
           const text = values.videoDurationRules[mode]?.trim()
-          if (text || modes[mode]) modes[mode] = {
+          if (values.videoDurationRules[mode] !== undefined) modes[mode] = {
             ...modes[mode], duration_by_resolution: text ? JSON.parse(text) : {},
           }
         }
@@ -874,6 +873,15 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
             const first = errorFields[0]?.name
             if (!first) return
             if (first[0] === 'params' && advanced.current) advanced.current.open = true
+            const control = document.getElementById(form.getFieldInstance(first)?.id ?? '')
+              ?? form.getFieldInstance(first)?.nativeElement
+            if (control instanceof HTMLElement) {
+              let parent = control.closest('details')
+              while (parent) {
+                parent.open = true
+                parent = parent.parentElement?.closest('details') ?? null
+              }
+            }
             requestAnimationFrame(() => {
               form.scrollToField(first)
               form.getFieldInstance(first)?.focus?.()

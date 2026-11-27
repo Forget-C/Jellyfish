@@ -197,9 +197,9 @@ async def test_review_reports_only_the_interval_and_tracks_sent_to_the_provider(
                                    (True, True, 'video_with_audio')]:
         async with canvas_client.canvas_sessions.begin() as db:
             model = await db.get(Model, 'canvas-text')
-            model.capability_profile = {key: {'declaration': 'supported'} for key, enabled in {
+            model.capability_profile = {
                 'image_inputs': True, 'video_inputs': video, 'audio_inputs': audio, 'tool_calling': True,
-            }.items() if enabled}
+            }
         response = await observe_canvas_turn(canvas_client, url, json={
             'request_id': evidence, 'text': '只评估运镜和声画同步', 'attachment_file_ids': [file_id],
         })

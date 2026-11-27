@@ -199,7 +199,7 @@ async def test_assistant_switches_model_without_losing_visible_card_scope(canvas
     ])
     async with canvas_client.canvas_sessions.begin() as db:
         model = await db.get(Model, 'canvas-text')
-        model.capability_profile = {'max_input_tokens': 4096}
+        model.capability_profile = {'max_input_tokens': 4096, 'tool_calling': False}
     limited = dict(turn, request_id='large-text', text='分析 camera-note', context=dict(turn['context'], draft=large, scope='canvas'))
     result = await observe_canvas_turn(canvas_client, assistant, json=limited)
     assert result.receipt.status_code == 202, result.receipt.text

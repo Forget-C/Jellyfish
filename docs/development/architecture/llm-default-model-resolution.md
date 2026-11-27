@@ -57,7 +57,7 @@
 - 模型管理页的“添加模型”采用供应商优先流程：先选择供应商配置，再按其 `provider_key` 选择供应商支持的模型类别，最后从目录多选模型名称或手动输入名称；编辑模型仍为单条编辑。
 - 目录模型和手动输入模型都通过 `POST /api/v1/llm/providers/{provider_id}/models/import` 批量导入，重复的 Provider + 类别 + 名称组合由后端幂等跳过。
 - 页面通过 `GET /api/v1/llm/providers/{provider_id}/models/catalog` 获取已配置 Provider 的可导入模型目录；目录查询由服务端使用供应商凭据。
-- OpenAI 兼容供应商（当前 OpenAI、火山引擎）从其配置 Base URL 的 `/models` 接口实时读取模型名，并按名称规则归类为 text、image 或 video。
+- OpenAI 兼容目录读取实际返回的输入输出模态、工具与长度字段。方舟优先根据输出模态和领域归类；百炼业务空间的官方地址使用原生分页目录，自定义连接使用配置地址。缺少类别信息时按名称推断。
 - Vidu 当前未提供模型枚举 API，因此该入口返回项目维护的 Vidu 官方 Model Map 目录，并在页面明确标注为“官方模型目录”。
 - 可灵同样返回项目维护的固定模型目录，避免将其非标准模型接口暴露到模型管理流程。
 - 用户选择后调用 `POST /api/v1/llm/providers/{provider_id}/models/import` 批量写入；同一 Provider、模型名称和类别的已有记录会跳过，不会被覆盖或重复创建。
