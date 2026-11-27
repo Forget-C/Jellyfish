@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { applyReply, bindChatSession } from '../../../../services/chatSession'
 import { observeChatSession } from '../../../../services/chatSessionObservation'
-import type { ChatEvent } from '../../../../services/generated'
+import type { ChatEvent, ChatTurnReceipt } from '../../../../services/generated'
 import type { ExperimentHistoryState } from './useExperimentHistory'
 
 export type TextTrialRun = {
@@ -59,21 +59,26 @@ function reconcileSnapshot(checkpoint: ExperimentHistoryState, previous: Record<
 }
 
 /** Observe the same text trial from its checkpoint, including turns sent by another view. */
-export function useTextTrialObservation(sessionId: string | undefined, history: ExperimentHistoryState) {
+export function useTextTrialObservation(
+  sessionId: string | undefined, history: ExperimentHistoryState, firstAdmission?: ChatTurnReceipt,
+) {
   const [observation, setObservation] = useState<{sessionId: string; epoch: number; runs: Record<string, TextTrialRun>}>()
   const [disconnected, setDisconnected] = useState(false)
   const historyRef = useRef(history)
   const adopt = useRef<() => void>()
   historyRef.current = history
   const {eventCursor, checkpointEpoch} = history
-  const ready = eventCursor !== undefined
+  // A newly created session may already have a committed turn before its first snapshot succeeds.
+  const admissionCursor = useRef<number>()
+  admissionCursor.current = firstAdmission?.session_id === sessionId ? firstAdmission?.cursor : undefined
+  const ready = eventCursor !== undefined || admissionCursor.current !== undefined
 
   useEffect(() => {
     if (!sessionId || !ready) return
     const abort = new AbortController()
     const session = bindChatSession('text', sessionId)
     const checkpoint = historyRef.current
-    let cursor = checkpoint.eventCursor
+    let cursor = checkpoint.eventCursor ?? admissionCursor.current
     let lastRecovery: number | undefined
     let runs = reconcileSnapshot(checkpoint, {})
     const publish = () => setObservation({sessionId, epoch: checkpointEpoch, runs})
@@ -90,7 +95,7 @@ export function useTextTrialObservation(sessionId: string | undefined, history: 
     void observeChatSession({
       signal: abort.signal,
       cursor: () => cursor,
-      load: async () => {}, // history already supplies the initial checkpoint
+      load: async () => {}, // History or the first admission supplies the initial cursor.
       events: session.events,
       apply(event) {
         if (event.category === 'turn' && event.payload.message?.session_id === sessionId) {

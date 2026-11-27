@@ -40,6 +40,10 @@ let textWritesBaseline = 0
 let textCursor = 0
 let holdTextSnapshot
 let textSendsAfterClear = false
+let textSnapshotUnavailable = false
+const newTextSession = {
+  id: 'text-new', lab_type: 'text', title: '新文本会话', created_at: timestamp, updated_at: timestamp,
+}
 
 try {
   await server.listen()
@@ -53,7 +57,13 @@ try {
     const admission = mediaAdmissionStream(route, url)
     if (admission) return admission
     const respond = data => route.fulfill({ json: { success: true, data } })
-    if (url.pathname.endsWith('/experiment-sessions')) return respond(sessions.filter(item => item.lab_type === url.searchParams.get('lab_type')))
+    if (url.pathname.endsWith('/experiment-sessions')) {
+      if (request.method() === 'POST') {
+        sessions.push(newTextSession)
+        return respond(newTextSession)
+      }
+      return respond(sessions.filter(item => item.lab_type === url.searchParams.get('lab_type')))
+    }
     if (url.pathname.endsWith('/models')) {
       const category = url.searchParams.get('category')
       if (modelsState === 'failed') return route.fulfill({ status: 503, json: { detail: '模型暂不可用' } })
@@ -90,8 +100,27 @@ try {
     }
     if (url.pathname.endsWith('/chat/sessions/text/text-session/snapshot')) {
       if (holdTextSnapshot) return holdTextSnapshot(route)
+      if (textSnapshotUnavailable) return route.fulfill({status: 503, json: {detail: '历史暂不可用'}})
       historyReads += 1
       return textTrialSnapshot(route, histories.get('text-session') ?? [], textCursor)
+    }
+    if (url.pathname.endsWith('/text/text-new/snapshot')) {
+      return route.fulfill({status: 503, json: {detail: '新文本会话历史暂不可用'}})
+    }
+    if (url.pathname.endsWith('/text/text-new/turns')) {
+      writes.push(request.postDataJSON())
+      return route.fulfill({status: 202, json: {data: {...turnReceipt(route, 'first-turn'), cursor: 8}}})
+    }
+    if (url.pathname.endsWith('/text/text-new/events')) {
+      assert.equal(url.searchParams.get('after'), '8')
+      const user = historyMessage('text-new', 'first-user', 'user', '从回执续读', 1)
+      const answer = historyMessage('text-new', 'first-answer', 'assistant', '首次快照失败后仍收到回复', 2, {
+        status: 'succeeded', payload: {interaction_run_id: 'first-turn'},
+      })
+      return route.fulfill({contentType: 'text/event-stream', body:
+        textTrialFrame('text-new', 'first-turn', 9, 'turn.accepted', {user_message: user}) +
+        textTrialFrame('text-new', 'first-turn', 10, 'turn.completed', {assistant_message: answer}),
+      })
     }
     if (/\/chat\/sessions\/(image|video)\/[^/]+\/turns$/.test(url.pathname)) {
       writes.push(request.postDataJSON())
@@ -294,14 +323,15 @@ try {
   await lateRequest
   assert.equal(writes.length, 7, '双击只提交一次')
   assert.deepEqual(writes.at(-1).media.references.map(item => item.file_id), ['reference-a'])
+  const cancelledReceipt = page.waitForEvent('requestfailed', {
+    predicate: request => request.url().includes('/image-session/requests/'),
+  })
   await page.getByRole('button', { name: '另一张图片会话', exact: true }).click()
   await page.getByRole('button', { name: '放弃未发送内容并离开', exact: true }).click()
   await page.waitForURL(url => url.searchParams.get('session') === 'image-other')
   await imageInput.fill('新会话继续写作')
-  await Promise.all([
-    page.waitForResponse(response => response.url().includes('/image-session/requests/')),
-    releaseLate(),
-  ])
+  assert.match((await cancelledReceipt).failure()?.errorText ?? '', /ABORTED/i)
+  releaseLate()
   assert.equal(await imageInput.inputValue(), '新会话继续写作')
   assert.equal(await page.getByText('迟到的旧会话结果', { exact: true }).count(), 0)
 
@@ -458,6 +488,64 @@ try {
   releaseSnapshot()
   await page.waitForURL(url => url.searchParams.get('session') === 'text-other')
   assert.equal(await page.getByText('快照确认的终态', {exact: true}).count(), 0)
+
+  // An existing text session cannot submit until it has an initial checkpoint.
+  holdTextSnapshot = undefined
+  textSnapshotUnavailable = true
+  await openLab('text')
+  const retryHistory = page.getByRole('button', {name: '重试读取消息'})
+  await retryHistory.waitFor()
+  await textInput.fill('检查点未就绪')
+  const beforeCheckpoint = writes.length
+  assert.equal(await textSubmit.isDisabled(), true)
+  await textInput.press('Enter')
+  assert.equal(writes.length, beforeCheckpoint)
+  textSnapshotUnavailable = false
+  await retryHistory.click()
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(
+    button => button.textContent?.replace(/\s/g, '') === '发送' && !button.disabled,
+  ))
+
+  // A first submission can already be committed when its new session snapshot fails.
+  await page.goto(origin + '/lab?mode=text')
+  await page.locator('.experiment-model-trigger').click()
+  await page.getByRole('button', {name: '文本恢复模型', exact: true}).click()
+  await textInput.fill('从回执续读')
+  const newSessionSnapshots = []
+  const trackSnapshot = response => {
+    if (new URL(response.url()).pathname.endsWith('/text/text-new/snapshot')) newSessionSnapshots.push(response.status())
+  }
+  page.on('response', trackSnapshot)
+  await textSubmit.click()
+  await page.getByText('首次快照失败后仍收到回复', {exact: true}).waitFor()
+  page.off('response', trackSnapshot)
+  assert.ok(newSessionSnapshots.includes(503))
+  assert.equal(writes.length, beforeCheckpoint + 1)
+
+  await openLab('video')
+  await videoInput.fill('离开时取消受理查询')
+  let holdReceipt
+  const pendingReceipt = new Promise(resolve => { holdReceipt = resolve })
+  let finishReceipt
+  const receiptGate = new Promise(resolve => { finishReceipt = resolve })
+  submission = route => {
+    const original = mediaTurnReceipt(route, {task_id: 'departed-video-task', status: 'succeeded'})
+    receipts.set(original.turn_id, async (_query, respond) => {
+      holdReceipt()
+      await receiptGate
+      return respond(original)
+    })
+    return route.abort('failed')
+  }
+  await videoSubmit.click()
+  await pendingReceipt
+  const abortedOnLeave = page.waitForEvent('requestfailed', {
+    predicate: request => request.url().includes('/video-session/requests/'),
+  })
+  await page.getByRole('link', {name: '首页', exact: true}).click()
+  await page.getByRole('button', {name: '放弃未发送内容并离开', exact: true}).click()
+  assert.match((await abortedOnLeave).failure()?.errorText ?? '', /ABORTED/i)
+  finishReceipt()
 
   console.log('Lab submission recovery browser checks passed', output)
 } catch (error) {

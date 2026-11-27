@@ -49,7 +49,7 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
   currentInput.current = input
   const uncertainRef = useRef<UncertainSubmission>()
   const currentSession = useRef(sessionId)
-  const checkingRef = useRef<UncertainSubmission>()
+  const checkingRef = useRef<{submission: UncertainSubmission; cancelReceipt?: () => void}>()
   const [submitting, setSubmitting] = useState(false)
   const [notice, setNotice] = useState<ExperimentSubmissionNotice>()
   const [receipt, setReceipt] = useState<{ sessionId: string; cleanInput: string }>()
@@ -60,6 +60,8 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
     if (firstPersistence) return
     attemptRef.current = undefined
     uncertainRef.current = undefined
+    checkingRef.current?.cancelReceipt?.()
+    checkingRef.current = undefined
     setSubmitting(false)
     setNotice(undefined)
     setReceipt(undefined)
@@ -68,6 +70,8 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
   useLayoutEffect(() => () => {
     attemptRef.current = undefined
     uncertainRef.current = undefined
+    checkingRef.current?.cancelReceipt?.()
+    checkingRef.current = undefined
   }, [])
 
   const isCurrent = (attempt: Attempt) => attemptRef.current === attempt
@@ -99,16 +103,19 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
 
   const checkHistory = async () => {
     const uncertain = uncertainRef.current
-    if (!uncertain || checkingRef.current === uncertain) return
-    checkingRef.current = uncertain
+    if (!uncertain || checkingRef.current?.submission === uncertain) return
+    const check: NonNullable<typeof checkingRef.current> = {submission: uncertain}
+    checkingRef.current = check
     setNotice({ kind: 'checking', accepted: uncertain.accepted })
     try {
-      const recovered = uncertain.recoverMedia && !uncertain.taskId
-        ? await bindChatSession(uncertain.recoverMedia, uncertain.sessionId).mediaReceipt(uncertain.attempt.requestId).catch(error => {
-          if (error instanceof ApiError && error.status === 404) return undefined
-          throw error
-        })
+      const request = uncertain.recoverMedia && !uncertain.taskId
+        ? bindChatSession(uncertain.recoverMedia, uncertain.sessionId).mediaReceipt(uncertain.attempt.requestId)
         : undefined
+      if (request) check.cancelReceipt = () => request.cancel()
+      const recovered = await request?.catch(error => {
+        if (error instanceof ApiError && error.status === 404) return undefined
+        throw error
+      })
       if (uncertainRef.current !== uncertain || !isCurrent(uncertain.attempt)) return
       if (recovered) {
         uncertainRef.current = undefined
@@ -144,7 +151,7 @@ export function useExperimentSubmission(sessionId: string | undefined, history: 
         setNotice({ kind: uncertain.accepted ? 'run-unavailable' : 'unknown', historyUnavailable: true })
       }
     } finally {
-      if (checkingRef.current === uncertain) checkingRef.current = undefined
+      if (checkingRef.current === check) checkingRef.current = undefined
     }
   }
 

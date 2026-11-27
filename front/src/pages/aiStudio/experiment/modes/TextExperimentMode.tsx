@@ -9,6 +9,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Button, message } from 'antd'
 import { StopOutlined } from '@ant-design/icons'
 import {
+  type ChatTurnReceipt,
   type ExperimentMessageRead,
   type ExperimentSessionRead,
 } from '../../../../services/generated'
@@ -119,7 +120,9 @@ export function TextExperimentMode({
     loadTemplates, selectTemplate, confirmReplacement, applyFreeInput, replacementDialog,
   } = useExperimentTemplates(textPromptCategories, draft, setDraft)
   const historyState = useExperimentHistory(sessionId, { readPage: readTextHistory })
-  const {runs, disconnected} = useTextTrialObservation(sessionId, historyState)
+  const [firstAdmission, setFirstAdmission] = useState<{receipt: ChatTurnReceipt; epoch: number}>()
+  const fallbackReceipt = firstAdmission?.epoch === historyState.checkpointEpoch ? firstAdmission.receipt : undefined
+  const {runs, disconnected} = useTextTrialObservation(sessionId, historyState, fallbackReceipt)
   const inputSignature = (prompt: string) => JSON.stringify([prompt, selectedTemplate?.id, selectedTemplate?.version, templateValues])
   const submission = useExperimentSubmission(sessionId, historyState, inputSignature(draft))
   const { submitting } = submission
@@ -135,6 +138,7 @@ export function TextExperimentMode({
     ?? (command?.sessionId === sessionId && command && !runs?.[command.turnId] ? command.turnId : undefined)
   const liveRun = Boolean(activeRunId) || submitting && !submission.outcomePending
   const busy = liveRun || submitting
+  const waitingForCheckpoint = Boolean(sessionId && historyState.eventCursor === undefined)
 
   useEffect(() => {
     onSubmittingChange?.(busy)
@@ -185,10 +189,7 @@ export function TextExperimentMode({
   /** 提交固定 SSE 文本运行；服务端是 canonical user/assistant 消息的唯一写入者。 */
   const handleSubmit = async () => {
     if (busy) return
-    if (sessionId && historyState.loading) {
-      message.info(uiText("正在加载会话历史，请稍后再发送"))
-      return
-    }
+    if (waitingForCheckpoint || (sessionId && historyState.loading)) return
     if (!modelId) {
       message.warning(uiText("请选择文本模型"))
       return
@@ -215,6 +216,7 @@ export function TextExperimentMode({
       })
       if (!submission.isCurrent(attempt)) return
       waiting = true
+      if (!sessionId) setFirstAdmission({receipt, epoch: historyState.checkpointEpoch})
       setCommand({
         sessionId: session.id,
         turnId: receipt.turn_id,
@@ -330,7 +332,8 @@ export function TextExperimentMode({
               disabled={!activeRunId || stopState === 'requested'}
               onClick={() => { void handleStop().catch(() => {}) }}>{uiText("停止")}</Button> : null}
             submitting={submitting}
-            submitDisabled={busy || stopState === 'requesting' || submission.outcomePending || Boolean(sessionId && historyState.loading)}
+            submitDisabled={busy || stopState === 'requesting' || submission.outcomePending ||
+              waitingForCheckpoint || Boolean(sessionId && historyState.loading)}
             onSubmit={() => void handleSubmit()}
             options={modelControl} addAction={addControl}
           >
