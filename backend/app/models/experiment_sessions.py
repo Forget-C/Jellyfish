@@ -44,6 +44,8 @@ class ExperimentMessage(Base, TimestampMixin):
     """保存会话展示消息、异步任务状态和生成结果快照。"""
 
     __tablename__ = "experiment_messages"
+    # 聊天事件在 flush 后立即序列化消息。MySQL 需要显式回读数据库生成的时间戳。
+    __mapper_args__ = {"eager_defaults": True}
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="消息 ID")
     session_id: Mapped[str] = mapped_column(

@@ -22,6 +22,8 @@ try {
   let question
   const requests = []
   let failedTurn
+  let rejectFirstSend
+  const waitForFirstRejection = new Promise(resolve => { rejectFirstSend = resolve })
   let exerciseStop = false
   let heldObserverRequests = 0
   let cursor = 1
@@ -133,6 +135,7 @@ try {
       }
       if (requests.length === 1) {
         failedTurn = command.request_id
+        await waitForFirstRejection
         return route.fulfill({status:422,json:{message:'测试失败'}})
       }
     }
@@ -185,7 +188,15 @@ try {
   assert.equal((await composer.inputValue()).trim(), '/videogen')
   await composer.fill('/videogen 雨夜')
   assert.equal(await page.getByRole('button', {name: '发送', exact: true}).isEnabled(), true)
-  await page.getByRole('button', {name:'发送', exact:true}).click()
+  const firstSend = page.waitForRequest(request => request.method() === 'POST' && request.url().endsWith('/turns'))
+  await send.click()
+  await firstSend
+  try {
+    assert.equal(await composer.inputValue(), '', 'Submitting clears the draft before the server responds')
+    await send.and(page.locator('.ant-btn-loading')).waitFor()
+  } finally {
+    rejectFirstSend()
+  }
   await page.getByText('测试失败', {exact:true}).waitFor()
   assert.equal(await composer.inputValue(), '/videogen 雨夜')
   await page.getByRole('button', {name:'发送', exact:true}).click()
@@ -266,9 +277,10 @@ try {
   await reference.waitFor()
   await page.getByRole('button', {name:'发送', exact:true}).click()
   await Promise.race([retryReady, new Promise((_, reject) => setTimeout(() => reject(Error('Missing safe retry')), 3500))])
+  assert.equal(await composer.inputValue(), '')
+  assert.equal(await reference.count(), 0)
   await composer.fill('下一条草稿')
   await composer.fill('原始请求')
-  await reference.click()
   await upload()
   await reference.waitFor()
   assert.equal(uploadCalls, 2)

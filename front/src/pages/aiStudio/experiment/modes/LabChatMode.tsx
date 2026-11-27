@@ -169,16 +169,24 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     } catch (e) { report(e) } finally { setSaving(false) }
   }
   const busy = submitting || lifecycle.busy
+  const canSend = Boolean(text.trim()) && !busy && !saving && !upload.uploading
   const modelSelect = (kind: ModelKind, footer?: ReactNode) => <ChatModelChoice key={kind} kind={kind} value={models[kind]} footer={footer}
     disabled={busy || saving} onChange={id => void selectModel(kind, id)} />
   const send = async () => {
-    if (!text.trim() || busy || inFlight.current) return
+    if (!canSend || inFlight.current) return
     inFlight.current = true
+    const version = draftVersion.current
+    const restoreDraft = () => {
+      if (!mounted.current || draftVersion.current !== version) return
+      setText(text)
+      setFiles(files)
+    }
     setSubmitting(true)
     setError('')
-    const version = draftVersion.current
-    const body = {request_id: crypto.randomUUID(), text, file_ids: files.map(file => file.id)}
+    setText('')
+    setFiles([])
     try {
+      const body = {request_id: crypto.randomUUID(), text, file_ids: files.map(file => file.id)}
       const session = await ensureSession('chat')
       if (!mounted.current) return
       const bound = bindChatSession('chat', session.id)
@@ -188,12 +196,14 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
         turnId: body.request_id,
         send: () => bound.send({requestBody: body}),
       })
-      if (result && result.outcome !== 'failed' && draftVersion.current === version) {
-        setText('')
-        setFiles([])
-      }
-    } catch (e) { report(e) }
-    finally { inFlight.current = false; setSubmitting(false) }
+      if (!result || result.outcome === 'failed') restoreDraft()
+    } catch (e) {
+      if (mounted.current) report(e)
+      restoreDraft()
+    } finally {
+      inFlight.current = false
+      if (mounted.current) setSubmitting(false)
+    }
   }
   const question = snapshot?.question
   const answer = async (fileId: string) => {
@@ -269,7 +279,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
         {modelSelect('image')} {modelSelect('video')}
       </details>)} onSubmit={() => void send()}
       submitting={sending}
-      submitDisabled={busy || !text.trim() || saving || upload.uploading}
+      submitDisabled={!canSend}
       addAction={<Upload accept="image/*,video/*" disabled={draftLocked || upload.uploading} showUploadList={false} beforeUpload={file => {
         void upload.uploadFile(file, 'chat', saved => editFiles(old => [...old, saved]))
         return false

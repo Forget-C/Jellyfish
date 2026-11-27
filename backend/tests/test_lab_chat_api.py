@@ -11,7 +11,10 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('canvas_client', ['app-handler-file'], indirect=True)
-async def test_lab_chat_replays_messages_and_uses_previous_turn(canvas_client, monkeypatch):
+@pytest.mark.parametrize('insert_returning', [True, False], ids=['returning', 'no-returning'])
+async def test_lab_chat_replays_messages_and_uses_previous_turn(canvas_client, monkeypatch, insert_returning):
+    # MySQL does not return server-generated timestamps as part of an INSERT.
+    monkeypatch.setattr(canvas_client.canvas_sessions.kw['bind'].dialect, 'insert_returning', insert_returning)
     async with canvas_client.canvas_sessions.begin() as db:
         (await db.get(Provider, 'canvas-provider')).api_key = 'local'
         (await db.get(Model, 'canvas-text')).capability_profile = {
@@ -42,7 +45,9 @@ async def test_lab_chat_replays_messages_and_uses_previous_turn(canvas_client, m
         assert repeat.status_code == 202
         assert sent.json()['data']['turn_id'] == request_id
         assert repeat.json()['data']['cursor'] == sent.json()['data']['cursor']
-        await wait_for_chat_event(canvas_client, url, request_id, 'turn.completed')
+        completed = await wait_for_chat_event(canvas_client, url, request_id, 'turn.completed')
+        assert completed['payload']['message']['created_at']
+        assert completed['payload']['message']['updated_at']
     assert len(prompts) == 2 and any(m['content'] == '雨夜' for m in prompts[1])
     snapshot = (await canvas_client.get(url + '/snapshot')).json()['data']['history']
     assert not snapshot['active_turn'] and snapshot['models']['text'] == 'canvas-text'
