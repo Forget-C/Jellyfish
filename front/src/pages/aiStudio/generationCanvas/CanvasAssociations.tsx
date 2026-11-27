@@ -118,7 +118,7 @@ export function CanvasAssociations({ entries, sourceActions, loading, error, ses
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return
       const editor = owner.current?.closest('.generation-card-editor')
-      if (editor?.querySelector('[role="combobox"][aria-expanded="true"]') || document.querySelector('.ant-modal-wrap:not([style*="display: none"]), .ant-image-preview-wrap:not([style*="display: none"])')) return
+      if (editor?.querySelector('[role="combobox"][aria-expanded="true"]') || document.querySelector('.ant-modal-wrap:not([style*="display: none"]), .ant-image-preview:not([style*="display: none"])')) return
       event.preventDefault()
       event.stopPropagation()
       close()

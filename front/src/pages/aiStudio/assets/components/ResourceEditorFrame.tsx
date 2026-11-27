@@ -99,7 +99,7 @@ export function ResourceEditorFrame({ id, open, drawer, inline, title, backLabel
         <div ref={panel} id={id} role="dialog" aria-modal="false" aria-label={title} className={`ant-drawer-content ${className ?? ''}`}
           style={{ backgroundPosition: `right -${bounds.y}px` }} onKeyDown={event => {
             if (event.key !== 'Escape' || event.defaultPrevented) return
-            if ([...document.querySelectorAll<HTMLElement>('.ant-image-preview-wrap')].some(node => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden')) return
+            if ([...document.querySelectorAll<HTMLElement>('.ant-image-preview')].some(node => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden')) return
             event.stopPropagation()
             onClose()
           }}>
