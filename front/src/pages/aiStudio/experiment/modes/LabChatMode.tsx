@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { PlusOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import { Suggestion } from '@ant-design/x'
 import { Alert, Button, Input, Upload } from 'antd'
-import { WorkbenchConversation } from '../../../../components/workbench/WorkbenchConversation'
+import { ExperimentHistory } from '../components/ExperimentHistory'
+import { ExperimentMessageBubble } from '../components/ExperimentMessageBubble'
 import { applyReply, bindChatSession, chatClient } from '../../../../services/chatSession'
 import { observeChatRequest, useChatTurnLifecycle, type ChatTurnAdapter } from '../../../../services/chatTurnLifecycle'
 import { ApiError, FilmService, LlmService, type ChatEvent, type ExperimentMessageRead, type ExperimentSessionRead, type LabChatSnapshot, type LabModels, type FileRead } from '../../../../services/generated'
 import { useUiText } from '../../../../uiText'
 import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
 import { MediaTaskDetails } from '../components/MediaTaskDetails'
+import { ExperimentReferenceImage } from '../components/ExperimentReferenceImage'
 import { ExperimentResultMedia } from '../components/ExperimentResultMedia'
 import { ExperimentTaskStatus } from '../components/ExperimentTaskStatus'
 import { buildFileDownloadUrl } from '../../assets/utils'
@@ -21,17 +24,17 @@ const labels = { text: '主聊天模型', image: '图片模型', video: '视频�
 type Props = {
   sessionId?: string
   ensureSession: (kind: 'chat') => Promise<ExperimentSessionRead>
-  render: (parts: { history: ReactNode; composer: ReactNode }) => ReactNode
+  render: (parts: { history: ReactNode; composer: ReactNode; hasMessages: boolean }) => ReactNode
 }
 
-function ChatModelChoice({kind, value, disabled, onChange}: {
-  kind: ModelKind; value?: string | null; disabled: boolean; onChange: (id: string) => void
+function ChatModelChoice({kind, value, disabled, onChange, footer}: {
+  kind: ModelKind; value?: string | null; disabled: boolean; onChange: (id: string) => void; footer?: ReactNode
 }) {
   const uiText = useUiText()
   const {models, modelsFailed, modelsLoading, loadModels} = useExperimentModels(kind, () => {})
   return <label>{uiText(labels[kind])}{' '}
     <ExperimentOptionBar models={models} modelId={value ?? undefined} disabled={disabled}
-      modelsFailed={modelsFailed} modelsLoading={modelsLoading} modelLabel={labels[kind]}
+      modelsFailed={modelsFailed} modelsLoading={modelsLoading} modelLabel={labels[kind]} modelFooter={footer}
       onRefreshModels={() => void loadModels(true)} onModelOpenChange={open => { if (open) void loadModels() }}
       onModelChange={id => { if (id) onChange(id) }} templates={[]} onTemplateChange={() => {}}>
       {({modelControl}) => modelControl}
@@ -165,7 +168,7 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     } catch (e) { report(e) } finally { setSaving(false) }
   }
   const busy = submitting || lifecycle.busy
-  const modelSelect = (kind: ModelKind) => <ChatModelChoice key={kind} kind={kind} value={models[kind]}
+  const modelSelect = (kind: ModelKind, footer?: ReactNode) => <ChatModelChoice key={kind} kind={kind} value={models[kind]} footer={footer}
     disabled={busy || saving} onChange={id => void selectModel(kind, id)} />
   const send = async () => {
     if (!text.trim() || busy || inFlight.current) return
@@ -221,9 +224,9 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     const reason = row.payload?.error_code ? errorText(row.payload.error_code) : uiText('生成失败')
     return [row.content, reason].filter(Boolean).join('\n')
   }
-  const items = (snapshot?.messages ?? []).map(row => ({
-    ...(row.media_receipt ? { contentRender: () => {
-      const receipt = row.media_receipt!
+  const renderMessage = (row: ExperimentMessageRead) => {
+    const receipt = row.media_receipt
+    if (receipt) {
       const urls = receipt.artifacts?.filter(file => !file.deleted).flatMap(file => buildFileDownloadUrl(file.file_id) ?? []) ?? []
       return <><ExperimentTaskStatus status={receipt.status} progress={receipt.progress} />
         <MediaTaskDetails receipt={receipt} />
@@ -235,35 +238,59 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
             taskId: receipt.task_id, requestBody: { reason: 'user_cancelled' },
           }).catch(report)}>{uiText('取消生成')}</Button>}
       </>
-    }} : {}),
-    key: row.id, role: row.role, content: messageText(row), placement: row.role === 'user' ? 'end' as const : 'start' as const,
-  }))
-  if (question) items.push({key: 'question-' + question.id, role: 'assistant', placement: 'start', content: '',
-    contentRender: () => <section aria-label={uiText('选择要修订的产物')}>
-      <p>{uiText('选择要修订的产物')}</p>
-      {question.options.map(option => <Button key={option.file_id} disabled={sending}
-        onClick={() => void answer(option.file_id)}>#{option.sequence}.{option.ordinal + 1} {option.name} {option.prompt}</Button>)}
-    </section>})
-  if (snapshot?.partial_reply) items.push({ key: 'pending', role: 'assistant', content: snapshot.partial_reply, placement: 'start' })
+    }
+    return messageText(row)
+  }
+  const messages = snapshot?.messages ?? []
+  const hasMessages = messages.length > 0 || Boolean(snapshot?.active_turn || question || snapshot?.partial_reply)
   const feedback = error || upload.uploadError?.message || (lifecycle.error ? failureText(lifecycle.error) : undefined)
   return render({
-    history: <WorkbenchConversation items={items} />,
-    composer: <ExperimentComposer options={modelSelect('text')} onSubmit={() => void send()}
-      submitting={sending} submitDisabled={busy || !text.trim() || saving || upload.uploading}
-      contextActions={<details><summary>{uiText('模态配置')}</summary>{modelSelect('image')} {modelSelect('video')}</details>}
+    hasMessages,
+    history: <ExperimentHistory messageCount={messages.length || Number(hasMessages)} emptyDescription={uiText('暂无会话消息')}>
+      {messages.map(row => <ExperimentMessageBubble key={row.id}
+        identity={row.role === 'user' ? uiText('你') : uiText('模型')}
+        tone={row.role === 'user' ? 'user' : 'assistant'}>
+        {renderMessage(row)}
+      </ExperimentMessageBubble>)}
+      {snapshot?.partial_reply && <ExperimentMessageBubble identity={uiText('模型')} tone="assistant">
+        {snapshot.partial_reply}
+      </ExperimentMessageBubble>}
+      {question && <ExperimentMessageBubble identity={uiText('模型')} tone="assistant">
+        <section aria-label={uiText('选择要修订的产物')}>
+          <p>{uiText('选择要修订的产物')}</p>
+          {question.options.map(option => <Button key={option.file_id} disabled={sending}
+            onClick={() => void answer(option.file_id)}>#{option.sequence}.{option.ordinal + 1} {option.name} {option.prompt}</Button>)}
+        </section>
+      </ExperimentMessageBubble>}
+    </ExperimentHistory>,
+    composer: <ExperimentComposer inline options={modelSelect('text',
+      <details className="experiment-modality-settings"><summary>{uiText('模态配置')}</summary>
+        {modelSelect('image')} {modelSelect('video')}
+      </details>)} onSubmit={() => void send()}
+      submitting={sending}
+      submitDisabled={busy || !text.trim() || saving || upload.uploading}
+      addAction={<Upload accept="image/*,video/*" disabled={draftLocked || upload.uploading} showUploadList={false} beforeUpload={file => {
+        void upload.uploadFile(file, 'chat', saved => editFiles(old => [...old, saved]))
+        return false
+      }}><Button type="text" className="experiment-add-trigger" icon={<PlusOutlined />} title={uiText('添加素材')}
+        aria-label={uiText('添加素材')} disabled={draftLocked || upload.uploading} /></Upload>}
       secondaryAction={stoppableTurn && <Button disabled={lifecycle.stopping} onClick={() => void stop()}>{uiText('停止回复')}</Button>}
-      feedback={feedback ? <Alert type="error" message={feedback} /> : null}>
+      feedback={(files.length || feedback) ? <>
+        {files.length > 0 && <div className="experiment-chat-attachments">
+          {files.map(file => <Button key={file.id} disabled={draftLocked} title={file.name}
+            aria-label={uiText('移除{{label}}：{{name}}', { label: uiText('素材'), name: file.name })}
+            icon={file.type === 'image' ? <ExperimentReferenceImage id={file.id} name={file.name} /> : <VideoCameraOutlined />}
+            onClick={() => editFiles(old => old.filter(f => f.id !== file.id))}><span>{file.name}</span> ×</Button>)}
+        </div>}
+        {feedback && <Alert type="error" message={feedback} />}
+      </> : null}>
       <Suggestion block items={['/imagegen', '/videogen'].map(value => ({ label: value, value }))} onSelect={value => editText(value + ' ')}>
-        {({ onTrigger, onKeyDown, open }) => <Input.TextArea aria-label={uiText('聊天消息')} disabled={draftLocked} value={text}
+        {({ onTrigger, onKeyDown, open }) => <Input.TextArea aria-label={uiText('聊天消息')} placeholder={uiText('输入消息，或添加素材')}
+          variant="borderless" className="experiment-prompt-input" autoSize={{ minRows: 1, maxRows: 6 }} disabled={draftLocked} value={text}
           onChange={event => { editText(event.target.value); onTrigger(event.target.value === '/' ? undefined : false) }}
           onKeyDown={event => { if (open) onKeyDown(event) }}
           onPressEnter={event => { if (!open && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send() } }} />}
       </Suggestion>
-      <Upload accept="image/*,video/*" disabled={draftLocked || upload.uploading} showUploadList={false} beforeUpload={file => {
-        void upload.uploadFile(file, 'chat', saved => editFiles(old => [...old, saved]))
-        return false
-      }}><Button>{uiText('添加素材')}</Button></Upload>
-      {files.map(file => <Button key={file.id} disabled={draftLocked} onClick={() => editFiles(old => old.filter(f => f.id !== file.id))}>{file.name} ×</Button>)}
     </ExperimentComposer>,
   })
 }

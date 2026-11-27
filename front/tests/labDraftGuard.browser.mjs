@@ -198,8 +198,8 @@ try {
   assert.equal(await textInput.inputValue(), '')
   assert.equal(new URL(page.url()).searchParams.get('session'), 'text-other')
   const type = label => ({ click: async () => {
-    await page.getByRole('button', { name: '新建会话', exact: true }).click()
-    await page.getByRole('menuitem', { name: label + '会话', exact: true }).click()
+    await page.getByRole('button', { name: '选择聊天类型', exact: true }).click()
+    await page.getByRole('menuitem', { name: label + '聊天', exact: true }).click()
   } })
   const discard = () => leave.getByRole('button', { name: '放弃未发送内容并离开' }).click()
   const selectModel = async label => {
@@ -364,7 +364,7 @@ try {
   const keepEditing = leave.getByRole('button', { name: '继续编辑' })
   await keepEditing.click({ trial: true })
   await keepEditing.press('Escape')
-  await page.getByRole('button', { name: '新建会话', exact: true }).and(page.locator(':focus')).waitFor()
+  await page.getByRole('button', { name: '选择聊天类型', exact: true }).and(page.locator(':focus')).waitFor()
   await videoType.click()
   await page.screenshot({ path: join(output, 'draft-guard-mobile.png'), animations: 'disabled' })
   await discard()

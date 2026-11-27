@@ -22,6 +22,7 @@ type ExperimentOptionBarProps = {
   templatesFailed?: boolean
   disabled?: boolean
   modelLabel?: string
+  modelFooter?: ReactNode
   onModelChange: (modelId?: string) => void
   onTemplateChange: (templateId?: string) => void
   onModelOpenChange?: (open: boolean) => void
@@ -32,7 +33,7 @@ type ExperimentOptionBarProps = {
 /** 共享模型列表与添加菜单；由输入框安排入口位置，互斥浮层只在这里管理。 */
 export function ExperimentOptionBar({ children, referenceAction, models, templates, modelId, selectedTemplate,
   modelsLoading = false, modelsFailed = false, onRefreshModels, templatesLoading = false, templatesFailed = false,
-  disabled = false, modelLabel = '模型', onModelChange, onTemplateChange, onModelOpenChange,
+  disabled = false, modelLabel = '模型', modelFooter, onModelChange, onTemplateChange, onModelOpenChange,
   onTemplateOpenChange, onRefreshTemplates,
 }: ExperimentOptionBarProps) {
   const uiText = useUiText()
@@ -77,8 +78,8 @@ export function ExperimentOptionBar({ children, referenceAction, models, templat
         else (modelPanel.current?.querySelector<HTMLElement>('[aria-checked="true"], [role="menuitemradio"]') ?? modelPanel.current)?.focus()
       }
     }}
-    content={<div ref={modelPanel} tabIndex={-1} className="experiment-model-panel" onKeyDownCapture={event => {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close('model'); modelTrigger.current?.focus() }
+    content={<div ref={modelPanel} tabIndex={-1} className="experiment-model-panel" onKeyDown={event => {
+      if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); close('model'); modelTrigger.current?.focus() }
     }}>
       <div className="experiment-model-heading"><Typography.Text strong>{uiText(modelLabel)}</Typography.Text>
         {onRefreshModels && !modelsFailed && <Button type="text" size="small" loading={modelsLoading} onClick={onRefreshModels}>{uiText("刷新模型")}</Button>}
@@ -95,6 +96,7 @@ export function ExperimentOptionBar({ children, referenceAction, models, templat
         }))}
         onClick={({ key }) => { onModelChange(key); close('model'); modelTrigger.current?.focus() }} />
       {models.length > 0 && !models.some(model => model.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())) && <p role="status">{uiText("没有匹配的模型")}</p>}
+      {modelFooter}
     </div>}>
     <Button ref={modelTrigger} type="text" onKeyDown={event => {
       if (event.key === 'Escape' && openPanel === 'model') { event.preventDefault(); event.stopPropagation(); close('model'); modelTrigger.current?.focus() }

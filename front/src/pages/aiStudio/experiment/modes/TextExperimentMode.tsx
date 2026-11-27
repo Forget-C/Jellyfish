@@ -67,6 +67,7 @@ type LocalMessage = {
 export type TextExperimentModeRenderProps = {
   history: ReactNode
   composer: ReactNode
+  hasMessages?: boolean
   clearContent?: () => Promise<void>
   disabled: boolean
 }
@@ -286,6 +287,7 @@ export function TextExperimentMode({
   }
 
   return render({
+    hasMessages: localMessages.length > 0,
     clearContent: sessionId && localMessages.length && !busy ? handleClearSession : undefined,
     history: (
       <ExperimentHistory key={sessionId ?? 'draft'} history={historyState} messageCount={localMessages.length || Number(submitting)} emptyDescription={uiText("选择模型并输入提示词，开始一轮文本实验")}>

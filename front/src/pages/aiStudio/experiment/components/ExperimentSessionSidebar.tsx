@@ -1,6 +1,6 @@
-/** 实验室左侧最近会话列表。 */
+/** 实验室右侧最近会话列表。 */
 import { useUiText } from '../../../../uiText'
-import { DownOutlined, DeleteOutlined, EditOutlined, MessageOutlined, MoreOutlined, PictureOutlined, PlusOutlined, VideoCameraOutlined } from '@ant-design/icons'
+import { CommentOutlined, DeleteOutlined, EditOutlined, EllipsisOutlined, FileTextOutlined, MoreOutlined, PictureOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import { Alert, Button, Dropdown, Input, Modal, Tooltip } from 'antd'
 import type { ReactNode } from 'react'
 import { useRef, useState } from 'react'
@@ -31,6 +31,7 @@ type ExperimentSessionSidebarProps = {
 export function ExperimentSessionSidebar({ value, currentSessionDirty, currentSessionGenerating, sessions, loading, failedTypes, onRetry, onChange, onStartDraft, onRename, onDelete }: ExperimentSessionSidebarProps) {
   const uiText = useUiText()
   const newSessionTrigger = useRef<HTMLButtonElement>(null)
+  const [typeMenuOpen, setTypeMenuOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [targetSession, setTargetSession] = useState<ExperimentSessionRead | null>(null)
   const [title, setTitle] = useState('')
@@ -45,8 +46,8 @@ export function ExperimentSessionSidebar({ value, currentSessionDirty, currentSe
 
   /** 返回会话模态对应的低干扰图标与名称。 */
   const labMeta: Record<ExperimentLabType, { label: string; icon: ReactNode }> = {
-    chat: { label: uiText("多模态聊天"), icon: <MessageOutlined aria-hidden="true" /> },
-    text: { label: uiText("文本"), icon: <MessageOutlined aria-hidden="true" /> },
+    chat: { label: uiText("多模态聊天"), icon: <CommentOutlined aria-hidden="true" /> },
+    text: { label: uiText("文本"), icon: <FileTextOutlined aria-hidden="true" /> },
     image: { label: uiText("图片"), icon: <PictureOutlined aria-hidden="true" /> },
     video: { label: uiText("视频"), icon: <VideoCameraOutlined aria-hidden="true" /> },
   }
@@ -66,28 +67,41 @@ export function ExperimentSessionSidebar({ value, currentSessionDirty, currentSe
 
   return <aside className="experiment-navigation">
     <div className="experiment-session-heading">
-      <h2>{uiText("最近会话")}</h2>
-      <Dropdown trigger={['click']} classNames={{ root: "experiment-session-dropdown" }} menu={{ items:
-        (Object.keys(labMeta) as ExperimentLabType[]).map(type => ({
-          key: type, icon: labMeta[type].icon, label: uiText("{{label}}会话", { label: labMeta[type].label }),
+      <Button type="text" className="experiment-new-chat" icon={labMeta.chat.icon} onClick={() => onStartDraft('chat')}>
+        {uiText("新聊天")}
+      </Button>
+      <Dropdown trigger={['click']} placement="bottomRight" open={typeMenuOpen} onOpenChange={setTypeMenuOpen} autoFocus classNames={{ root: "experiment-session-dropdown" }} menu={{ items:
+        (['text', 'image', 'video'] as const).map(type => ({
+          key: type, icon: labMeta[type].icon, label: uiText("{{label}}聊天", { label: labMeta[type].label }),
           onClick: () => {
+            setTypeMenuOpen(false)
             newSessionTrigger.current?.focus()
             onStartDraft(type)
           },
         })),
+        onKeyDown: event => {
+          if (event.key === 'Escape') {
+            event.stopPropagation()
+            setTypeMenuOpen(false)
+            newSessionTrigger.current?.focus()
+          }
+        },
       }}>
-        <Button ref={newSessionTrigger} type="text" icon={<PlusOutlined />} aria-label={uiText("新建会话")}>{uiText("新建")} <DownOutlined /></Button>
+        <Button ref={newSessionTrigger} type="text" className="experiment-icon-action" icon={<EllipsisOutlined />}
+          aria-haspopup="menu" aria-expanded={typeMenuOpen} aria-label={uiText("选择聊天类型")} title={uiText("选择聊天类型")} />
       </Dropdown>
     </div>
+    <h2 className="experiment-session-caption">{uiText("最近会话")}</h2>
     {failedTypes.length > 0 && <Alert type="error"
       message={failedTypes.length === Object.keys(labMeta).length ? uiText("读取会话失败") : uiText("{{value1}}会话读取失败", { value1: failedTypes.map(type => labMeta[type].label).join('、') })}
       action={<Button type="text" size="small" aria-label={uiText("重试")} onClick={onRetry}>{uiText("重试")}</Button>} />}
     <nav className="experiment-session-list" aria-label={uiText("最近会话")} aria-busy={loading}>
-      {!sessions.length && (loading || !failedTypes.length) && <p role="status">{loading ? uiText("正在读取会话…") : uiText("暂无会话，从右上方新建开始")}</p>}
+      {!sessions.length && (loading || !failedTypes.length) && <p role="status">{loading ? uiText("正在读取会话…") : uiText("暂无会话")}</p>}
       {sessions.map((session) => {
         const selected = session.id === value
         const menuItems = getMenuItems(session)
         return <div key={session.id} className="experiment-session-row">
+          <Tooltip title={uiText("{{label}}会话 · {{title}}", { label: labMeta[session.lab_type].label, title: session.title })} placement="left" trigger={['hover', 'focus']} mouseEnterDelay={0.6}>
           <button
             type="button"
             className="experiment-nav-item experiment-session-link"
@@ -97,10 +111,9 @@ export function ExperimentSessionSidebar({ value, currentSessionDirty, currentSe
             aria-current={selected ? 'page' : undefined}
           >
             <span className="experiment-session-type" aria-hidden="true">{labMeta[session.lab_type].icon}</span>
-            <Tooltip title={uiText("{{label}}会话 · {{title}}", { label: labMeta[session.lab_type].label, title: session.title })} placement="right" mouseEnterDelay={0.6}>
-              <span className={`experiment-session-name ${selected ? 'font-semibold' : 'font-normal'}`}>{session.title}</span>
-            </Tooltip>
+            <span className={`experiment-session-name ${selected ? 'font-semibold' : 'font-normal'}`}>{session.title}</span>
           </button>
+          </Tooltip>
           {menuItems.length ? <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight" classNames={{ root: "experiment-session-dropdown" }}>
             <Button type="text" size="small" icon={<MoreOutlined />} aria-label={uiText("{{title}} 更多操作", { title: session.title })} className="experiment-session-actions experiment-icon-action" />
           </Dropdown> : null}

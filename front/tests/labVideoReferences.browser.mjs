@@ -296,6 +296,7 @@ try {
   await getCapability('B', 'A')
   await page.getByText('当前模型不支持比例 16:9，请重新选择', { exact: true }).waitFor()
   await prompt.fill('修正模型冲突后提交')
+  await page.getByRole('button', { name: '生成参数', exact: true }).click()
   await page.getByText('16:9（当前模型不支持）', { exact: true }).click()
   await page.getByText('9:16', { exact: true }).last().click()
   await page.getByText('当前模型不支持比例 16:9，请重新选择', { exact: true }).waitFor({ state: 'hidden' })

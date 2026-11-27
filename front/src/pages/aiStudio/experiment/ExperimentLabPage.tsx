@@ -17,7 +17,7 @@ function parseMode(mode: string | null): ExperimentLabType | undefined {
   return undefined
 }
 
-type LabSlots = { history: ReactNode; composer: ReactNode; clearContent?: () => Promise<void>; overlays?: ReactNode; disabled?: boolean }
+type LabSlots = { history: ReactNode; composer: ReactNode; clearContent?: () => Promise<void>; overlays?: ReactNode; hasMessages?: boolean; disabled?: boolean }
 
 /** 将会话选择写入唯一实验室路由，同时使草稿态保持显式模态。 */
 export default function ExperimentLabPage() {
@@ -48,9 +48,7 @@ export default function ExperimentLabPage() {
       return
     }
     skipSessionWriteRef.current = true
-    if (requestedMode) {
-      selectDraft(requestedMode)
-    } else void reloadSessions({})
+    selectDraft(requestedMode ?? 'chat')
   }, [reloadSessions, requestedMode, searchParams, selectDraft])
 
   /** 草稿首提创建会话后补写 URL；已有会话切换均由显式操作写入。 */
@@ -91,7 +89,7 @@ export default function ExperimentLabPage() {
     if (next.toString() !== searchParams.toString()) allowNavigation(() => setSearchParams(next))
   }
 
-  /** 删除后恢复全局最新会话；没有历史时回到文本草稿。 */
+  /** 删除后恢复全局最新会话；没有历史时回到多模态草稿。 */
   const handleDeleteSession = async (sessionId: string) => {
     const deletingCurrent = sessionId === selectedSessionId
     if (deletingCurrent && isTextRunActive()) throw new Error(uiText("文本生成中，不能删除当前会话"))
@@ -101,13 +99,22 @@ export default function ExperimentLabPage() {
     else handleStartDraft('chat')
   }
 
+  const welcome = {
+    chat: uiText("今天想创作什么？"),
+    text: uiText("想聊些什么？"),
+    image: uiText("想生成什么图片？"),
+    video: uiText("想生成什么视频？"),
+  }
   /** 统一装配布局与侧栏，确保不同模态不再拥有独立页面框架。 */
   // render-prop 工厂返回布局节点，不是匿名 React 组件。
   // eslint-disable-next-line react/display-name
   const renderLayout = (title: string) => (slots: LabSlots) => (
     <ExperimentLabLayout
       title={title}
+      welcomeTitle={slots.composer && welcome[selectedLabType]}
+      hasMessages={slots.hasMessages}
       sessionTitle={selectedSession?.title}
+      draft={!selectedSessionId}
       clearContent={slots.clearContent}
       sidebarTrigger={sidebarTrigger}
       sidebar={(close) => <ExperimentSessionSidebar

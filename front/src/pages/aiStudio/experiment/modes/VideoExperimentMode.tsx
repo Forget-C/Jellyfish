@@ -10,7 +10,7 @@ import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, InputNumber, Select, Tag, message } from 'antd'
+import { Button, InputNumber, Popover, Select, Tag, message } from 'antd'
 import {
   LlmService,
   type MediaTaskReceipt,
@@ -96,7 +96,7 @@ function toVideoMessage(item: ExperimentMessageRead): VideoMessage {
   }
 }
 
-type RenderParts = { history: ReactNode; composer: ReactNode; clearContent?: () => Promise<void>; overlays?: ReactNode; disabled?: boolean }
+type RenderParts = { history: ReactNode; composer: ReactNode; hasMessages?: boolean; clearContent?: () => Promise<void>; overlays?: ReactNode; disabled?: boolean }
 type VideoExperimentModeProps = {
   sessionId?: string
   ensureSession: (labType: ExperimentLabType) => Promise<{ id: string }>
@@ -271,7 +271,20 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     })}
   </ExperimentHistory>
   const referencePicker = useRef<ExperimentReferenceHandle>(null)
-  const composer = <ExperimentOptionBar models={models.map((item) => ({ id: item.id, name: item.name }))} templates={templates.map((item) => ({ id: item.id, name: item.name, version: item.version, preview: item.preview, category: '视频提示词' }))} modelId={modelId} selectedTemplate={selectedTemplate ?? undefined} modelsLoading={modelsLoading} modelsFailed={modelsFailed} onRefreshModels={() => void loadModels(true)} templatesLoading={templatesLoading} templatesFailed={templatesFailed} onRefreshTemplates={() => void loadTemplates(true)} disabled={disabled} modelLabel={uiText("视频模型")} onModelChange={selectModel} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} referenceAction={{ label: uiText("配置参考素材"), onOpen: trigger => referencePicker.current?.open(trigger) }} >{({ modelControl, addControl }) => (<ExperimentComposer submitting={disabled} submitDisabled={disabled || submission.outcomePending || capabilityBlocked || ratioConflict || durationConflict || modeConflict || referenceIssues.length > 0} onSubmit={() => void submit()} options={<>{modelControl}    <Select
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsTrigger = useRef<HTMLButtonElement>(null)
+  const settingsPanel = useRef<HTMLDivElement>(null)
+  const closeSettings = (event: React.KeyboardEvent) => {
+    if (event.key !== 'Escape' || event.defaultPrevented) return
+    event.stopPropagation()
+    setSettingsOpen(false)
+    settingsTrigger.current?.focus()
+  }
+  const composer = <ExperimentOptionBar models={models.map((item) => ({ id: item.id, name: item.name }))} templates={templates.map((item) => ({ id: item.id, name: item.name, version: item.version, preview: item.preview, category: '视频提示词' }))} modelId={modelId} selectedTemplate={selectedTemplate ?? undefined} modelsLoading={modelsLoading} modelsFailed={modelsFailed} onRefreshModels={() => void loadModels(true)} templatesLoading={templatesLoading} templatesFailed={templatesFailed} onRefreshTemplates={() => void loadTemplates(true)} disabled={disabled} modelLabel={uiText("视频模型")} onModelChange={selectModel} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} referenceAction={{ label: uiText("配置参考素材"), onOpen: trigger => referencePicker.current?.open(trigger) }} >{({ modelControl, addControl }) => (<ExperimentComposer submitting={disabled} submitDisabled={disabled || submission.outcomePending || capabilityBlocked || ratioConflict || durationConflict || modeConflict || referenceIssues.length > 0} onSubmit={() => void submit()} options={<>{modelControl}
+    <Popover trigger="click" placement="topRight" open={settingsOpen} onOpenChange={setSettingsOpen}
+      afterOpenChange={open => { if (open) settingsPanel.current?.focus() }}
+      content={<div ref={settingsPanel} tabIndex={-1} className="experiment-video-settings" onKeyDown={closeSettings}>
+      <Select
       value={ratio}
       onChange={setRatio}
       disabled={disabled}
@@ -292,7 +305,12 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
       : <InputNumber value={seconds} precision={0} disabled={disabled} placeholder={uiText('时长（秒）')}
         aria-label={uiText('时长（秒）')} min={duration.min_seconds} max={duration.max_seconds}
         onChange={value => setSeconds(value ?? undefined)} />)}
-    </>} addAction={addControl} contextActions={<>
+    </div>}>
+      <Button ref={settingsTrigger} type="text" aria-label={uiText('生成参数')} aria-expanded={settingsOpen}
+        onKeyDown={settingsOpen ? closeSettings : undefined} disabled={disabled} danger={ratioConflict || durationConflict}>
+        {seconds === undefined ? ratio : uiText('{{ratio}} · {{seconds}} 秒', { ratio, seconds })}
+      </Button>
+    </Popover></>} addAction={addControl} contextActions={<>
 
     <VideoExperimentReferences ref={referencePicker}
       key={sessionId ?? 'draft'}
@@ -320,5 +338,5 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     await history.refresh()
   }
   const clearContent = messages.length && !disabled && clearSessionMessages ? clearHistory : undefined
-  return render({ history: historyNode, composer, clearContent, disabled })
+  return render({ hasMessages: messages.length > 0, history: historyNode, composer, clearContent, disabled })
 }

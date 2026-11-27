@@ -70,7 +70,7 @@ export type ImageExperimentModeProps = {
   /** 清空服务端消息，仍由统一页面的共享会话层执行。 */
   clearSessionMessages?: (sessionId: string) => Promise<void>
   /** 由统一页面壳将模态内容装配进布局。 */
-  render: (slots: { history: ReactNode; composer: ReactNode; clearContent?: () => Promise<void>; overlays: ReactNode; disabled: boolean }) => ReactNode
+  render: (slots: { history: ReactNode; composer: ReactNode; hasMessages?: boolean; clearContent?: () => Promise<void>; overlays: ReactNode; disabled: boolean }) => ReactNode
 }
 
 /** 将图片任务结果转换为浏览器可直接预览的 URL。 */
@@ -238,5 +238,5 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
         disabled={disabled}
       />}
     >{replacementDialog}<ExperimentSubmissionFeedback notice={submission.notice} onCheck={() => void submission.checkHistory()} onAcknowledge={submission.acknowledgeUnknown} /><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder={uiText("描述你想生成的图片；Shift + Enter 换行")} label={uiText("图片提示词")} disabled={disabled} submitOnEnter onSubmit={() => void handleSubmit()} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={applyFreeInput} /></ExperimentComposer>)}</ExperimentOptionBar>
-  return render({ history: historyContent, composer, clearContent, overlays: null, disabled })
+  return render({ hasMessages: messages.length > 0, history: historyContent, composer, clearContent, overlays: null, disabled })
 }

@@ -13,6 +13,22 @@
   min-height: 0;
   padding: 0 var(--app-page-gutter) var(--experiment-section-gap);
 }
+/* 消息与输入框共用阅读宽度，草稿和会话间移动输入框时保留焦点与内容。 */
+.experiment-conversation,
+.experiment-composition {
+  width: min(100%, 760px);
+  margin-inline: auto;
+}
+.experiment-conversation:not([hidden]) { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.app-lab-welcome { overflow-y: auto; padding-block: 16px clamp(16px, 10vh, 96px); }
+.app-lab-welcome .experiment-composition { flex-shrink: 0; margin-block: auto; }
+.experiment-composition > h2 {
+  margin: 0 0 24px;
+  color: var(--app-text);
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 600;
+  text-align: center;
+}
 .app-lab-history { container-type: inline-size; }
 .experiment-history-panel { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .experiment-history-list { min-height: 100%; }
@@ -51,8 +67,9 @@
   color: var(--app-text);
   background: #fff;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: 20px;
 }
+.app-lab-welcome .experiment-composer { box-shadow: 0 6px 20px rgb(38 50 68 / 6%); }
 .experiment-composer:focus-within { border-color: var(--app-accent); }
 .experiment-composer-input { max-height: 45dvh; overflow-y: auto; }
 .experiment-composer-input .experiment-prompt-input {
@@ -117,17 +134,19 @@
 
 .experiment-navigation {
   display: flex;
-  flex: 0 0 216px;
+  flex: 0 0 272px;
   flex-direction: column;
   gap: 10px;
   min-width: 0;
   min-height: 0;
   padding: 12px;
+  border-inline-start: 1px solid var(--app-border);
 }
 
 .ant-drawer-body > .experiment-navigation {
   height: 100%;
   padding: 2px;
+  border: 0;
 }
 
 .experiment-session-list {
@@ -173,8 +192,9 @@
   padding-inline: 8px;
 }
 
-.experiment-session-heading h2 {
-  margin: 0;
+.experiment-session-caption {
+  margin: 6px 0 0;
+  padding-inline: 11px;
   color: var(--app-muted, #536174);
   font-size: 14px;
   font-weight: 600;
@@ -266,7 +286,8 @@
 .experiment-result-note { color: var(--app-muted); font-size: 12px; margin: 4px 0 0; }
 .experiment-result-error { color: #ad2838; }
 
-.experiment-session-heading .ant-btn { height: 32px; padding-inline: 8px; font-size: 13px; }
+.experiment-session-heading .ant-btn { height: 36px; padding-inline: 8px; font-size: 14px; }
+.experiment-session-heading .experiment-new-chat { flex: 1; justify-content: flex-start; }
 .experiment-session-type { flex-shrink: 0; color: var(--app-muted); font-size: 16px; }
 .experiment-session-name { min-width: 0; overflow: hidden; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
 @media (pointer: coarse) {
@@ -275,7 +296,7 @@
   .experiment-session-link { min-height: 44px; }
 }
 
-/* 输入区底栏始终按模型、素材、添加、提交的顺序浏览。 */
+/* 输入区底栏从添加开始，提交保持在最右侧。 */
 .experiment-model-trigger.ant-btn { display: inline-flex; align-items: center; min-width: 0; max-width: 180px; padding-inline: 8px; }
 .experiment-model-trigger > span:not(.anticon) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .experiment-model-trigger .anticon { flex: none; }
@@ -300,4 +321,38 @@
   .experiment-composer-toolbar :is(.ant-btn, .ant-select) { min-height: 44px; height: 44px; }
   .experiment-add-trigger.ant-btn { width: 44px; }
   .experiment-add-menu .ant-dropdown-menu-item, .experiment-model-panel .ant-menu-item { min-height: 44px; }
+}
+
+.experiment-chat-attachments,
+.experiment-video-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.experiment-chat-attachments { max-height: 112px; overflow-y: auto; }
+.experiment-chat-attachments .ant-btn { max-width: 100%; }
+.experiment-chat-attachments .ant-btn > span:not(.ant-btn-icon) { overflow: hidden; text-overflow: ellipsis; }
+.experiment-chat-attachments .experiment-reference-image { width: 24px; height: 24px; }
+.experiment-chat-attachments .experiment-reference-placeholder > span:not(.anticon) { display: none; }
+.experiment-video-settings .ant-select { min-width: 80px; }
+.experiment-modality-settings { margin-top: 8px; }
+.experiment-modality-settings summary { cursor: pointer; }
+
+@media (min-width: 600px) {
+  .experiment-composer-inline {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, max-content) auto;
+    align-items: center;
+    column-gap: 8px;
+    border-radius: 26px;
+  }
+  .experiment-composer-inline .experiment-composer-toolbar { display: contents; }
+  .experiment-composer-inline .experiment-composer-input { grid-area: 1 / 2; }
+  .experiment-composer-inline .experiment-composer-toolbar > :first-child { grid-area: 1 / 1; }
+  .experiment-composer-inline .experiment-composer-feedback { grid-column: 1 / -1; }
+}
+
+@media (max-height: 540px) {
+  .app-lab-welcome { padding-block: 8px; }
+  .experiment-composition > h2 { margin-bottom: 12px; }
 }

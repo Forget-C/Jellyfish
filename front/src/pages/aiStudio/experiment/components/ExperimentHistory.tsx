@@ -7,7 +7,7 @@ import { ExperimentEmptyState } from './ExperimentEmptyState'
 import type { ExperimentHistoryState } from '../hooks/useExperimentHistory'
 
 type ExperimentHistoryProps = {
-  history: ExperimentHistoryState
+  history?: ExperimentHistoryState
   messageCount: number
   emptyDescription: string
   children: ReactNode
@@ -16,7 +16,7 @@ type ExperimentHistoryProps = {
 /** 管理历史读取状态及滚动。向前分页时保持首条可见消息的屏幕位置。 */
 export function ExperimentHistory({ history, messageCount, emptyDescription, children }: ExperimentHistoryProps) {
   const uiText = useUiText()
-  const { error, errorOnLoadMore, hasLoadedHistory, hasMoreHistory, loading, loadingMore, refresh, loadMore } = history
+  const { error, errorOnLoadMore, hasLoadedHistory, hasMoreHistory, loading, loadingMore, refresh, loadMore } = history ?? {}
   const viewportRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const followingLatest = useRef(true)
@@ -46,7 +46,7 @@ export function ExperimentHistory({ history, messageCount, emptyDescription, chi
       if (visible) anchor.current = { element: visible, top: visible.getBoundingClientRect().top - top, count: messageCount }
       followingLatest.current = false
     }
-    void loadMore()
+    void loadMore?.()
   }
 
   useLayoutEffect(() => {
@@ -84,7 +84,7 @@ export function ExperimentHistory({ history, messageCount, emptyDescription, chi
           type="error"
           showIcon
           message={errorOnLoadMore ? uiText("更早消息读取失败") : firstRead ? uiText("会话消息读取失败") : uiText("会话消息刷新失败")}
-          action={<Button size="small" onClick={errorOnLoadMore ? readEarlier : () => void refresh()}>
+          action={<Button size="small" onClick={errorOnLoadMore ? readEarlier : () => void refresh?.()}>
             {errorOnLoadMore ? uiText("重试加载更早消息") : uiText("重试读取消息")}
           </Button>}
         /> : null}

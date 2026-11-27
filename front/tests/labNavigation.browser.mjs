@@ -123,8 +123,8 @@ try {
   await page.waitForURL(url => url.pathname === '/lab' && url.searchParams.get('mode') === 'image' && url.searchParams.get('keep') === '1')
   const types = page.locator('.experiment-navigation')
   const startDraft = async label => {
-    await page.getByRole('button', { name: '新建会话', exact: true }).click()
-    await page.getByRole('menuitem', { name: label + '会话', exact: true }).click()
+    await page.getByRole('button', { name: '选择聊天类型', exact: true }).click()
+    await page.getByRole('menuitem', { name: label + '聊天', exact: true }).click()
   }
   const history = page.getByRole('navigation', { name: '最近会话' })
   await history.getByRole('button', { name: '图片历史 1', exact: true }).waitFor()
@@ -152,7 +152,7 @@ try {
 
   await startDraft('文本')
   await page.waitForURL(url => url.searchParams.get('mode') === 'text')
-  await page.getByRole('button', { name: '新建会话', exact: true }).click()
+  await page.getByRole('button', { name: '选择聊天类型', exact: true }).click()
   await page.keyboard.press('Escape')
   assert.equal(created, 0)
   await page.getByRole('button', { name: /选择模型/ }).click()
@@ -261,7 +261,7 @@ try {
 
   hideHistory = true
   await page.goto(origin + '/lab')
-  await history.getByText('暂无会话，从右上方新建开始', { exact: true }).waitFor()
+  await history.getByText('暂无会话', { exact: true }).waitFor()
   await startDraft('图片')
   await imageInput.waitFor()
   await page.goBack()
@@ -282,7 +282,7 @@ try {
     await trigger.focus()
     await trigger.press('Enter')
     const drawer = page.getByRole('dialog').filter({ has: types })
-    await drawer.getByRole('button', { name: '新建会话', exact: true }).waitFor()
+    await drawer.getByRole('button', { name: '选择聊天类型', exact: true }).waitFor()
     await page.keyboard.press('Escape')
     await drawer.waitFor({ state: 'hidden' })
     await trigger.and(page.locator(':focus')).waitFor()
@@ -315,7 +315,7 @@ try {
       assert.ok(layout.barHeight >= 52 && layout.barHeight <= 56)
       assert.equal(layout.hasOverflow, false)
       if (width < 1024) await page.getByRole('button', { name: '会话导航', exact: true }).waitFor()
-      else assert.equal(Math.round((await types.boundingBox()).width), 216)
+      else assert.equal(Math.round((await types.boundingBox()).width), 272)
       await page.waitForFunction(({ button, controlHeight }) => {
         const bounds = button.getBoundingClientRect()
         return Math.abs(bounds.height - controlHeight) < 0.5 && bounds.bottom <= innerHeight
@@ -337,6 +337,8 @@ try {
   const compactInput = page.getByRole('textbox', { name: '文本提示词', exact: true })
   await compactInput.scrollIntoViewIfNeeded()
   await compactInput.focus()
+  await page.keyboard.press('Tab')
+  await page.getByRole('button', { name: '添加内容', exact: true }).and(page.locator(':focus-visible')).waitFor()
   await page.keyboard.press('Tab')
   const compactModel = page.getByRole('button', { name: '选择模型', exact: true })
   await compactModel.and(page.locator(':focus-visible')).waitFor()

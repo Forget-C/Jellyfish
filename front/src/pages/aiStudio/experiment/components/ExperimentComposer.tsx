@@ -6,6 +6,7 @@ import { WorkbenchButton } from '../../../../components/workbench/WorkbenchButto
 import { SendOutlined } from '@ant-design/icons'
 
 type ExperimentComposerProps = {
+  inline?: boolean
   appearance?: 'default' | 'workbench'
   options: ReactNode
   addAction?: ReactNode
@@ -27,6 +28,7 @@ type ExperimentComposerProps = {
  */
 export function ExperimentComposer({
   options,
+  inline = false,
   appearance = 'default',
   contextActions,
   addAction,
@@ -41,13 +43,13 @@ export function ExperimentComposer({
   const uiText = useUiText()
   const workbench = appearance === 'workbench'
   if (!workbench) return (
-    <div className="experiment-composer">
+    <div className={inline ? "experiment-composer experiment-composer-inline" : "experiment-composer"}>
       <div className="experiment-composer-input">{children}</div>
       <div className="experiment-composer-toolbar">
+        {addAction}
         <div className="experiment-composer-options">{options}</div>
         <div className="experiment-composer-submit">
           {contextActions}
-          {addAction}
           {secondaryAction ?? <Button type="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>{submitLabel ?? uiText("发送")}</Button>}
         </div>
       </div>
