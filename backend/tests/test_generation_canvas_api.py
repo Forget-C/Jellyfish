@@ -40,8 +40,9 @@ async def canvas_client(request, monkeypatch, canvas_file_store, tmp_path):
         bootstrap_all_registries()
         db.add(Provider(id='canvas-provider', provider_key='openai', name='openai', base_url='https://example.test'))
         await db.flush()
+        profiles = {'text': {'tool_calling': False}, 'image': {'image_modes': {'edit': {'supported': True}}}}
         db.add_all([Model(id=f'canvas-{kind}', name=f'canvas-{kind}', category=kind, provider_id='canvas-provider',
-                          capability_profile={'tool_calling': False} if kind == 'text' else None)
+                          capability_profile=profiles.get(kind))
                     for kind in ('text', 'image', 'video')])
         await db.commit()
     async with sessions() as db:

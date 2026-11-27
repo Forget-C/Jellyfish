@@ -78,7 +78,8 @@ def model_profile(provider: str, model: str, category: str,
         "vidu": ("viduq1", "viduq2", "viduq3", "vidu2.0"),
         "kling": ("kling-v3", "kling-3.0"),
     }
-    if not model.lower().startswith(known_families.get(provider, ())):
+    families = known_families.get(provider, ())
+    if not any(model.lower() == prefix.rstrip("-") or model.lower().startswith(prefix) for prefix in families):
         for name, mode in modes.items():
             mode.supported = name in {"text_to_image", "text_to_video"}
             for field in type(mode).model_fields:

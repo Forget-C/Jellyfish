@@ -33,6 +33,7 @@ async def image_card(runtime, count=3):
     async with runtime.sessions.begin() as db:
         model = await db.get(Model, runtime.model_id)
         model.category, model.name = 'image', 'image-model'
+        model.capability_profile = {'image_modes': {'edit': {'supported': True}}}
     runtime.document['cards'][0].update(id='image', type='model.image', config={'count': count, 'target_ratio': '1:1', 'resolution_profile': 'standard'})
     response = await runtime.client.put(runtime.url, json={'request_id': 'image-card', 'expected_revision': 1, 'document': runtime.document})
     assert response.status_code == 200, response.text

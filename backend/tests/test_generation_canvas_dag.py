@@ -131,6 +131,7 @@ async def test_missing_positions_block_consumer_and_admitted_files_remain_pinned
     async with runtime.sessions.begin() as db:
         model = await db.get(Model, runtime.model_id)
         model.category, model.name = 'image', 'image-model'
+        model.capability_profile = {'image_modes': {'edit': {'supported': True}}}
         image_storage['known'] = (b'known', 'image/png', {})
         db.add(FileItem(id='known', name='known', type='image', storage_key='known', content_type='image/png'))
         await db.flush()

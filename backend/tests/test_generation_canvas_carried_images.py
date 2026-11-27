@@ -65,7 +65,8 @@ async def test_worker_freezes_carried_image_and_text_model_field_reference(runti
     await asyncio.gather(*worker.jobs.values())
     worker.text_pool.shutdown(wait=False)
     async with runtime.sessions.begin() as db:
-        db.add(Model(id='image-' + runtime.model_id, name='image-model', category='image', provider_id=runtime.provider_id))
+        db.add(Model(id='image-' + runtime.model_id, name='image-model', category='image', provider_id=runtime.provider_id,
+                     capability_profile={'image_modes': {'edit': {'supported': True}}}))
         db.add(FileItem(id='reference', name='reference', type='image', storage_key='reference', content_type='image/png'))
         await db.flush()
         await upsert_file_usage(db, file_id='reference', project_id=runtime.project_id, chapter_id=None, usage_kind='upload')
