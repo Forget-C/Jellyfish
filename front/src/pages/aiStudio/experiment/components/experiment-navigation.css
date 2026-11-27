@@ -1,6 +1,7 @@
 .experiment-workspace {
   --experiment-control-height: 32px;
   --experiment-section-gap: 16px;
+  --experiment-action-size: 36px;
 }
 
 .app-lab-layout { display: flex; flex: 1; min-height: 0; }
@@ -11,12 +12,13 @@
   flex-direction: column;
   gap: var(--experiment-section-gap);
   min-height: 0;
-  padding: 0 var(--app-page-gutter) var(--experiment-section-gap);
+  padding-block-end: var(--experiment-section-gap);
+  container-type: inline-size;
 }
 /* 消息与输入框共用阅读宽度，草稿和会话间移动输入框时保留焦点与内容。 */
-.experiment-conversation,
+.experiment-history-list,
 .experiment-composition {
-  width: min(100%, 760px);
+  width: min(760px, calc(100cqw - 2 * var(--app-page-gutter)));
   margin-inline: auto;
 }
 .experiment-conversation:not([hidden]) { display: flex; flex: 1; flex-direction: column; min-height: 0; }
@@ -29,12 +31,17 @@
   font-weight: 600;
   text-align: center;
 }
-.app-lab-history { container-type: inline-size; }
+.app-lab-history {
+  scrollbar-gutter: stable both-edges;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.app-lab-history:hover { scrollbar-color: #aab8ca transparent; }
 .experiment-history-panel { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; }
-.experiment-history-list { min-height: 100%; }
+.experiment-history-list { min-height: 100%; container-type: inline-size; }
 .experiment-history-list > * + * { margin-top: 16px; }
 .app-lab-history:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -2px; }
-.experiment-history-jump { position: absolute; right: 12px; bottom: 8px; box-shadow: 0 2px 8px rgb(38 50 68 / 12%); }
+.experiment-history-jump { position: absolute; inset-inline-end: max(var(--app-page-gutter), (100% - 760px) / 2); bottom: 8px; box-shadow: 0 2px 8px rgb(38 50 68 / 12%); }
 
 .experiment-empty-state { display: grid; min-height: 100%; place-items: center; padding: 8px; }
 .experiment-empty-state .ant-empty { margin: 0; }
@@ -81,19 +88,35 @@
 }
 .experiment-composer-toolbar,
 .experiment-composer-options,
-.experiment-composer-submit {
+.experiment-composer-actions {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
 }
 .experiment-composer-toolbar { margin-top: 8px; }
-.experiment-composer-options { flex: 1; min-width: 0; }
-.experiment-composer-submit { flex-shrink: 0; justify-content: flex-end; margin-inline-start: auto; }
+.experiment-composer-options,
+.experiment-chat-model { min-width: 0; }
+.experiment-composer-actions { min-width: 0; justify-content: flex-end; margin-inline-start: auto; }
 .experiment-composer-toolbar :is(.ant-btn, .ant-select) { height: var(--experiment-control-height); font-size: 13px; }
 .experiment-composer-toolbar .ant-select { height: 100%; }
-.experiment-composer-toolbar .ant-btn-primary:not(:disabled) { background: var(--app-accent); }
-.experiment-composer-toolbar .ant-btn-primary:not(:disabled):hover { background: #1d50aa; }
+.experiment-composer-toolbar .experiment-composer-action.ant-btn {
+  flex: none;
+  width: var(--experiment-action-size);
+  min-width: var(--experiment-action-size);
+  height: var(--experiment-action-size);
+  padding: 0;
+  border: 0;
+  background: var(--app-accent);
+  color: #fff;
+  font-size: 17px;
+}
+.experiment-composer-toolbar .experiment-composer-action.ant-btn:not(:disabled):hover { background: #1d50aa; }
+.experiment-composer-toolbar .experiment-composer-action.ant-btn:disabled {
+  background: #dfe7f2;
+  color: var(--app-muted);
+}
+.experiment-stop-icon { width: 10px; height: 10px; background: currentColor; border-radius: 2px; }
 .experiment-workspace :is(button, textarea):focus-visible {
   outline: 2px solid var(--app-accent);
   outline-offset: 2px;
@@ -297,10 +320,9 @@
 }
 
 /* 输入区底栏从添加开始，提交保持在最右侧。 */
-.experiment-model-trigger.ant-btn { display: inline-flex; align-items: center; min-width: 0; max-width: 180px; padding-inline: 8px; }
+.experiment-model-trigger.ant-btn { display: inline-flex; align-items: center; min-width: 0; max-width: min(200px, 100%); padding-inline: 8px; border-radius: 999px; }
 .experiment-model-trigger > span:not(.anticon) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.experiment-model-trigger .anticon { flex: none; }
-.experiment-model-trigger[aria-expanded='true'],
+.experiment-model-trigger.ant-btn:not(:disabled):is(:hover, :focus-visible, [aria-expanded='true']),
 .experiment-add-trigger[aria-expanded='true'] { color: var(--app-accent); background: var(--app-selected); }
 .experiment-add-trigger.ant-btn { width: var(--experiment-control-height); padding: 0; flex: none; }
 .experiment-composer-feedback { display: grid; gap: 4px; margin-top: 8px; }
@@ -314,10 +336,11 @@
 .experiment-add-menu .ant-dropdown-menu-item { font-size: 13px; }
 .experiment-model-panel :is(button, input, li):focus-visible { outline: 2px solid var(--app-accent, #245fc5); outline-offset: -2px; }
 @media (max-width: 767px) {
-  .experiment-composer-toolbar, .experiment-composer-options, .experiment-composer-submit { gap: 4px; }
+  .experiment-composer-toolbar, .experiment-composer-options, .experiment-composer-actions { gap: 4px; }
   .experiment-model-trigger.ant-btn { padding-inline: 4px; }
 }
 @media (pointer: coarse) {
+  .experiment-workspace { --experiment-action-size: 44px; }
   .experiment-composer-toolbar :is(.ant-btn, .ant-select) { min-height: 44px; height: 44px; }
   .experiment-add-trigger.ant-btn { width: 44px; }
   .experiment-add-menu .ant-dropdown-menu-item, .experiment-model-panel .ant-menu-item { min-height: 44px; }
@@ -339,17 +362,18 @@
 .experiment-modality-settings summary { cursor: pointer; }
 
 @media (min-width: 600px) {
-  .experiment-composer-inline {
+  .app-lab-welcome .experiment-composer-inline {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) minmax(0, max-content) auto;
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 42%);
     align-items: center;
     column-gap: 8px;
     border-radius: 26px;
   }
-  .experiment-composer-inline .experiment-composer-toolbar { display: contents; }
-  .experiment-composer-inline .experiment-composer-input { grid-area: 1 / 2; }
-  .experiment-composer-inline .experiment-composer-toolbar > :first-child { grid-area: 1 / 1; }
-  .experiment-composer-inline .experiment-composer-feedback { grid-column: 1 / -1; }
+  .app-lab-welcome .experiment-composer-inline .experiment-composer-toolbar { display: contents; }
+  .app-lab-welcome .experiment-composer-inline .experiment-composer-input { grid-area: 1 / 2; }
+  .app-lab-welcome .experiment-composer-inline .experiment-composer-toolbar > :first-child { grid-area: 1 / 1; }
+  .app-lab-welcome .experiment-composer-inline .experiment-composer-actions { grid-area: 1 / 3; }
+  .app-lab-welcome .experiment-composer-inline .experiment-composer-feedback { grid-column: 1 / -1; }
 }
 
 @media (max-height: 540px) {

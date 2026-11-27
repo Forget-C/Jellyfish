@@ -1,8 +1,10 @@
 import { useUiText } from '../../../../uiText'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ApiOutlined, CheckOutlined, DownOutlined, FileTextOutlined, PictureOutlined, PlusOutlined } from '@ant-design/icons'
-import { Alert, Button, Dropdown, Input, Menu, Modal, Popover, Select, Typography } from 'antd'
+import { CheckOutlined, FileTextOutlined, PictureOutlined, PlusOutlined } from '@ant-design/icons'
+import { Alert, Button, Dropdown, Input, Menu, Modal, Popover, Select, Tooltip, Typography } from 'antd'
 import type { GetRef, InputRef } from 'antd'
+
+import { LlmService } from '../../../../services/generated'
 
 export type ExperimentModelOption = { id: string; name: string }
 export type ExperimentTemplateOption = { id: string; name: string; version: number; preview?: string; category?: string }
@@ -51,7 +53,18 @@ export function ExperimentOptionBar({ children, referenceAction, models, templat
     if (models.length > 8) modelSearch.current?.focus()
     else modelPanel.current?.querySelector<HTMLElement>('[aria-checked="true"], [role="menuitemradio"]')?.focus()
   }, [openPanel, modelsLoading, models.length])
-  const selectedModel = useMemo(() => models.find(model => model.id === modelId), [modelId, models])
+  const listedModel = useMemo(() => models.find(model => model.id === modelId), [modelId, models])
+  const [resolvedModel, setResolvedModel] = useState<ExperimentModelOption>()
+  useEffect(() => {
+    if (!modelId || listedModel || resolvedModel?.id === modelId) return
+    const request = LlmService.getModelApiV1LlmModelsModelIdGet({ modelId })
+    let active = true
+    void request.then(({ data }) => {
+      if (active && data?.id === modelId && data.name) setResolvedModel({ id: modelId, name: data.name })
+    }).catch(() => {})
+    return () => { active = false; request.cancel() }
+  }, [listedModel, modelId, resolvedModel?.id])
+  const modelName = listedModel?.name ?? (resolvedModel?.id === modelId ? resolvedModel?.name : undefined)
   const templateOptions = templates.map(template => ({ value: template.id,
     label: `${uiText(template.category ?? '提示词模板')} · ${template.name} · v${template.version}`, disabled: false }))
   if (selectedTemplate && !templates.some(template => template.id === selectedTemplate.id)) {
@@ -69,7 +82,7 @@ export function ExperimentOptionBar({ children, referenceAction, models, templat
     if (panel === 'template') onTemplateOpenChange?.(true)
   }
   const closeTemplate = () => { close('template'); addTrigger.current?.focus() }
-  const modelControl = <Popover trigger="click" placement="topLeft" open={openPanel === 'model'}
+  const modelControl = <Popover trigger="click" placement="topRight" open={openPanel === 'model'}
     classNames={{ root: "experiment-model-popup" }}
     onOpenChange={visible => visible ? open('model') : close('model')}
     afterOpenChange={visible => {
@@ -98,11 +111,13 @@ export function ExperimentOptionBar({ children, referenceAction, models, templat
       {models.length > 0 && !models.some(model => model.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())) && <p role="status">{uiText("没有匹配的模型")}</p>}
       {modelFooter}
     </div>}>
+    <Tooltip title={openPanel === 'model' ? null : uiText("选择模型")} trigger={['hover', 'focus']}>
     <Button ref={modelTrigger} type="text" onKeyDown={event => {
       if (event.key === 'Escape' && openPanel === 'model') { event.preventDefault(); event.stopPropagation(); close('model'); modelTrigger.current?.focus() }
     }} aria-expanded={openPanel === 'model'} aria-haspopup="menu"
-      icon={<ApiOutlined aria-hidden="true" />} disabled={disabled} title={selectedModel?.name}
-      className="experiment-model-trigger"><span>{selectedModel?.name ?? (modelId ? uiText("已选模型") : uiText("选择模型"))}</span><DownOutlined aria-hidden="true" /></Button>
+      aria-description={uiText(modelLabel)} disabled={disabled}
+      className="experiment-model-trigger"><span>{modelName ?? (modelId ? uiText("已选模型") : uiText("选择模型"))}</span></Button>
+    </Tooltip>
   </Popover>
   const addControl = <Dropdown trigger={['click']} placement="topRight" open={openPanel === 'add'}
     onOpenChange={visible => visible ? open('add') : close('add')} autoFocus

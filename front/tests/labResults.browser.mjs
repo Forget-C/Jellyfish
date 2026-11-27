@@ -275,6 +275,11 @@ try {
   const firstVisible = history.getByText('第 51 条历史', { exact: true })
   await firstVisible.waitFor()
   await page.waitForFunction(region => region.scrollTop > 0, await history.elementHandle())
+  const main = page.getByRole('region', { name: '实验室 · 文本', exact: true })
+  const mainBounds = await main.boundingBox()
+  const scrollBounds = await history.boundingBox()
+  assert.ok(Math.abs(scrollBounds.x + scrollBounds.width - mainBounds.x - mainBounds.width) < 1,
+    'Message scrolling reaches the right edge of the conversation area')
   await history.evaluate(region => { region.scrollTop = 0 })
   const latest = page.getByRole('button', { name: '回到最新', exact: true })
   await latest.waitFor()

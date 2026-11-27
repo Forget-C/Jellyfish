@@ -147,26 +147,35 @@ try {
       : url.pathname.endsWith('/snapshot') ? {kind: 'chat', session_id: existing.id, cursor, capabilities: [], history: snapshot}
       : url.pathname.includes('/chat/sessions/lab/chat') ? snapshot
       : url.pathname.endsWith('/model-settings') ? {default_text_model_id: 'T', default_image_model_id: 'I'}
+      : url.pathname.endsWith('/models/T') ? {id: 'T', name: '主模型T'}
+      : url.pathname.endsWith('/models/I') ? {id: 'I', name: '图片模型I'}
       : url.pathname.endsWith('/models') ? {items: [{id: 'T', name: '主模型T'}, {id: 'I', name: '图片模型I'}]} : []
     return route.fulfill({ json: {data} })
   })
   await page.goto('http://127.0.0.1:4917/lab')
   await page.getByRole('region', {name: '实验室 · 多模态聊天'}).waitFor()
-  await page.getByText('主聊天模型', {exact: false}).first().waitFor()
-  await page.getByRole('button', { name: '主聊天模型', exact: true }).click()
+  await page.getByRole('button', { name: '主模型T', exact: true }).click()
   await page.getByRole('menuitemradio', {name:'主模型T'}).click()
-  assert.equal(await page.getByLabel(/图片模型/).first().isVisible(), false)
-  await page.getByRole('button', { name: '主聊天模型', exact: true }).click()
+  assert.equal(await page.getByText('图片模型', {exact: true}).isVisible(), false)
+  await page.getByRole('button', { name: '主模型T', exact: true }).click()
   await page.getByText('模态配置', {exact: true}).click()
-  await page.getByRole('button', { name: '图片模型', exact: true }).click()
+  await page.getByRole('button', { name: '图片模型I', exact: true }).click()
   await page.getByRole('menu', {name:'图片模型', exact:true}).getByRole('menuitemradio', {name:'图片模型I'}).click()
   hasHistory = true
   await page.goto('http://127.0.0.1:4917/lab?session=chat')
   const stop = page.getByRole('button', {name: '停止回复'})
   await stop.waitFor()
+  const stopBounds = await stop.boundingBox()
+  assert.equal(stopBounds.width, 36)
+  assert.equal(stopBounds.height, stopBounds.width)
   assert.equal(await page.getByRole('button', {name:'发送', exact:true}).count(), 0)
   await page.reload()
   await stop.click()
+  const send = page.getByRole('button', {name: '发送', exact: true})
+  await send.waitFor()
+  const sendBounds = await send.boundingBox()
+  assert.equal(sendBounds.width, stopBounds.width)
+  assert.equal(sendBounds.x, stopBounds.x)
   const composer = page.getByRole('textbox', {name: '聊天消息'})
   await composer.fill('/')
   await page.getByText('/imagegen', {exact: true}).click()

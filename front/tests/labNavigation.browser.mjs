@@ -325,7 +325,7 @@ try {
       await page.waitForFunction(({ button, controlHeight }) => {
         const bounds = button.getBoundingClientRect()
         return Math.abs(bounds.height - controlHeight) < 0.5 && bounds.bottom <= innerHeight
-      }, { button: await send.elementHandle(), controlHeight: width >= 1024 ? 32 : 36 })
+      }, { button: await send.elementHandle(), controlHeight: 36 })
       await page.waitForFunction(expectedRows => {
         const editor = document.querySelector('textarea[aria-label="文本提示词"]')
         const rows = editor.clientHeight / parseFloat(getComputedStyle(editor).lineHeight)

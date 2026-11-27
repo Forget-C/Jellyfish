@@ -280,7 +280,18 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     setSettingsOpen(false)
     settingsTrigger.current?.focus()
   }
-  const composer = <ExperimentOptionBar models={models.map((item) => ({ id: item.id, name: item.name }))} templates={templates.map((item) => ({ id: item.id, name: item.name, version: item.version, preview: item.preview, category: '视频提示词' }))} modelId={modelId} selectedTemplate={selectedTemplate ?? undefined} modelsLoading={modelsLoading} modelsFailed={modelsFailed} onRefreshModels={() => void loadModels(true)} templatesLoading={templatesLoading} templatesFailed={templatesFailed} onRefreshTemplates={() => void loadTemplates(true)} disabled={disabled} modelLabel={uiText("视频模型")} onModelChange={selectModel} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} referenceAction={{ label: uiText("配置参考素材"), onOpen: trigger => referencePicker.current?.open(trigger) }} >{({ modelControl, addControl }) => (<ExperimentComposer submitting={disabled} submitDisabled={disabled || submission.outcomePending || capabilityBlocked || ratioConflict || durationConflict || modeConflict || referenceIssues.length > 0} onSubmit={() => void submit()} options={<>{modelControl}
+  const composer = <ExperimentOptionBar models={models.map((item) => ({ id: item.id, name: item.name }))} templates={templates.map((item) => ({ id: item.id, name: item.name, version: item.version, preview: item.preview, category: '视频提示词' }))} modelId={modelId} selectedTemplate={selectedTemplate ?? undefined} modelsLoading={modelsLoading} modelsFailed={modelsFailed} onRefreshModels={() => void loadModels(true)} templatesLoading={templatesLoading} templatesFailed={templatesFailed} onRefreshTemplates={() => void loadTemplates(true)} disabled={disabled} modelLabel={uiText("视频模型")} onModelChange={selectModel} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} referenceAction={{ label: uiText("配置参考素材"), onOpen: trigger => referencePicker.current?.open(trigger) }} >{({ modelControl, addControl }) => (<ExperimentComposer submitting={submitting} submitDisabled={disabled || submission.outcomePending || capabilityBlocked || ratioConflict || durationConflict || modeConflict || referenceIssues.length > 0} onSubmit={() => void submit()} options={modelControl} addAction={addControl} contextActions={<>
+    <VideoExperimentReferences ref={referencePicker}
+      key={sessionId ?? 'draft'}
+      value={references}
+      onChange={next => { setFrameFileIds(next.frames); setSubjectReferences(next.subjects) }}
+      files={files}
+      libraryState={libraryState}
+      onRetryLibrary={() => void loadLibrary()}
+      onUploaded={onUploaded}
+      capability={capability}
+      disabled={disabled}
+    />
     <Popover trigger="click" placement="topRight" open={settingsOpen} onOpenChange={setSettingsOpen}
       afterOpenChange={open => { if (open) settingsPanel.current?.focus() }}
       content={<div ref={settingsPanel} tabIndex={-1} className="experiment-video-settings" onKeyDown={closeSettings}>
@@ -310,20 +321,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
         onKeyDown={settingsOpen ? closeSettings : undefined} disabled={disabled} danger={ratioConflict || durationConflict}>
         {seconds === undefined ? ratio : uiText('{{ratio}} · {{seconds}} 秒', { ratio, seconds })}
       </Button>
-    </Popover></>} addAction={addControl} contextActions={<>
-
-    <VideoExperimentReferences ref={referencePicker}
-      key={sessionId ?? 'draft'}
-      value={references}
-      onChange={next => { setFrameFileIds(next.frames); setSubjectReferences(next.subjects) }}
-      files={files}
-      libraryState={libraryState}
-      onRetryLibrary={() => void loadLibrary()}
-      onUploaded={onUploaded}
-      capability={capability}
-      disabled={disabled}
-    />
-  </>} feedback={<>     {capabilityState === 'loading' && <span role="status" className="experiment-video-reference-summary">{uiText("正在读取视频模型能力")}</span>}
+    </Popover></>} feedback={<>     {capabilityState === 'loading' && <span role="status" className="experiment-video-reference-summary">{uiText("正在读取视频模型能力")}</span>}
     {capabilityState === 'failed' && <span role="alert" className="experiment-video-reference-issue">{uiText("视频模型能力读取失败")} <Button type="link" onClick={() => void loadCapability(modelId)}>{uiText("重试读取能力")}</Button></span>}
     {capabilityIncomplete && <span className="experiment-video-reference-summary">{uiText("模型未提供完整参考限制，提交时由服务端校验")}</span>}
     {ratioConflict && <span role="alert" className="experiment-video-reference-issue">{uiText("当前模型不支持比例")} {ratio}{uiText("，请重新选择")}</span>}

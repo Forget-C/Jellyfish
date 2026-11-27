@@ -506,9 +506,7 @@ try {
   assert.equal(writes.length, beforeCheckpoint)
   textSnapshotUnavailable = false
   await retryHistory.click()
-  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(
-    button => button.textContent?.replace(/\s/g, '') === '发送' && !button.disabled,
-  ))
+  await page.waitForFunction(button => !button.disabled, await textSubmit.elementHandle())
 
   // A first submission can already be committed when its new session snapshot fails.
   await page.goto(origin + '/lab?mode=text')

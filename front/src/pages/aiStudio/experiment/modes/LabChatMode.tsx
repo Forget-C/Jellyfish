@@ -32,14 +32,15 @@ function ChatModelChoice({kind, value, disabled, onChange, footer}: {
 }) {
   const uiText = useUiText()
   const {models, modelsFailed, modelsLoading, loadModels} = useExperimentModels(kind, () => {})
-  return <label>{uiText(labels[kind])}{' '}
+  return <div className="experiment-chat-model">
+    {kind !== 'text' && <span>{uiText(labels[kind])} </span>}
     <ExperimentOptionBar models={models} modelId={value ?? undefined} disabled={disabled}
       modelsFailed={modelsFailed} modelsLoading={modelsLoading} modelLabel={labels[kind]} modelFooter={footer}
       onRefreshModels={() => void loadModels(true)} onModelOpenChange={open => { if (open) void loadModels() }}
       onModelChange={id => { if (id) onChange(id) }} templates={[]} onTemplateChange={() => {}}>
       {({modelControl}) => modelControl}
     </ExperimentOptionBar>
-  </label>
+  </div>
 }
 
 function mergeMessages(previous: ExperimentMessageRead[], updates: ExperimentMessageRead[]) {
@@ -274,7 +275,10 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
         return false
       }}><Button type="text" className="experiment-add-trigger" icon={<PlusOutlined />} title={uiText('添加素材')}
         aria-label={uiText('添加素材')} disabled={draftLocked || upload.uploading} /></Upload>}
-      secondaryAction={stoppableTurn && <Button disabled={lifecycle.stopping} onClick={() => void stop()}>{uiText('停止回复')}</Button>}
+      stopAction={stoppableTurn ? {
+        label: uiText('停止回复'), loading: lifecycle.stopping, disabled: lifecycle.stopping,
+        onClick: () => void stop(),
+      } : undefined}
       feedback={(files.length || feedback) ? <>
         {files.length > 0 && <div className="experiment-chat-attachments">
           {files.map(file => <Button key={file.id} disabled={draftLocked} title={file.name}

@@ -625,6 +625,7 @@
   "倾听": "Listen",
   "停下": "Stop",
   "停止": "Stop",
+  "停止生成": "Stop generation",
   "停止生成并离开": "Stop generation and leave",
   "停止生成请求失败，已保留当前会话。请重试或继续等待。": "Could not stop generation. Your session is still open. Try again or wait for it to finish.",
   "停止生成请求失败，请重试。": "Could not stop generation. Try again.",

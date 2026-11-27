@@ -6,8 +6,7 @@
  */
 import { useUiText } from '../../../../uiText'
 import { useEffect, useState, type ReactNode } from 'react'
-import { Button, message } from 'antd'
-import { StopOutlined } from '@ant-design/icons'
+import { message } from 'antd'
 import {
   type ChatTurnReceipt,
   type ExperimentMessageRead,
@@ -329,10 +328,12 @@ export function TextExperimentMode({
       >
         {({ modelControl, addControl }) => (
           <ExperimentComposer
-            secondaryAction={liveRun ? <Button icon={<StopOutlined aria-hidden="true" />} danger
-              loading={stopState === 'requesting'}
-              disabled={!activeRunId || stopState === 'requested'}
-              onClick={() => { void handleStop().catch(() => {}) }}>{uiText("停止")}</Button> : null}
+            stopAction={liveRun ? {
+              label: uiText("停止"),
+              loading: stopState === 'requesting' || (submitting && !activeRunId),
+              disabled: !activeRunId || stopState === 'requested',
+              onClick: () => { void handleStop().catch(() => {}) },
+            } : undefined}
             submitting={submitting}
             submitDisabled={busy || stopState === 'requesting' || submission.outcomePending ||
               waitingForCheckpoint || Boolean(sessionId && historyState.loading)}

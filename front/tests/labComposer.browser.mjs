@@ -34,6 +34,8 @@ try {
     }
     if (/\/chat\/sessions\/text\/[^/]+\/snapshot$/.test(url.pathname)) return textTrialSnapshot(route, [])
     if (url.pathname.endsWith('/model-settings')) return respond({ default_text_model_id: 'model-2' })
+    const modelDetail = url.pathname.match(/\/models\/model-(\d+)$/)
+    if (modelDetail) return respond({ id: 'model-' + modelDetail[1], name: '模型 ' + modelDetail[1] })
     if (url.pathname.endsWith('/models')) { await modelGate; return respond({ items: Array.from({ length: 10 }, (_, i) => ({ id: 'model-' + i, name: longModels ? '很长的模型名称'.repeat(8) + i : '模型 ' + i, category: url.searchParams.get('category') })) }) }
     if (url.pathname.endsWith('/video-generation-options')) return respond({ model_id: url.searchParams.get('model_id'), allowed_ratios: ['16:9', '9:16'] })
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
@@ -44,7 +46,7 @@ try {
   })
   for (const mode of Object.keys(modes)) {
     await page.goto(origin + '/lab?session=' + mode)
-    await page.getByRole('button', { name: mode === 'text' ? '已选模型' : '选择模型', exact: true }).click()
+    await page.getByRole('button', { name: mode === 'text' ? '模型 2' : '选择模型', exact: true }).click()
     const option = page.getByRole('menuitemradio', { name: '模型 0', exact: true })
     await option.waitFor()
     if (mode === 'text') assert.equal(await page.getByRole('menuitemradio', { name: '模型 2', exact: true }).getAttribute('aria-checked'), 'true')
@@ -52,6 +54,14 @@ try {
     await page.getByRole('menuitemradio', { name: '模型 9', exact: true }).click()
     await page.getByRole('button', { name: '模型 9', exact: true }).and(page.locator(':focus')).waitFor()
     await page.getByRole('menuitemradio').waitFor({ state: 'hidden' })
+    const currentModel = page.getByRole('button', { name: '模型 9', exact: true })
+    const send = page.getByRole('button', { name: '发送', exact: true })
+    await currentModel.hover()
+    await page.getByRole('tooltip').getByText('选择模型', { exact: true }).waitFor()
+    assert.equal(await currentModel.getAttribute('aria-expanded'), 'false')
+    const modelBounds = await currentModel.boundingBox()
+    const sendBounds = await send.boundingBox()
+    assert.ok(modelBounds.x + modelBounds.width <= sendBounds.x)
     await page.getByRole('button', { name: '添加内容', exact: true }).click()
     await page.getByRole('menuitem', { name: '选择提示词模板', exact: true }).waitFor()
     assert.equal(await page.getByRole('menuitem', { name: mode === 'image' ? '添加参考图' : '配置参考素材', exact: true }).count(), mode === 'text' ? 0 : 1)
@@ -63,7 +73,7 @@ try {
   let releaseModels
   modelGate = new Promise(resolve => { releaseModels = resolve })
   await page.goto(origin + '/lab?session=text')
-  const loadingTrigger = page.getByRole('button', { name: '已选模型', exact: true })
+  const loadingTrigger = page.getByRole('button', { name: '模型 9', exact: true })
   await loadingTrigger.click()
   await page.getByText('正在加载模型…', { exact: true }).waitFor()
   await loadingTrigger.press('Escape')
