@@ -137,7 +137,7 @@ function ModelCapabilities({ model }: { model: ModelRead }) {
       {TOKEN_LIMITS.map(([key, label]) => {
         const declared = model.capability_profile?.[key]
         const effective = model.effective_capabilities?.[key]
-        return declared == null ? null : (
+        return declared === null || declared === undefined ? null : (
           <p key={key} className="mt-2 text-xs">
             {uiText(label)} · {uiText('模型能力声明')} {declared} · {uiText('当前接入可用')} {effective ?? '—'}
           </p>

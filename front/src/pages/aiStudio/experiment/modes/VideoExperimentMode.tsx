@@ -150,7 +150,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   const resolutions = Object.keys(durationOptions ?? {})
   const duration = resolution ? durationOptions?.[resolution] : undefined
   const durationConflict = resolutions.length > 0 && (
-    !duration || seconds == null || (Array.isArray(duration) ? !duration.includes(seconds)
+    !duration || seconds === null || seconds === undefined || (Array.isArray(duration) ? !duration.includes(seconds)
       : seconds < duration.min_seconds || seconds > duration.max_seconds)
   )
   const modeConflict = videoMode?.supported === false

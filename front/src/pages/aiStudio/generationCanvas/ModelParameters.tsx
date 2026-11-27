@@ -13,7 +13,7 @@ export function ImageModelParameters({ card, capability, disabled, onChange, has
   const profiles = capability?.resolution_profiles || {}
   const resolutions = Object.keys(profiles[config.target_ratio || ''] || {})
   const supportsResolution = Object.values(profiles).some(values => Object.keys(values).length > 0)
-  const maxCount = (hasReference && capability?.reference_max_count != null) ? capability.reference_max_count : capability?.max_count
+  const maxCount = (hasReference ? capability?.reference_max_count : undefined) ?? capability?.max_count
   return <>
     {ratios.length > 0 && <Select size="small" bordered={false} disabled={disabled} aria-label={uiText("图片画幅")} data-diagnostic-control="target_ratio" value={config.target_ratio || 'default'}
       options={[{ value: 'default', label: uiText("默认画幅") }, ...options(ratios)]} onChange={value => onChange({ ...card, config: { ...config, target_ratio: value === 'default' ? null : value } })} />}
