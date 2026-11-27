@@ -114,6 +114,7 @@ class ProviderSupportedRead(BaseModel):
     key: str = Field(..., description="供应商稳定键")
     display_name: str = Field(..., description="供应商展示名")
     test_prompts: dict[ModelCategoryKey, str] = Field(default_factory=dict)
+    capability_defaults: dict[ModelCategoryKey, ModelCapabilityProfile] = Field(default_factory=dict)
     live_model_catalog: bool = False
     aliases: list[str] = Field(default_factory=list, description="可识别别名")
     supported_categories: list[ModelCategoryKey] = Field(

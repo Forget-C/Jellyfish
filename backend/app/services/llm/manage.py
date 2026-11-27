@@ -42,6 +42,7 @@ from app.services.llm.provider_registry import (
     is_provider_category_supported,
     list_registered_providers,
 )
+from app.core.integrations.model_capabilities import model_profile
 from app.services.llm.model_capabilities import model_operation_capabilities
 from app.bootstrap import bootstrap_all_registries
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
@@ -221,7 +222,7 @@ async def import_provider_models(
             category=candidate.category,
             provider_id=provider.id,
             params=candidate.params,
-            capability_profile=candidate.capability_profile.model_dump() if candidate.capability_profile else None,
+            capability_profile=candidate.capability_profile.model_dump(exclude_unset=True) if candidate.capability_profile else None,
             description=candidate.description,
             created_by="model_catalog",
         )
@@ -296,7 +297,7 @@ async def create_model(
         category=body.category,
         provider_id=body.provider_id,
         params=body.params,
-        capability_profile=body.capability_profile.model_dump() if body.capability_profile else None,
+        capability_profile=body.capability_profile.model_dump(exclude_unset=True) if body.capability_profile else None,
         description=body.description,
         created_by=body.created_by,
     )
@@ -321,6 +322,7 @@ async def read_model(db: AsyncSession, model: Model) -> ModelRead:
 
 def _model_read(model: Model, provider: Provider) -> ModelRead:
     data = ModelRead.model_validate(model)
+    data.capability_profile = model_profile(provider.provider_key, model.name, model.category, data.capability_profile)
     operation = {"image": "image_generation", "video": "video_generation"}.get(model.category, "chat")
     effective = model_operation_capabilities(model, provider, operation, data.capability_profile)
     data.effective_capabilities = effective.features
@@ -493,6 +495,7 @@ def list_supported_providers(*, category: ModelCategoryKey | None) -> list[Provi
             key=spec.key,
             display_name=spec.display_name,
             test_prompts={c: PROMPTS[c] for c in TEST_CATEGORIES.get(spec.key, {}) if c in spec.supported_categories},
+            capability_defaults={c: model_profile(spec.key, "", c) for c in spec.supported_categories},
             live_model_catalog=has_remote_model_catalog(spec.key),
             aliases=list(spec.aliases),
             supported_categories=list(spec.supported_categories),

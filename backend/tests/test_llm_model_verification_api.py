@@ -95,7 +95,7 @@ async def test_verification_requires_the_full_tool_round_trip(model_http, calls_
     assert previous["provider_name"] == "Managed endpoint"
     assert previous["endpoint"] == data["endpoint"]
     profile = (await model_http.get("models/model1")).json()["data"]["capability_profile"]
-    assert profile["tool_calling"] == {"declaration": "supported", "source": "Original claim"}
+    assert profile["tool_calling"] is True
 
 
 def _color(pixel):

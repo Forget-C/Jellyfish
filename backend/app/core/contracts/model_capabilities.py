@@ -53,43 +53,51 @@ class VideoModeDeclaration(BaseModel):
     audio_switch: bool | None = None
 
 
-class CapabilityDeclaration(BaseModel):
-    """A model's declared support, independent of the current operation's adapter."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    declaration: Literal["supported", "unsupported", "unknown"] = "unknown"
-    source: str | None = Field(None, max_length=255)
-
-
 class ModelCapabilityProfile(BaseModel):
     """Model declarations stored apart from the parameters sent to providers."""
 
     model_config = ConfigDict(extra="forbid")
 
-    text_inputs: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    image_inputs: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    video_inputs: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    audio_inputs: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    text_outputs: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    tool_calling: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    image_outputs: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    video_outputs: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    audio_outputs: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    non_streaming: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    native_streaming: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    tool_results: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    parallel_tool_calls: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    streaming_tool_arguments: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    json_object: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    json_schema: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    direct_result: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    remote_task: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
-    remote_cancel: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
+    text_inputs: bool = True
+    image_inputs: bool = False
+    video_inputs: bool = False
+    audio_inputs: bool = False
+    text_outputs: bool = True
+    tool_calling: bool = True
+    image_outputs: bool = False
+    video_outputs: bool = False
+    audio_outputs: bool = False
+    non_streaming: bool = True
+    native_streaming: bool = True
+    tool_results: bool = True
+    parallel_tool_calls: bool = False
+    streaming_tool_arguments: bool = False
+    json_object: bool = False
+    json_schema: bool = False
+    direct_result: bool = True
+    remote_task: bool = False
+    remote_cancel: bool = False
+    context_window: int | None = Field(None, gt=0, strict=True)
     max_input_tokens: int | None = Field(None, gt=0, strict=True)
     max_output_tokens: int | None = Field(None, gt=0, strict=True)
     image_modes: dict[ImageOperationMode, ImageModeDeclaration] = Field(default_factory=dict)
     video_modes: dict[VideoOperationMode, VideoModeDeclaration] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def read_legacy_declarations(cls, value):
+        """Read saved tri-state declarations, letting missing values inherit defaults."""
+        if not isinstance(value, dict):
+            return value
+        fields = dict(value)
+        for key, item in value.items():
+            if cls.__annotations__.get(key) is bool and isinstance(item, dict):
+                declaration = item.get("declaration", "unknown")
+                if declaration == "unknown":
+                    fields.pop(key)
+                elif declaration in ("supported", "unsupported"):
+                    fields[key] = declaration == "supported"
+        return fields
 
 
 class EffectiveModelCapabilities(BaseModel):

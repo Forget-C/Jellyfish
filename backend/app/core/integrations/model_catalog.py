@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from urllib.parse import urlsplit
+
 import httpx
+
+from app.core.contracts.model_capabilities import ModelCapabilityProfile
+from app.core.integrations.model_capabilities import model_profile
 
 from app.core.contracts.model_catalog import ProviderModelCandidate, ProviderModelCatalog
 from app.core.contracts.model_provider import ModelProviderConfig, ModelProviderConfigurationError
@@ -23,6 +28,21 @@ class OpenAICompatibleModelCatalog:
         base_url = (cfg.base_url or "").rstrip("/")
         if not base_url:
             raise ModelProviderConfigurationError(f"Provider {cfg.provider} has no catalog base URL")
+        host = urlsplit(base_url).hostname or ""
+        if cfg.provider == "aliyun_bailian" and (host.endswith(".maas.aliyuncs.com") or host == "dashscope-us.aliyuncs.com") and base_url.endswith("/compatible-mode/v1"):
+            native = base_url.removesuffix("/compatible-mode/v1") + "/api/v1/models"
+            rows = []
+            page = 1
+            while True:
+                response = await self._client.get(native, headers={"Authorization": f"Bearer {cfg.api_key}"},
+                                                  params={"page_no": page, "page_size": 100})
+                response.raise_for_status()
+                output = response.json()["output"]
+                rows.extend(output["models"])
+                if not output["models"] or len(rows) >= output["total"]:
+                    break
+                page += 1
+            return _parse_remote_catalog(cfg.provider, {"data": rows})
         response = await self._client.get(
             f"{base_url}/models", headers={"Authorization": f"Bearer {cfg.api_key}"}
         )
@@ -41,22 +61,57 @@ class BuiltinModelCatalog:
         return ProviderModelCatalog(
             provider_key=self._provider,
             source="provider_catalog",
-            models=[model.model_copy(deep=True) for model in self._models],
+            models=[model.model_copy(update={"capability_profile": model_profile(
+                self._provider, model.name, model.category)}) for model in self._models],
         )
 
 
 def _parse_remote_catalog(provider: str, payload: dict[str, Any]) -> ProviderModelCatalog:
-    names = [
-        str(item.get("id") or item.get("name") or "").strip()
-        for item in (payload.get("data") or payload.get("models") or [])
-        if isinstance(item, dict)
-    ]
-    candidates = [
-        ProviderModelCandidate(name=name, category=_infer_category(name))
-        for name in sorted(set(names))
-        if name
-    ]
-    return ProviderModelCatalog(provider_key=provider, source="provider_api", models=candidates)
+    candidates = {}
+    for row in payload.get("data") or payload.get("models") or []:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("id") or row.get("model") or row.get("name") or "").strip()
+        if not name or any(part in name.lower() for part in ("embedding", "whisper", "transcribe", "moderation", "tts-", "rerank")):
+            continue
+        modality = row.get("modalities") or row.get("inference_metadata") or row
+        values = {}
+        for side, alias in (("input", "request"), ("output", "response")):
+            kinds = modality.get(side + "_modalities", modality.get(alias + "_modality"))
+            if isinstance(kinds, list) and kinds:
+                kinds = {str(kind).lower() for kind in kinds}
+                for kind in ("text", "image", "video", "audio"):
+                    values[f"{kind}_{side}s"] = kind in kinds
+        category = next((kind for kind in ("video", "image", "text") if values.get(kind + "_outputs")),
+                        _infer_category(name))
+        if row.get("domain") in {"Embedding", "Audio", "3DGeneration"} or (
+            "text_outputs" in values and not any(values[k + "_outputs"] for k in ("text", "video", "image"))
+        ):
+            continue
+        if provider == "volcengine" and category == "text" or provider == "aliyun_bailian" and category != "text":
+            continue
+        features = row.get("features")
+        if isinstance(features, dict):
+            tools = features.get("tools") or {}
+            structured = features.get("structured_outputs") or {}
+            for key, flag in (("tool_calling", tools.get("function_calling")),
+                              ("json_schema", structured.get("json_schema")), ("json_object", structured.get("json_object"))):
+                if isinstance(flag, bool):
+                    values[key] = flag
+        elif isinstance(features, list) and provider == "aliyun_bailian":
+            values["tool_calling"] = "function-calling" in features
+        limits = row.get("token_limits") or row.get("model_info") or row
+        for key, alias in (("context_window", "context_window"), ("max_input_tokens", "max_input_token_length"),
+                           ("max_output_tokens", "max_output_token_length")):
+            value = limits.get(key, limits.get(alias))
+            if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+                values[key] = value
+        candidates[name, category] = ProviderModelCandidate(
+            name=name, category=category, description=row.get("description") or "",
+            capability_profile=model_profile(provider, name, category, ModelCapabilityProfile.model_validate(values)),
+        )
+    return ProviderModelCatalog(provider_key=provider, source="provider_api",
+                                models=[candidates[key] for key in sorted(candidates)])
 
 
 def _infer_category(model_name: str) -> ModelCategoryKey:

@@ -295,7 +295,6 @@ export type { CanvasVideoFrameOrigin } from './models/CanvasVideoFrameOrigin';
 export type { CanvasVideoFrameRequest } from './models/CanvasVideoFrameRequest';
 export type { CanvasVideoFrameResult } from './models/CanvasVideoFrameResult';
 export type { CanvasVisualContinuity } from './models/CanvasVisualContinuity';
-export type { CapabilityDeclaration } from './models/CapabilityDeclaration';
 export type { CardTextEdit } from './models/CardTextEdit';
 export type { ChapterCreate } from './models/ChapterCreate';
 export type { ChapterOverview } from './models/ChapterOverview';

@@ -118,7 +118,7 @@ async def prepare(db, model_id, body):
         content, evidence = await describe_assistant_media(body.text, body.file_ids, sources, capability=caps)
         if evidence and any(item['observation'] == 'unavailable' for item in evidence):
             raise HTTPException(422, 'Attachment unavailable')
-    streaming = caps.native_streaming and profile.native_streaming.declaration != 'unsupported'
+    streaming = caps.native_streaming
     client = build_provider_agent_model(provider=provider, model=model, thinking=False,
                                        configure=lambda params: params.update(streaming=streaming, disable_streaming=not streaming))
     return client, content, streaming, caps.tool_results, shortcut, reference_only

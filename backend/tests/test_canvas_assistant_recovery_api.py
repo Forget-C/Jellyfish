@@ -33,7 +33,7 @@ async def _canvas(client, *, scene, native):
     suffix = uuid4().hex
     async with client.canvas_sessions.begin() as db:
         text_model = await db.get(Model, 'canvas-text')
-        text_model.capability_profile = {'tool_calling': {'declaration': 'supported'}} if native else None
+        text_model.capability_profile = {'tool_calling': {'declaration': 'supported'}} if native else {'tool_calling': False}
         (await db.get(Provider, text_model.provider_id)).api_key = 'test-text-key'
         db.add(Provider(id=suffix, provider_key='vidu', name=suffix, api_key='test-video-key', base_url='https://video.test'))
         await db.flush()

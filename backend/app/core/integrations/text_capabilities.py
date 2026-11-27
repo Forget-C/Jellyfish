@@ -32,55 +32,40 @@ def describe_model(
     if provider not in {"openai", "aliyun_bailian"}:
         return EffectiveModelCapabilities()
 
-    text_inputs = profile.text_inputs.declaration != "unsupported"
-    text_outputs = profile.text_outputs.declaration != "unsupported"
-    defaults = [
-        key for key in ("text_inputs", "text_outputs")
-        if getattr(profile, key).declaration == "unknown"
-    ]
+    text_inputs = profile.text_inputs
+    text_outputs = profile.text_outputs
     if operation == "storyboard_inspection":
         image, video = check_media_support(provider, model)
         return EffectiveModelCapabilities(
             text_inputs=text_inputs,
             text_outputs=text_outputs,
-            image_inputs=image and profile.image_inputs.declaration != "unsupported",
-            video_inputs=video and profile.video_inputs.declaration != "unsupported",
-            max_input_tokens=profile.max_input_tokens,
+            image_inputs=image and profile.image_inputs,
+            video_inputs=video and profile.video_inputs,
+            max_input_tokens=profile.max_input_tokens or profile.context_window,
             max_output_tokens=profile.max_output_tokens,
-            builtin_defaults=defaults + [
-                key for key, available in (("image_inputs", image), ("video_inputs", video))
-                if available and getattr(profile, key).declaration == "unknown"
-            ],
         )
 
     chat = text_inputs and text_outputs
-    video = chat and profile.video_inputs.declaration == "supported" and check_media_support(provider, model)[1]
-    tools = chat and profile.tool_calling.declaration == "supported"
-    stream = chat and profile.native_streaming.declaration == "supported"
-    non_streaming = chat and profile.non_streaming.declaration != "unsupported"
+    video = chat and profile.video_inputs and check_media_support(provider, model)[1]
+    tools = chat and profile.tool_calling
+    stream = chat and profile.native_streaming
+    non_streaming = chat and profile.non_streaming
     return EffectiveModelCapabilities(
         text_inputs=text_inputs,
         text_outputs=text_outputs,
-        image_inputs=chat and profile.image_inputs.declaration == "supported",
+        image_inputs=chat and profile.image_inputs,
         video_inputs=video,
-        audio_inputs=video and profile.audio_inputs.declaration == "supported"
+        audio_inputs=video and profile.audio_inputs
         and supports_synchronized_video_audio(provider, model),
         tool_calling=tools,
-        tool_results=tools and profile.tool_results.declaration != "unsupported",
-        parallel_tool_calls=tools and profile.parallel_tool_calls.declaration == "supported",
-        streaming_tool_arguments=tools and stream and profile.streaming_tool_arguments.declaration == "supported",
-        json_object=chat and profile.json_object.declaration == "supported",
-        json_schema=chat and profile.json_schema.declaration == "supported",
+        tool_results=tools and profile.tool_results,
+        parallel_tool_calls=tools and profile.parallel_tool_calls,
+        streaming_tool_arguments=tools and stream and profile.streaming_tool_arguments,
+        json_object=chat and profile.json_object,
+        json_schema=chat and profile.json_schema,
         non_streaming=non_streaming,
         native_streaming=stream,
-        direct_result=non_streaming and profile.direct_result.declaration != "unsupported",
-        max_input_tokens=profile.max_input_tokens,
+        direct_result=non_streaming and profile.direct_result,
+        max_input_tokens=profile.max_input_tokens or profile.context_window,
         max_output_tokens=profile.max_output_tokens,
-        builtin_defaults=defaults + [
-            key for key, available in (
-                ("non_streaming", non_streaming), ("direct_result", non_streaming),
-                ("tool_results", tools),
-            )
-            if available and getattr(profile, key).declaration == "unknown"
-        ],
     )

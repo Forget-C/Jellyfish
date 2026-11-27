@@ -16,7 +16,7 @@ from tests.test_generation_canvas_api import canvas_client, canvas_file_store  #
 async def test_assistant_partial_approval_uses_original_version_and_actual_receipt(canvas_client, monkeypatch, scene, native):
     async with canvas_client.canvas_sessions.begin() as db:
         model = await db.get(Model, 'canvas-text')
-        model.capability_profile = {'tool_calling': {'declaration': 'supported'}} if native else None
+        model.capability_profile = {'tool_calling': {'declaration': 'supported'}} if native else {'tool_calling': False}
         (await db.get(Provider, model.provider_id)).api_key = 'fixture'
     groups = [
         {'title': '第一镜', 'changes': [{'kind': 'add_card', 'reference': 'one',

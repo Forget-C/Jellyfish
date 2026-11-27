@@ -170,7 +170,7 @@ async def build_laboratory_chat(
     effective = describe_operation(provider_key, model.name, profile, "chat").features
     if streaming:
         # 未声明流式的旧连接仍可使用实验室 SSE。
-        if profile.native_streaming.declaration == "unsupported" or not (effective.text_inputs and effective.text_outputs):
+        if not effective.native_streaming or not (effective.text_inputs and effective.text_outputs):
             raise HTTPException(422, "Model does not support streaming text")
     elif not effective.non_streaming:
         raise HTTPException(422, "Model does not support non-streaming text")

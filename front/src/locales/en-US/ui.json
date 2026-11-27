@@ -4189,5 +4189,12 @@
   "已恢复部分回复，最终状态待核实": "Partial reply recovered. The final status is unverified.",
   "没有找到指令中点名的镜头，请核对镜头或引用对应卡片。": "The named shot could not be found. Check the shot or reference its card.",
   "素材已准备": "Media prepared",
-  "其他画布的编组超过单轮可引用范围，请减少引用卡片。": "This group exceeds the reference limit. Reduce the number of referenced cards."
+  "其他画布的编组超过单轮可引用范围，请减少引用卡片。": "This group exceeds the reference limit. Reduce the number of referenced cards.",
+  "上下文窗口（tokens）": "Context window (tokens)",
+  "最大输入（tokens）": "Maximum input (tokens)",
+  "高级能力": "Advanced capabilities",
+  "-1 表示未指定，实际限制以供应商为准。": "Use -1 to leave unspecified. Provider limits apply.",
+  "请输入正整数或 -1": "Enter a positive integer or -1",
+  "当前对话接入无法使用此能力": "Unavailable through the current chat integration",
+  "恢复默认值": "Restore defaults"
 }

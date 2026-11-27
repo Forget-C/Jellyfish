@@ -370,7 +370,7 @@ class TaskWorker:
                         profile = ModelCapabilityProfile.model_validate(
                             (task.input_snapshot.get("execution_config") or {}).get("capability_profile") or {},
                         )
-                        outcome = ("unsupported" if profile.remote_cancel.declaration == "unsupported"
+                        outcome = ("unsupported" if "remote_cancel" in profile.model_fields_set and not profile.remote_cancel
                                    else await provider.cancel(reference))
                         async with self.sessions.begin() as db:
                             await TaskService(db).record_remote_cancel(task_id, outcome)

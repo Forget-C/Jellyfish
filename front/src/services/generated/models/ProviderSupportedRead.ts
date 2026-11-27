@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ModelCapabilityProfile_Output } from './ModelCapabilityProfile_Output';
 import type { ModelCategoryKey } from './ModelCategoryKey';
 /**
  * 系统支持的供应商能力清单。
@@ -16,6 +17,7 @@ export type ProviderSupportedRead = {
      */
     display_name: string;
     test_prompts?: Record<string, string>;
+    capability_defaults?: Record<string, ModelCapabilityProfile_Output>;
     live_model_catalog?: boolean;
     /**
      * 可识别别名

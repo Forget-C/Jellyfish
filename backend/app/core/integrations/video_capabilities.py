@@ -115,7 +115,7 @@ def validate_video_declaration(
         return
     if rule.supported is False:
         raise ValueError(f"video mode is unsupported: {mode}")
-    if rule.ratios is not None and input_.ratio not in rule.ratios:
+    if input_.ratio is not None and rule.ratios is not None and input_.ratio not in rule.ratios:
         raise ValueError("ratio is outside the declared video options")
     if frames and frame_count and subjects and rule.combine_subjects_and_frames is False:
         raise ValueError("subject and frame references cannot be combined in this video mode")

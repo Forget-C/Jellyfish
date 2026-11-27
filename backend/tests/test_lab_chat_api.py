@@ -109,7 +109,7 @@ async def test_chat_admission_stop_and_independent_session(canvas_client, monkey
 async def test_media_understanding_is_checked_before_turn_admission(canvas_client):
     async with canvas_client.canvas_sessions.begin() as db:
         model = await db.get(Model, 'canvas-text')
-        model.capability_profile = {'image_inputs': {'declaration': 'unsupported'}}
+        model.capability_profile = {'image_inputs': False, 'tool_calling': False}
         db.add(ModelSettings(id=1, default_text_model_id='canvas-text'))
     file = await canvas_client.post('/api/v1/studio/files/upload', files={'file': ('scene.png', b'picture', 'image/png')})
     created = await canvas_client.post('/api/v1/studio/experiment-sessions', json={'lab_type': 'chat'})
@@ -130,14 +130,16 @@ async def test_native_text_stream_publishes_real_model_chunks(canvas_client, mon
     async with canvas_client.canvas_sessions.begin() as db:
         (await db.get(Provider, 'canvas-provider')).api_key = 'local'
         model = await db.get(Model, 'canvas-text')
-        model.capability_profile = {'native_streaming': {'declaration': 'supported'}}
+        model.capability_profile = None
         db.add(ModelSettings(id=1, default_text_model_id=model.id))
     original = httpx.AsyncClient.send
 
     async def respond(client, request, **kwargs):
         if request.url.host != 'example.test':
             return await original(client, request, **kwargs)
-        assert json.loads(request.content)['stream']
+        body = json.loads(request.content)
+        assert body['stream']
+        assert 'generate_image' in [tool['function']['name'] for tool in body['tools']]
         chunks = [{'choices': [{'index': 0, 'delta': {'content': part}}]} for part in ('rain', 'fall')]
         return httpx.Response(200, request=request, headers={'content-type': 'text/event-stream'},
                               content=''.join('data: ' + json.dumps(chunk) + '\n\n' for chunk in chunks)

@@ -68,7 +68,7 @@ async def approve_structure(client, url, canvas, proposal):
 async def test_write_canvas_from_chat_prepares_a_real_preview(canvas_client, monkeypatch, structured, write_request):
     async with canvas_client.canvas_sessions.begin() as db:
         model = await db.get(Model, 'canvas-text')
-        model.capability_profile = None
+        model.capability_profile = {'tool_calling': False}
     canvas = (await canvas_client.post('/canvases', json={'name': '旧方案画布'})).json()['data']
     url = f"/canvases/{canvas['id']}"
     assistant = url + '/assistant'
@@ -469,7 +469,7 @@ async def test_large_canvas_proposal_recovers_from_invalid_output(canvas_client,
     from uuid import uuid4
 
     async with canvas_client.canvas_sessions.begin() as db:
-        (await db.get(Model, 'canvas-text')).capability_profile = None
+        (await db.get(Model, 'canvas-text')).capability_profile = {'tool_calling': False}
     if surface == 'draft':
         canvas_id = str(uuid4())
         draft_path = f'/canvases/drafts/{canvas_id}'
@@ -567,7 +567,7 @@ async def test_batch_merges_references_and_preserves_independent_groups(canvas_c
     native = surface == 'free-native'
     async with canvas_client.canvas_sessions.begin() as db:
         (await db.get(Model, 'canvas-text')).capability_profile = (
-            {'tool_calling': {'declaration': 'supported'}} if native else None
+            {'tool_calling': {'declaration': 'supported'}} if native else {'tool_calling': False}
         )
     suffix = '?project_id=p' if surface == 'scene' else ''
     if surface == 'draft':

@@ -173,7 +173,7 @@ async def test_generation_waits_for_a_separately_approved_edit(runtime, monkeypa
                                                                expected_runs):
     async with runtime.sessions.begin() as db:
         model = await db.get(Model, runtime.model_id)
-        model.capability_profile = None if scenario == 'named_plain' else {'tool_calling': {'declaration': 'supported'}}
+        model.capability_profile = {'tool_calling': False} if scenario == 'named_plain' else {'tool_calling': {'declaration': 'supported'}}
         db.add(ModelSettings(id=1, default_text_model_id=model.id))
         db.add(Model(id='video-model', name='sora-2', category='video', provider_id=runtime.provider_id))
     current = (await runtime.client.get(runtime.url)).json()['data']

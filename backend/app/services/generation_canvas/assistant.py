@@ -326,8 +326,7 @@ class CanvasAssistant:
 
     async def _model_client(self, model, provider, capability, *, stream_reply=False):
         """Resolve the provider transport needed to deliver the model's actual media inputs."""
-        streaming_disabled = ModelCapabilityProfile.model_validate(
-            model.capability_profile or {}).native_streaming.declaration == 'unsupported'
+        streaming_disabled = not capability.native_streaming
 
         def configure(params):
             if streaming_disabled:

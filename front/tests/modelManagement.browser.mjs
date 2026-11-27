@@ -17,6 +17,7 @@ const model = {
   description: '完整说明' + '，用于验证长文本的浏览和换行'.repeat(20),
   created_by: '验收创建人',
   params: { long_value: 'abcdefghijklmnopqrstuvwxyz'.repeat(35) },
+  capability_profile: { tool_calling: true, native_streaming: true },
   storyboard_inspection_capabilities: { image_inputs: true, video_inputs: false },
 }
 const provider = { provider_key: 'openai', id: 'provider1', name: '验收供应商', base_url: 'https://example.invalid' }
@@ -93,7 +94,7 @@ try {
     if (pathname.endsWith('/providers')) return respond({ items: [provider], pagination: { total: 1 } })
     if (pathname.endsWith('/providers/provider1/models/catalog')) {
       return respond({
-        provider_id: provider.id, provider_key: 'fixture', source: 'provider_catalog', models: [{ name: '目录模型', category: 'text', description: '目录描述', params: { temperature: 0.5 } }],
+        provider_id: provider.id, provider_key: 'fixture', source: 'provider_catalog', models: [{ name: '目录模型', category: 'text', description: '目录描述', params: { temperature: 0.5 }, capability_profile: { image_inputs: true, tool_calling: true, native_streaming: true } }],
       })
     }
     if (pathname.endsWith('/providers/provider1/models/import') && route.request().method() === 'POST') {
@@ -105,9 +106,10 @@ try {
         { name: '目录模型', category: 'text', description: '目录描述', params: { temperature: 0.5 } },
       ])
       for (const declaration of declarations) {
-        assert.deepEqual(declaration.tool_calling, { declaration: 'supported', source: '验收依据' })
-        assert.equal(declaration.native_streaming.declaration, 'supported')
+        assert.equal(declaration.tool_calling, false)
+        assert.equal(declaration.native_streaming, true)
       }
+      assert.equal(declarations[1].image_inputs, true)
       const created = { ...models[0], id: 'new-model', provider_id: provider.id }
       rows.push(created)
       return respond({ created: [created], skipped: [models[1]] })
@@ -125,7 +127,7 @@ try {
         ...(omitTotal ? {} : { pagination: { total: matching.length } }),
       })
     }
-    if (pathname.endsWith('/supported')) return respond([{ key: 'openai', display_name: 'OpenAI', supported_categories: ['text', 'image', 'video'] }])
+    if (pathname.endsWith('/supported')) return respond([{ key: 'openai', display_name: 'OpenAI', supported_categories: ['text', 'image', 'video'], capability_defaults: { text: { native_streaming: true, tool_calling: true } } }])
     if (pathname.endsWith('/model-settings')) {
       if (route.request().method() === 'PUT') {
         const body = route.request().postDataJSON()
@@ -163,7 +165,8 @@ try {
   assert.equal(await modelDescription.inputValue(), model.description)
   assert.match(await editor.getByRole('textbox', { name: '参数（JSON）' }).inputValue(), /abcdefghijklmnopqrstuvwxyz/)
   await editor.locator('summary').getByText('模型能力', { exact: true }).click()
-  await editor.getByRole('table', { name: '模型能力' }).getByText('未知', { exact: true }).first().waitFor()
+  assert.ok(await editor.getByRole('switch', { name: '工具调用', exact: true }).isChecked())
+  assert.equal(await editor.getByRole('spinbutton', { name: '上下文窗口（tokens）' }).inputValue(), '-1')
   await editor.getByText('分镜检查可读取图片和视频静帧，当前接入无法读取连续视频。').waitFor()
   assert.equal(capabilityVerifications.length, 0)
   await editor.getByRole('button', { name: '验证连续视频输入', exact: true }).click()
@@ -380,11 +383,7 @@ try {
   assert.equal(createRequests, 0)
   await json.fill('{}')
   await add.locator('summary').getByText('模型能力', { exact: true }).click()
-  await add.getByRole('combobox', { name: '工具调用', exact: true }).click()
-  await page.getByText('支持', { exact: true }).filter({ visible: true }).last().click()
-  await add.getByRole('textbox', { name: '工具调用来源', exact: true }).fill('验收依据')
-  await add.getByRole('combobox', { name: '原生流式响应', exact: true }).click()
-  await page.getByText('支持', { exact: true }).filter({ visible: true }).last().click()
+  await add.getByRole('switch', { name: '工具调用', exact: true }).click()
   await submit.click()
   await add.waitFor({ state: 'hidden' })
   assert.equal(createRequests, 1)
@@ -395,10 +394,7 @@ try {
   await created.waitFor()
   await created.click()
   await editor.locator('summary').getByText('模型能力', { exact: true }).click()
-  const toolRow = editor.getByRole('row').filter({ has: page.getByRole('rowheader', { name: '工具调用', exact: true }) })
-  await toolRow.getByText('支持', { exact: true }).waitFor()
-  await toolRow.getByText('验收依据', { exact: true }).waitFor()
-  assert.equal(await editor.getByRole('textbox', { name: '工具调用来源', exact: true }).inputValue(), '验收依据')
+  assert.equal(await editor.getByRole('switch', { name: '工具调用', exact: true }).isChecked(), false)
   await editor.getByRole('button', { name: '返回' }).click()
   await editor.waitFor({ state: 'hidden' })
   const addedRow = page.getByRole('row').filter({ has: created })

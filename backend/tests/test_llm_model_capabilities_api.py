@@ -50,7 +50,7 @@ async def test_model_capabilities_follow_each_provider_config(tmp_path) -> None:
 
             response = await http.get(path + "/models/a")
             configured = response.json()["data"]
-            assert configured["capability_profile"]["video_inputs"] == supported
+            assert configured["capability_profile"]["video_inputs"] is True
             assert configured["capability_profile"]["max_input_tokens"] == 16384
             assert configured["params"] == {"temperature": 0.3}
             assert configured["storyboard_inspection_capabilities"]["image_inputs"]
@@ -83,17 +83,14 @@ async def test_model_capabilities_follow_each_provider_config(tmp_path) -> None:
             listed = (await http.get(path + "/models")).json()["data"]["items"]
             by_id = {item["id"]: item for item in listed}
             assert by_id["a"]["capability_profile"] == updated.json()["data"]["capability_profile"]
-            assert by_id["b"]["capability_profile"]["tool_calling"]["declaration"] == "unknown"
+            assert by_id["b"]["capability_profile"]["tool_calling"] is True
+            assert by_id["b"]["effective_capabilities"]["tool_results"]
+            assert by_id["b"]["effective_capabilities"]["native_streaming"]
             assert by_id["b"]["effective_capabilities"]["max_output_tokens"] is None
-            assert not by_id["b"]["effective_capabilities"]["native_streaming"]
-            assert set(by_id["b"]["effective_capabilities"]["builtin_defaults"]) == {
-                "text_inputs", "text_outputs", "non_streaming", "direct_result",
-            }
-            assert "image_inputs" in by_id["b"]["storyboard_inspection_capabilities"]["builtin_defaults"]
 
             assert (await http.patch(path + "/providers/a", json={"status": "disabled"})).status_code == 200
             disabled = (await http.get(path + "/models/a")).json()["data"]
-            assert disabled["capability_profile"]["tool_calling"] == supported
+            assert disabled["capability_profile"]["tool_calling"] is True
             assert not disabled["effective_capabilities"]["tool_calling"]
             assert not disabled["storyboard_inspection_capabilities"]["image_inputs"]
     finally:

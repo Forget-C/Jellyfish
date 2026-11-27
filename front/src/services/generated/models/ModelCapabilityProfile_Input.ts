@@ -2,32 +2,32 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { CapabilityDeclaration } from './CapabilityDeclaration';
 import type { ImageModeDeclaration } from './ImageModeDeclaration';
 import type { VideoModeDeclaration } from './VideoModeDeclaration';
 /**
  * Model declarations stored apart from the parameters sent to providers.
  */
 export type ModelCapabilityProfile_Input = {
-    text_inputs?: CapabilityDeclaration;
-    image_inputs?: CapabilityDeclaration;
-    video_inputs?: CapabilityDeclaration;
-    audio_inputs?: CapabilityDeclaration;
-    text_outputs?: CapabilityDeclaration;
-    tool_calling?: CapabilityDeclaration;
-    image_outputs?: CapabilityDeclaration;
-    video_outputs?: CapabilityDeclaration;
-    audio_outputs?: CapabilityDeclaration;
-    non_streaming?: CapabilityDeclaration;
-    native_streaming?: CapabilityDeclaration;
-    tool_results?: CapabilityDeclaration;
-    parallel_tool_calls?: CapabilityDeclaration;
-    streaming_tool_arguments?: CapabilityDeclaration;
-    json_object?: CapabilityDeclaration;
-    json_schema?: CapabilityDeclaration;
-    direct_result?: CapabilityDeclaration;
-    remote_task?: CapabilityDeclaration;
-    remote_cancel?: CapabilityDeclaration;
+    text_inputs?: boolean;
+    image_inputs?: boolean;
+    video_inputs?: boolean;
+    audio_inputs?: boolean;
+    text_outputs?: boolean;
+    tool_calling?: boolean;
+    image_outputs?: boolean;
+    video_outputs?: boolean;
+    audio_outputs?: boolean;
+    non_streaming?: boolean;
+    native_streaming?: boolean;
+    tool_results?: boolean;
+    parallel_tool_calls?: boolean;
+    streaming_tool_arguments?: boolean;
+    json_object?: boolean;
+    json_schema?: boolean;
+    direct_result?: boolean;
+    remote_task?: boolean;
+    remote_cancel?: boolean;
+    context_window?: (number | null);
     max_input_tokens?: (number | null);
     max_output_tokens?: (number | null);
     image_modes?: Record<string, ImageModeDeclaration>;
