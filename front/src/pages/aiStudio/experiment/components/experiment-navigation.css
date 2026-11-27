@@ -140,7 +140,7 @@
   min-width: 0;
   min-height: 0;
   padding: 12px;
-  border-inline-start: 1px solid var(--app-border);
+  border-inline-end: 1px solid var(--app-border);
 }
 
 .ant-drawer-body > .experiment-navigation {

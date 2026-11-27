@@ -283,6 +283,7 @@ try {
     await trigger.press('Enter')
     const drawer = page.getByRole('dialog').filter({ has: types })
     await drawer.getByRole('button', { name: '选择聊天类型', exact: true }).waitFor()
+    await page.waitForFunction(element => Math.abs(element.getBoundingClientRect().left) < 1, await drawer.elementHandle())
     await page.keyboard.press('Escape')
     await drawer.waitFor({ state: 'hidden' })
     await trigger.and(page.locator(':focus')).waitFor()
@@ -315,7 +316,12 @@ try {
       assert.ok(layout.barHeight >= 52 && layout.barHeight <= 56)
       assert.equal(layout.hasOverflow, false)
       if (width < 1024) await page.getByRole('button', { name: '会话导航', exact: true }).waitFor()
-      else assert.equal(Math.round((await types.boundingBox()).width), 272)
+      else {
+        const sidebar = await types.boundingBox()
+        const main = await page.getByRole('region', { name: '实验室 · 文本', exact: true }).boundingBox()
+        assert.equal(Math.round(sidebar.width), 272)
+        assert.ok(sidebar.x + sidebar.width <= main.x, 'Session navigation sits to the left of the conversation')
+      }
       await page.waitForFunction(({ button, controlHeight }) => {
         const bounds = button.getBoundingClientRect()
         return Math.abs(bounds.height - controlHeight) < 0.5 && bounds.bottom <= innerHeight

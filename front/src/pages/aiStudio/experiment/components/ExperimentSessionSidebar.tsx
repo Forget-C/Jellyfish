@@ -1,4 +1,4 @@
-/** 实验室右侧最近会话列表。 */
+/** 实验室左侧最近会话列表。 */
 import { useUiText } from '../../../../uiText'
 import { CommentOutlined, DeleteOutlined, EditOutlined, EllipsisOutlined, FileTextOutlined, MoreOutlined, PictureOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import { Alert, Button, Dropdown, Input, Modal, Tooltip } from 'antd'
@@ -101,7 +101,7 @@ export function ExperimentSessionSidebar({ value, currentSessionDirty, currentSe
         const selected = session.id === value
         const menuItems = getMenuItems(session)
         return <div key={session.id} className="experiment-session-row">
-          <Tooltip title={uiText("{{label}}会话 · {{title}}", { label: labMeta[session.lab_type].label, title: session.title })} placement="left" trigger={['hover', 'focus']} mouseEnterDelay={0.6}>
+          <Tooltip title={uiText("{{label}}会话 · {{title}}", { label: labMeta[session.lab_type].label, title: session.title })} placement="right" trigger={['hover', 'focus']} mouseEnterDelay={0.6}>
           <button
             type="button"
             className="experiment-nav-item experiment-session-link"

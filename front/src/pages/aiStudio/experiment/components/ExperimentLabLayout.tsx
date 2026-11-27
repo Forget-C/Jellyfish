@@ -55,6 +55,7 @@ export function ExperimentLabLayout({ title, sessionTitle, draft, welcomeTitle, 
   return (
     <WorkspaceLayout className="experiment-workspace">
       <div className="app-lab-layout">
+        {wide && sidebar(closeNavigation)}
         <section className="app-lab-main" aria-label={title}>
           <PageToolbar className="experiment-toolbar" title={<>{title}<span className="experiment-session-title" title={sessionTitle}> · {sessionTitle ?? uiText("新会话")}</span></>}>
             {!wide && <Button className="experiment-navigation-trigger" ref={sidebarTrigger} type="text" icon={<MenuOutlined />}
@@ -79,9 +80,8 @@ export function ExperimentLabLayout({ title, sessionTitle, draft, welcomeTitle, 
             </div>
           </div>
         </section>
-        {wide && sidebar(closeNavigation)}
       </div>
-      {!wide && <Drawer title={uiText("会话导航")} placement="right" width="min(272px, 100vw)"
+      {!wide && <Drawer title={uiText("会话导航")} placement="left" width="min(272px, 100vw)"
         open={sessionsOpen} onClose={closeNavigation}>{sidebar(closeNavigation)}</Drawer>}
       <ExperimentSessionConfirmation
         title={uiText("清空会话内容")}
