@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
-import { Alert, Button, Space, Spin, Tag } from 'antd'
+import { useEffect, useRef, useState } from 'react'
+import { Button, Checkbox, Popover, Space, Tooltip } from 'antd'
 import { LlmService } from '../../../services/generated'
-import type { ModelCapabilityVerificationRead } from '../../../services/generated'
+import type { ModelCapabilityProfile_Input, ModelCapabilityVerificationRead } from '../../../services/generated'
 import { uiText } from '../../../uiText'
 
 const CAPABILITIES = {
@@ -23,88 +23,84 @@ const RESULTS = {
   probe_unavailable: '无法准备本次验证素材',
 } as const
 
-export function ModelCapabilityVerifications({ modelId, canVerify }: { modelId: string; canVerify: boolean }) {
-  const [items, setItems] = useState<ModelCapabilityVerificationRead[]>([])
-  const [loading, setLoading] = useState(true)
-  const [pending, setPending] = useState<Capability>()
-  const [error, setError] = useState('')
-  const [retry, setRetry] = useState(0)
-
+export function useCapabilityTests(modelId?: string) {
+  const activeModel = useRef(false)
   useEffect(() => {
+    activeModel.current = true
+    return () => { activeModel.current = false }
+  }, [modelId])
+  const [items, setItems] = useState<ModelCapabilityVerificationRead[]>([])
+  const [pending, setPending] = useState<Capability>()
+  const [historyError, setHistoryError] = useState(false)
+  const [failed, setFailed] = useState<Capability[]>([])
+  const [reload, setReload] = useState(0)
+  useEffect(() => {
+    if (!modelId) return
     let active = true
     const request = LlmService.getModelCapabilityVerificationsApiV1LlmModelsModelIdCapabilityVerificationsGet({ modelId })
-    void request.then(result => {
-      if (active) setItems(result.data ?? [])
-    }).catch(() => {
-      if (active) setError(uiText('读取验证历史失败'))
-    }).finally(() => {
-      if (active) setLoading(false)
-    })
-    return () => {
-      active = false
-      request.cancel()
-    }
-  }, [modelId, retry])
-
-  const verify = async (capability: Capability) => {
-    if (pending !== undefined) return
-    setPending(capability)
-    setError('')
-    try {
-      const result = await LlmService.verifyModelCapabilityApiV1LlmModelsModelIdCapabilityVerificationsPost({
-        modelId,
-        requestBody: { capability },
-      })
-      if (result.data) {
-        const record = result.data
-        setItems(previous => [record, ...previous])
+    request.then(result => {
+      if (active) {
+        setItems(local => [...local, ...(result.data ?? []).filter(row => !local.some(item => item.id === row.id))])
+        setHistoryError(false)
       }
-    } catch {
-      setError(uiText('无法发起能力验证'))
-    } finally {
-      setPending(undefined)
-    }
-  }
+    }).catch(() => { if (active) setHistoryError(true) })
+    return () => { active = false; request.cancel() }
+  }, [modelId, reload])
 
-  return (
-    <div className="w-full min-w-0 space-y-3">
-      {canVerify && <>
-        <p className="text-xs text-slate-600">{uiText('验证会向已保存的模型发送一次测试，工具调用需要两轮请求。')}</p>
-        <Space size={[8, 8]} wrap>
-          {CHECKS.map(capability => (
-            <Button key={capability} size="small" disabled={loading || (pending !== undefined && pending !== capability)}
-              loading={pending === capability} onClick={() => void verify(capability)}>
-              {uiText('验证{{capability}}', { capability: uiText(CAPABILITIES[capability]) })}
-            </Button>
-          ))}
-        </Space>
-      </>}
-      {error && (
-        <Alert type="error" showIcon message={error} action={(
-          <Button size="small" onClick={() => {
-            setError('')
-            setLoading(true)
-            setRetry(previous => previous + 1)
-          }}>{uiText('重新读取')}</Button>
-        )} />
-      )}
-      {loading && <Spin size="small" />}
-      {!loading && items.length === 0 && !error && <p className="text-xs">{uiText('暂无模型能力验证记录')}</p>}
-      {items.length > 0 && <ol className="space-y-3" aria-label={uiText('模型能力验证历史')}>
-        {items.map(record => (
-          <li key={record.id} className="break-all border-b pb-2">
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="font-medium">{uiText(CAPABILITIES[record.capability])}</span>
-              <Tag color={record.outcome === 'passed' ? 'green' : 'orange'}>{uiText(RESULTS[record.reason])}</Tag>
-              <Tag>{uiText(record.current ? '当前配置' : '历史配置')}</Tag>
-            </div>
-            <div className="text-xs">{record.provider_name}</div>
-            <div className="text-xs">{record.model_name}</div>
-            {record.endpoint && <div className="text-xs">{record.endpoint}</div>}
-            <time className="text-xs" dateTime={record.tested_at}>{new Date(record.tested_at).toLocaleString()}</time>
-          </li>
-        ))}
-      </ol>}
-    </div>
-  )
+  async function run(queue: Capability[]) {
+    if (!modelId || pending || !queue.length) return
+    for (const capability of queue) {
+      if (!activeModel.current) break
+      setPending(capability)
+      try {
+        const { data } = await LlmService.verifyModelCapabilityApiV1LlmModelsModelIdCapabilityVerificationsPost({ modelId, requestBody: { capability } })
+        if (!data) throw new Error()
+        setItems(previous => [data, ...previous])
+        setFailed(previous => previous.filter(key => key !== capability))
+      } catch {
+        setFailed(previous => [...new Set([...previous, capability])])
+      }
+    }
+    setPending(undefined)
+  }
+  return { items, failed, pending, historyError, reloadHistory: () => setReload(value => value + 1), run }
+}
+
+export function ModelCapabilityVerifications({ modelId, group, profile, tests }: {
+  modelId?: string; group: 'input' | 'tools'; profile: ModelCapabilityProfile_Input; tests: ReturnType<typeof useCapabilityTests>
+}) {
+  const checks = CHECKS.filter(key => (key === 'tool_calling') === (group === 'tools'))
+  const label = uiText(group === 'input' ? '测试输入模态' : '测试工具调用')
+  const [selected, setSelected] = useState<Capability[]>([])
+  const [open, setOpen] = useState(false)
+  const panel = useRef<HTMLDivElement>(null)
+  const { items, failed, pending, historyError, reloadHistory, run } = tests
+  const history = items.filter(item => checks.includes(item.capability))
+  const content = <div ref={panel} className="model-cap-probe" role="group" aria-label={label} onKeyDown={event => {
+    if (event.key === 'Escape') { event.stopPropagation(); setOpen(false); document.getElementById('probe-' + group)?.focus() }
+  }}>
+    <p className="model-cap-note">{uiText(group === 'input' ? '本次测试使用已保存的配置。' : '使用已保存的配置发送两轮请求，检查函数调用和工具结果回传。')}</p>
+    {group === 'input' && <Checkbox.Group value={selected} disabled={!!pending} onChange={values => setSelected(values as Capability[])}
+      options={checks.map(value => ({ value, label: uiText(CAPABILITIES[value]) }))} />}
+    <Button size="small" disabled={!selected.length} loading={!!pending} onClick={() => void run(selected)}>{pending ? uiText(CAPABILITIES[pending]) : uiText('开始测试')}</Button>
+    <div aria-live="polite">{checks.map(key => {
+      const record = history.find(item => item.capability === key)
+      if (!record && !failed.includes(key)) return null
+      return <div key={key}>{uiText(CAPABILITIES[key])} · {uiText(failed.includes(key) ? '无法发起能力验证' : RESULTS[record!.reason])}
+        {(failed.includes(key) || record?.outcome === 'failed') && <Button type="link" size="small" disabled={!!pending} onClick={() => void run([key])}>{uiText('重试')}</Button>}
+      </div>
+    })}</div>
+    {historyError && <Button size="small" onClick={reloadHistory}>{uiText('重新读取验证历史')}</Button>}
+    {history.length > 0 && <details><summary>{uiText('验证历史')}</summary><ol>{history.map(item => <li key={item.id}>{uiText(CAPABILITIES[item.capability])} · {uiText(RESULTS[item.reason])}
+      <div>{item.model_name} · {item.provider_name} · {uiText(item.current ? '当前配置' : '历史配置')}</div>
+      <div className="model-cap-note break-all">{item.endpoint} · {new Date(item.tested_at).toLocaleString()}</div></li>)}</ol></details>}
+  </div>
+  if (!modelId) return <span className="model-cap-note">{uiText('保存模型后可测试')}</span>
+  return <Space orientation="vertical" size={0} align="end">
+    <Popover afterOpenChange={visible => { if (visible) panel.current?.querySelector<HTMLElement>('input:enabled, button:enabled')?.focus() }} trigger="click" placement="bottomRight" open={open} onOpenChange={next => {
+      if (next && !pending) setSelected(checks.filter(key => group === 'tools' || profile[key]))
+      setOpen(next)
+    }} content={content}><Button id={'probe-' + group} type="link" size="small" aria-label={label} aria-expanded={open}>{uiText('测试…')}</Button></Popover>
+    {history[0] && <Tooltip title={uiText(RESULTS[history[0].reason])}><span className="model-cap-note">{uiText(history[0].outcome === 'passed' ? '最近测试通过' : '最近测试未通过')}</span></Tooltip>}
+  </Space>
 }

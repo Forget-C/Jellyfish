@@ -1,0 +1,15 @@
+.model-cap-section > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.model-cap-section > header h2 { margin: 0; font-size: 16px; }
+.model-cap-fields { display: grid; gap: 16px; font-size: 14px; }
+.model-cap-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; }
+.model-cap-options { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+.model-cap-limits { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin-top: 8px; }
+.model-cap-limits .ant-form-item { margin: 0; }
+.model-cap-note { margin: 6px 0 0; font-size: 12px; line-height: 18px; color: var(--app-muted); }
+.model-cap-probe { max-width: min(320px, calc(100vw - 48px)); max-height: 55vh; overflow: auto; display: grid; gap: 10px; }
+@media (max-width: 599px) {
+  .model-cap-row { grid-template-columns: 1fr auto; }
+  .model-cap-row > .model-cap-options { grid-row: 2; grid-column: 1 / -1; }
+  .model-cap-row > :nth-child(3) { grid-area: 1 / 2; }
+  .model-cap-limits { grid-template-columns: 1fr; }
+}

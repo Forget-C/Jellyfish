@@ -10,6 +10,8 @@ import {
   Input,
   InputNumber,
   Switch,
+  Checkbox,
+  Tooltip,
   Button,
   Table,
   Tag,
@@ -28,6 +30,8 @@ import {
 import type { TableColumnsType } from 'antd'
 import {
   PlusOutlined,
+  UndoOutlined,
+  InfoCircleOutlined,
   DeleteOutlined,
   MoreOutlined,
   SearchOutlined,
@@ -36,7 +40,8 @@ import {
 } from '@ant-design/icons'
 import { PageToolbar, WorkspaceScrollPanel } from '../../../components'
 import { ApiError, LlmService } from '../../../services/generated'
-import { ModelCapabilityVerifications } from './ModelCapabilityVerifications'
+import './modelCapabilities.css'
+import { ModelCapabilityVerifications, useCapabilityTests } from './ModelCapabilityVerifications'
 import type {
   ModelRead,
   ModelCapabilityProfile_Input,
@@ -63,64 +68,72 @@ const DEFAULT_MODEL_FIELD_BY_CATEGORY = {
   image: 'default_image_model_id',
   video: 'default_video_model_id',
 } as const
-const MODEL_CAPABILITIES = [
-  ['text_inputs', '文本输入'],
-  ['image_inputs', '图片输入'],
-  ['video_inputs', '连续视频输入'],
-  ['audio_inputs', '音频输入'],
-  ['text_outputs', '文本输出'],
-  ['tool_calling', '工具调用'],
-  ['image_outputs', '图片输出'],
-  ['video_outputs', '视频输出'],
-  ['audio_outputs', '音频输出'],
-  ['non_streaming', '非流式响应'],
-  ['native_streaming', '原生流式响应'],
-  ['tool_results', '工具结果回传'],
-  ['parallel_tool_calls', '并行工具调用'],
-  ['streaming_tool_arguments', '流式工具参数'],
-  ['json_object', 'JSON 对象输出'],
-  ['json_schema', 'JSON Schema 结构化输出'],
-  ['direct_result', '直接返回结果'],
-] as const
-const TOKEN_LIMITS = [
-  ['context_window', '上下文窗口（tokens）'],
-  ['max_input_tokens', '最大输入（tokens）'],
-  ['max_output_tokens', '输出上限（tokens）'],
-] as const
 type CapabilityProfile = ModelCapabilityProfile_Input
+const MODALITIES = [['text', '文本'], ['image', '图像'], ['audio', '音频'], ['video', '视频']] as const
+const TOKEN_LIMITS = [['context_window', '上下文窗口'], ['max_input_tokens', '最大输入'], ['max_output_tokens', '最大输出']] as const
+
+function CapabilityReset({ defaults, loading, editing }: { defaults: CapabilityProfile; loading: boolean; editing: boolean }) {
+  const form = Form.useFormInstance()
+  const [previous, setPrevious] = useState<Partial<ModelFormValues> | null>(null)
+  return <Space size={4}>
+    {previous && <Button type="link" size="small" onClick={() => {
+      form.setFieldValue('capability_profile', previous.capability_profile)
+      form.setFieldValue('videoDurationRules', previous.videoDurationRules)
+      setPrevious(null)
+    }}>{uiText('撤销')}</Button>}
+    <Tooltip title={uiText('恢复模型能力默认值')}><Button type="text" icon={<UndoOutlined />} aria-label={uiText('恢复模型能力默认值')} disabled={loading} onClick={() => {
+      setPrevious(structuredClone({ capability_profile: form.getFieldValue('capability_profile'), videoDurationRules: form.getFieldValue('videoDurationRules') }))
+      form.setFieldValue('capability_profile', editing ? structuredClone(defaults) : {})
+      form.setFieldValue('videoDurationRules', undefined)
+    }} /></Tooltip>
+  </Space>
+}
 
 function ModelCapabilityFields({ defaults, model }: { defaults: CapabilityProfile; model: ModelRead | null }) {
   const form = Form.useFormInstance()
-  const tools = Form.useWatch(['capability_profile', 'tool_calling'], form) ?? defaults.tool_calling
-  const streaming = Form.useWatch(['capability_profile', 'native_streaming'], form) ?? defaults.native_streaming
-  const rows = MODEL_CAPABILITIES.map(([key, label]) => {
-    const disabled = (['tool_results', 'parallel_tool_calls', 'streaming_tool_arguments'].includes(key) && !tools)
-      || (key === 'streaming_tool_arguments' && !streaming)
-    return <Form.Item key={key} layout="horizontal" className="[&_.ant-form-item-control-input-content]:text-right" label={uiText(label)} name={['capability_profile', key]}
-      extra={model?.capability_profile?.[key] && model.effective_capabilities?.[key] === false
-        ? uiText('当前对话接入无法使用此能力') : undefined}
-      getValueProps={value => ({ checked: !disabled && (value ?? defaults[key] ?? false) })}
-      valuePropName="checked">
-      <Switch aria-label={uiText(label)} disabled={disabled} />
-    </Form.Item>
-  })
-  return <>
-    <div className="grid gap-x-4 sm:grid-cols-2">{rows.slice(0, 6)}</div>
-    <details><summary>{uiText('高级能力')}</summary>
-      <div className="grid gap-x-4 sm:grid-cols-2">{rows.slice(6)}</div>
-    </details>
-    {TOKEN_LIMITS.map(([key, label]) => <Form.Item key={key} name={['capability_profile', key]} label={uiText(label)}
-      getValueProps={value => ({ value: value === undefined ? defaults[key] ?? -1 : value ?? -1 })}
-      normalize={value => value === -1 || value === null || value === undefined ? null : value}
-      rules={[{ validator: async (_, value) => {
-        if (value !== null && value !== undefined && (!Number.isInteger(value) || value <= 0)) throw new Error(uiText('请输入正整数或 -1'))
-      } }]}>
-      <InputNumber min={-1} precision={0} className="w-full" />
-    </Form.Item>)}
-    <Typography.Text type="secondary">{uiText('-1 表示未指定，实际限制以供应商为准。')}</Typography.Text>
+  const profile: CapabilityProfile = Form.useWatch('capability_profile', form) ?? {}
+  const tools = profile.tool_calling ?? defaults.tool_calling
+  const streaming = profile.native_streaming ?? defaults.native_streaming
+  function field(key: Extract<keyof CapabilityProfile, keyof NonNullable<ModelRead['effective_capabilities']>>, label: string, reason?: string) {
+    const hint = reason || (model?.capability_profile?.[key] && model.effective_capabilities?.[key] === false ? '当前对话接入无法使用此能力' : undefined)
+    return <span key={key} className="inline-flex items-center gap-2">
+      <Form.Item noStyle name={['capability_profile', key]} valuePropName="checked" getValueProps={value => ({ checked: !reason && (value ?? defaults[key] ?? false) })}>
+        {key === 'tool_calling' ? <Switch size="small" aria-label={uiText(label)} /> : <Checkbox disabled={!!reason}>{uiText(label)}</Checkbox>}
+      </Form.Item>
+      {key === 'tool_calling' && uiText(label)}
+      {(hint || key === 'video_inputs') && <Tooltip title={uiText(hint || '读取连续视频')}><InfoCircleOutlined tabIndex={0} aria-label={uiText(hint || '读取连续视频')} /></Tooltip>}
+    </span>
+  }
+  function row(label: string, controls: ReactNode, action?: ReactNode) {
+    return <div className="model-cap-row" role="group" aria-label={uiText(label)}>
+      <span className="font-medium">{uiText(label)}</span><div className="model-cap-options">{controls}</div>{action}
+    </div>
+  }
+  const modelId = model?.category === 'text' ? model.id : undefined
+  const tests = useCapabilityTests(modelId)
+  const probe = (group: 'input' | 'tools') => <ModelCapabilityVerifications modelId={modelId} tests={tests} group={group} profile={{ ...defaults, ...profile }} />
+  return <div className="model-cap-fields">
+    {row('输入模态', MODALITIES.map(([key,label]) => field(`${key}_inputs`,label)), probe('input'))}
+    {row('输出模态', MODALITIES.map(([key,label]) => field(`${key}_outputs`,label)))}
+    {row('工具调用', <>{field('tool_calling','函数调用（Function calling）')}<div className="model-cap-options w-full">
+      {field('tool_results','工具结果回传', tools ? undefined : '请先开启函数调用')}
+      {field('parallel_tool_calls','并行工具调用', tools ? undefined : '请先开启函数调用')}
+      {field('streaming_tool_arguments','工具参数流式传输', !tools ? '请先开启函数调用' : !streaming ? '请先开启原生流式响应' : undefined)}
+    </div></>,probe('tools'))}
+    {row('结构化输出', <>{field('json_object','JSON 模式')}{field('json_schema','JSON Schema 约束输出')}</>)}
+    {row('响应方式', <>{field('non_streaming','非流式响应')}{field('native_streaming','原生流式响应')}</>)}
+    {row('结果返回',field('direct_result','直接返回结果'))}
+    <div><strong>{uiText('Token 限额')}</strong><div className="model-cap-limits">{TOKEN_LIMITS.map(([key,label]) =>
+      <Form.Item key={key} name={['capability_profile',key]} label={uiText(label)}
+        getValueProps={value => { const tokens = value === undefined ? defaults[key] : value; return { value: tokens > 0 ? tokens / 1000 : null } }}
+        normalize={value => value === null || value === undefined ? null : Math.round(value * 1000)}
+        rules={[{ validator: async (_, value) => { if (value !== null && value !== undefined && (!Number.isSafeInteger(value) || value <= 0)) throw new Error(uiText('请输入大于零的 Token 限额')) } }]}>
+        <InputNumber precision={3} formatter={(value, info) => info.userTyping ? info.input : value === null || value === undefined || String(value) === '' ? '' : String(Number(value))} step={0.001} suffix="K tokens" placeholder={uiText('未指定')} className="w-full" />
+      </Form.Item>)}</div>
+      <p className="model-cap-note">{uiText('1 K = 1,000 tokens。留空表示未指定，实际限制以供应商为准。')}</p></div>
     {model?.storyboard_inspection_capabilities?.image_inputs && !model.storyboard_inspection_capabilities.video_inputs &&
-      <p>{uiText('分镜检查可读取图片和视频静帧，当前接入无法读取连续视频。')}</p>}
-  </>
+      <p className="model-cap-note">{uiText('分镜检查可读取图片和视频静帧，当前接入无法读取连续视频。')}</p>}
+  </div>
 }
 
 const IMAGE_MODES = [
@@ -147,7 +160,7 @@ function ImageCapabilityFields({ model, providerKey, defaults }: { model: ModelR
             <Form.Item key={key} name={['capability_profile', 'image_modes', mode, key]} hidden={key !== 'supported' && !enabled} valuePropName="checked"
               getValueProps={value => ({ checked: value ?? defaults.image_modes?.[mode]?.[key] ?? false })}
               label={uiText(['是否支持此操作', '随机种子', '水印'][index])}>
-              <Switch />
+              <Switch size="small" />
             </Form.Item>
           ))}
           {(['sizes', 'ratios', 'resolution_profiles'] as const).map((key, index) => (
@@ -197,7 +210,7 @@ function VideoCapabilityFields({ model, providerKey, defaults }: { model: ModelR
         ] as const).map(([key, fieldLabel]) => (
           <Form.Item key={key} name={['capability_profile', 'video_modes', mode, key]} hidden={key !== 'supported' && !enabled} valuePropName="checked"
             getValueProps={value => ({ checked: value ?? defaults.video_modes?.[mode]?.[key] ?? false })} label={uiText(fieldLabel)}>
-            <Switch />
+            <Switch size="small" />
           </Form.Item>
         ))}
         <Form.Item name={['capability_profile', 'video_modes', mode, 'ratios']} hidden={!enabled} getValueProps={value => ({ value: value ?? defaults.video_modes?.[mode]?.ratios })} label={uiText('宽高比')}>
@@ -481,11 +494,6 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
       request.cancel()
     }
   }, [modelEditorOpen, modelEditing, selectedFormProviderId])
-
-  const resetCapabilities = <Button disabled={formCatalogLoading} onClick={() => {
-            form.setFieldValue('capability_profile', modelEditing ? structuredClone(defaults) : {})
-            form.setFieldValue('videoDurationRules', undefined)
-          }}>{uiText('恢复默认值')}</Button>
 
   const closeModelEditor = () => {
     const trigger = editorTrigger.current
@@ -995,36 +1003,16 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
               </Form.Item>
             </details>
           </section>
-          {selectedFormCategory === 'text' && <section className="project-settings-group">
-            <details>
-              <summary>{uiText('模型能力')}</summary>
-              {resetCapabilities}
-              {modelEditing && <>
-
-                <ModelCapabilityVerifications key={modelEditing.id} modelId={modelEditing.id}
-                  canVerify={modelEditing.category === 'text'} />
-              </>}
-              <ModelCapabilityFields defaults={defaults} model={modelEditing} />
-            </details>
-          </section>}
-          {selectedFormCategory === 'image' && <section className="project-settings-group">
-            <details>
-              <summary>{uiText('模型能力')}</summary>
-              {resetCapabilities}
-              <ImageCapabilityFields model={modelEditing} providerKey={selectedFormProvider?.provider_key} defaults={defaults} />
-            </details>
-          </section>}
-          {selectedFormCategory === 'video' && <section className="project-settings-group">
-            <details>
-              <summary>{uiText('模型能力')}</summary>
-              {resetCapabilities}
-              <VideoCapabilityFields model={modelEditing} providerKey={selectedFormProvider?.provider_key} defaults={defaults} />
-            </details>
+          {selectedFormCategory && <section className="project-settings-group model-cap-section">
+            <header><h2>{uiText('模型能力')}</h2><CapabilityReset key={JSON.stringify([selectedFormProviderId,selectedFormCategory,editedName,selectedNames])} defaults={defaults} loading={formCatalogLoading} editing={!!modelEditing} /></header>
+            {selectedFormCategory === 'text' && <ModelCapabilityFields defaults={defaults} model={modelEditing} />}
+            {selectedFormCategory === 'image' && <ImageCapabilityFields model={modelEditing} providerKey={selectedFormProvider?.provider_key} defaults={defaults} />}
+            {selectedFormCategory === 'video' && <VideoCapabilityFields model={modelEditing} providerKey={selectedFormProvider?.provider_key} defaults={defaults} />}
           </section>}
           {(selectedFormCategory === 'image' || selectedFormCategory === 'video') && selectedFormProvider?.provider_key === 'vidu' &&
             <Form.Item name={['capability_profile', 'remote_cancel']} label={uiText('远端取消')}
               valuePropName="checked" getValueProps={value => ({ checked: value ?? defaults.remote_cancel ?? false })}>
-              <Switch />
+              <Switch size="small" />
             </Form.Item>}
 
           {modelEditing && <Typography.Text type="secondary">{uiText("创建人")} · {modelEditing.created_by || '—'}</Typography.Text>}
