@@ -41,6 +41,7 @@ let textCursor = 0
 let holdTextSnapshot
 let textSendsAfterClear = false
 let textSnapshotUnavailable = false
+const newTextEventCursors = []
 const newTextSession = {
   id: 'text-new', lab_type: 'text', title: '新文本会话', created_at: timestamp, updated_at: timestamp,
 }
@@ -112,7 +113,10 @@ try {
       return route.fulfill({status: 202, json: {data: {...turnReceipt(route, 'first-turn'), cursor: 8}}})
     }
     if (url.pathname.endsWith('/text/text-new/events')) {
-      assert.equal(url.searchParams.get('after'), '8')
+      newTextEventCursors.push(url.searchParams.get('after'))
+      if (newTextEventCursors.length > 1) {
+        return route.fulfill({contentType: 'text/event-stream', body: ''})
+      }
       const user = historyMessage('text-new', 'first-user', 'user', '从回执续读', 1)
       const answer = historyMessage('text-new', 'first-answer', 'assistant', '首次快照失败后仍收到回复', 2, {
         status: 'succeeded', payload: {interaction_run_id: 'first-turn'},
@@ -516,10 +520,19 @@ try {
     if (new URL(response.url()).pathname.endsWith('/text/text-new/snapshot')) newSessionSnapshots.push(response.status())
   }
   page.on('response', trackSnapshot)
-  await textSubmit.click()
-  await page.getByText('首次快照失败后仍收到回复', {exact: true}).waitFor()
+  const newTextReply = page.getByText('首次快照失败后仍收到回复', {exact: true})
+  await Promise.all([
+    page.waitForResponse(response => {
+      const url = new URL(response.url())
+      return url.pathname.endsWith('/text/text-new/events') && url.searchParams.get('after') === '10'
+    }),
+    newTextReply.waitFor(),
+    textSubmit.click(),
+  ])
   page.off('response', trackSnapshot)
   assert.ok(newSessionSnapshots.includes(503))
+  assert.deepEqual(newTextEventCursors.slice(0, 2), ['8', '10'])
+  assert.equal(await newTextReply.count(), 1)
   assert.equal(writes.length, beforeCheckpoint + 1)
 
   await openLab('video')
