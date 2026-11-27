@@ -77,12 +77,20 @@ export function ModelCapabilityVerifications({ modelId, group, profile, tests }:
   const label = uiText(group === 'input' ? '测试输入模态' : '测试工具调用')
   const [selected, setSelected] = useState<Capability[]>([])
   const [open, setOpen] = useState(false)
+  const trigger = useRef<HTMLButtonElement>(null)
   const panel = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const disclosure = trigger.current?.closest('details')
+    const closeOnCollapse = () => { if (!disclosure?.open) setOpen(false) }
+    disclosure?.addEventListener('toggle', closeOnCollapse)
+    return () => disclosure?.removeEventListener('toggle', closeOnCollapse)
+  }, [open])
   const { items, latestRequestFailed, failed, pending, historyError, reloadHistory, run } = tests
   const history = items.filter(item => checks.includes(item.capability))
   const runningHere = pending && checks.includes(pending)
   const content = <div ref={panel} className="model-cap-probe" role="group" aria-label={label} onKeyDown={event => {
-    if (event.key === 'Escape') { event.stopPropagation(); setOpen(false); document.getElementById('probe-' + group)?.focus() }
+    if (event.key === 'Escape') { event.stopPropagation(); setOpen(false); trigger.current?.focus() }
   }}>
     <p className="model-cap-note">{uiText(group === 'input' ? '本次测试使用已保存的配置。' : '使用已保存的配置发送两轮请求，检查函数调用和工具结果回传。')}</p>
     {group === 'input' && <Checkbox.Group value={selected} disabled={!!pending} onChange={values => setSelected(values as Capability[])}
@@ -105,7 +113,7 @@ export function ModelCapabilityVerifications({ modelId, group, profile, tests }:
     <Popover afterOpenChange={visible => { if (visible) panel.current?.querySelector<HTMLElement>('input:enabled, button:enabled')?.focus() }} trigger="click" placement="bottomRight" open={open} onOpenChange={next => {
       if (next && !runningHere) setSelected(checks.filter(key => group === 'tools' || profile[key]))
       setOpen(next)
-    }} content={content}><Button id={'probe-' + group} type="link" size="small" aria-label={label} aria-expanded={open}>{uiText('测试…')}</Button></Popover>
+    }} content={content}><Button ref={trigger} type="link" size="small" aria-label={label} aria-expanded={open}>{uiText('测试…')}</Button></Popover>
     {latestRequestFailed[group] ? <span className="model-cap-note">{uiText('无法发起能力验证')}</span> : history[0] && <Tooltip title={uiText(RESULTS[history[0].reason])}><span className="model-cap-note">{uiText(history[0].outcome === 'passed' ? '最近测试通过' : '最近测试未通过')}</span></Tooltip>}
   </Space>
 }
