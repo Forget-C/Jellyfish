@@ -101,7 +101,7 @@ function ModelCapabilityFields({ defaults, model }: { defaults: CapabilityProfil
         {key === 'tool_calling' ? <Switch size="small" aria-label={uiText(label)} /> : <Checkbox disabled={!!reason}>{uiText(label)}</Checkbox>}
       </Form.Item>
       {key === 'tool_calling' && uiText(label)}
-      {(hint || key === 'video_inputs') && <Tooltip title={uiText(hint || '读取连续视频')}><InfoCircleOutlined tabIndex={0} aria-label={uiText(hint || '读取连续视频')} /></Tooltip>}
+      {(hint || key === 'video_inputs') && <Tooltip trigger={['hover', 'focus']} title={uiText(hint || '读取连续视频')}><InfoCircleOutlined tabIndex={0} aria-label={uiText(hint || '读取连续视频')} /></Tooltip>}
     </span>
   }
   function row(label: string, controls: ReactNode, action?: ReactNode) {

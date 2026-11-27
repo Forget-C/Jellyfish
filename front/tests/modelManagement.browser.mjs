@@ -62,6 +62,7 @@ try {
       if (route.request().method() === 'POST') {
         const { capability } = route.request().postDataJSON()
         assert.ok(['audio_inputs','video_inputs','tool_calling'].includes(capability))
+        if (capability === 'tool_calling' && capabilityVerifications.some(item => item.capability === capability)) return route.fulfill({status:503,json:{message:'服务暂不可用'}})
         const item = {
           id: 'verification'+capabilityVerifications.length, provider_id: provider.id, provider_name: provider.name,
           model_name: '此前保存的型号', endpoint: 'https://example.invalid/chat/completions',
@@ -172,6 +173,11 @@ try {
   assert.equal(await editor.getByRole('spinbutton', { name: '上下文窗口' }).inputValue(), '')
   await editor.getByText('分镜检查可读取图片和视频静帧，当前接入无法读取连续视频。').waitFor()
   assert.equal(capabilityVerifications.length, 0)
+  const inputGroup = editor.getByRole('group',{name:'输入模态',exact:true})
+  await inputGroup.getByLabel('读取连续视频').focus()
+  await page.getByRole('tooltip').getByText('读取连续视频').waitFor()
+  await inputGroup.scrollIntoViewIfNeeded()
+  await editor.screenshot({path:output+'/model-capabilities-desktop.png',animations:'disabled'})
   await page.setViewportSize({width:375,height:812})
   assert.ok(await editor.evaluate(node => node.scrollWidth <= node.clientWidth + 1))
   const probe = editor.getByRole('button',{name:'测试输入模态'})
@@ -190,7 +196,10 @@ try {
   const toolPanel = page.getByRole('group',{name:'测试工具调用'})
   await toolPanel.getByRole('button',{name:'开始测试'}).click()
   await toolPanel.getByText(/工具调用 · 验证通过/).first().waitFor()
+  await toolPanel.getByRole('button',{name:'开始测试'}).click()
+  await toolPanel.getByText(/工具调用 · 无法发起能力验证/).waitFor()
   await toolPanel.getByRole('button',{name:'开始测试'}).press('Escape')
+  await editor.getByRole('group',{name:'工具调用',exact:true}).getByText('无法发起能力验证',{exact:true}).waitFor()
   assert.deepEqual(capabilityVerifications.map(item => item.capability),['video_inputs','audio_inputs','video_inputs','tool_calling'])
   assert.equal(await editor.getByRole('group',{name:'输入模态',exact:true}).getByRole('checkbox',{name:'视频'}).isChecked(),false)
   await page.setViewportSize({width:1366,height:768})
@@ -421,6 +430,7 @@ try {
   const created = page.getByRole('button', { name: '新增验收模型', exact: true })
   await created.waitFor()
   await created.click()
+  assert.equal(await editor.getByRole('spinbutton', {name:'上下文窗口'}).inputValue(),'4.096')
   assert.equal(await editor.getByRole('switch', { name: '函数调用（Function calling）', exact: true }).isChecked(), false)
   await editor.getByRole('button', { name: '返回' }).click()
   await editor.waitFor({ state: 'hidden' })

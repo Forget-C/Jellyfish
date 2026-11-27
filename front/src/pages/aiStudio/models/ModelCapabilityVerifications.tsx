@@ -32,6 +32,7 @@ export function useCapabilityTests(modelId?: string) {
   const [items, setItems] = useState<ModelCapabilityVerificationRead[]>([])
   const [pending, setPending] = useState<Capability>()
   const [historyError, setHistoryError] = useState(false)
+  const [latestRequestFailed, setLatestRequestFailed] = useState({ input: false, tools: false })
   const [failed, setFailed] = useState<Capability[]>([])
   const [reload, setReload] = useState(0)
   useEffect(() => {
@@ -51,19 +52,22 @@ export function useCapabilityTests(modelId?: string) {
     if (!modelId || pending || !queue.length) return
     for (const capability of queue) {
       if (!activeModel.current) break
+      const group = capability === 'tool_calling' ? 'tools' : 'input'
       setPending(capability)
       try {
         const { data } = await LlmService.verifyModelCapabilityApiV1LlmModelsModelIdCapabilityVerificationsPost({ modelId, requestBody: { capability } })
         if (!data) throw new Error()
         setItems(previous => [data, ...previous])
+        setLatestRequestFailed(previous => ({ ...previous, [group]: false }))
         setFailed(previous => previous.filter(key => key !== capability))
       } catch {
+        setLatestRequestFailed(previous => ({ ...previous, [group]: true }))
         setFailed(previous => [...new Set([...previous, capability])])
       }
     }
     setPending(undefined)
   }
-  return { items, failed, pending, historyError, reloadHistory: () => setReload(value => value + 1), run }
+  return { items, latestRequestFailed, failed, pending, historyError, reloadHistory: () => setReload(value => value + 1), run }
 }
 
 export function ModelCapabilityVerifications({ modelId, group, profile, tests }: {
@@ -74,15 +78,16 @@ export function ModelCapabilityVerifications({ modelId, group, profile, tests }:
   const [selected, setSelected] = useState<Capability[]>([])
   const [open, setOpen] = useState(false)
   const panel = useRef<HTMLDivElement>(null)
-  const { items, failed, pending, historyError, reloadHistory, run } = tests
+  const { items, latestRequestFailed, failed, pending, historyError, reloadHistory, run } = tests
   const history = items.filter(item => checks.includes(item.capability))
+  const runningHere = pending && checks.includes(pending)
   const content = <div ref={panel} className="model-cap-probe" role="group" aria-label={label} onKeyDown={event => {
     if (event.key === 'Escape') { event.stopPropagation(); setOpen(false); document.getElementById('probe-' + group)?.focus() }
   }}>
     <p className="model-cap-note">{uiText(group === 'input' ? '本次测试使用已保存的配置。' : '使用已保存的配置发送两轮请求，检查函数调用和工具结果回传。')}</p>
     {group === 'input' && <Checkbox.Group value={selected} disabled={!!pending} onChange={values => setSelected(values as Capability[])}
       options={checks.map(value => ({ value, label: uiText(CAPABILITIES[value]) }))} />}
-    <Button size="small" disabled={!selected.length} loading={!!pending} onClick={() => void run(selected)}>{pending ? uiText(CAPABILITIES[pending]) : uiText('开始测试')}</Button>
+    <Button size="small" disabled={!selected.length || !!pending} loading={!!runningHere} onClick={() => void run(selected)}>{runningHere && pending ? uiText(CAPABILITIES[pending]) : uiText('开始测试')}</Button>
     <div aria-live="polite">{checks.map(key => {
       const record = history.find(item => item.capability === key)
       if (!record && !failed.includes(key)) return null
@@ -98,9 +103,9 @@ export function ModelCapabilityVerifications({ modelId, group, profile, tests }:
   if (!modelId) return <span className="model-cap-note">{uiText('保存模型后可测试')}</span>
   return <Space orientation="vertical" size={0} align="end">
     <Popover afterOpenChange={visible => { if (visible) panel.current?.querySelector<HTMLElement>('input:enabled, button:enabled')?.focus() }} trigger="click" placement="bottomRight" open={open} onOpenChange={next => {
-      if (next && !pending) setSelected(checks.filter(key => group === 'tools' || profile[key]))
+      if (next && !runningHere) setSelected(checks.filter(key => group === 'tools' || profile[key]))
       setOpen(next)
     }} content={content}><Button id={'probe-' + group} type="link" size="small" aria-label={label} aria-expanded={open}>{uiText('测试…')}</Button></Popover>
-    {history[0] && <Tooltip title={uiText(RESULTS[history[0].reason])}><span className="model-cap-note">{uiText(history[0].outcome === 'passed' ? '最近测试通过' : '最近测试未通过')}</span></Tooltip>}
+    {latestRequestFailed[group] ? <span className="model-cap-note">{uiText('无法发起能力验证')}</span> : history[0] && <Tooltip title={uiText(RESULTS[history[0].reason])}><span className="model-cap-note">{uiText(history[0].outcome === 'passed' ? '最近测试通过' : '最近测试未通过')}</span></Tooltip>}
   </Space>
 }
