@@ -16,7 +16,7 @@
 .experiment-media-prompt { width: 100%; padding: 8px 12px; border: 1px solid var(--app-border); border-radius: 10px; background: transparent; }
 .experiment-media-prompt > p { margin: 8px 0 0; white-space: pre-wrap; }
 .experiment-media-task summary { cursor: pointer; }
-.experiment-media-details { max-width: 100%; margin: 0 0 8px; color: var(--app-muted); font-size: 13px; }
+.experiment-media-details { max-width: 100%; overflow-wrap: anywhere; margin: 0 0 8px; color: var(--app-muted); font-size: 13px; }
 .experiment-media-details pre { max-height: 160px; overflow: auto; }
 .experiment-media-placeholder {
   position: relative;
