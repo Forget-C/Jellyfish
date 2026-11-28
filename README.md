@@ -40,22 +40,46 @@ A production workspace for AI short dramas. Divide a chapter into scenes, prepar
 
 Jellyfish helps short-drama creators turn a script into shots. Split a chapter into scenes, choose visual references for each scene, then generate and compare frames on the storyboard. Here, the shot description and references guide the image of Lin Xia reading a letter on the platform.
 
+## Features
+
+1. **Script breakdown.** Split a chapter into scenes and trace each scene back to its source passage.
+2. **Shared asset library.** Reuse actors, locations, props and costumes across projects.
+3. **Storyboard canvas.** Connect a shot description and reference images to an image model, then generate and compare candidate frames.
+4. **Canvas assistant.** Describe a change to a shot in your own words and review the proposed edit before applying it.
+5. **Image-to-video chat.** Generate a still and use it as the first frame of a video in the same conversation.
+6. **MCP integration.** Read, edit and run a canvas from an external MCP client and retrieve the results.
+
 ## Core Features
 
-| From chapter to storyboard | Generate images and video in one chat |
-| --- | --- |
-| <a href="site/static/images/screenshots/home/scene-division.webp"><img src="site/static/images/screenshots/home/scene-division.webp" width="195" alt="From chapter to storyboard" /></a> <a href="site/static/images/screenshots/home/storyboard.webp"><img src="site/static/images/screenshots/home/storyboard.webp" width="195" alt="Storyboard canvas" /></a> | <a href="docs/img/chat-image-to-video.webp"><img src="docs/img/chat-image-to-video.webp" width="420" alt="Generate images and video in one chat" /></a> |
-| Split a chapter into scenes, confirm the source passages and generate an editable storyboard for each scene. | The main model handles the conversation. Separate image and video models generate the media, so you can use an image from an earlier turn as the first frame of a video. |
+### From chapter to storyboard
 
-| Canvas editor | Canvas assistant |
-| --- | --- |
-| <a href="site/static/images/docs/canvas/graph.webp"><img src="site/static/images/docs/canvas/graph.webp" width="420" alt="Canvas editor" /></a> | <a href="docs/img/canvas-assistant-proposal.webp"><img src="docs/img/canvas-assistant-proposal.webp" width="420" alt="Canvas assistant" /></a> |
-| Connect shot descriptions, references and model cards. Adjust the inputs, run the canvas and compare candidate frames. | Select a shot card, describe the change you want and review the assistant’s proposed edit before applying it. |
+Split a chapter into scenes, check the passage for each scene and generate an editable storyboard. On the canvas, connect shot descriptions, references and model cards, then adjust the inputs to generate and compare candidate frames.
 
-| Project management | Shared asset library |
-| --- | --- |
-| <a href="site/static/images/docs/chapter/chapter.webp"><img src="site/static/images/docs/chapter/chapter.webp" width="420" alt="Project management" /></a> | <a href="site/static/images/screenshots/assets.png"><img src="site/static/images/screenshots/assets.png" width="420" alt="Shared asset library" /></a> |
-| Organize chapters and scenes by project and open the storyboard workspace from a chapter. | Reuse actors, locations, props and costumes across projects. |
+<p align="center">
+  <a href="site/static/images/screenshots/home/scene-division.webp"><img src="site/static/images/screenshots/home/scene-division.webp" width="32%" alt="Two scenes marked in the chapter text" /></a>
+  <a href="site/static/images/screenshots/home/storyboard.webp"><img src="site/static/images/screenshots/home/storyboard.webp" width="32%" alt="Storyboard canvas with shot references for the seaside platform" /></a>
+  <a href="site/static/images/docs/canvas/graph.webp"><img src="site/static/images/docs/canvas/graph.webp" width="32%" alt="Text card connected to an image model, with the result on the right" /></a>
+</p>
+
+### Refine a shot and generate video
+
+Select a shot card, describe the change you want and review the assistant’s proposal before applying it. Preview a generated frame on the canvas. In chat, the main model handles the conversation. Generate a still with your chosen image model, then use it as the first frame for your video model.
+
+<p align="center">
+  <a href="docs/img/canvas-assistant-proposal.webp"><img src="docs/img/previews/canvas-assistant.webp" width="32%" alt="Canvas assistant proposing an edit to the selected shot" /></a>
+  <a href="site/static/images/screenshots/home/generation-preview.webp"><img src="site/static/images/screenshots/home/generation-preview.webp" width="32%" alt="Canvas preview of Lin Xia reading the letter under the platform lights" /></a>
+  <a href="docs/img/chat-image-to-video.webp"><img src="docs/img/previews/chat-image-to-video.webp" width="32%" alt="A generated still and the video that follows it in the same chat" /></a>
+</p>
+
+### Organize projects and visual references
+
+Organize chapters and scenes within a project and open the storyboard from its chapter. Reuse actors, locations, props and costumes from the shared library. For each scene, choose the character, location and prop images to use as visual references.
+
+<p align="center">
+  <a href="site/static/images/docs/chapter/chapter.webp"><img src="docs/img/previews/chapter.webp" width="32%" alt="Chapter editor showing the title and script text" /></a>
+  <a href="docs/img/previews/assets.webp"><img src="docs/img/previews/assets.webp" width="32%" alt="Cast portraits of Lin Xia, the mountain guide and the radio operator in the asset library" /></a>
+  <a href="site/static/images/screenshots/home/object-references.webp"><img src="site/static/images/screenshots/home/object-references.webp" width="32%" alt="Reference cards for Lin Xia, the seaside platform and the envelope" /></a>
+</p>
 
 ### Connect via Canvas MCP
 

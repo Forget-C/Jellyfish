@@ -40,22 +40,46 @@
 
 Jellyfish 帮短剧创作者把剧本变成分镜。先把章节划成场次，为每场戏选好人物、场景和道具参考图，再到分镜画布上生成、比较候选画面。演示里，林夏在站台读信的首帧就来自这组镜头描述和参考图。
 
+## 特性
+
+1. **剧本拆分**　将章节划为场次，每场戏都能回看对应的原文。
+2. **共享资产库**　跨项目复用演员、场景、道具和服装。
+3. **分镜画布**　将镜头描述和参考图连到图片模型，生成并比较候选画面。
+4. **画布助手**　用自己的话描述想改的镜头，审阅助手的修改提案后再应用。
+5. **图生视频**　在同一会话里生成静帧，再用它作为视频的首帧。
+6. **MCP 接入**　从外部 MCP 客户端读取、编辑和运行画布，取回生成结果。
+
 ## 核心功能
 
-| 从章节原文生成分镜 | 在同一会话中生成图片和视频 |
-| --- | --- |
-| <a href="../site/static/images/screenshots/home/scene-division.webp"><img src="../site/static/images/screenshots/home/scene-division.webp" width="195" alt="从章节原文生成分镜" /></a> <a href="../site/static/images/screenshots/home/storyboard.webp"><img src="../site/static/images/screenshots/home/storyboard.webp" width="195" alt="分镜画布" /></a> | <a href="img/chat-image-to-video.webp"><img src="img/chat-image-to-video.webp" width="420" alt="在同一会话中生成图片和视频" /></a> |
-| 智能划分章节，确认每场对应的原文后，按场生成可编辑的分镜。 | 主模型负责对话，图片和视频分别由选定的生成模型执行。可以接着上一轮的图片生成视频。 |
+### 从章节原文到分镜
 
-| 画布编辑 | 画布智能助手 |
-| --- | --- |
-| <a href="../site/static/images/docs/canvas/graph.webp"><img src="../site/static/images/docs/canvas/graph.webp" width="420" alt="画布编辑" /></a> | <a href="img/canvas-assistant-proposal.webp"><img src="img/canvas-assistant-proposal.webp" width="420" alt="画布智能助手" /></a> |
-| 连接镜头描述、参考图和模型卡，调整输入并运行画布，比较候选画面。 | 选中镜头卡，用自然语言描述想改的内容，查看并采用助手的修改提案。 |
+将章节划分为场次，确认每场对应的原文，再生成可编辑的分镜。在画布上连接镜头描述、参考图和模型卡，调整输入后生成并比较候选画面。
 
-| 项目管理 | 全局资产库 |
-| --- | --- |
-| <a href="../site/static/images/docs/chapter/chapter.webp"><img src="../site/static/images/docs/chapter/chapter.webp" width="420" alt="项目管理" /></a> | <a href="../site/static/images/screenshots/assets.png"><img src="../site/static/images/screenshots/assets.png" width="420" alt="全局资产库" /></a> |
-| 按项目组织章节和场次，从章节进入对应的分镜工作台。 | 集中管理演员、场景、道具和服装，让多个项目复用视觉素材。 |
+<p align="center">
+  <a href="../site/static/images/screenshots/home/scene-division.webp"><img src="../site/static/images/screenshots/home/scene-division.webp" width="32%" alt="章节原文中标出的两个场次" /></a>
+  <a href="../site/static/images/screenshots/home/storyboard.webp"><img src="../site/static/images/screenshots/home/storyboard.webp" width="32%" alt="海边站台的分镜画布与镜头参考图" /></a>
+  <a href="../site/static/images/docs/canvas/graph.webp"><img src="../site/static/images/docs/canvas/graph.webp" width="32%" alt="文本卡连接图片模型卡，右侧显示生成结果" /></a>
+</p>
+
+### 修改镜头与生成视频
+
+选中镜头卡，向画布助手描述想改的地方，确认提案后再应用。生成候选画面后，可在画布上放大查看。在会话中，主模型负责对话，图片模型生成静帧，视频模型可以用这张图作为首帧。
+
+<p align="center">
+  <a href="img/canvas-assistant-proposal.webp"><img src="img/previews/canvas-assistant.webp" width="32%" alt="画布助手为选中的镜头提出修改建议" /></a>
+  <a href="../site/static/images/screenshots/home/generation-preview.webp"><img src="../site/static/images/screenshots/home/generation-preview.webp" width="32%" alt="放大查看林夏在站台灯下读信的候选画面" /></a>
+  <a href="img/chat-image-to-video.webp"><img src="img/previews/chat-image-to-video.webp" width="32%" alt="同一会话中的生成图与后续视频" /></a>
+</p>
+
+### 管理项目与视觉参考
+
+按项目整理章节和场次，从章节进入分镜工作台。在全局资产库中管理可跨项目复用的演员、场景、道具和服装，再为每场戏选定人物、场景和道具参考图。
+
+<p align="center">
+  <a href="../site/static/images/docs/chapter/chapter.webp"><img src="img/previews/chapter.webp" width="32%" alt="章节编辑器中的标题和剧本原文" /></a>
+  <a href="img/previews/assets.webp"><img src="img/previews/assets.webp" width="32%" alt="资产库演员页中的林夏、山路向导和电台值守员封面" /></a>
+  <a href="../site/static/images/screenshots/home/object-references.webp"><img src="../site/static/images/screenshots/home/object-references.webp" width="32%" alt="林夏、海边站台与信封的三张参考卡" /></a>
+</p>
 
 ### 通过 MCP 连接画布
 

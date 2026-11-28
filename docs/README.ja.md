@@ -40,22 +40,46 @@ AI ショートドラマの制作ワークスペースです。章の本文を�
 
 Jellyfish はショートドラマの脚本を絵コンテにする制作ツールです。章をシーンに分け、それぞれに人物や場所、小道具の参考画像を選び、絵コンテ上でフレームを生成して見比べられます。デモでは、カットの説明と参考画像をもとに、ホームで手紙を読む林夏の姿を描いています。
 
+## 特長
+
+1. **脚本のシーン分け**　章をシーンに分け、それぞれに対応する原文を確認できます。
+2. **共有素材ライブラリ**　俳優、ロケ地、小道具、衣装を複数のプロジェクトで再利用できます。
+3. **絵コンテのキャンバス**　カットの説明と参考画像を画像モデルにつなぎ、候補画像を生成して見比べられます。
+4. **キャンバスアシスタント**　カットで変えたい箇所を自分の言葉で伝え、修正案を確認してから適用できます。
+5. **画像から動画を生成**　同じチャットで静止画を生成し、動画の最初のフレームに使えます。
+6. **MCP 連携**　外部の MCP クライアントからキャンバスを開いて編集・実行し、生成結果を取得できます。
+
 ## 主な機能
 
-| 章の本文から絵コンテを生成 | 同じ会話で画像と動画を生成 |
-| --- | --- |
-| <a href="../site/static/images/screenshots/home/scene-division.webp"><img src="../site/static/images/screenshots/home/scene-division.webp" width="195" alt="章の本文から絵コンテを生成" /></a> <a href="../site/static/images/screenshots/home/storyboard.webp"><img src="../site/static/images/screenshots/home/storyboard.webp" width="195" alt="絵コンテ" /></a> | <a href="img/chat-image-to-video.webp"><img src="img/chat-image-to-video.webp" width="420" alt="同じ会話で画像と動画を生成" /></a> |
-| 章をシーンに分け、対応する本文を確認してから、シーンごとに編集可能な絵コンテを生成します。 | 会話はメインモデルが担当し、画像と動画はそれぞれ選択したモデルが生成します。前のターンの画像を動画の最初のフレームに使えます。 |
+### 章の本文から絵コンテへ
 
-| キャンバス編集 | キャンバスアシスタント |
-| --- | --- |
-| <a href="../site/static/images/docs/canvas/graph.webp"><img src="../site/static/images/docs/canvas/graph.webp" width="420" alt="キャンバス編集" /></a> | <a href="img/canvas-assistant-proposal.webp"><img src="img/canvas-assistant-proposal.webp" width="420" alt="キャンバスアシスタント" /></a> |
-| カットの説明、参考画像、モデルカードをつなぎ、入力を調整して実行し、候補画像を見比べられます。 | カットのカードを選び、変更したい内容を伝えると、アシスタントの修正案を確認して適用できます。 |
+章をシーンに分け、それぞれに対応する本文を確認してから、編集可能な絵コンテを生成します。キャンバスでカットの説明、参考画像、モデルカードをつなぎ、入力を調整しながら候補画像を生成して見比べられます。
 
-| プロジェクト管理 | 共有素材ライブラリ |
-| --- | --- |
-| <a href="../site/static/images/docs/chapter/chapter.webp"><img src="../site/static/images/docs/chapter/chapter.webp" width="420" alt="プロジェクト管理" /></a> | <a href="../site/static/images/screenshots/assets.png"><img src="../site/static/images/screenshots/assets.png" width="420" alt="共有素材ライブラリ" /></a> |
-| プロジェクトごとに章とシーンを整理し、章から絵コンテの作業画面を開けます。 | 俳優、場所、小道具、衣装の素材を複数のプロジェクトで再利用できます。 |
+<p align="center">
+  <a href="../site/static/images/screenshots/home/scene-division.webp"><img src="../site/static/images/screenshots/home/scene-division.webp" width="32%" alt="章の本文に示された2つのシーン" /></a>
+  <a href="../site/static/images/screenshots/home/storyboard.webp"><img src="../site/static/images/screenshots/home/storyboard.webp" width="32%" alt="海辺のホームの絵コンテとカットの参考画像" /></a>
+  <a href="../site/static/images/docs/canvas/graph.webp"><img src="../site/static/images/docs/canvas/graph.webp" width="32%" alt="画像モデルにつないだテキストカードと右側に表示された生成結果" /></a>
+</p>
+
+### カットの修正と動画の生成
+
+カットのカードを選んで変更したい箇所を伝え、アシスタントの修正案を確認してから適用します。生成した画像はキャンバスで拡大して確認できます。チャットではメインモデルが会話を担当し、画像モデルで生成した静止画を動画モデルの最初のフレームに使えます。
+
+<p align="center">
+  <a href="img/canvas-assistant-proposal.webp"><img src="img/previews/canvas-assistant.webp" width="32%" alt="選択したカットに対するアシスタントの修正案" /></a>
+  <a href="../site/static/images/screenshots/home/generation-preview.webp"><img src="../site/static/images/screenshots/home/generation-preview.webp" width="32%" alt="ホームの明かりの下で手紙を読む林夏の画像をキャンバスで拡大した様子" /></a>
+  <a href="img/chat-image-to-video.webp"><img src="img/previews/chat-image-to-video.webp" width="32%" alt="同じチャットで生成した静止画と、それを使った動画" /></a>
+</p>
+
+### プロジェクトと参考素材の管理
+
+プロジェクトごとに章とシーンを整理し、章から絵コンテを開けます。共有ライブラリでは俳優、ロケ地、小道具、衣装の素材を複数のプロジェクトで再利用できます。各シーンには人物、場所、小道具の参考画像を選びます。
+
+<p align="center">
+  <a href="../site/static/images/docs/chapter/chapter.webp"><img src="img/previews/chapter.webp" width="32%" alt="章の編集画面に表示されたタイトルと脚本の本文" /></a>
+  <a href="img/previews/assets.webp"><img src="img/previews/assets.webp" width="32%" alt="素材ライブラリの俳優タブに並ぶ林夏、山道の案内人、無線通信士の画像" /></a>
+  <a href="../site/static/images/screenshots/home/object-references.webp"><img src="../site/static/images/screenshots/home/object-references.webp" width="32%" alt="林夏、海辺のホーム、封筒の参考画像カード" /></a>
+</p>
 
 ### MCP でキャンバスに接続
 
