@@ -256,7 +256,7 @@ try {
     frame('turn', 'turn.failed', {text: '', error: 'CHAT_VIDEO_MODEL_REQUIRED', message: turnMessage})
   active = false
   releaseStream()
-  const toolError = page.getByText('generate_video · video-1 · 引用文件不可用', {exact:true})
+  const toolError = page.getByText('视频生成未能开始', {exact:true})
   const turnError = page.getByText('请先选择视频模型', {exact:true})
   await toolError.waitFor()
   await turnError.waitFor()
@@ -341,6 +341,33 @@ try {
   await page.getByText('断线前与重连后', {exact:true}).waitFor()
   assert.deepEqual(resumePositions.slice(0, 2), [20, 21])
   assert.equal(resumeSnapshots, 1)
+
+  exerciseResume = false
+  active = false
+  const taskRow = (kind, sequence, status, finished) => ({
+    id: kind + '-task', task_id: kind + '-run', role: 'task', status, sequence, content: '',
+    payload: {turn_id: 'media-turn', modality: kind},
+    media_receipt: {
+      task_id: kind + '-run', model_name: '测试模型', status, progress: status === 'running' ? 8 : null,
+      accepted_at_ms: 2000, finished_at_ms: finished, execution_prompt: '测试提示词',
+      artifacts: [], parameters: {}, error: '',
+    },
+  })
+  const reply = {id: 'media-reply', role: 'assistant', status: 'completed', sequence: 3,
+    content: '已经提交两项生成任务', payload: {turn_id: 'media-turn',
+      turn_timing: {accepted_at_ms: 1000, finished_at_ms: 5000}}}
+  savedFailure = [taskRow('image', 1, 'succeeded', 7000), taskRow('video', 2, 'running', null), reply]
+  await page.reload()
+  const replyArticle = page.getByRole('article').filter({hasText:reply.content})
+  await page.getByText('8%', {exact:true}).waitFor()
+  await replyArticle.waitFor()
+  assert.equal(await replyArticle.getByText(/用时/).count(),0,'total waits for all media tasks')
+  savedFailure[1] = taskRow('video', 2, 'cancelled', 14000)
+  await page.reload()
+  await page.getByText('视频生成已取消', {exact:true}).waitFor()
+  await replyArticle.getByText('用时 13 秒', {exact:true}).waitFor()
+  assert.equal(await page.locator('.experiment-media-placeholder').count(),0)
+
 } finally {
   await cleanup()
 }

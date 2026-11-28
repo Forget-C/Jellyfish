@@ -1,3 +1,4 @@
+import { elapsedBetween, ExperimentElapsed } from '../components/ExperimentElapsed'
 /**
  * 文本实验室模态。
  *
@@ -56,6 +57,7 @@ type LocalMessage = {
   content: string
   inputSnapshot?: ExperimentInputSnapshot
   status?: 'running' | 'succeeded' | 'failed' | 'cancelled'
+  elapsedMs?: number
   progress?: number
   partial?: boolean
   recoveredFromHistory?: boolean
@@ -88,6 +90,8 @@ function toLocalMessages(messages: ExperimentMessageRead[], includePartial: bool
     if (item.role !== 'user' && item.role !== 'assistant') return []
     const row: LocalMessage = {
       id: item.id,
+      error: item.status === 'failed' && typeof item.payload?.error?.message === 'string' ? item.payload.error.message : undefined,
+      elapsedMs: elapsedBetween(item.payload?.turn_timing?.accepted_at_ms, item.payload?.turn_timing?.finished_at_ms),
       role: item.role,
       content: item.content ?? '',
       status: item.role === 'assistant' ? (item.status === 'failed' || item.status === 'cancelled' ? item.status : 'succeeded') : undefined,
@@ -295,7 +299,10 @@ export function TextExperimentMode({
             key={item.id}
             footer={item.inputSnapshot ? <ExperimentHistoryRestoreButton disabled={busy} onRestore={() => restoreUserMessage(item)} /> : undefined}
             identity={item.role === 'user' ? uiText("你") : uiText("模型")}
-            status={item.status ? <ExperimentTaskStatus status={item.status} progress={item.progress} /> : null}
+            status={<>
+              {item.status && <ExperimentTaskStatus status={item.status} progress={item.progress} />}
+              <ExperimentElapsed milliseconds={item.elapsedMs} />
+            </>}
             tone={item.role === 'user' ? 'user' : 'assistant'}
           >
             {item.partial ? <><div>{item.content}</div><p className="experiment-result-note">{item.recoveredFromHistory ? uiText("已恢复部分回复，最终状态待核实") : uiText("流连接中断前收到的部分回复")}</p></> : item.content}{item.error ? <p className="experiment-result-error">{item.error}</p> : null}

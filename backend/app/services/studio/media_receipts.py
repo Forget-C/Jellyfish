@@ -7,6 +7,7 @@ from app.core.contracts.task import TaskStatus
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.task import Task, TaskInput
 from app.schemas.media_task import MediaArtifactRead, MediaReferenceRead, MediaTaskReceipt
+from app.services.studio.experiment_messages import epoch_ms
 from app.services.task_queries import TaskQueries
 
 
@@ -17,7 +18,8 @@ async def media_task_receipts(db, results):
     # Extract only the public fields in SQL. The full snapshot includes execution credentials.
     rows = (await db.execute(select(
         Task.id, Task.input_snapshot['model_id'].as_string(), Task.input_snapshot['model_name'].as_string(),
-        Task.input_snapshot['operation_input'],
+        Task.input_snapshot['operation_input'], Task.created_at, Task.finished_at,
+        Task.input_snapshot['execution_prompt'].as_string(),
     ).where(
         Task.id.in_(results), Task.kind.in_(('image_generation', 'video_generation')),
     ))).all()
@@ -29,13 +31,14 @@ async def media_task_receipts(db, results):
     for item in inputs:
         references[item.task_id].append(MediaReferenceRead(role=item.role_path, ordinal=item.ordinal, file_id=item.file_id))
     receipts = {}
-    for task_id, model_id, model_name, parameters in rows:
+    for task_id, model_id, model_name, parameters, accepted_at, finished_at, prompt in rows:
         result = results[task_id]
         receipts[task_id] = MediaTaskReceipt(
             task_id=task_id, model_id=model_id, model_name=model_name,
             parameters=parameters or {}, references=references[task_id],
             artifacts=[MediaArtifactRead(**item.model_dump()) for item in result.outputs
                        if item.media_type in ('image', 'video', 'audio')],
+            accepted_at_ms=epoch_ms(accepted_at), finished_at_ms=epoch_ms(finished_at), execution_prompt=prompt,
             status=result.status, progress=result.progress, stage=result.stage, error=result.error,
             cancel_requested=result.cancel_requested, remote_cancellation=result.remote_cancellation,
         )

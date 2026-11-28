@@ -19,6 +19,9 @@ export type TaskUpdate = {
     error: string;
     cancel_requested: boolean;
     remote_cancellation: ('requested' | 'unsupported' | 'accepted' | 'confirmed' | 'rejected' | 'unconfirmed' | null);
+    accepted_at_ms?: (number | null);
+    finished_at_ms?: (number | null);
+    execution_prompt?: (string | null);
     tool_call_id?: (string | null);
     messages?: (Array<ExperimentMessageRead> | null);
 };

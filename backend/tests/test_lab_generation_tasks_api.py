@@ -294,6 +294,8 @@ async def test_lab_submission_history_recovers_media_inputs(tmp_path, monkeypatc
         assert receipt["task_id"] == task["task_id"]
         assert receipt["model_id"] == "lab-model" and receipt["model_name"] == model
         assert receipt["references"][0]["file_id"] == "input"
+        assert receipt["execution_prompt"] == "按参考图生成"
+        assert receipt["accepted_at_ms"] > 0 and receipt["finished_at_ms"] is None
         assert "private-key" not in events.text
         assert task["media_receipt"] == receipt
         assert not (await client.get(event_url, params={"after": observed[0]["cursor"], "follow": "false"})).text
@@ -359,6 +361,7 @@ async def complete_media_trial(sessions, api, url, snapshot_url, modality, model
     assert any(item["type"] == "task.progress" for item in items)
     assert items[-2]["type"] == "artifact.created"
     receipt = items[-1]["payload"]
+    assert receipt["finished_at_ms"] >= receipt["accepted_at_ms"]
     assert len(posts) == 1 and uploads == ([b"v"] if modality == "video" else [b"a", b"b"])
     assert len({item["file_id"] for item in receipt["artifacts"]}) == len(uploads)
     snapshot = await api.get(snapshot_url)

@@ -122,7 +122,9 @@ try {
       if (failTextHistory) return route.fulfill({ status: 503, json: { detail: '历史服务暂不可用' } })
       return textTrialSnapshot(route, [
         item('text-prompt', 'text-history', 'user', '短提示词', 1),
-        item('text-answer', 'text-history', 'assistant', '历史回复', 2),
+        item('text-answer', 'text-history', 'assistant', '历史回复', 2, {
+          payload: {turn_timing: {accepted_at_ms: 1000, finished_at_ms: 13000}},
+        }),
         item('text-link', 'text-history', 'user', longLink, 3),
         item('text-long-answer', 'text-history', 'assistant', longReply, 4),
         item('text-break', 'text-history', 'user', manualBreak, 5),
@@ -193,7 +195,9 @@ try {
         .map((file_id, ordinal) => ({ file_id, ordinal, media_type: image ? 'image' : 'video', deleted: false })) : []
       const payload = { task_id: stale ? 'stale-run' : image ? 'image-run' : 'video-run',
         model_id: 'trial-model', model_name: 'Trial Provider Model', stage: status, status, artifacts,
-        progress: stale ? 29 : image ? 38 : 42, error: '' }
+        progress: stale ? 29 : image ? 38 : 42, error: '',
+        accepted_at_ms: 1000, finished_at_ms: status === 'succeeded' ? 139000 : null,
+        execution_prompt: '服务端实际生成提示词' }
       const frame = `id: ${cursor}\nevent: ${type}\ndata: ${JSON.stringify({ session_id: id, turn_id: 'turn', cursor, type, category: 'task', detail: null, payload })}\n\n`
       return route.fulfill({ contentType: 'text/event-stream', body: cursor > Number(url.searchParams.get('after')) ? frame + frame : ': heartbeat\n\n' })
     }
@@ -243,6 +247,8 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 })
   assert.deepEqual(writes, [])
 
+  await history.getByText('用时 12 秒', { exact: true }).waitFor()
+
   await page.goto(origin + '/lab?session=image-history')
   await history.getByText('排队', { exact: true }).waitFor()
   await history.getByText('状态暂不可用', { exact: true }).waitFor()
@@ -253,17 +259,29 @@ try {
   await englishHistory.getByText('Queued', { exact: true }).waitFor()
   imageStatus = 'running'
   await englishHistory.getByRole('button', { name: 'Retry loading status' }).click()
-  await englishHistory.getByText('Generating 38%', { exact: true }).waitFor()
+  await englishHistory.getByText('38%', { exact: true }).waitFor()
   await assertResultSpacing(englishHistory, 'Image generation')
+  const placeholder = englishHistory.locator('.experiment-media-placeholder')
+  await placeholder.screenshot({path:output+'/image-generating.png',animations:'disabled'})
+  assert.equal(await placeholder.evaluate(node => getComputedStyle(node, '::before').animationName), 'experiment-media-breathe')
+  await page.emulateMedia({reducedMotion: 'reduce'})
+  assert.equal(await placeholder.evaluate(node => getComputedStyle(node, '::before').animationName), 'none')
+  await page.emulateMedia({reducedMotion: 'no-preference'})
   await englishHistory.evaluate(region => { region.scrollTop = 0 })
   await englishHistory.getByRole('button', { name: 'Load earlier messages' }).click()
   await englishHistory.getByText('更早的图片提示词', { exact: true }).waitFor()
   imageReadsFail = true
   imageStatus = 'succeeded'
-  await englishHistory.getByText('Completed', { exact: true }).waitFor()
+  await englishHistory.getByText('Generated images (2)', { exact: true }).waitFor()
+  await englishHistory.getByText('Took 2m 18s', {exact:true}).waitFor()
+  await englishHistory.getByText('Generation prompt', {exact:true}).click()
+  await englishHistory.getByText('服务端实际生成提示词', {exact:true}).waitFor()
+  await placeholder.waitFor({state:'hidden'})
+  await englishHistory.getByRole('article').filter({hasText:'Generated images (2)'}).screenshot({path:output+'/image-completed.png',animations:'disabled'})
   assert.ok(observedImageCursors.includes(1), 'subscription continued after the progress event')
   assert.ok(!observedImageCursors.includes(99), 'older history cursor did not change the subscription')
 
+  await englishHistory.getByText('Took 2m 18s', {exact:true}).click()
   await englishHistory.getByText(/Trial Provider Model/).waitFor()
   await englishHistory.getByText('Could not refresh session messages', { exact: true }).waitFor()
   await englishHistory.getByText('图片实验原始提示词', { exact: true }).waitFor()
@@ -303,9 +321,9 @@ try {
   await history.getByText('状态暂不可用', { exact: true }).waitFor()
   videoStatus = 'running'
   await history.getByRole('button', { name: '重试读取状态' }).click()
-  await history.getByText('生成中 42%', { exact: true }).waitFor()
+  await history.getByText('42%', { exact: true }).waitFor()
   videoStatus = 'succeeded'
-  await history.getByText('已完成', { exact: true }).waitFor()
+  await history.getByText('已生成 1 段视频', { exact: false }).waitFor()
   const videoPreview = history.getByRole('button', { name: '播放视频' })
   await videoPreview.waitFor()
   const listVideo = videoPreview.locator('video')
@@ -370,12 +388,12 @@ try {
   await page.getByRole('textbox', { name: '图片提示词' }).fill(stalePrompt.content)
   const generate = page.getByRole('button', { name: /^发\s*送$/, exact: true })
   await generate.click()
-  await history.getByText('生成中 29%', { exact: true }).waitFor()
+  await history.getByText('29%', { exact: true }).waitFor()
   staleStatusAvailable = false
   await history.getByText('状态暂不可用', { exact: true }).waitFor()
   staleHistoryAvailable = true
   await retryHistory.click()
-  await history.getByText('已完成', { exact: true }).waitFor()
+  await history.getByText('已生成 1 张图片', { exact: false }).waitFor()
   await history.getByRole('button', { name: '查看图片 1' }).waitFor()
   assert.equal(await history.getByText('状态暂不可用', { exact: true }).count(), 0)
   assert.equal(await generate.isEnabled(), true)
@@ -398,7 +416,7 @@ try {
         '已经受理但尚未出现在历史中的任务仍占用发送')
       for (const stream of entry.open) stream.write(encodeEvent(entry.replay[0]))
     }
-    await history.getByText('生成中 37%', { exact: true }).waitFor()
+    await history.getByText('37%', { exact: true }).waitFor()
     assert.deepEqual(entry.after, [10], label + '发送不应打开新的 SSE')
     assert.equal(entry.open.size, 1)
     const initial = entry.replay[0]
@@ -411,14 +429,14 @@ try {
     await unavailable.waitFor()
     await reconnected
     await unavailable.waitFor({state: 'hidden'})
-    assert.equal(await history.getByText('生成中 37%', {exact: true}).count(), 1)
+    assert.equal(await history.getByText('37%', {exact: true}).count(), 1)
     const progress = {...initial, cursor: ++entry.cursor, type: 'task.progress',
       payload: {...initial.payload, progress: 71, messages: undefined}}
     entry.replay.push(progress)
     for (const stream of entry.open) stream.write(encodeEvent(progress))
-    await history.getByText('生成中 71%', { exact: true }).waitFor()
+    await history.getByText('71%', { exact: true }).waitFor()
     assert.deepEqual(entry.after, [10, 11], label + '断线后按已处理游标续读')
-    assert.equal(await history.getByText('生成中 71%', { exact: true }).count(), 1)
+    assert.equal(await history.getByText('71%', { exact: true }).count(), 1)
     assert.equal(entry.open.size, 1)
   }
   console.log(`Experiment result browser acceptance passed. Evidence: ${output}`)

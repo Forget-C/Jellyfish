@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import aclosing
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import HTTPException, status
@@ -34,7 +35,7 @@ from app.schemas.studio.text_lab import TextLabRunRequest
 from app.services.studio.experiment_interaction import (
     find_text_request, interaction_request_payload, text_stream_origin, text_stream_result,
 )
-from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, experiment_user_message
+from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, epoch_ms, experiment_user_message, turn_timing
 
 _runtime = TextStreamingRuntime()
 _stream_inputs: dict[str, _TextStreamInput] = {}
@@ -55,12 +56,16 @@ class _TextStreamInput:
 
 def _as_message_data(message: ExperimentMessage) -> StreamMessageData:
     """将持久化实验消息投影为 SSE 使用的最小消息契约。"""
+    if message.role == "user":
+        payload = {key: value for key, value in message.payload.items() if key != '_stream_partial'}
+    else:
+        payload = {key: message.payload[key] for key in ('turn_timing', 'interaction_run_id') if key in message.payload}
     return StreamMessageData(
         id=message.id,
         session_id=message.session_id,
         role="assistant" if message.role == "assistant" else "user",
         content=message.content,
-        payload={key: value for key, value in message.payload.items() if key != '_stream_partial'} if message.role == "user" else {},
+        payload=payload,
         sequence=message.sequence,
         created_at=message.created_at,
         updated_at=message.updated_at,
@@ -76,6 +81,7 @@ async def create_text_stream_run(
     await build_laboratory_chat(db, model_id=model_id, streaming=True)
     run_id = uuid4().hex
     draft = experiment_user_message(prompt=content, model_id=model_id)
+    draft.payload['accepted_at_ms'] = epoch_ms(datetime.now(UTC))
     if request_id:
         draft.payload.update(interaction_request_payload(request_id, TextLabRunRequest(model_id=model_id, content=content)))
         draft.payload['interaction_run_id'] = run_id
@@ -282,16 +288,20 @@ async def _persist_stream_message(run_id, stream_input, events, body, state, det
             await _lock_text_interaction(db, stream_input.session_id)
             if settled := await text_stream_result(db, stream_input.session_id, run_id):
                 return settled
-            if origin := await db.get(ExperimentMessage, stream_input.user_message_id):
-                origin.payload = {key: value for key, value in origin.payload.items() if key != '_stream_partial'}
+        origin = await db.get(ExperimentMessage, stream_input.user_message_id) if stream_input.user_message_id else None
+        if stream_input.request_id and origin is not None:
+            origin.payload = {key: value for key, value in origin.payload.items() if key != '_stream_partial'}
+        timing = turn_timing(origin)
+        payload.update(timing)
         message, = await append_experiment_messages(db, session_id=stream_input.session_id, drafts=[
             ExperimentMessageDraft(role='assistant', content=body, status=state, payload=payload),
         ])
         if stream_input.publish_events:
             await db.flush()
             await db.refresh(message)
-            data = ({"assistant_message": _as_message_data(message).model_dump(mode="json")}
-                    if state == "succeeded" else details or {})
+            assistant = _as_message_data(message).model_dump(mode="json")
+            assistant["status"] = state
+            data = {**(details or {}), "assistant_message": assistant}
             kind = {"succeeded": "turn.completed", "cancelled": "turn.stopped", "failed": "turn.failed"}[state]
             await append_session_event(db, stream_input.session_id, run_id, kind, data)
         await db.commit()

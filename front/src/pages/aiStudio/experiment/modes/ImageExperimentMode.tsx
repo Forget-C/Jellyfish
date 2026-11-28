@@ -1,7 +1,7 @@
+import { ExperimentMediaTask } from '../components/ExperimentMediaTask'
 import { useUiText } from '../../../../uiText'
 import { bindChatSession, readTrialHistory } from '../../../../services/chatSession'
 import { useTrialModelPreference } from '../hooks/useTrialModelPreference'
-import { MediaTaskDetails } from '../components/MediaTaskDetails'
 import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
 /**
  * 图片实验室模态。
@@ -27,8 +27,6 @@ import { ExperimentHistory } from '../components/ExperimentHistory'
 import { ExperimentHistoryRestoreButton } from '../components/ExperimentHistoryRestoreButton'
 import { ExperimentHistoryReferences } from '../components/ExperimentHistoryReferences'
 import { ExperimentMessageBubble } from '../components/ExperimentMessageBubble'
-import { ExperimentResultMedia } from '../components/ExperimentResultMedia'
-import { ExperimentTaskStatus } from '../components/ExperimentTaskStatus'
 import { useExperimentTaskResults } from '../hooks/useExperimentTaskResults'
 import { ExperimentOptionBar } from '../components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../components/ExperimentPromptEditor'
@@ -53,6 +51,7 @@ type ImageLabMessage = {
   role: 'user' | 'assistant'
   content: string
   receipt?: MediaTaskReceipt
+  submittedPrompt?: string
   taskId?: string
   status?: string
   progress?: number | null
@@ -137,7 +136,12 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
   const submission = useExperimentSubmission(sessionId, history, inputSignature(draft))
   const { submitting } = submission
   useExperimentLeaveStatus(submission.dirty)
-  const persistedMessages = history.messages.map(toImageLabMessage)
+  const userPrompts = new Map(history.messages.filter(item => item.role === 'user').map(item => [
+    item.sequence, readExperimentInputSnapshot(item)?.prompt ?? item.content,
+  ]))
+  const persistedMessages = history.messages.map(item => ({
+    ...toImageLabMessage(item), submittedPrompt: item.task_id ? userPrompts.get(item.sequence - 1) : undefined,
+  }))
   const { messages, runningTaskId, observeAdmission, retryStatus } = useExperimentTaskResults(session, history, persistedMessages, (item, result) => {
     const resultUrls = (result.artifacts ?? []).filter(file => !file.deleted && file.media_type === 'image')
       .flatMap(file => buildFileDownloadUrl(file.file_id) ?? [])
@@ -211,15 +215,14 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
           key={item.id}
           footer={item.inputSnapshot ? <ExperimentHistoryRestoreButton disabled={disabled} onRestore={() => restoreUserMessage(item)} /> : undefined}
           identity={isUser ? uiText("你") : uiText("图片生成")}
-          status={item.taskId ? <ExperimentTaskStatus status={item.status} progress={item.progress} unavailable={item.unavailable} onRetry={item.taskId === runningTaskId ? retryStatus : undefined} /> : null}
           tone={isUser ? 'user' : 'assistant'}
           result={!isUser}
         >
-            {isUser || item.content !== '图片生成任务已提交，正在等待生成结果。' ? item.content : null}
+            {isUser || !item.taskId ? item.content : null}
             {isUser ? <ExperimentHistoryReferences files={files} references={(item.referenceFileIds ?? []).map((id) => ({ id, label: uiText("参考图") }))} /> : null}
-            {item.receipt && <MediaTaskDetails receipt={item.receipt} />}
-            {item.error ? <div className="mt-2 text-sm text-red-600">{item.error}</div> : null}
-            {item.resultUrls?.length ? <ExperimentResultMedia kind="image" urls={item.resultUrls} /> : null}
+            {!isUser && item.taskId && <ExperimentMediaTask kind="image" receipt={item.receipt} submittedPrompt={item.submittedPrompt}
+            status={item.status} progress={item.progress} unavailable={item.unavailable} error={item.error}
+            urls={item.resultUrls ?? []} onRetry={item.taskId === runningTaskId ? retryStatus : undefined} />}
         </ExperimentMessageBubble>
       })}
     </div>

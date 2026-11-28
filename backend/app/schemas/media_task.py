@@ -36,3 +36,6 @@ class MediaTaskReceipt(BaseModel):
     error: str
     cancel_requested: bool
     remote_cancellation: RemoteCancellationStatus | None
+    accepted_at_ms: int | None = None
+    finished_at_ms: int | None = None
+    execution_prompt: str | None = None

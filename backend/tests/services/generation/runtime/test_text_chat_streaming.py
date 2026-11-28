@@ -188,6 +188,8 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
             assert first.status_code == 202, first.text
             receipt = first.json()['data']
             completed = await wait_for_chat_event(client, session_url, receipt['turn_id'], 'turn.completed')
+            timing = completed['payload']['message']['payload']['turn_timing']
+            assert timing['finished_at_ms'] >= timing['accepted_at_ms']
             monkeypatch.setattr(text_chat_streaming, '_runtime', TextStreamingRuntime())
             replayed = await client.post(url, json=body, headers=headers)
             assert replayed.json() == first.json()
@@ -216,6 +218,7 @@ async def test_text_lab_replays_accepted_request_after_runtime_is_replaced(tmp_p
             assert snapshot['session_id'] == 'sse-replay' and snapshot['kind'] == 'text'
             assert snapshot['cursor'] == completed['cursor']
             history = snapshot['history']['messages']
+            assert history[-1]['payload']['turn_timing'] == completed['payload']['message']['payload']['turn_timing'] == timing
             older = await client.get(session_url + '/snapshot', params={'page': 2, 'page_size': 1})
             assert older.json()['data']['history']['messages'] == history[:1]
             assert older.json()['data']['cursor'] == snapshot['cursor']

@@ -9,10 +9,9 @@ import { observeChatRequest, useChatTurnLifecycle, type ChatTurnAdapter } from '
 import { ApiError, FilmService, LlmService, type ChatEvent, type ExperimentMessageRead, type ExperimentSessionRead, type LabChatSnapshot, type LabModels, type FileRead } from '../../../../services/generated'
 import { useUiText } from '../../../../uiText'
 import { useExperimentLeaveStatus } from '../ExperimentLeaveGuard'
-import { MediaTaskDetails } from '../components/MediaTaskDetails'
+import { ExperimentMediaTask } from '../components/ExperimentMediaTask'
+import { elapsedBetween, ExperimentElapsed } from '../components/ExperimentElapsed'
 import { ExperimentReferenceImage } from '../components/ExperimentReferenceImage'
-import { ExperimentResultMedia } from '../components/ExperimentResultMedia'
-import { ExperimentTaskStatus } from '../components/ExperimentTaskStatus'
 import { buildFileDownloadUrl } from '../../assets/utils'
 import { useExperimentModels } from '../hooks/useExperimentModels'
 import { ExperimentOptionBar } from '../components/ExperimentOptionBar'
@@ -68,7 +67,7 @@ function applyChatEvent(snapshot: LabChatSnapshot, event: ChatEvent): LabChatSna
     const {messages, ...receipt} = event.payload
     next.messages = mergeMessages(snapshot.messages, messages ?? []).map(message =>
       message.task_id === receipt.task_id && message.role === 'task'
-        ? {...message, media_receipt: receipt, status: receipt.status} : message)
+        ? {...message, payload: {...message.payload, turn_id: event.turn_id}, media_receipt: receipt, status: receipt.status} : message)
   } else if (event.type === 'question.answered' && currentTurn) {
     next.question = null
   }
@@ -230,36 +229,73 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     setFiles(update)
   }
   const messageText = (row: ExperimentMessageRead) => {
-    if (row.payload?.tool_error) return [row.payload.tool, row.payload.tool_call_id, row.content].join(' · ')
+    if (row.payload?.tool_error) {
+      const tool = row.payload.tool
+      const title = tool === 'generate_image' ? '图片生成未能开始' : tool === 'generate_video' ? '视频生成未能开始' : '工具执行失败'
+      return <div className="experiment-media-task">
+        <p role="status">{uiText(title)}</p>
+        {row.content && <p className="experiment-result-error">{errorText(row.content)}</p>}
+        <details className="experiment-media-details"><summary>{uiText('生成详情')}</summary>
+          <p>{[tool, row.payload.tool_call_id].filter(Boolean).join(' · ')}</p>
+        </details>
+      </div>
+    }
     if (row.status !== 'failed') return row.content || ''
     const reason = row.payload?.error_code ? errorText(row.payload.error_code) : uiText('生成失败')
     return [row.content, reason].filter(Boolean).join('\n')
   }
   const renderMessage = (row: ExperimentMessageRead) => {
     const receipt = row.media_receipt
-    if (receipt) {
-      const urls = receipt.artifacts?.filter(file => !file.deleted).flatMap(file => buildFileDownloadUrl(file.file_id) ?? []) ?? []
-      return <><ExperimentTaskStatus status={receipt.status} progress={receipt.progress} />
-        <MediaTaskDetails receipt={receipt} />
-        {row.payload?.source_file_id && <a href={buildFileDownloadUrl(row.payload.source_file_id)}>{uiText('原版产物')}</a>}
-        {receipt.error && <Alert type="error" message={receipt.error} />}
-        {urls.length > 0 && <ExperimentResultMedia kind={row.payload?.modality === 'video' ? 'video' : 'image'} urls={urls} />}
-        {['queued', 'running'].includes(receipt.status) && !receipt.cancel_requested &&
-          <Button onClick={() => void FilmService.cancelTaskApiV1FilmTasksTaskIdCancelPost({
-            taskId: receipt.task_id, requestBody: { reason: 'user_cancelled' },
-          }).catch(report)}>{uiText('取消生成')}</Button>}
-      </>
+    if (row.task_id && row.role === 'task') {
+      const kind = row.payload?.modality === 'video' || receipt?.parameters?.kind === 'video_generation' ? 'video' : 'image'
+      const urls = receipt?.artifacts?.filter(file => !file.deleted).flatMap(file => buildFileDownloadUrl(file.file_id) ?? []) ?? []
+      return <ExperimentMediaTask kind={kind} receipt={receipt ?? undefined} status={receipt?.status ?? row.status ?? undefined}
+        progress={receipt?.progress} error={receipt?.error || row.payload?.error} urls={urls}
+        unavailable={(lifecycle.reconnecting || lifecycle.uncertain) && (receipt?.status === 'running' || receipt?.status === 'queued')}
+        onRetry={() => void lifecycle.refresh()}
+        sourceUrl={row.payload?.source_file_id ? buildFileDownloadUrl(row.payload.source_file_id) : undefined}
+        onCancel={receipt ? async () => {
+          try {
+            const { data } = await FilmService.cancelTaskApiV1FilmTasksTaskIdCancelPost({
+              taskId: receipt.task_id, requestBody: { reason: 'user_cancelled' },
+            })
+            return Boolean(data)
+          } catch (error) { report(error); return false }
+        } : undefined} />
     }
     return messageText(row)
   }
   const messages = snapshot?.messages ?? []
+  const mediaByTurn = new Map<string, ExperimentMessageRead[]>()
+  for (const row of messages) {
+    if (row.role !== 'task' || typeof row.payload?.turn_id !== 'string') continue
+    const turn = row.payload.turn_id
+    const tasks = mediaByTurn.get(turn) ?? []
+    tasks.push(row)
+    mediaByTurn.set(turn, tasks)
+  }
+  const turnElapsed = (row: ExperimentMessageRead) => {
+    const timing = row.payload?.turn_timing
+    if (row.role !== 'assistant' || !timing) return undefined
+    let finished = timing.finished_at_ms
+    for (const task of mediaByTurn.get(row.payload?.turn_id) ?? []) {
+      const receipt = task.media_receipt
+      const taskFinished = receipt?.finished_at_ms
+      if (typeof taskFinished !== 'number' || !Number.isFinite(taskFinished) ||
+        !receipt || !['succeeded', 'failed', 'cancelled'].includes(receipt.status)) return undefined
+      finished = Math.max(finished, taskFinished)
+    }
+    return elapsedBetween(timing.accepted_at_ms, finished)
+  }
   const hasMessages = messages.length > 0 || Boolean(snapshot?.active_turn || question || snapshot?.partial_reply)
   const feedback = error || upload.uploadError?.message || (lifecycle.error ? failureText(lifecycle.error) : undefined)
   return render({
     hasMessages,
     history: <ExperimentHistory messageCount={messages.length || Number(hasMessages)} emptyDescription={uiText('暂无会话消息')}>
       {messages.map(row => <ExperimentMessageBubble key={row.id}
-        identity={row.role === 'user' ? uiText('你') : uiText('模型')}
+        identity={uiText(row.role === 'user' ? '你' : row.role === 'task'
+          ? row.payload?.modality === 'video' ? '视频生成' : '图片生成' : '模型')}
+        status={<ExperimentElapsed milliseconds={turnElapsed(row)} />}
         tone={row.role === 'user' ? 'user' : 'assistant'} result={Boolean(row.media_receipt)}>
         {renderMessage(row)}
       </ExperimentMessageBubble>)}

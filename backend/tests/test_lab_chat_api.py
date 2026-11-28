@@ -48,10 +48,13 @@ async def test_lab_chat_replays_messages_and_uses_previous_turn(canvas_client, m
         completed = await wait_for_chat_event(canvas_client, url, request_id, 'turn.completed')
         assert completed['payload']['message']['created_at']
         assert completed['payload']['message']['updated_at']
+        timing = completed['payload']['message']['payload']['turn_timing']
+        assert timing['finished_at_ms'] >= timing['accepted_at_ms']
     assert len(prompts) == 2 and any(m['content'] == '雨夜' for m in prompts[1])
     snapshot = (await canvas_client.get(url + '/snapshot')).json()['data']['history']
     assert not snapshot['active_turn'] and snapshot['models']['text'] == 'canvas-text'
     assert [m['content'] for m in snapshot['messages']] == ['雨夜', '霓虹', '接着说', '霓虹']
+    assert snapshot['messages'][-1]['payload']['turn_timing'] == timing
     events = await canvas_client.get(url + '/events', params={'follow': False})
     assert 'event: turn.completed' in events.text
 

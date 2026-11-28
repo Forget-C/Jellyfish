@@ -1,7 +1,7 @@
+import { ExperimentMediaTask } from '../components/ExperimentMediaTask'
 import { useUiText } from '../../../../uiText'
 import { bindChatSession, readTrialHistory } from '../../../../services/chatSession'
 import { useTrialModelPreference } from '../hooks/useTrialModelPreference'
-import { MediaTaskDetails } from '../components/MediaTaskDetails'
 import { useExperimentLibrary } from '../hooks/useExperimentLibrary'
 /**
  * 视频实验室模态组件。
@@ -27,8 +27,6 @@ import { ExperimentHistory } from '../components/ExperimentHistory'
 import { ExperimentHistoryRestoreButton } from '../components/ExperimentHistoryRestoreButton'
 import { ExperimentHistoryReferences } from '../components/ExperimentHistoryReferences'
 import { ExperimentMessageBubble } from '../components/ExperimentMessageBubble'
-import { ExperimentResultMedia } from '../components/ExperimentResultMedia'
-import { ExperimentTaskStatus } from '../components/ExperimentTaskStatus'
 import { useExperimentTaskResults } from '../hooks/useExperimentTaskResults'
 import { ExperimentOptionBar } from '../components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../components/ExperimentPromptEditor'
@@ -42,6 +40,7 @@ import type { ExperimentLabType } from '../hooks/useExperimentSessions'
 
 type VideoMessage = {
   receipt?: MediaTaskReceipt
+  submittedPrompt?: string
   id: string; role: 'user' | 'assistant'; content: string; taskId?: string; status?: string
   progress?: number | null; videoUrl?: string; error?: string; ratio?: string
   resolution?: string
@@ -133,7 +132,12 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
 
 
   const currentPrompt = selectedTemplate ? renderPromptTemplate(selectedTemplate.content, templateValues).trim() : draft.trim()
-  const persistedMessages = history.messages.map(toVideoMessage)
+  const userPrompts = new Map(history.messages.filter(item => item.role === 'user').map(item => [
+    item.sequence, readExperimentInputSnapshot(item)?.prompt ?? item.content,
+  ]))
+  const persistedMessages = history.messages.map(item => ({
+    ...toVideoMessage(item), submittedPrompt: item.task_id ? userPrompts.get(item.sequence - 1) : undefined,
+  }))
   const { messages, runningTaskId, observeAdmission, retryStatus } = useExperimentTaskResults(session, history, persistedMessages, (item, result) => ({
     ...item,
     videoUrl: buildFileDownloadUrl(result.artifacts?.find(file => !file.deleted && file.media_type === 'video')?.file_id) ?? item.videoUrl,
@@ -259,15 +263,14 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
         key={item.id}
         footer={item.inputSnapshot ? <ExperimentHistoryRestoreButton disabled={disabled} onRestore={() => restoreUserMessage(item)} /> : undefined}
         identity={isUser ? uiText("你") : uiText("视频生成")}
-        status={item.taskId ? <ExperimentTaskStatus status={item.status} progress={item.progress} unavailable={item.unavailable} onRetry={item.taskId === runningTaskId ? retryStatus : undefined} /> : null}
         tone={isUser ? 'user' : 'assistant'}
         result={!isUser}
       >
-          {isUser || item.content !== '视频生成任务已提交，正在等待生成结果。' ? item.content : null}
+          {isUser || !item.taskId ? item.content : null}
           {isUser ? <><ExperimentHistoryReferences files={files} references={[...(['first', 'last', 'key'] as FrameSlot[]).flatMap((slot) => item.frameFileIds?.[slot] ? [{ id: item.frameFileIds[slot]!, label: uiText(frameLabels[slot]) }] : []), ...(item.subjectReferences ?? []).flatMap((subject) => subject.media.filter(file => file.kind === 'image').map(({ id }) => ({ id, label: uiText("{{name}}图片", { name: subject.name }) })))]} />{(item.subjectReferences ?? []).flatMap((subject) => subject.media.filter(file => file.kind === 'video').map(({ id }) => <Tag key={`${subject.id}:${id}`} className="mt-1">{subject.name}{uiText("视频：")}{files.find((file) => file.id === id)?.name ?? id}</Tag>))}{item.ratio ? <div className="mt-2 text-xs text-slate-500">{uiText("画幅：")}{item.ratio}</div> : null}</> : null}
-          {item.receipt && <MediaTaskDetails receipt={item.receipt} />}
-            {item.error ? <div className="mt-2 text-sm text-red-600">{item.error}</div> : null}
-          {item.videoUrl ? <ExperimentResultMedia kind="video" urls={[item.videoUrl]} /> : null}
+          {!isUser && item.taskId && <ExperimentMediaTask kind="video" receipt={item.receipt} submittedPrompt={item.submittedPrompt}
+            status={item.status} progress={item.progress} unavailable={item.unavailable} error={item.error}
+            urls={item.videoUrl ? [item.videoUrl] : []} onRetry={item.taskId === runningTaskId ? retryStatus : undefined} />}
       </ExperimentMessageBubble>
     })}
   </ExperimentHistory>

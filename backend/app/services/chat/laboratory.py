@@ -2,6 +2,7 @@
 import asyncio
 import json
 from contextlib import aclosing
+from datetime import UTC, datetime
 
 from fastapi import HTTPException
 from langchain.agents.middleware import wrap_model_call
@@ -22,7 +23,7 @@ from app.services.generation_canvas.assistant_media import resolve_assistant_med
 from app.services.llm.model_capabilities import effective_chat_capabilities
 from app.services.llm.resolver import build_provider_agent_model, get_model_by_category, get_provider_by_model_or_id
 from app.services.studio.session_events import append_session_event, session_event_page
-from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, read_experiment_messages
+from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, epoch_ms, read_experiment_messages, turn_timing
 
 
 def laboratory_tools(tools, media, reference_only=False):
@@ -160,6 +161,11 @@ async def finish(db, session_id, turn_id, status, text='', owner=None, error_cod
         messages = await append_experiment_messages(db, session_id=session_id, drafts=[
             ExperimentMessageDraft(role='assistant', content=text, status=status, payload=message_payload)])
         await db.flush()
+        origin = await db.scalar(select(ExperimentMessage).where(
+            ExperimentMessage.session_id == session_id, ExperimentMessage.role == 'user',
+            ExperimentMessage.payload['turn_id'].as_string() == turn_id,
+        ).order_by(ExperimentMessage.sequence).limit(1))
+        messages[0].payload = {**message_payload, **turn_timing(origin)}
         reply, = await read_experiment_messages(db, messages)
         payload = {'text': text, 'assistant_message': reply.model_dump(mode='json')}
         if error_code:
@@ -216,7 +222,8 @@ async def send(db, session_id, body, *, recovering=None, on_accepted=None):
             raise HTTPException(409, 'Chat turn active')
         messages = await append_experiment_messages(db, session_id=session_id, drafts=[ExperimentMessageDraft(
             role='user', content=body.text, payload={'turn_id': body.request_id, 'file_ids': body.file_ids,
-                                                    'models': choices.model_dump()})])
+                                                    'models': choices.model_dump(),
+                                                    'accepted_at_ms': epoch_ms(datetime.now(UTC))})])
         await db.flush()
         user, = await read_experiment_messages(db, messages)
         await append_session_event(db, session_id, body.request_id, 'turn.accepted',

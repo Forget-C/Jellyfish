@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select, update
@@ -14,6 +15,22 @@ from app.core.contracts.generation import ImageGenerationOperationInput, VideoGe
 from app.core.contracts.media import ImageMediaInput, VideoMediaInput
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.task import Task
+
+
+def epoch_ms(value: datetime | None) -> int | None:
+    """Normalize persisted UTC datetimes for comparisons across task and message records."""
+    if value is None:
+        return None
+    return int((value if value.tzinfo else value.replace(tzinfo=UTC)).timestamp() * 1000)
+
+
+def turn_timing(origin):
+    """Record durable admission and terminal timestamps for a laboratory turn."""
+    accepted = origin.payload.get('accepted_at_ms') if origin else None
+    finished = epoch_ms(datetime.now(UTC))
+    if accepted is None or finished < accepted:
+        return {}
+    return {'turn_timing': {'accepted_at_ms': accepted, 'finished_at_ms': finished}}
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +92,8 @@ async def read_experiment_messages(
             task = tasks.get(message.task_id) if owners.get(message.task_id) == message.session_id else None
             payload = task_message_display_payload(modality=str((message.payload or {}).get("modality") or "generation"))
             if task is not None:
+                if turn_id := (message.payload or {}).get('turn_id'):
+                    payload['turn_id'] = turn_id
                 if source_file_id := (message.payload or {}).get('source_file_id'):
                     payload['source_file_id'] = source_file_id
                 payload.update(progress=task.progress, outputs=[item.model_dump() for item in task.outputs])
