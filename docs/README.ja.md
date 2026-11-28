@@ -30,141 +30,54 @@
 
 AI ショートドラマの制作ワークスペースです。章の本文をシーンに分け、参考素材をそろえ、絵コンテのキャンバスで候補画像を生成します。画面の表示言語は中国語（初期設定）と英語です。
 
-[クイックスタート](#-docker-compose) · [ローカル開発](development/guides/local-development.md)
+[クイックスタート](#クイックスタート) · [ローカル開発](development/guides/local-development.md)
 
-## 📷 スクリーンショット
+## Jellyfish とは？
 
-<a href="../site/static/images/screenshots/home/storyboard.webp"><img src="../site/static/images/screenshots/home/storyboard.webp" alt="このカットを絵コンテのキャンバスで見る" width="720" /></a>
+<p align="center">
+  <a href="../site/static/images/sea-letter/canvas-walkthrough.mp4"><img src="img/canvas-walkthrough.gif" width="960" alt="絵コンテ上でカットの説明を確認し、ホームで手紙を読む林夏のフレームをプレビューする様子" /></a>
+</p>
 
-**このカットができるまで**　海辺の駅のシーンでは、絵コンテ上でカットの説明と人物・ホーム・封筒の参考画像を画像モデルにつなぎました。生成された候補から最初のフレームを選び、ゆっくりと寄るカットを試し撮りしています。
+Jellyfish はショートドラマの脚本を絵コンテにする制作ツールです。章をシーンに分け、それぞれに人物や場所、小道具の参考画像を選び、絵コンテ上でフレームを生成して見比べられます。デモでは、カットの説明と参考画像をもとに、ホームで手紙を読む林夏の姿を描いています。
 
-[選んだ最初のフレーム](../site/static/images/docs/labs/letter-frame.jpg) · [▶ 3 秒間の試し撮り（ローカルデモ）](../site/static/images/sea-letter/letter-push-in.mp4)
+## 主な機能
 
-<details>
-<summary>シーンの参考素材と画面例</summary>
-
-| 林夏 | 海辺の駅のホーム | 古い封筒 |
-| --- | --- | --- |
-| <a href="../site/static/images/docs/assets/samples/character.jpg"><img src="../site/static/images/docs/assets/samples/character.jpg" alt="林夏" width="180" /></a> | <a href="../site/static/images/docs/assets/samples/scene.jpg"><img src="../site/static/images/docs/assets/samples/scene.jpg" alt="海辺の駅のホーム" width="180" /></a> | <a href="../site/static/images/docs/assets/samples/prop.jpg"><img src="../site/static/images/docs/assets/samples/prop.jpg" alt="古い封筒" width="180" /></a> |
-
-| シーン分割 | シーンの参考素材 |
+| 章の本文から絵コンテを生成 | 同じ会話で画像と動画を生成 |
 | --- | --- |
-| <a href="../site/static/images/screenshots/home/scene-division.webp"><img src="../site/static/images/screenshots/home/scene-division.webp" alt="シーン分割" width="320" /></a> | <a href="../site/static/images/screenshots/home/object-references.webp"><img src="../site/static/images/screenshots/home/object-references.webp" alt="シーンの参考素材" width="320" /></a> |
+| <a href="../site/static/images/screenshots/home/scene-division.webp"><img src="../site/static/images/screenshots/home/scene-division.webp" width="195" alt="章の本文から絵コンテを生成" /></a> <a href="../site/static/images/screenshots/home/storyboard.webp"><img src="../site/static/images/screenshots/home/storyboard.webp" width="195" alt="絵コンテ" /></a> | <a href="img/chat-image-to-video.webp"><img src="img/chat-image-to-video.webp" width="420" alt="同じ会話で画像と動画を生成" /></a> |
+| 章をシーンに分け、対応する本文を確認してから、シーンごとに編集可能な絵コンテを生成します。 | 会話はメインモデルが担当し、画像と動画はそれぞれ選択したモデルが生成します。前のターンの画像を動画の最初のフレームに使えます。 |
 
-</details>
+| キャンバス編集 | キャンバスアシスタント |
+| --- | --- |
+| <a href="../site/static/images/docs/canvas/graph.webp"><img src="../site/static/images/docs/canvas/graph.webp" width="420" alt="キャンバス編集" /></a> | <a href="img/canvas-assistant-proposal.webp"><img src="img/canvas-assistant-proposal.webp" width="420" alt="キャンバスアシスタント" /></a> |
+| カットの説明、参考画像、モデルカードをつなぎ、入力を調整して実行し、候補画像を見比べられます。 | カットのカードを選び、変更したい内容を伝えると、アシスタントの修正案を確認して適用できます。 |
 
-## ✨ 主な特長
+| プロジェクト管理 | 共有素材ライブラリ |
+| --- | --- |
+| <a href="../site/static/images/docs/chapter/chapter.webp"><img src="../site/static/images/docs/chapter/chapter.webp" width="420" alt="プロジェクト管理" /></a> | <a href="../site/static/images/screenshots/assets.png"><img src="../site/static/images/screenshots/assets.png" width="420" alt="共有素材ライブラリ" /></a> |
+| プロジェクトごとに章とシーンを整理し、章から絵コンテの作業画面を開けます。 | 俳優、場所、小道具、衣装の素材を複数のプロジェクトで再利用できます。 |
 
-- 各シーンに対応する原文の範囲を確認できます。
-- 同じ人物、場所、小道具の参考素材を複数のカットで再利用できます。
-- 候補画像を選ぶ前に、生成に使った入力と結果を照合できます。
+### MCP でキャンバスに接続
 
-## ✨ 主な機能
+外部の MCP クライアントからキャンバスを読み取り、編集・実行して生成結果を取得できます。 [接続ガイド](../site/content/docs/tools/generation-canvas.md#从-mcp-客户端连接画布)
 
-### 1. AI による脚本の分析と絵コンテの作成
+## クイックスタート
 
-章の本文を保存してシーンの境界を指定し、選んだシーンの絵コンテを生成・編集します。
-
-### 2. カットの準備と確認
-
-章の本文 → シーン分割 → 参考素材の選択 → 絵コンテ → 生成前チェック → 候補画像の確認。
-
-### 3. 素材の一貫性と再利用
-
-人物、場所、小道具、衣装をプロジェクトの素材に関連付け、シーンごとに参考画像を選びます。
-
-### 4. カット単位の画像・動画生成
-
-キャンバスでカットの説明と参考素材をモデルカードにつなぎ、入力を確認して生成した画像や動画を確認します。
-
-### 5. 非同期タスクの管理
-
-テキスト・画像・動画のタスクを追跡し、失敗の原因を確認したり、対応するタスクをキャンセルしたりできます。
-
-### 6. モデル・プロンプト・生成サービス
-
-プロバイダーと既定モデルを設定し、プロンプトテンプレートを管理します。バックエンドとの連携には OpenAPI を使います。
-
-## 🚀 機能一覧
-
-### プロジェクトと章の管理
-
-プロジェクトを作成し、章の本文を保存して過去のシーン分割案を参照できます。
-
-### AI による脚本処理
-
-テキストラボで台詞、人物の動き、カットの描写を試作できます。
-
-### カットの準備手順
-
-原文とシーンの参考素材を照合しながら、カットごとの描写を調整できます。
-
-### 素材と登場要素の管理
-
-プロジェクトの素材を管理し、各シーンで使用する参考画像を選択できます。
-
-### カット生成ワークスペース
-
-プロンプトとモデル設定を編集し、生成前チェックを実行して候補をプレビューできます。
-
-### タスクセンター
-
-進捗を追跡し、タスクを開いて結果を確認できます。
-
-### モデルとプロンプトの管理
-
-生成タスクごとの既定モデルを選び、再利用するプロンプトテンプレートを管理できます。
-
-### ファイルとメディアの管理
-
-アップロードした素材や生成結果をプレビューし、参考素材として再利用できます。
-
-## 🎯 活用例
-
-- ショートドラマのチームで絵コンテを準備し、候補画像をレビューする。
-- 個人制作で同じシーンのカット割りを試す。
-- 教育、ブランド、EC 向けの脚本を短編動画に仕上げる。
-
-## 🔁 フロントエンドの OpenAPI クライアントと型の生成
-
-現在のコードで API を `http://127.0.0.1:8000` に起動し、リポジトリのルートで次のコマンドを実行して `front/openapi.json` と `front/src/services/generated/` を更新します。
+初めてローカル環境で試す場合は、Git をインストールし、Compose プラグインを備えた Docker を起動してから、次のコマンドを実行します。
 
 ```bash
-pnpm --dir front run openapi:update
-```
-
-## 🐳 Docker Compose
-
-### ポート
-
-- フロントエンド: `http://localhost:7788`
-- API: `http://localhost:8000` (Swagger UI: `/docs`)
-- MySQL: `localhost:${MYSQL_PORT:-3306}`
-- RustFS: `http://localhost:${RUSTFS_PORT:-9000}`
-
-### 起動
-
-初回はリポジトリのルートで環境ファイルを作成し、サービスを起動します。
-
-```bash
+git clone https://github.com/Forget-C/Jellyfish.git
+cd Jellyfish
 cp deploy/compose/.env.example deploy/compose/.env
-docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up --build
+docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up --build -d
 ```
 
-フロントエンドを開いたら、[最初のプロジェクトを作成](../site/content/docs/guide/first-project.md)します。メディアを生成する前に[モデルを設定](../site/content/docs/getting-started/model-setup.md)してください。
+[Jellyfish](http://localhost:7788) を開き、プロジェクト一覧から[最初のプロジェクトを作成](../site/content/docs/guide/first-project.md)します。画像や動画を生成する前に[モデルを設定](../site/content/docs/getting-started/model-setup.md)してください。
 
-## キャンバス MCP
+[デプロイガイド](../site/content/docs/getting-started/docker.md) · [キャンバス MCP](../site/content/docs/tools/generation-canvas.md#从-mcp-客户端连接画布) · [OpenAPI クライアント](development/guides/openapi.md)
 
-キャンバス MCP は既定で有効です。`MCP_SECRET_KEY` を設定し、Streamable HTTP で接続します。キーを Bearer トークンとして指定すると、すべてのキャンバスにアクセスできます。[設定手順とキーの生成コマンド](../README.md#canvas-mcp)を参照してください。
+## Star History
 
-## 🧑‍💻 ローカル開発
+[![Jellyfish の GitHub スター数の推移](https://api.star-history.com/svg?repos=Forget-C%2FJellyfish&type=Date)](https://www.star-history.com/?repos=Forget-C%2FJellyfish&type=date)
 
-API、タスクワーカー、Vite の起動手順は[ローカル開発ガイド](development/guides/local-development.md)を参照してください。設計と規約は[開発ドキュメント](development/README.md)、公式サイトの保守は[サイトガイド](../site/README.md)にまとめています。
-
-## 📄 ライセンス
-
-このプロジェクトは [Apache-2.0](../LICENSE) ライセンスで公開されています。
-
-## 💬 コミュニティ・フィードバック
-
-- [GitHub Issues](https://github.com/Forget-C/Jellyfish/issues)
+[問題を報告](https://github.com/Forget-C/Jellyfish/issues) · [開発に参加](../site/content/docs/community/contributing.md) · [Apache 2.0 ライセンス](../LICENSE)
