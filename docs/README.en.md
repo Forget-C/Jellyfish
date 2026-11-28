@@ -100,6 +100,16 @@ Open [Jellyfish](http://localhost:7788), go to **Projects** and [create your fir
 
 [Deployment guide](../site/content/docs/getting-started/docker.md) · [Canvas MCP](../site/content/docs/tools/generation-canvas.md#从-mcp-客户端连接画布) · [OpenAPI client](development/guides/openapi.md)
 
+## Contribute, sponsor or advertise
+
+We’re improving the way short dramas are made with Jellyfish, from script to storyboard to video. We welcome developers who want to contribute, sponsors who can support the project and advertisers who want to reach its community.
+
+- **Developers** can contribute to the frontend or backend, improve the storyboard canvas, integrate generative models, or help with tests and documentation. Tell us about a problem you’d like to solve, or share a link to relevant work.
+- **Sponsors** can support ongoing development and maintenance through funding, compute, model API credits or testing resources. Let us know what you’d like to support and how.
+- **Advertisers** with products or services for short-drama creators, film and television teams or AI tool developers are welcome to get in touch. Please introduce your product, describe your audience and tell us what kind of advertising you have in mind.
+
+Email us at [jellyfishai@163.com](mailto:jellyfishai@163.com). To help us respond, please include “Development”, “Sponsorship” or “Advertising” in the subject line.
+
 ## Star History
 
 [![Jellyfish stars over time](https://api.star-history.com/svg?repos=Forget-C%2FJellyfish&type=Date)](https://www.star-history.com/?repos=Forget-C%2FJellyfish&type=date)

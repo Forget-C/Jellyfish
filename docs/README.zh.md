@@ -100,6 +100,16 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.y
 
 [部署指南](../site/content/docs/getting-started/docker.md) · [画布 MCP](../site/content/docs/tools/generation-canvas.md#从-mcp-客户端连接画布) · [OpenAPI 客户端](development/guides/openapi.md)
 
+## 参与开发与商务合作
+
+Jellyfish 正在持续完善从剧本到分镜、再到视频的短剧创作流程。我们欢迎开发者参与建设，也欢迎有意赞助项目或投放广告的伙伴与我们联系。
+
+- **开发者**：欢迎参与前后端开发、改进分镜画布、接入生成模型，或完善测试和文档。来信时可以聊聊你想解决的问题，或附上相关作品。
+- **赞助商**：如果你希望支持 Jellyfish 的持续开发与维护，欢迎提供资金、算力、模型调用额度或测试资源。请简要说明你希望支持的方向和方式。
+- **广告商**：如果你的产品或服务面向短剧创作者、影视团队或 AI 工具开发者，欢迎洽谈广告合作。请附上产品介绍、目标受众和期望的合作形式。
+
+有意参与，请发邮件至 [jellyfishai@163.com](mailto:jellyfishai@163.com)。建议在邮件主题中注明「开发参与」「项目赞助」或「广告合作」，方便我们回复。
+
 ## Star History
 
 [![Jellyfish 的 GitHub Star 数量随时间变化](https://api.star-history.com/svg?repos=Forget-C%2FJellyfish&type=Date)](https://www.star-history.com/?repos=Forget-C%2FJellyfish&type=date)

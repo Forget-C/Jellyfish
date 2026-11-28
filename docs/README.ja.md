@@ -100,6 +100,16 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.y
 
 [デプロイガイド](../site/content/docs/getting-started/docker.md) · [キャンバス MCP](../site/content/docs/tools/generation-canvas.md#从-mcp-客户端连接画布) · [OpenAPI クライアント](development/guides/openapi.md)
 
+## 開発参加・スポンサー・広告掲載のご案内
+
+Jellyfish では、脚本から絵コンテ、映像へと進むショートドラマの制作フローを改善しています。開発に参加したい方、プロジェクトへの協賛や広告掲載をご検討の方は、ぜひご連絡ください。
+
+- **開発者の方**　フロントエンドやバックエンドの開発、絵コンテのキャンバスの改善、生成モデルの連携、テストやドキュメントの整備にご参加いただけます。取り組みたい課題や、これまでに手がけた関連作品などをお知らせください。
+- **協賛をご検討の方**　資金、計算資源、モデル API の利用クレジット、テスト用のリソースなどを通じて、継続的な開発と保守をご支援いただけます。支援したい分野と方法を簡単にお知らせください。
+- **広告主の方**　ショートドラマのクリエイター、映像制作チーム、AI ツールの開発者向けの製品やサービスについて、広告掲載のご相談を承ります。製品の概要、対象となる利用者層、ご希望の掲載形式をお知らせください。
+
+お問い合わせは [jellyfishai@163.com](mailto:jellyfishai@163.com) までお寄せください。件名に「開発参加」「協賛」「広告掲載」のいずれかをご記入いただけると幸いです。
+
 ## Star History
 
 [![Jellyfish の GitHub スター数の推移](https://api.star-history.com/svg?repos=Forget-C%2FJellyfish&type=Date)](https://www.star-history.com/?repos=Forget-C%2FJellyfish&type=date)
