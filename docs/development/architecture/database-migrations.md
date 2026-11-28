@@ -10,7 +10,7 @@ MySQL 就绪后，Compose 先运行 `backend-migrate`，随后运行 `backend-se
 
 供应商配置版本 `174afba8895d` 要求升级前的 `providers` 表为空。已有配置时迁移会中止并保留数据；初始版本请使用新的空库部署。
 
-`backend/alembic/versions/68e14fd0c209_initial_schema.py` 是初始 revision，显式定义 56 张业务表与约束。后续变更追加独立 revision。迁移不调用 ORM 建表，`backend/init_db.py` 也使用正式迁移入口。Alembic `env.py` 通过 SQLAlchemy 异步桥接连接数据库，导入当前模型供后续 autogenerate 比较。应用运行连接在 MySQL 使用 READ COMMITTED，避免文件删除检查沿用旧快照。
+`backend/alembic/versions/68e14fd0c209_initial_schema.py` 是初始 revision，显式定义 56 张业务表与约束。v1.0.0 的末次 revision 为 `174afba8895d`；v1.1.0 的增量由 `a9d237cc18e1` 一步完成。后续变更从该版本追加 revision。迁移不调用 ORM 建表，`backend/init_db.py` 也使用正式迁移入口。Alembic `env.py` 通过 SQLAlchemy 异步桥接连接数据库，导入当前模型供后续 autogenerate 比较。应用运行连接在 MySQL 使用 READ COMMITTED，避免文件删除检查沿用旧快照。
 
 退役跨场衔接接口后，空库初始化省略 `directing_chapter_transitions`。此前已到达 `68e14fd0c209` 的库沿用原版本号，保留该表、记录及外键。同一 revision 下的这处结构差异是预期行为。若将来通过 Alembic autogenerate 比较已初始化的库，需从生成结果中排除这张历史表的删除操作，除非另行确认存量退役。
 
