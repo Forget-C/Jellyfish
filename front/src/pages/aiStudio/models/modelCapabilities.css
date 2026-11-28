@@ -1,10 +1,10 @@
-.model-cap-disclosure { position: relative; }
-.model-cap-disclosure > summary { cursor: pointer; list-style: none; }
-.model-cap-disclosure > summary::-webkit-details-marker { display: none; }
-.model-cap-disclosure > summary h2 { display: flex; align-items: center; gap: 8px; min-height: 32px; margin: 0; }
-.model-cap-disclosure > summary .anticon { font-size: 12px; transform: rotate(-90deg); }
-.model-cap-disclosure[open] > summary { margin-bottom: 16px; }
-.model-cap-disclosure[open] > summary .anticon { transform: none; }
+.model-editor-disclosure { position: relative; }
+.model-editor-disclosure > summary { cursor: pointer; list-style: none; }
+.model-editor-disclosure > summary::-webkit-details-marker { display: none; }
+.model-editor-disclosure > summary h2 { display: flex; align-items: center; gap: 8px; min-height: 32px; margin: 0; }
+.model-editor-disclosure > summary .anticon { font-size: 12px; transform: rotate(-90deg); }
+.model-editor-disclosure[open] > summary { margin-bottom: 16px; }
+.model-editor-disclosure[open] > summary .anticon { transform: none; }
 .model-cap-actions { position: absolute; inset-block-start: 0; inset-inline-end: 0; }
 .model-cap-label, .model-cap-subheading { font-size: 13px; }
 .model-cap-subheading { font-weight: 500; }

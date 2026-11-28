@@ -987,8 +987,8 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
               <Typography.Text type="secondary">{uiText("描述和参数仅用于手动填写的模型。目录模型沿用目录中的值。")}</Typography.Text>}
           </section>
           <section className="project-settings-group">
-            <details ref={advanced} open={Boolean(initialFields.current.params && initialFields.current.params !== '{}')}>
-              <summary>{uiText("高级参数")}</summary>
+            <details className="model-editor-disclosure" ref={advanced} open={Boolean(initialFields.current.params && initialFields.current.params !== '{}')}>
+              <summary><h2>{uiText("高级参数")} <DownOutlined aria-hidden="true" /></h2></summary>
               <Form.Item name="params" label={uiText("参数（JSON）")} rules={[{
                 validator: async (_, value?: string) => {
                   if (!value?.trim()) return
@@ -1004,7 +1004,7 @@ export default function ModelsTab({ header }: { header: ReactNode }) {
             </details>
           </section>
           {selectedFormCategory && <section className="project-settings-group">
-            <details className="model-cap-disclosure">
+            <details className="model-editor-disclosure">
               <summary><h2>{uiText('模型能力')} <DownOutlined aria-hidden="true" /></h2></summary>
               <div className="model-cap-actions"><CapabilityReset key={JSON.stringify([selectedFormProviderId,selectedFormCategory,editedName,selectedNames])} defaults={defaults} loading={formCatalogLoading} editing={!!modelEditing} /></div>
               {selectedFormCategory === 'text' && <ModelCapabilityFields defaults={defaults} model={modelEditing} />}
