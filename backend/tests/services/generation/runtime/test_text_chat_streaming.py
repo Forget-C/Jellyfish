@@ -97,6 +97,10 @@ async def test_text_lab_streams_from_selected_gateway(tmp_path, monkeypatch, res
         assert response.status_code == 200
         if responses == "failed":
             assert "event: turn.failed" in response.text
+            failed = events[-1]['payload']['message']
+            assert failed['status'] == 'failed'
+            assert failed['payload']['error'] == snapshot.json()['data']['history']['messages'][-1]['payload']['error']
+            assert failed['payload']['turn_timing'] == snapshot.json()['data']['history']['messages'][-1]['payload']['turn_timing']
             return
         assert "event: turn.completed" in response.text
         assert "第一段" in response.text and "第二段" in response.text

@@ -161,10 +161,7 @@ async def finish(db, session_id, turn_id, status, text='', owner=None, error_cod
         messages = await append_experiment_messages(db, session_id=session_id, drafts=[
             ExperimentMessageDraft(role='assistant', content=text, status=status, payload=message_payload)])
         await db.flush()
-        origin = await db.scalar(select(ExperimentMessage).where(
-            ExperimentMessage.session_id == session_id, ExperimentMessage.role == 'user',
-            ExperimentMessage.payload['turn_id'].as_string() == turn_id,
-        ).order_by(ExperimentMessage.sequence).limit(1))
+        origin = await user_turn(db, session_id, turn_id)
         messages[0].payload = {**message_payload, **turn_timing(origin)}
         reply, = await read_experiment_messages(db, messages)
         payload = {'text': text, 'assistant_message': reply.model_dump(mode='json')}

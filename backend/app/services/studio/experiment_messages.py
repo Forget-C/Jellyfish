@@ -91,9 +91,9 @@ async def read_experiment_messages(
         if message.task_id:
             task = tasks.get(message.task_id) if owners.get(message.task_id) == message.session_id else None
             payload = task_message_display_payload(modality=str((message.payload or {}).get("modality") or "generation"))
+            if turn_id := (message.payload or {}).get('turn_id'):
+                payload['turn_id'] = turn_id
             if task is not None:
-                if turn_id := (message.payload or {}).get('turn_id'):
-                    payload['turn_id'] = turn_id
                 if source_file_id := (message.payload or {}).get('source_file_id'):
                     payload['source_file_id'] = source_file_id
                 payload.update(progress=task.progress, outputs=[item.model_dump() for item in task.outputs])

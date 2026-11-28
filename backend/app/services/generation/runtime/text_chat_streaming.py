@@ -59,7 +59,7 @@ def _as_message_data(message: ExperimentMessage) -> StreamMessageData:
     if message.role == "user":
         payload = {key: value for key, value in message.payload.items() if key != '_stream_partial'}
     else:
-        payload = {key: message.payload[key] for key in ('turn_timing', 'interaction_run_id') if key in message.payload}
+        payload = {key: message.payload[key] for key in ('turn_timing', 'interaction_run_id', 'error') if key in message.payload}
     return StreamMessageData(
         id=message.id,
         session_id=message.session_id,

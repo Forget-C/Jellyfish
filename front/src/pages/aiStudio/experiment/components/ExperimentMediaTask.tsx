@@ -18,6 +18,7 @@ type Props = {
   unavailable?: boolean
   submittedPrompt?: string
   sourceUrl?: string
+  hideActivityLabel?: boolean
   onRetry?: () => void
   onCancel?: () => Promise<boolean>
 }
@@ -29,8 +30,17 @@ function mediaAspect(kind: Props['kind'], ratio: unknown) {
   return width > 0 && height > 0 ? width / height : 16 / 9
 }
 
+function originalFileLink(value: string) {
+  try {
+    const url = new URL(value, window.location.href)
+    if (url.protocol === 'http:' || url.protocol === 'https:') return url.href
+  } catch {
+    return undefined
+  }
+}
+
 export function ExperimentMediaTask({
-  kind, receipt, status, progress, urls, error, unavailable, submittedPrompt, sourceUrl, onRetry, onCancel,
+  kind, receipt, status, progress, urls, error, unavailable, submittedPrompt, sourceUrl, hideActivityLabel, onRetry, onCancel,
 }: Props) {
   const uiText = useUiText()
   const [cancelling, setCancelling] = useState(false)
@@ -40,6 +50,7 @@ export function ExperimentMediaTask({
   const elapsed = useElapsedLabel(terminal ? elapsedBetween(receipt?.accepted_at_ms, receipt?.finished_at_ms) : undefined)
   const prompt = receipt?.execution_prompt?.trim() || submittedPrompt?.trim()
   const cancellingTask = active && (cancelling || cancelSent || receipt?.cancel_requested)
+  const originalLink = status === 'succeeded' && urls.length === 1 ? originalFileLink(urls[0]) : undefined
   const image = kind === 'image'
   const aspectRatio = mediaAspect(kind, receipt?.parameters?.ratio)
   const outcome = status === 'succeeded'
@@ -57,7 +68,7 @@ export function ExperimentMediaTask({
   return <div className="experiment-media-task">
     {terminal && receipt && <MediaTaskDetails receipt={receipt} label={elapsed} />}
     {active && <>
-      <p>{uiText(image ? '正在生成图片' : '正在生成视频')}</p>
+      {!hideActivityLabel && <p>{uiText(image ? '正在生成图片' : '正在生成视频')}</p>}
       <div className={`experiment-media-placeholder experiment-media-placeholder-${kind}`}
         style={{ aspectRatio, maxWidth: `min(100%, ${240 * aspectRatio}px)` }}>
         {cancellingTask
@@ -67,8 +78,8 @@ export function ExperimentMediaTask({
       {onCancel && !cancellingTask && <Button type="text" size="small" onClick={() => void cancel()}>{uiText('取消生成')}</Button>}
     </>}
     {(unavailable || !active && !terminal) && <ExperimentTaskStatus unavailable onRetry={onRetry} />}
-    {outcome && <p role="status">{outcome}{status === 'succeeded' && urls.length === 1 && <>
-      {' · '}<a href={urls[0]} target="_blank" rel="noreferrer">{uiText(image ? '查看原图' : '打开视频文件')}</a>
+    {outcome && <p role="status">{outcome}{originalLink && <>
+      {' · '}<a href={originalLink} target="_blank" rel="noreferrer">{uiText(image ? '查看原图' : '打开视频文件')}</a>
     </>}</p>}
     {error && <p className="experiment-result-error">{error}</p>}
     {sourceUrl && <a href={sourceUrl}>{uiText('原版产物')}</a>}

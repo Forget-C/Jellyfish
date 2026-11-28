@@ -37,6 +37,7 @@ try {
   let selected
   let replayAnsweredQuestion = false
   let exerciseResume = false
+  let partialReply
   const resumePositions = []
   let resumeSnapshots = 0
   let exerciseRecovery = false
@@ -140,7 +141,7 @@ try {
       }
     }
     if (url.pathname.endsWith('/stop')) { active = false; if (exerciseStop) cursor++ }
-    const snapshot = {question, session_id: existing.id, cursor, models: {text: 'T', image: 'I'}, messages: savedFailure.length ? savedFailure : failedTurn ? [{id:'failed', role:'assistant', content:'失败', status:'failed', payload:{turn_id:failedTurn}}] : [], capabilities: [], active_turn: active ? activeId : null}
+    const snapshot = {question, partial_reply:partialReply, session_id: existing.id, cursor, models: {text: 'T', image: 'I'}, messages: savedFailure.length ? savedFailure : failedTurn ? [{id:'failed', role:'assistant', content:'失败', status:'failed', payload:{turn_id:failedTurn}}] : [], capabilities: [], active_turn: active ? activeId : null}
     if (url.pathname.endsWith('/snapshot')) {
       assert.equal(url.pathname, '/api/v1/studio/chat/sessions/chat/chat/snapshot')
       if (exerciseResume) resumeSnapshots++
@@ -357,11 +358,20 @@ try {
     content: '已经提交两项生成任务', payload: {turn_id: 'media-turn',
       turn_timing: {accepted_at_ms: 1000, finished_at_ms: 5000}}}
   savedFailure = [taskRow('image', 1, 'succeeded', 7000), taskRow('video', 2, 'running', null), reply]
+  active = true
+  activeId = 'media-turn'
+  partialReply = '我会先完成这段视频'
   await page.reload()
   const replyArticle = page.getByRole('article').filter({hasText:reply.content})
-  await page.getByText('8%', {exact:true}).waitFor()
+  const progress = page.getByText('8%', {exact:true})
+  await progress.waitFor()
+  const lead = page.getByText(partialReply, {exact:true})
+  assert.ok((await lead.boundingBox()).y < (await progress.boundingBox()).y)
+  assert.equal(await page.getByText('正在生成视频', {exact:true}).count(),0)
   await replyArticle.waitFor()
   assert.equal(await replyArticle.getByText(/用时/).count(),0,'total waits for all media tasks')
+  active = false
+  partialReply = undefined
   savedFailure[1] = taskRow('video', 2, 'cancelled', 14000)
   await page.reload()
   await page.getByText('视频生成已取消', {exact:true}).waitFor()

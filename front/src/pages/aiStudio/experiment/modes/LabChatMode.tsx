@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { PlusOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import { Suggestion } from '@ant-design/x'
 import { Alert, Button, Input, Upload } from 'antd'
@@ -244,12 +244,12 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     const reason = row.payload?.error_code ? errorText(row.payload.error_code) : uiText('生成失败')
     return [row.content, reason].filter(Boolean).join('\n')
   }
-  const renderMessage = (row: ExperimentMessageRead) => {
+  const renderMessage = (row: ExperimentMessageRead, hasLead: boolean) => {
     const receipt = row.media_receipt
     if (row.task_id && row.role === 'task') {
       const kind = row.payload?.modality === 'video' || receipt?.parameters?.kind === 'video_generation' ? 'video' : 'image'
       const urls = receipt?.artifacts?.filter(file => !file.deleted).flatMap(file => buildFileDownloadUrl(file.file_id) ?? []) ?? []
-      return <ExperimentMediaTask kind={kind} receipt={receipt ?? undefined} status={receipt?.status ?? row.status ?? undefined}
+      return <ExperimentMediaTask kind={kind} hideActivityLabel={hasLead} receipt={receipt ?? undefined} status={receipt?.status ?? row.status ?? undefined}
         progress={receipt?.progress} error={receipt?.error || row.payload?.error} urls={urls}
         unavailable={(lifecycle.reconnecting || lifecycle.uncertain) && (receipt?.status === 'running' || receipt?.status === 'queued')}
         onRetry={() => void lifecycle.refresh()}
@@ -287,21 +287,28 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     }
     return elapsedBetween(timing.accepted_at_ms, finished)
   }
+  const partialReply = snapshot?.partial_reply ? <ExperimentMessageBubble identity={uiText('模型')} tone="assistant">
+    {snapshot.partial_reply}
+  </ExperimentMessageBubble> : null
+  const firstActiveMedia = partialReply && snapshot?.active_turn
+    ? mediaByTurn.get(snapshot.active_turn)?.find(task => ['queued', 'running'].includes(task.media_receipt?.status ?? ''))
+    : undefined
   const hasMessages = messages.length > 0 || Boolean(snapshot?.active_turn || question || snapshot?.partial_reply)
   const feedback = error || upload.uploadError?.message || (lifecycle.error ? failureText(lifecycle.error) : undefined)
   return render({
     hasMessages,
     history: <ExperimentHistory messageCount={messages.length || Number(hasMessages)} emptyDescription={uiText('暂无会话消息')}>
-      {messages.map(row => <ExperimentMessageBubble key={row.id}
-        identity={uiText(row.role === 'user' ? '你' : row.role === 'task'
-          ? row.payload?.modality === 'video' ? '视频生成' : '图片生成' : '模型')}
-        status={<ExperimentElapsed milliseconds={turnElapsed(row)} />}
-        tone={row.role === 'user' ? 'user' : 'assistant'} result={Boolean(row.media_receipt)}>
-        {renderMessage(row)}
-      </ExperimentMessageBubble>)}
-      {snapshot?.partial_reply && <ExperimentMessageBubble identity={uiText('模型')} tone="assistant">
-        {snapshot.partial_reply}
-      </ExperimentMessageBubble>}
+      {messages.map(row => <Fragment key={row.id}>
+        {firstActiveMedia?.id === row.id && partialReply}
+        <ExperimentMessageBubble
+          identity={uiText(row.role === 'user' ? '你' : row.role === 'task'
+            ? row.payload?.modality === 'video' ? '视频生成' : '图片生成' : '模型')}
+          status={<ExperimentElapsed milliseconds={turnElapsed(row)} />}
+          tone={row.role === 'user' ? 'user' : 'assistant'} result={Boolean(row.media_receipt)}>
+          {renderMessage(row, firstActiveMedia?.id === row.id)}
+        </ExperimentMessageBubble>
+      </Fragment>)}
+      {!firstActiveMedia && partialReply}
       {question && <ExperimentMessageBubble identity={uiText('模型')} tone="assistant">
         <section aria-label={uiText('选择要修订的产物')}>
           <p>{uiText('选择要修订的产物')}</p>
