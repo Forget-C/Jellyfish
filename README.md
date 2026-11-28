@@ -30,161 +30,54 @@
 
 A production workspace for AI short dramas. Divide a chapter into scenes, prepare visual references and generate candidate frames on a storyboard canvas. The interface supports Chinese (default) and English.
 
-[Quick start](#-docker-compose) · [Local development](docs/development/guides/local-development.md)
+[Quick start](#quick-start) · [Local development](docs/development/guides/local-development.md)
 
-## 📷 Screenshots
+## What is Jellyfish?
 
-<a href="site/static/images/screenshots/home/storyboard.webp"><img src="site/static/images/screenshots/home/storyboard.webp" alt="View this shot on the storyboard canvas" width="720" /></a>
+<p align="center">
+  <a href="site/static/images/sea-letter/canvas-walkthrough.mp4"><img src="docs/img/canvas-walkthrough.gif" width="960" alt="Storyboard canvas demo showing the shot description and a candidate frame of Lin Xia reading a letter on the platform" /></a>
+</p>
 
-**How this shot was made**　The storyboard for a seaside station scene connects the shot description and three visual references to an image model. The creator picked a frame from its outputs for a slow push-in.
+Jellyfish helps short-drama creators turn a script into shots. Split a chapter into scenes, choose visual references for each scene, then generate and compare frames on the storyboard. Here, the shot description and references guide the image of Lin Xia reading a letter on the platform.
 
-[Selected first frame](site/static/images/docs/labs/letter-frame.jpg) · [▶ 3-second camera test (local demo)](site/static/images/sea-letter/letter-push-in.mp4)
+## Core Features
 
-<details>
-<summary>Scene references and screenshots</summary>
-
-| Lin Xia | Seaside platform | Old envelope |
-| --- | --- | --- |
-| <a href="site/static/images/docs/assets/samples/character.jpg"><img src="site/static/images/docs/assets/samples/character.jpg" alt="Lin Xia" width="180" /></a> | <a href="site/static/images/docs/assets/samples/scene.jpg"><img src="site/static/images/docs/assets/samples/scene.jpg" alt="Seaside platform" width="180" /></a> | <a href="site/static/images/docs/assets/samples/prop.jpg"><img src="site/static/images/docs/assets/samples/prop.jpg" alt="Old envelope" width="180" /></a> |
-
-| Scene division | Scene references |
+| From chapter to storyboard | Generate images and video in one chat |
 | --- | --- |
-| <a href="site/static/images/screenshots/home/scene-division.webp"><img src="site/static/images/screenshots/home/scene-division.webp" alt="Scene division" width="320" /></a> | <a href="site/static/images/screenshots/home/object-references.webp"><img src="site/static/images/screenshots/home/object-references.webp" alt="Scene references" width="320" /></a> |
+| <a href="site/static/images/screenshots/home/scene-division.webp"><img src="site/static/images/screenshots/home/scene-division.webp" width="195" alt="From chapter to storyboard" /></a> <a href="site/static/images/screenshots/home/storyboard.webp"><img src="site/static/images/screenshots/home/storyboard.webp" width="195" alt="Storyboard canvas" /></a> | <a href="docs/img/chat-image-to-video.webp"><img src="docs/img/chat-image-to-video.webp" width="420" alt="Generate images and video in one chat" /></a> |
+| Split a chapter into scenes, confirm the source passages and generate an editable storyboard for each scene. | The main model handles the conversation. Separate image and video models generate the media, so you can use an image from an earlier turn as the first frame of a video. |
 
-</details>
+| Canvas editor | Canvas assistant |
+| --- | --- |
+| <a href="site/static/images/docs/canvas/graph.webp"><img src="site/static/images/docs/canvas/graph.webp" width="420" alt="Canvas editor" /></a> | <a href="docs/img/canvas-assistant-proposal.webp"><img src="docs/img/canvas-assistant-proposal.webp" width="420" alt="Canvas assistant" /></a> |
+| Connect shot descriptions, references and model cards. Adjust the inputs, run the canvas and compare candidate frames. | Select a shot card, describe the change you want and review the assistant’s proposed edit before applying it. |
 
-## ✨ Core Value
+| Project management | Shared asset library |
+| --- | --- |
+| <a href="site/static/images/docs/chapter/chapter.webp"><img src="site/static/images/docs/chapter/chapter.webp" width="420" alt="Project management" /></a> | <a href="site/static/images/screenshots/assets.png"><img src="site/static/images/screenshots/assets.png" width="420" alt="Shared asset library" /></a> |
+| Organize chapters and scenes by project and open the storyboard workspace from a chapter. | Reuse actors, locations, props and costumes across projects. |
 
-- Trace each scene back to the passage it adapts.
-- Reuse the same character, location and prop references across shots.
-- Inspect the inputs and results of a generation run before choosing a candidate.
+### Connect via Canvas MCP
 
-## ✨ Core Capabilities
+Read, edit and run a Jellyfish canvas from an external MCP client and retrieve the results. [Connection guide](site/content/docs/tools/generation-canvas.md#从-mcp-客户端连接画布)
 
-### 1. AI script understanding and storyboard breakdown
+## Quick Start
 
-Save the chapter text, mark scene boundaries, then generate and edit a storyboard for a selected scene.
-
-### 2. Shot preparation and confirmation workflow
-
-Chapter text → scene division → reference selection → storyboard canvas → precheck → candidate review.
-
-### 3. Asset consistency and reuse
-
-Link characters, locations, props and costumes to project assets. Choose the reference images needed for each scene.
-
-### 4. Shot-level image and video orchestration
-
-On the canvas, connect shot descriptions and references to a model card, check its inputs and review the generated media.
-
-### 5. Unified async task center
-
-Track text, image and video jobs, inspect failures and cancel eligible tasks.
-
-### 6. Model, prompt, and generation infrastructure
-
-Configure providers and default models, manage prompt templates and access the backend through its OpenAPI contract.
-
-## 🚀 Feature Overview
-
-### Project and chapter management
-
-Create a project, save chapter text and reopen earlier scene divisions.
-
-### AI script processing
-
-Use the text lab to explore alternate dialogue, actions and shot descriptions.
-
-### Shot preparation workflow
-
-Review the source passage alongside the scene references and refine each shot description.
-
-### Asset and entity management
-
-Maintain project assets and choose which reference images a scene uses.
-
-### Shot generation workspace
-
-Edit prompts and model parameters, run a precheck and preview candidate outputs.
-
-### Task center
-
-Monitor progress and open a task to inspect its result.
-
-### Model and prompt infrastructure
-
-Choose defaults for different generation tasks and maintain reusable prompt templates.
-
-### File and media management
-
-Preview uploaded and generated media and reuse them as references.
-
-## 🎯 Use Cases
-
-- Short-drama teams preparing storyboards and reviewing candidate frames together.
-- Independent creators trying different shots for the same scene.
-- Education, brand and e-commerce teams developing scripts into short videos.
-
-## 🔁 Frontend OpenAPI client and type generation
-
-With the API serving the current code at `http://127.0.0.1:8000`, run the following from the repository root to refresh `front/openapi.json` and `front/src/services/generated/`.
+For a first local run, install Git and start Docker with the Compose plugin. Then run:
 
 ```bash
-pnpm --dir front run openapi:update
-```
-
-## 🐳 Docker Compose
-
-### Ports
-
-- Frontend: `http://localhost:7788`
-- API: `http://localhost:8000` (Swagger UI: `/docs`)
-- MySQL: `localhost:${MYSQL_PORT:-3306}`
-- RustFS: `http://localhost:${RUSTFS_PORT:-9000}`
-
-### Start
-
-From the repository root, create the environment file on first setup and start the services.
-
-```bash
+git clone https://github.com/Forget-C/Jellyfish.git
+cd Jellyfish
 cp deploy/compose/.env.example deploy/compose/.env
-docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up --build
+docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up --build -d
 ```
 
-Once the frontend opens, [create your first project](site/content/docs/guide/first-project.md). Before generating media, [configure a model](site/content/docs/getting-started/model-setup.md).
+Open [Jellyfish](http://localhost:7788), go to **Projects** and [create your first project](site/content/docs/guide/first-project.md). [Configure a model](site/content/docs/getting-started/model-setup.md) before generating media.
 
-## Canvas MCP
+[Deployment guide](site/content/docs/getting-started/docker.md) · [Canvas MCP](site/content/docs/tools/generation-canvas.md#从-mcp-客户端连接画布) · [OpenAPI client](docs/development/guides/openapi.md)
 
-Generate a key and set `MCP_SECRET_KEY` in `deploy/compose/.env` for Docker Compose or `backend/.env` for local development. `MCP_ENABLED` defaults to `true`. Set it to `false` to disable MCP. The API serves `/mcp` only when MCP is enabled and a key is set.
+## Star History
 
-**macOS / Linux with OpenSSL**
+[![Jellyfish stars over time](https://api.star-history.com/svg?repos=Forget-C%2FJellyfish&type=Date)](https://www.star-history.com/?repos=Forget-C%2FJellyfish&type=date)
 
-```sh
-openssl rand -hex 32
-```
-
-**Windows PowerShell 5.1 / PowerShell 7**
-
-```powershell
-$bytes = New-Object byte[] 32
-$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-$rng.GetBytes($bytes)
-$rng.Dispose()
-[BitConverter]::ToString($bytes).Replace('-', '').ToLowerInvariant()
-```
-
-Restart the local API or recreate the Compose `backend` service to apply the configuration. In your MCP client, select **Streamable HTTP**, use `http://localhost:8000/mcp` (or your deployed API URL with `/mcp` appended), and set `Authorization: Bearer <key>`. The key grants access to all free canvases and scene storyboard canvases. If you used a temporary token before upgrading, replace it with this key.
-
-Deployment, rotation, and troubleshooting are covered in the [canvas MCP guide](site/content/docs/tools/generation-canvas.md#从-mcp-客户端连接画布).
-
-## 🧑‍💻 Local Development
-
-Follow the [local development guide](docs/development/guides/local-development.md) to start the API, task worker and Vite frontend. See the [developer documentation](docs/development/README.md) for architecture and standards, or the [site guide](site/README.md) to work on the website.
-
-## 📄 License
-
-This project is licensed under [Apache-2.0](LICENSE).
-
-## 💬 Community & Feedback
-
-- [GitHub Issues](https://github.com/Forget-C/Jellyfish/issues)
+[Report an issue](https://github.com/Forget-C/Jellyfish/issues) · [Contribute](site/content/docs/community/contributing.md) · [Apache 2.0 license](LICENSE)
