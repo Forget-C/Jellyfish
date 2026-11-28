@@ -375,7 +375,13 @@ try {
   savedFailure[1] = taskRow('video', 2, 'cancelled', 14000)
   await page.reload()
   await page.getByText('视频生成已取消', {exact:true}).waitFor()
-  await replyArticle.getByText('用时 13 秒', {exact:true}).waitFor()
+  await replyArticle.locator('header').getByText('用时 13 秒', {exact:true}).waitFor()
+  const videoTask = page.getByRole('article').filter({hasText:'视频生成已取消'})
+  const details = videoTask.locator('header').getByRole('button',{name:'生成详情'})
+  assert.equal(await details.getAttribute('aria-expanded'),'false')
+  await details.press('Enter')
+  await videoTask.getByText('用时 12 秒',{exact:true}).waitFor()
+  assert.equal(await videoTask.locator('header').getByText(/用时/).count(),0)
   assert.equal(await page.locator('.experiment-media-placeholder').count(),0)
 
 } finally {

@@ -83,3 +83,20 @@
 .experiment-result-dialog .experiment-result-frame :is(img, video) { object-fit: contain; }
 
 .experiment-result-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; }
+
+.experiment-result-dialog .ant-modal-header { padding-inline-end: 72px; }
+.experiment-result-dialog .experiment-result-download,
+.experiment-result-dialog .ant-modal-close {
+  position: absolute;
+  inset-block-start: 8px;
+  width: 36px;
+  height: 36px;
+}
+.experiment-result-dialog .ant-modal-close { inset-inline-end: 8px; }
+.experiment-result-dialog .experiment-result-download { inset-inline-end: 48px; }
+@media (pointer: coarse) {
+  .experiment-result-dialog .ant-modal-header { padding-inline-end: 88px; }
+  .experiment-result-dialog .experiment-result-download,
+  .experiment-result-dialog .ant-modal-close { width: 44px; height: 44px; }
+  .experiment-result-dialog .experiment-result-download { inset-inline-end: 56px; }
+}

@@ -217,6 +217,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
           identity={isUser ? uiText("你") : uiText("图片生成")}
           tone={isUser ? 'user' : 'assistant'}
           result={!isUser}
+          media={!isUser ? {kind: 'image', receipt: item.receipt} : undefined}
         >
             {isUser ? item.content : (
               item.content && item.content !== '图片生成任务已提交，正在等待生成结果。' && item.content !== '已完成'

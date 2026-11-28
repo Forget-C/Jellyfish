@@ -265,6 +265,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
         identity={isUser ? uiText("你") : uiText("视频生成")}
         tone={isUser ? 'user' : 'assistant'}
         result={!isUser}
+        media={!isUser ? {kind: 'video', receipt: item.receipt} : undefined}
       >
           {isUser ? item.content : (
               item.content && item.content !== '视频生成任务已提交，正在等待生成结果。' && item.content !== '已完成'

@@ -4229,6 +4229,8 @@
   "最近测试未通过": "Latest test failed",
   "图像": "Image",
   "生成详情": "Generation details",
+  "下载图片": "Download image",
+  "下载视频": "Download video",
   "用时不足 1 秒": "Took less than 1 second",
   "用时 {{seconds}} 秒": "Took {{seconds}}s",
   "用时 {{minutes}} 分 {{seconds}} 秒": "Took {{minutes}}m {{seconds}}s",

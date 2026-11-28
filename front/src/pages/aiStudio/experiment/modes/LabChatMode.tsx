@@ -244,10 +244,12 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
     const reason = row.payload?.error_code ? errorText(row.payload.error_code) : uiText('生成失败')
     return [row.content, reason].filter(Boolean).join('\n')
   }
+  const mediaKind = (row: ExperimentMessageRead) =>
+    row.payload?.modality === 'video' || row.media_receipt?.parameters?.kind === 'video_generation' ? 'video' : 'image'
   const renderMessage = (row: ExperimentMessageRead, hasLead: boolean) => {
     const receipt = row.media_receipt
     if (row.task_id && row.role === 'task') {
-      const kind = row.payload?.modality === 'video' || receipt?.parameters?.kind === 'video_generation' ? 'video' : 'image'
+      const kind = mediaKind(row)
       const urls = receipt?.artifacts?.filter(file => !file.deleted).flatMap(file => buildFileDownloadUrl(file.file_id) ?? []) ?? []
       return <ExperimentMediaTask kind={kind} hideActivityLabel={hasLead} receipt={receipt ?? undefined} status={receipt?.status ?? row.status ?? undefined}
         progress={receipt?.progress} error={receipt?.error || row.payload?.error} urls={urls}
@@ -302,9 +304,10 @@ export function LabChatMode({ sessionId, ensureSession, render }: Props) {
         {firstActiveMedia?.id === row.id && partialReply}
         <ExperimentMessageBubble
           identity={uiText(row.role === 'user' ? '你' : row.role === 'task'
-            ? row.payload?.modality === 'video' ? '视频生成' : '图片生成' : '模型')}
+            ? mediaKind(row) === 'video' ? '视频生成' : '图片生成' : '模型')}
           status={<ExperimentElapsed milliseconds={turnElapsed(row)} />}
-          tone={row.role === 'user' ? 'user' : 'assistant'} result={Boolean(row.media_receipt)}>
+          tone={row.role === 'user' ? 'user' : 'assistant'} result={row.role === 'task'}
+          media={row.role === 'task' ? {kind: mediaKind(row), receipt: row.media_receipt ?? undefined, hideElapsed: true} : undefined}>
           {renderMessage(row, firstActiveMedia?.id === row.id)}
         </ExperimentMessageBubble>
       </Fragment>)}

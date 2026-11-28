@@ -306,13 +306,12 @@
   white-space: pre-wrap;
 }
 .experiment-message-body:empty { display: none; }
-.experiment-message-user .experiment-message-body,
-.experiment-message-result .experiment-message-body {
+.experiment-message-user .experiment-message-body {
   padding: 8px 12px;
   border-radius: 12px;
 }
 .experiment-message-user .experiment-message-body { background: var(--app-selected); }
-.experiment-message-result .experiment-message-body { background: white; }
+.experiment-message-result .experiment-message-body { background: transparent; padding: 0; }
 .experiment-message-footer { display: flex; justify-content: flex-end; margin-block-start: 4px; }
 .experiment-task-status,
 .experiment-task-read-state { display: inline-flex; align-items: center; gap: 4px; }
