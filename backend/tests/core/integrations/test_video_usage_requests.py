@@ -5,8 +5,9 @@ import httpx
 import pytest
 
 from app.core.contracts.provider import ProviderConfig
+from app.core.contracts.provider_media import RemoteTaskReference
 from app.core.contracts.provider_media import ProviderVideoInput, ProviderVideoFrames, ProviderVideoSubject
-from app.core.integrations.media_provider import MediaProvider
+from app.core.integrations.media_provider import bind_media_provider
 from app.core.integrations.video_capabilities import (
     VideoModelCapability, register_video_model_capability, clear_video_model_capability_overrides,
 )
@@ -28,10 +29,11 @@ async def test_final_reference_request(provider, model, frames, path, field, exp
         assert json.loads(request.content)[field] == expected
         return httpx.Response(200, json={'id': 'result'})
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        result = await MediaProvider(client).submit(
-            ProviderConfig(provider=provider, api_key='key', base_url='https://example.test'),
+        result = await bind_media_provider(
+            ProviderConfig(provider=provider, api_key='key', base_url='https://example.test'), client=client,
+        ).invoke(
             ProviderVideoInput(prompt='test', ratio='16:9', model=model, frame_references=ProviderVideoFrames(**frames)))
-    assert result == 'result'
+    assert isinstance(result, RemoteTaskReference) and result.task_id == 'result'
 
 
 @pytest.mark.asyncio
@@ -47,8 +49,9 @@ async def test_invalid_request_preserves_error_priority(provider, model, seed, f
         pytest.fail('invalid input must not reach provider')
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         with pytest.raises(ValueError) as error:
-            await MediaProvider(client).submit(
-                ProviderConfig(provider=provider, api_key='key'),
+            await bind_media_provider(
+                ProviderConfig(provider=provider, api_key='key'), client=client,
+            ).invoke(
                 ProviderVideoInput(prompt='test', ratio='16:9', model=model, seed=seed, frame_references=ProviderVideoFrames(**frames)))
     assert str(error.value) == message
 
@@ -69,11 +72,11 @@ async def test_vidu_override_keeps_subject_branch_and_media_error():
             inp = ProviderVideoInput(prompt='test', model='usage-test', ratio='16:9',
                 frame_references=ProviderVideoFrames(first_frame='first'),
                 subject_references=[ProviderVideoSubject(name='hero', images=['https://example.test/hero.png'])])
-            assert await MediaProvider(client).submit(ProviderConfig(provider='vidu', api_key='key'), inp) == 'result'
+            assert (await bind_media_provider(ProviderConfig(provider='vidu', api_key='key'), client=client).invoke(inp)).task_id == 'result'
             inp.subject_references[0].images = ['invalid']
             inp.subject_references[0].videos = ['invalid']
             with pytest.raises(ValueError) as error:
-                await MediaProvider(client).submit(ProviderConfig(provider='vidu', api_key='key'), inp)
+                await bind_media_provider(ProviderConfig(provider='vidu', api_key='key'), client=client).invoke(inp)
             assert str(error.value) == 'Vidu subject image references require an http(s) URL or data:image URL'
     finally:
         clear_video_model_capability_overrides(provider='vidu')

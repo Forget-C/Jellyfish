@@ -115,7 +115,7 @@ async def test_actual_worker_receives_whole_continuity_with_explicit_ancestors_w
         async def astream(self, messages):
             received.append(messages[0].content)
             yield SimpleNamespace(content='完整空间分析')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ProviderText)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ProviderText)
     def provider_http(request):
         if request.method == 'POST':
             body = json.loads(request.content)

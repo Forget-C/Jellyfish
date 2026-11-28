@@ -96,7 +96,7 @@ async def test_complex_scope_reaches_real_compiler_without_expanding_dependencie
                                        'excerpt': '林舟在码头', 'asset_id': 'scope-character'}]}
             return SimpleNamespace(content=json.dumps(output, ensure_ascii=False))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = SCRIPT
@@ -265,7 +265,7 @@ async def test_parked_van_still_informs_the_offscreen_detail_shot(tmp_path, monk
                                                                             'scope': {'shot_ids': ['detail']}}}}]}
             return SimpleNamespace(content=json.dumps(output, ensure_ascii=False))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original

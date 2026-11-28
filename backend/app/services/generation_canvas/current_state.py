@@ -47,6 +47,8 @@ class CanvasCurrentState:
         if config and model and provider:
             frozen = {'model_name': model.name, 'model_params': model.params or {}, 'provider_key': config.provider_key,
                       'provider_id': provider.id, 'api_key': config.api_key, 'base_url': config.base_url}
+            if model.capability_profile and category in (ModelCategoryKey.image, ModelCategoryKey.video):
+                frozen['capability_profile'] = model.capability_profile
         model_context = CanvasModelContext(
             model={'id': model.id, 'name': model.name, 'params': model.params} if model else None,
             execution_config=frozen, capability=cap, diagnostics=issues)

@@ -14,18 +14,21 @@ type ExperimentTaskStatusProps = {
   status?: string
   progress?: number | null
   unavailable?: boolean
+  compact?: boolean
   onRetry?: () => void
 }
 
 /** 状态使用任务已知值，读取失败不会改写最后一次可靠状态。 */
-export function ExperimentTaskStatus({ status, progress, unavailable, onRetry }: ExperimentTaskStatusProps) {
+export function ExperimentTaskStatus({ status, progress, unavailable, compact, onRetry }: ExperimentTaskStatusProps) {
   const uiText = useUiText()
   const key = status === 'pending' ? 'queued' : status
   const state = key && Object.prototype.hasOwnProperty.call(states, key) ? states[key as keyof typeof states] : undefined
   const showProgress = key === 'running' && typeof progress === 'number' && Number.isFinite(progress) && progress >= 0 && progress <= 100
   return <>
     {state ? <span className={`experiment-task-status experiment-task-status-${state.tone}`} role="status">
-      <state.icon aria-hidden="true" /> {uiText(state.label)}{showProgress ? ` ${progress}%` : ''}
+      {compact ? (showProgress ? `${progress}%` : uiText(state.label)) : <>
+        <state.icon aria-hidden="true" /> {uiText(state.label)}{showProgress ? ` ${progress}%` : ''}
+      </>}
     </span> : null}
     {unavailable || !state ? <span className="experiment-task-read-state">
       <span role="status">{uiText("状态暂不可用")}</span>

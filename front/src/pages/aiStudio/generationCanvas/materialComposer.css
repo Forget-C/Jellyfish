@@ -36,7 +36,7 @@
 .generation-material-parameters { display: flex; flex: 1; min-width: 0; flex-wrap: nowrap; align-items: center; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
 .generation-material-parameters > .ant-select { flex: none; width: auto; min-width: 64px; max-width: 180px; }
 .generation-material-parameters > .generation-material-model { min-width: 100px; max-width: 180px; }
-.generation-material-parameters .ant-select-selection-item { font-size: 12px; }
+.generation-material-parameters .ant-select-content-value { font-size: 12px; }
 .generation-material-parameters .ant-input-number { width: 64px; flex: 0 0 64px; }
 .generation-material-parameters .ant-input-number-input { font-size: 12px; }
 .generation-result-display { display: inline-flex; align-items: center; gap: 6px; flex: none; color: var(--wb-text); font-size: 11px; white-space: nowrap; }
@@ -80,7 +80,7 @@
 .generation-prompt-candidate-text strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .generation-prompt-candidate-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .generation-prompt-candidates > button[aria-selected="true"], .generation-prompt-candidates > button:hover:not(:disabled) { background: var(--wb-selected); }
-.generation-prompt-popup .ant-popover-inner { padding: 4px; background: var(--wb-raised); border: 1px solid var(--wb-border); }
+.generation-prompt-popup .ant-popover-container { padding: 4px; background: var(--wb-raised); border: 1px solid var(--wb-border); }
 .generation-prompt-candidates small { color: var(--wb-muted); }
 .generation-prompt-candidates > button:disabled { cursor: default; opacity: .55; }
 .generation-card-editor[data-card-type="model.image"] .generation-prompt-token:not([data-invalid="true"]) { background: transparent; color: var(--wb-focus); text-decoration: underline; text-underline-offset: 3px; }

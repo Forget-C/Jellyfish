@@ -3,7 +3,6 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ApiResponse_ExperimentSessionRead_ } from '../models/ApiResponse_ExperimentSessionRead_';
-import type { ApiResponse_list_ExperimentMessageRead__ } from '../models/ApiResponse_list_ExperimentMessageRead__';
 import type { ApiResponse_list_ExperimentSessionRead__ } from '../models/ApiResponse_list_ExperimentSessionRead__';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ExperimentSessionCreate } from '../models/ExperimentSessionCreate';
@@ -42,7 +41,7 @@ export class StudioExperimentSessionsService {
     public static listExperimentSessionsApiV1StudioExperimentSessionsGet({
         labType,
     }: {
-        labType: 'text' | 'image' | 'video',
+        labType: 'chat' | 'text' | 'image' | 'video',
     }): CancelablePromise<ApiResponse_list_ExperimentSessionRead__> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -99,36 +98,6 @@ export class StudioExperimentSessionsService {
             url: '/api/v1/studio/experiment-sessions/{session_id}',
             path: {
                 'session_id': sessionId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * List Experiment Messages
-     * 分页读取一个会话的用户可见消息历史。
-     * @returns ApiResponse_list_ExperimentMessageRead__ Successful Response
-     * @throws ApiError
-     */
-    public static listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet({
-        sessionId,
-        page = 1,
-        pageSize = 50,
-    }: {
-        sessionId: string,
-        page?: number,
-        pageSize?: number,
-    }): CancelablePromise<ApiResponse_list_ExperimentMessageRead__> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/studio/experiment-sessions/{session_id}/messages',
-            path: {
-                'session_id': sessionId,
-            },
-            query: {
-                'page': page,
-                'page_size': pageSize,
             },
             errors: {
                 422: `Validation Error`,

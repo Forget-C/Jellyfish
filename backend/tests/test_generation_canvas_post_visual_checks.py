@@ -40,7 +40,7 @@ async def test_post_visual_check_shares_real_media_preserves_evidence_and_leaves
     async with runtime.sessions.begin() as db:
         generation = await db.get(Model, runtime.model_id)
         generation.category = modality
-        generation.name = 'image-model' if modality == 'image' else 'doubao-seedance'
+        generation.name = 'gpt-image-1' if modality == 'image' else 'doubao-seedance'
         generation.params = {}
         if modality == 'video':
             (await db.get(Provider, runtime.provider_id)).provider_key = 'volcengine'

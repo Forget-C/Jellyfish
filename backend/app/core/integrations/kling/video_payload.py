@@ -4,21 +4,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.core.integrations.video_adapter_usage import KLING_FRAME_ROLES, ordered_video_frames, resolve_video_adapter_usage
+from app.core.integrations.video_adapter_usage import KLING_FRAME_ROLES, ordered_video_frames
 from app.core.contracts.video_generation import VideoGenerationInput
 from app.core.integrations.kling.video_capabilities import validate_kling_video_options
 
 
-def build_create_video_request(input_: VideoGenerationInput) -> tuple[str, dict[str, Any]]:
+def build_create_video_request(input_: VideoGenerationInput, *, connection_test: bool = False) -> tuple[str, dict[str, Any]]:
     """根据模型与参考帧构建可灵 3.0 视频创建请求。"""
-    validate_kling_video_options(input_)
-    model = (input_.model or "").strip().lower()
-    usage = resolve_video_adapter_usage(provider="kling", model=input_.model)
-    if not usage.model_supported:
-        raise ValueError("Kling video model must be kling-3.0 or kling-3.0-turbo")
+    model = (input_.model or "").strip()
+    if connection_test:
+        if not model or model in {".", ".."} or any(char in model for char in "/\\?#%"):
+            raise ValueError("可灵视频模型名称不能包含路径或查询参数")
+    else:
+        validate_kling_video_options(input_)
+        model = model.lower()
     references = _frame_contents(input_)
-    if references and not usage.frame_roles:
-        raise ValueError("Kling 3.0 Turbo only supports text-to-video")
     if references:
         path = "/image-to-video/kling-3.0"
         body: dict[str, Any] = {"contents": _text_content(input_) + references}
@@ -41,11 +41,8 @@ def _text_content(input_: VideoGenerationInput) -> list[dict[str, str]]:
 
 
 def _frame_contents(input_: VideoGenerationInput) -> list[dict[str, Any]]:
-    """拒绝关键帧，并按首帧、尾帧顺序生成可灵内容项。"""
-    if input_.frame_references.key_frames:
-        raise ValueError("Kling 3.0 Omni image-to-video does not support key_frame")
+    """按首帧、尾帧顺序生成可灵内容项。"""
     contents: list[dict[str, Any]] = []
-    # Turbo 也须先读取帧，保留关键帧及仅文生视频错误的原优先级。
     for name, value in ordered_video_frames(input_.frame_references, roles=KLING_FRAME_ROLES):
         contents.append({"type": name, "url": _to_image_data_url(value)})
     return contents

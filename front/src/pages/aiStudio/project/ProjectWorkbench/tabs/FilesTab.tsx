@@ -253,7 +253,7 @@ export function FilesTab() {
         footer={null}
         width={720}
         onCancel={() => { setFocusedId(previewVideo?.id); setPreviewVideo(null) }}
-        destroyOnClose
+        destroyOnHidden
       >
         {previewVideo?.type === 'image' ? <img className="project-resource-preview" alt={previewVideo.name} src={buildFileDownloadUrl(previewVideo.id)} /> : previewVideo?.type === 'audio' ? <audio aria-label={uiText("音频预览")} src={buildFileDownloadUrl(previewVideo.id)} controls style={{ width: '100%' }} /> : previewVideo ? (
           <video

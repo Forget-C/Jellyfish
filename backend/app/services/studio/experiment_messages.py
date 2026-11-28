@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select, update
@@ -14,6 +15,22 @@ from app.core.contracts.generation import ImageGenerationOperationInput, VideoGe
 from app.core.contracts.media import ImageMediaInput, VideoMediaInput
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.task import Task
+
+
+def epoch_ms(value: datetime | None) -> int | None:
+    """Normalize persisted UTC datetimes for comparisons across task and message records."""
+    if value is None:
+        return None
+    return int((value if value.tzinfo else value.replace(tzinfo=UTC)).timestamp() * 1000)
+
+
+def turn_timing(origin):
+    """Record durable admission and terminal timestamps for a laboratory turn."""
+    accepted = origin.payload.get('accepted_at_ms') if origin else None
+    finished = epoch_ms(datetime.now(UTC))
+    if accepted is None or finished < accepted:
+        return {}
+    return {'turn_timing': {'accepted_at_ms': accepted, 'finished_at_ms': finished}}
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +68,7 @@ def task_message_display_payload(*, modality: str) -> dict[str, Any]:
 
 
 async def read_experiment_messages(
-    db: AsyncSession, messages: Sequence[ExperimentMessage],
+    db: AsyncSession, messages: Sequence[ExperimentMessage], *, include_media_receipts: bool = False,
 ) -> list["ExperimentMessageRead"]:
     """读时批量合成任务状态与结果，消息行不保存异步生命周期副本。"""
     from app.schemas.studio.experiment_sessions import ExperimentMessageRead
@@ -63,13 +80,22 @@ async def read_experiment_messages(
     ))).all()) if task_ids else {}
     task_ids = {message.task_id for message in messages if owners.get(message.task_id) == message.session_id}
     tasks = await TaskQueries(db).results(list(task_ids))
+    from app.services.studio.media_receipts import media_task_receipts
+    receipts = await media_task_receipts(db, tasks) if include_media_receipts else {}
     result = []
     for message in messages:
         view = ExperimentMessageRead.model_validate(message)
+        if view.payload and (partial := view.payload.get('_stream_partial')):
+            view.payload = {key: value for key, value in view.payload.items() if key != '_stream_partial'}
+            view.payload['partial_text'] = ''.join(chunk for _, chunk in partial)
         if message.task_id:
             task = tasks.get(message.task_id) if owners.get(message.task_id) == message.session_id else None
             payload = task_message_display_payload(modality=str((message.payload or {}).get("modality") or "generation"))
+            if turn_id := (message.payload or {}).get('turn_id'):
+                payload['turn_id'] = turn_id
             if task is not None:
+                if source_file_id := (message.payload or {}).get('source_file_id'):
+                    payload['source_file_id'] = source_file_id
                 payload.update(progress=task.progress, outputs=[item.model_dump() for item in task.outputs])
                 if task.generation_delivery is not None:
                     payload["result"] = task.generation_delivery.model_dump(mode="json")
@@ -77,11 +103,20 @@ async def read_experiment_messages(
                     payload["result"] = task.result
                 if task.error:
                     payload["error"] = task.error
-                view = view.model_copy(update={"status": task.status.value, "payload": payload})
+                view = view.model_copy(update={"status": task.status.value, "payload": payload,
+                                              "media_receipt": receipts.get(message.task_id)})
             else:
                 view = view.model_copy(update={"status": None, "payload": {**payload, "error": "关联任务不存在"}})
         result.append(view)
     return result
+
+
+async def read_experiment_page(db: AsyncSession, session_id: str, page: int, page_size: int, *, include_media_receipts: bool = False):
+    """Return the selected page of history in display order, including task projections."""
+    rows = (await db.scalars(select(ExperimentMessage).where(
+        ExperimentMessage.session_id == session_id,
+    ).order_by(ExperimentMessage.sequence.desc()).offset((page - 1) * page_size).limit(page_size))).all()
+    return await read_experiment_messages(db, list(reversed(rows)), include_media_receipts=include_media_receipts)
 
 
 async def has_active_experiment_tasks(db: AsyncSession, session_id: str) -> bool:

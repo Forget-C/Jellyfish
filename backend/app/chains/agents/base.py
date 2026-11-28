@@ -281,6 +281,8 @@ class AgentBase(ABC, Generic[T]):
 
     def _build_structured_chain(self) -> Runnable | None:
         """构建 structured output chain（优先 ToolStrategy；缺 langchain 时退回 with_structured_output）。"""
+        if not getattr(self._model, "tools_available", True):
+            return None
         return self.create_agent(structured_output=self.output_model)
 
     def _get_structured_chain(self) -> Runnable | None:

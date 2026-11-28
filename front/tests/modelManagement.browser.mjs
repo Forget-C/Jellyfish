@@ -17,6 +17,8 @@ const model = {
   description: '完整说明' + '，用于验证长文本的浏览和换行'.repeat(20),
   created_by: '验收创建人',
   params: { long_value: 'abcdefghijklmnopqrstuvwxyz'.repeat(35) },
+  capability_profile: { tool_calling: true, native_streaming: true, remote_task: false },
+  storyboard_inspection_capabilities: { image_inputs: true, video_inputs: false },
 }
 const provider = { provider_key: 'openai', id: 'provider1', name: '验收供应商', base_url: 'https://example.invalid' }
 const images = Array.from({ length: 105 }, (_, i) => ({
@@ -41,6 +43,7 @@ let releaseInitialLoad
 const initialLoad = new Promise(resolve => { releaseInitialLoad = resolve })
 let deleteGate
 let createRequests = 0
+let capabilityVerifications = []
 let omitTotal = false
 const loadedQueries = []
 let browser
@@ -55,9 +58,27 @@ try {
   await page.route('**/api/**', async route => {
     const { pathname, searchParams } = new URL(route.request().url())
     const respond = data => route.fulfill({ json: { code: 200, data } })
+    if (pathname.endsWith('/models/model1/capability-verifications')) {
+      if (route.request().method() === 'POST') {
+        const { capability } = route.request().postDataJSON()
+        assert.ok(['audio_inputs','video_inputs','tool_calling'].includes(capability))
+        if (capability === 'tool_calling' && capabilityVerifications.some(item => item.capability === capability)) return route.fulfill({status:503,json:{message:'服务暂不可用'}})
+        const item = {
+          id: 'verification'+capabilityVerifications.length, provider_id: provider.id, provider_name: provider.name,
+          model_name: '此前保存的型号', endpoint: 'https://example.invalid/chat/completions',
+          capability, outcome: capability === 'video_inputs' ? 'failed' : 'passed', reason: capability === 'video_inputs' ? 'expected_observation_missing' : 'verified',
+          tested_at: '2026-11-22T08:00:00Z', current: true,
+        }
+        capabilityVerifications.push(item)
+        return respond(item)
+      }
+      return respond(capabilityVerifications)
+    }
+    if (pathname.endsWith('/capability-verifications')) return respond([])
     if (pathname.endsWith('/models/model1') && route.request().method() === 'PATCH') {
       const body = route.request().postDataJSON()
       assert.equal(body.description, '更新后的完整描述')
+      assert.equal(body.capability_profile.remote_task, false)
       assert.equal(body.provider_id, provider.id)
       assert.equal(body.category, 'text')
       if (editFails) return route.fulfill({ status: 500, json: { detail: '编辑失败' } })
@@ -77,16 +98,23 @@ try {
     if (pathname.endsWith('/providers')) return respond({ items: [provider], pagination: { total: 1 } })
     if (pathname.endsWith('/providers/provider1/models/catalog')) {
       return respond({
-        provider_id: provider.id, provider_key: 'fixture', source: 'provider_catalog', models: [{ name: '目录模型', category: 'text', description: '目录描述', params: { temperature: 0.5 } }],
+        provider_id: provider.id, provider_key: 'fixture', source: 'provider_catalog', models: [{ name: '目录模型', category: 'text', description: '目录描述', params: { temperature: 0.5 }, capability_profile: { image_inputs: true, tool_calling: true, native_streaming: true } }],
       })
     }
     if (pathname.endsWith('/providers/provider1/models/import') && route.request().method() === 'POST') {
       createRequests += 1
       const { models } = route.request().postDataJSON()
-      assert.deepEqual(models, [
+      const declarations = models.map(({ capability_profile }) => capability_profile)
+      assert.deepEqual(models.map(({ capability_profile: _, ...entry }) => entry), [
         { name: '新增验收模型', category: 'text', params: {}, description: '手填描述' },
         { name: '目录模型', category: 'text', description: '目录描述', params: { temperature: 0.5 } },
       ])
+      for (const declaration of declarations) {
+        assert.equal(declaration.tool_calling, false)
+        assert.equal(declaration.native_streaming, true)
+        assert.equal(declaration.context_window,4096)
+      }
+      assert.equal(declarations[1].image_inputs, true)
       const created = { ...models[0], id: 'new-model', provider_id: provider.id }
       rows.push(created)
       return respond({ created: [created], skipped: [models[1]] })
@@ -104,7 +132,7 @@ try {
         ...(omitTotal ? {} : { pagination: { total: matching.length } }),
       })
     }
-    if (pathname.endsWith('/supported')) return respond([{ key: 'openai', display_name: 'OpenAI', supported_categories: ['text', 'image', 'video'] }])
+    if (pathname.endsWith('/supported')) return respond([{ key: 'openai', display_name: 'OpenAI', supported_categories: ['text', 'image', 'video'], capability_defaults: { text: { native_streaming: true, tool_calling: true } } }])
     if (pathname.endsWith('/model-settings')) {
       if (route.request().method() === 'PUT') {
         const body = route.request().postDataJSON()
@@ -136,11 +164,65 @@ try {
   const editor = page.getByRole('dialog', { name: '编辑模型' })
   await editor.screenshot({ path: output + '/model-editor-desktop.png', animations: 'disabled' })
   assert.equal((await editor.boundingBox()).width, 720)
-  assert.ok(await editor.locator('.ant-drawer-body').evaluate(node => node.scrollHeight <= node.clientHeight))
+  const disclosure = editor.locator('summary').filter({hasText:'模型能力'})
+  assert.equal(await editor.getByRole('group', { name: '输入模态' }).count(), 0)
+  assert.equal(await editor.getByRole('button',{name:'恢复模型能力默认值'}).count(),0)
+  await disclosure.press('Enter')
+  await editor.getByRole('group', { name: '输入模态' }).getByRole('checkbox', { name: '图像' }).waitFor()
   const modelDescription = editor.getByRole('textbox', { name: '描述', exact: true })
   await editor.getByText(model.created_by, { exact: false }).waitFor()
   assert.equal(await modelDescription.inputValue(), model.description)
   assert.match(await editor.getByRole('textbox', { name: '参数（JSON）' }).inputValue(), /abcdefghijklmnopqrstuvwxyz/)
+  assert.ok(await editor.getByRole('switch', { name: '函数调用（Function calling）', exact: true }).isChecked())
+  assert.equal(await editor.getByRole('spinbutton', { name: '上下文窗口' }).inputValue(), '')
+  await editor.getByText('分镜检查可读取图片和视频静帧，当前接入无法读取连续视频。').waitFor()
+  assert.equal(capabilityVerifications.length, 0)
+  const inputGroup = editor.getByRole('group',{name:'输入模态',exact:true})
+  const typography = element => element.evaluate(node => {
+    const {fontFamily, fontSize, fontWeight, lineHeight, color} = getComputedStyle(node)
+    return {fontFamily, fontSize, fontWeight, lineHeight, color}
+  })
+  assert.deepEqual(await typography(inputGroup.getByText('输入模态',{exact:true})), await typography(editor.locator('label').filter({hasText:/^模型名称$/})))
+  assert.deepEqual(await typography(inputGroup.getByText('图像',{exact:true})), await typography(editor.getByText(provider.name+'（OpenAI）',{exact:true})))
+  await inputGroup.getByLabel('读取连续视频').focus()
+  await page.getByRole('tooltip').getByText('读取连续视频').waitFor()
+  await inputGroup.scrollIntoViewIfNeeded()
+  await editor.screenshot({path:output+'/model-capabilities-desktop.png',animations:'disabled'})
+  await page.setViewportSize({width:375,height:812})
+  assert.ok(await editor.evaluate(node => node.scrollWidth <= node.clientWidth + 1))
+  const probe = editor.getByRole('button',{name:'测试输入模态'})
+  await probe.press('Enter')
+  const panel = page.getByRole('group',{name:'测试输入模态',exact:true})
+  await panel.waitFor()
+  await disclosure.press('Space')
+  await panel.waitFor({state:'hidden'})
+  await disclosure.press('Enter')
+  assert.equal(await probe.getAttribute('aria-expanded'),'false')
+  await probe.press('Enter')
+  await panel.getByRole('checkbox',{name:'连续视频输入'}).check()
+  await panel.getByRole('checkbox',{name:'音频输入'}).check()
+  await panel.getByRole('button',{name:'开始测试'}).click()
+  await panel.getByText(/未确认模型读取到该项内容/).filter({visible:true}).first().waitFor()
+  await panel.getByRole('button',{name:/重\s*试/}).click()
+  await panel.getByText('验证历史').click()
+  await panel.getByText(/此前保存的型号/).first().waitFor()
+  await panel.getByRole('button',{name:'开始测试'}).press('Escape')
+  await panel.waitFor({state:'hidden'})
+  await editor.getByRole('button',{name:'测试工具调用'}).click()
+  const toolPanel = page.getByRole('group',{name:'测试工具调用'})
+  await toolPanel.getByRole('button',{name:'开始测试'}).click()
+  await toolPanel.getByText(/工具调用 · 验证通过/).first().waitFor()
+  await toolPanel.getByRole('button',{name:'开始测试'}).click()
+  await toolPanel.getByText(/工具调用 · 无法发起能力验证/).waitFor()
+  await toolPanel.getByRole('button',{name:'开始测试'}).press('Escape')
+  await editor.getByRole('group',{name:'工具调用',exact:true}).getByText('无法发起能力验证',{exact:true}).waitFor()
+  await disclosure.press('Space')
+  assert.equal(await inputGroup.count(),0)
+  await disclosure.press('Enter')
+  await editor.getByRole('group',{name:'工具调用',exact:true}).getByText('无法发起能力验证',{exact:true}).waitFor()
+  assert.deepEqual(capabilityVerifications.map(item => item.capability),['video_inputs','audio_inputs','video_inputs','tool_calling'])
+  assert.equal(await editor.getByRole('group',{name:'输入模态',exact:true}).getByRole('checkbox',{name:'视频'}).isChecked(),false)
+  await page.setViewportSize({width:1366,height:768})
   await modelDescription.fill('未保存的描述')
   await page.keyboard.press('Escape')
   const discard = page.getByRole('dialog', { name: '放弃未保存的修改？' })
@@ -231,8 +313,7 @@ try {
   await imageDefault.fill('验收图片模型 105')
   await targetOption.click()
   await defaultModal.getByTitle('验收图片模型 105 · 验收供应商（OpenAI）', { exact: true }).waitFor()
-  await defaultModal.getByRole('button', { name: 'Close' }).focus()
-  await page.keyboard.press('Escape')
+  await defaultModal.getByRole('button', { name: '关闭', exact: true }).click()
   await defaultModal.waitFor({ state: 'hidden' })
   await defaults.and(page.locator(':focus')).waitFor()
   assert.equal(await search.inputValue(), '供应商未找到')
@@ -323,8 +404,8 @@ try {
   await supplier.click()
   await page.getByText('验收供应商（OpenAI）', { exact: true }).filter({ visible: true }).last().waitFor()
   await page.keyboard.press('Escape')
+  await supplier.and(page.locator('[aria-expanded="false"]')).waitFor()
   assert.equal(await add.isVisible(), true)
-  assert.equal(await supplier.getAttribute('aria-expanded'), 'false')
   await supplier.click()
   await page.getByText('验收供应商（OpenAI）', { exact: true }).filter({ visible: true }).last().click()
   await add.getByRole('combobox', { name: '类别', exact: true }).click()
@@ -350,6 +431,23 @@ try {
   await json.and(page.locator(':focus')).waitFor()
   assert.equal(createRequests, 0)
   await json.fill('{}')
+  const contextLimit = add.getByRole('spinbutton', { name: '上下文窗口' })
+  const addDisclosure = add.locator('summary').filter({hasText:'模型能力'})
+  await addDisclosure.click()
+  await contextLimit.fill('0')
+  await addDisclosure.click()
+  await submit.click()
+  await add.getByText('请输入大于零的 Token 限额').waitFor()
+  await contextLimit.and(page.locator(':focus')).waitFor()
+  await contextLimit.fill('4.096')
+  await addDisclosure.click()
+  await addDisclosure.click()
+  assert.equal(await contextLimit.inputValue(),'4.096')
+  await add.getByRole('button', { name: '恢复模型能力默认值' }).click()
+  assert.equal(await contextLimit.inputValue(), '')
+  await add.getByRole('button', {name:'撤销'}).click()
+  assert.equal(await contextLimit.inputValue(),'4.096')
+  await add.getByRole('switch', { name: '函数调用（Function calling）', exact: true }).click()
   await submit.click()
   await add.waitFor({ state: 'hidden' })
   assert.equal(createRequests, 1)
@@ -358,6 +456,13 @@ try {
   await search.fill('新增验收模型')
   const created = page.getByRole('button', { name: '新增验收模型', exact: true })
   await created.waitFor()
+  await created.click()
+  assert.equal(await inputGroup.count(),0)
+  await disclosure.click()
+  assert.equal(await editor.getByRole('spinbutton', {name:'上下文窗口'}).inputValue(),'4.096')
+  assert.equal(await editor.getByRole('switch', { name: '函数调用（Function calling）', exact: true }).isChecked(), false)
+  await editor.getByRole('button', { name: '返回' }).click()
+  await editor.waitFor({ state: 'hidden' })
   const addedRow = page.getByRole('row').filter({ has: created })
   const copy = addedRow.getByRole('button', { name: /^复\s*制$/ })
   await copy.click()

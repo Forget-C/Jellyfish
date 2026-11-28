@@ -1,7 +1,7 @@
 import { useUiText } from '../../../uiText'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { ComponentProps, ReactNode } from 'react'
+import type { ComponentPropsWithoutRef, ReactNode } from 'react'
 import { Alert, Button as LightButton, Checkbox, Spin } from 'antd'
 import { ApiError, StudioDirectingService as Directing } from '../../../services/generated'
 import type { StoryboardApplication, StoryboardCandidate, StoryboardConflictChoice, StoryboardDiff, StoryboardDiffCard,
@@ -11,7 +11,7 @@ import { apiErrorMessage } from '../../../services/apiErrorMessage'
 import { WorkbenchButton as ButtonBase } from '../../../components/workbench/WorkbenchButton'
 import { WorkbenchDialogActions, WorkbenchModal } from '../../../components/workbench/WorkbenchModal'
 
-function ReviewButton({ light, variant, ...props }: ComponentProps<typeof ButtonBase> & { light: boolean }) {
+function ReviewButton({ light, variant, ...props }: ComponentPropsWithoutRef<typeof ButtonBase> & { light: boolean }) {
   return light ? <LightButton {...props} type={variant === 'primary' ? 'primary' : variant === 'quiet' ? 'text' : 'default'} />
     : <ButtonBase {...props} variant={variant} />
 }

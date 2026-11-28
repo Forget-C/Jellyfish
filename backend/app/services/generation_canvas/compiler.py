@@ -279,7 +279,7 @@ def compile_inputs(canvas_id: str, prepared, capability: CanvasModelCapability |
             files = [item.file_id for item in result.media]
             if not capability.supports_duplicate_reference_images and len(files) != len(set(files)):
                 issue('DUPLICATE_MEDIA_UNSUPPORTED', '当前模型不支持不同来源使用同一图片文件', '', ['prompt'])
-        result.diagnostics.extend(CanvasDiagnostic.model_validate(item) for item in parameter_diagnostics(card, capability))
+        result.diagnostics.extend(CanvasDiagnostic.model_validate(item) for item in parameter_diagnostics(card, capability, has_reference=bool(result.media)))
     from app.services.generation_canvas.composition import validate_composition_requirements
     validate_composition_requirements(card, result, issue)
     result.can_run = not any('run' in item.blocks for item in result.diagnostics)

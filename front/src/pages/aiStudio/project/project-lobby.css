@@ -42,12 +42,12 @@
   font-size: inherit;
 }
 
-.app-shell .project-lobby-controls .ant-select > .ant-select-selector {
+.app-shell .project-lobby-controls .ant-select {
   height: 100%;
   align-items: center;
 }
 
-.app-shell .project-lobby-controls .ant-select-selection-item {
+.app-shell .project-lobby-controls .ant-select-content-value {
   line-height: normal;
 }
 

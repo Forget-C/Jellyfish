@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import httpx
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.services.llm.provider_test_call import PATHS, PROMPTS
+from app.services.llm.provider_test_call import TEST_CATEGORIES, PROMPTS
 from app.api.utils import apply_keyword_filter, apply_order, paginate
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider
 from app.core.integrations.image_capabilities import (
@@ -17,9 +19,9 @@ from app.core.integrations.image_capabilities import (
     resolve_image_capability,
 )
 from app.core.integrations.video_capabilities import resolve_default_ratio, resolve_video_capability
-from app.core.integrations.model_catalog import discover_provider_models
 from app.core.contracts.model_catalog import ProviderModelCandidate
-from app.core.contracts.provider import ProviderConfig
+from app.core.contracts.model_provider import ModelProviderConfig, ModelProviderConfigurationError
+from app.core.integrations.model_provider_registry import has_remote_model_catalog, list_provider_models
 from app.schemas.common import ApiResponse, PaginatedData, paginated_response
 from app.schemas.llm import (
     ImageGenerationOptionsRead,
@@ -40,6 +42,8 @@ from app.services.llm.provider_registry import (
     is_provider_category_supported,
     list_registered_providers,
 )
+from app.core.integrations.model_capabilities import model_profile
+from app.services.llm.model_capabilities import model_operation_capabilities
 from app.bootstrap import bootstrap_all_registries
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.common import (
@@ -173,13 +177,17 @@ async def get_provider_model_catalog(
         provider=provider,
         category=spec.supported_categories[0],
     )
-    catalog = await discover_provider_models(
-        cfg=ProviderConfig(
-            provider=resolved.provider_key,  # type: ignore[arg-type]
-            api_key=resolved.api_key,
-            base_url=(provider.base_url or spec.default_base_url or "").strip() or None,
+    try:
+        catalog = await list_provider_models(
+            ModelProviderConfig(
+                provider=resolved.provider_key,
+                api_key=resolved.api_key,
+                base_url=(provider.base_url or "").strip() or spec.default_base_url,
+            ),
+            client_factory=lambda: httpx.AsyncClient(timeout=15.0),
         )
-    )
+    except ModelProviderConfigurationError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return ProviderModelCatalogRead(
         provider_id=provider.id,
         provider_key=catalog.provider_key,
@@ -214,13 +222,14 @@ async def import_provider_models(
             category=candidate.category,
             provider_id=provider.id,
             params=candidate.params,
+            capability_profile=candidate.capability_profile.model_dump(exclude_unset=True) if candidate.capability_profile else None,
             description=candidate.description,
             created_by="model_catalog",
         )
         db.add(model)
         await db.flush()
         await db.refresh(model)
-        created.append(ModelRead.model_validate(model))
+        created.append(_model_read(model, provider))
         existing.add((candidate.name, category_value))
     return ProviderModelImportResult(created=created, skipped=skipped)
 
@@ -238,7 +247,7 @@ async def list_models_paginated(
     allow_fields: set[str],
 ) -> ApiResponse[PaginatedData[ModelRead]]:
     """分页查询模型。"""
-    stmt = select(Model)
+    stmt = select(Model).options(selectinload(Model.provider))
     if provider_id is not None:
         stmt = stmt.where(Model.provider_id == provider_id)
     if category is not None:
@@ -254,7 +263,7 @@ async def list_models_paginated(
     )
     items, total = await paginate(db, stmt=stmt, page=page, page_size=page_size)
     return paginated_response(
-        [ModelRead.model_validate(x) for x in items],
+        [_model_read(model, model.provider) for model in items],
         page=page,
         page_size=page_size,
         total=total,
@@ -288,6 +297,7 @@ async def create_model(
         category=body.category,
         provider_id=body.provider_id,
         params=body.params,
+        capability_profile=body.capability_profile.model_dump(exclude_unset=True) if body.capability_profile else None,
         description=body.description,
         created_by=body.created_by,
     )
@@ -302,6 +312,26 @@ async def get_model(
 ) -> Model:
     """获取模型。"""
     return await get_or_404(db, Model, model_id, detail=entity_not_found("Model"))
+
+
+async def read_model(db: AsyncSession, model: Model) -> ModelRead:
+    """Return model management data using the current provider configuration."""
+    provider = await get_or_404(db, Provider, model.provider_id, detail=entity_not_found("Provider"))
+    return _model_read(model, provider)
+
+
+def _model_read(model: Model, provider: Provider) -> ModelRead:
+    data = ModelRead.model_validate(model)
+    data.capability_profile = model_profile(provider.provider_key, model.name, model.category, data.capability_profile)
+    operation = {"image": "image_generation", "video": "video_generation"}.get(model.category, "chat")
+    effective = model_operation_capabilities(model, provider, operation, data.capability_profile)
+    data.effective_capabilities = effective.features
+    data.effective_image_modes = effective.image_modes
+    data.effective_video_modes = effective.video_modes
+    data.storyboard_inspection_capabilities = model_operation_capabilities(
+        model, provider, "storyboard_inspection", data.capability_profile,
+    ).features
+    return data
 
 
 async def update_model(
@@ -411,6 +441,7 @@ async def get_video_generation_options(
         model_name=model.name,
         allowed_ratios=allowed_ratios,
         default_ratio=default_ratio,
+        video_modes=model_operation_capabilities(model, provider, "video_generation").video_modes,
         supports_subject_image_reference=capability.supports_subject_image_reference,
         supports_subject_video_reference=capability.supports_subject_video_reference,
         supports_subject_reference_with_frame_reference=capability.supports_subject_reference_with_frame_reference,
@@ -463,8 +494,9 @@ def list_supported_providers(*, category: ModelCategoryKey | None) -> list[Provi
         ProviderSupportedRead(
             key=spec.key,
             display_name=spec.display_name,
-            test_prompts={c: PROMPTS[c] for c in PATHS.get(spec.key, {}) if c in spec.supported_categories},
-            live_model_catalog=spec.key in {"openai", "volcengine", "aliyun_bailian"},
+            test_prompts={c: PROMPTS[c] for c in TEST_CATEGORIES.get(spec.key, {}) if c in spec.supported_categories},
+            capability_defaults={c: model_profile(spec.key, "", c) for c in spec.supported_categories},
+            live_model_catalog=has_remote_model_catalog(spec.key),
             aliases=list(spec.aliases),
             supported_categories=list(spec.supported_categories),
             default_base_url=spec.default_base_url,

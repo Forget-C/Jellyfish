@@ -83,7 +83,7 @@ try {
     const picker=panel.getByRole('combobox',{name:'参考名称',exact:true});await picker.fill('保留名称');await picker.press('Enter');await delay(220)
     assert.equal(await view(),settled,'editing and save do not move viewport')
     await page.keyboard.press('Escape');await panel.waitFor({state:'hidden'})
-    await card.press('Enter');await panel.waitFor();assert.equal(await panel.locator('.ant-select-selection-item').filter({hasText:'保留名称'}).count(),1)
+    await card.press('Enter');await panel.waitFor();assert.equal(await panel.locator('.ant-select-content-value').filter({hasText:'保留名称'}).count(),1)
   },{}, {reducedMotion:'reduce'})
   await probe('editor follows card movement zoom and manual pan without recentering or hiding',async({card,view})=>{
     await card.press('Enter');const panel=page.locator('.generation-card-editor:visible');await panel.waitFor();await delay(220)

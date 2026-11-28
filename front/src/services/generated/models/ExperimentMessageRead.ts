@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { MediaTaskReceipt } from './MediaTaskReceipt';
 /**
  * 持久化消息的展示结构。
  */
@@ -11,6 +12,7 @@ export type ExperimentMessageRead = {
     status?: (string | null);
     payload?: Record<string, any>;
     task_id?: (string | null);
+    media_receipt?: (MediaTaskReceipt | null);
     id: string;
     session_id: string;
     /**

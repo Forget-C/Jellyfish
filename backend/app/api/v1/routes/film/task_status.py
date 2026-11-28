@@ -9,7 +9,7 @@ from app.core.contracts.task import TaskStatus
 from app.dependencies import get_db
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.task import TaskCancelRead, TaskCancelRequest, TaskPageRead, TaskResultRead, TaskStatusRead, TaskOutputPageRead, ActorImageParametersRead
-from app.services.task_queries import TaskQueries, timestamp
+from app.services.task_queries import TaskQueries, remote_cancellation_view, timestamp
 from app.services.task_service import TaskService
 
 router = APIRouter()
@@ -79,6 +79,7 @@ async def cancel_task(
         raise HTTPException(status_code=404, detail="Task not found")
     return success_response(TaskCancelRead(
         task_id=task.id, status=task.status, cancel_requested=task.cancel_requested_at is not None,
+        remote_cancellation=remote_cancellation_view(task),
         cancel_requested_at_ts=timestamp(task.cancel_requested_at),
         effective_immediately=task.status == TaskStatus.cancelled,
     ))

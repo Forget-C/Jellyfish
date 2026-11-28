@@ -2,11 +2,17 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ApiResponse_CanvasAssistantApprovalSetting_ } from '../models/ApiResponse_CanvasAssistantApprovalSetting_';
+import type { ApiResponse_CanvasAssistantGenerationRead_ } from '../models/ApiResponse_CanvasAssistantGenerationRead_';
+import type { ApiResponse_CanvasAssistantLayout_ } from '../models/ApiResponse_CanvasAssistantLayout_';
+import type { ApiResponse_CanvasAssistantModelSelection_ } from '../models/ApiResponse_CanvasAssistantModelSelection_';
+import type { ApiResponse_CanvasAssistantProposalResult_ } from '../models/ApiResponse_CanvasAssistantProposalResult_';
 import type { ApiResponse_CanvasCardOutputs_ } from '../models/ApiResponse_CanvasCardOutputs_';
 import type { ApiResponse_CanvasCatalog_ } from '../models/ApiResponse_CanvasCatalog_';
 import type { ApiResponse_CanvasCheckPreview_ } from '../models/ApiResponse_CanvasCheckPreview_';
 import type { ApiResponse_CanvasCheckReportRead_ } from '../models/ApiResponse_CanvasCheckReportRead_';
 import type { ApiResponse_CanvasCompiledInput_ } from '../models/ApiResponse_CanvasCompiledInput_';
+import type { ApiResponse_CanvasDraftSaved_ } from '../models/ApiResponse_CanvasDraftSaved_';
 import type { ApiResponse_CanvasModelCapability_ } from '../models/ApiResponse_CanvasModelCapability_';
 import type { ApiResponse_CanvasPostCheckPreview_ } from '../models/ApiResponse_CanvasPostCheckPreview_';
 import type { ApiResponse_CanvasPrecheck_ } from '../models/ApiResponse_CanvasPrecheck_';
@@ -22,9 +28,15 @@ import type { ApiResponse_list_CanvasCheckReportRead__ } from '../models/ApiResp
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_CanvasSummary__ } from '../models/ApiResponse_PaginatedData_CanvasSummary__';
 import type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from '../models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
+import type { CanvasAssistantApprovalSetting } from '../models/CanvasAssistantApprovalSetting';
+import type { CanvasAssistantGenerationApproval } from '../models/CanvasAssistantGenerationApproval';
+import type { CanvasAssistantLayoutDecision } from '../models/CanvasAssistantLayoutDecision';
+import type { CanvasAssistantModelSelection } from '../models/CanvasAssistantModelSelection';
+import type { CanvasAssistantProposalDecision } from '../models/CanvasAssistantProposalDecision';
 import type { CanvasCheckRecheckRequest } from '../models/CanvasCheckRecheckRequest';
 import type { CanvasCheckRequest } from '../models/CanvasCheckRequest';
 import type { CanvasCreate } from '../models/CanvasCreate';
+import type { CanvasDraftSave } from '../models/CanvasDraftSave';
 import type { CanvasPostCheckRequest } from '../models/CanvasPostCheckRequest';
 import type { CanvasPrecheckRequest } from '../models/CanvasPrecheckRequest';
 import type { CanvasRename } from '../models/CanvasRename';
@@ -110,7 +122,7 @@ export class StudioGenerationCanvasesService {
     /**
      * Save Free Draft
      * 原子创建并保存首份有效内容；未知结果可重放原请求。
-     * @returns ApiResponse_CanvasSaved_ Successful Response
+     * @returns ApiResponse_CanvasDraftSaved_ Successful Response
      * @throws ApiError
      */
     public static canvasDraftSave({
@@ -118,8 +130,8 @@ export class StudioGenerationCanvasesService {
         requestBody,
     }: {
         canvasId: string,
-        requestBody: CanvasSave,
-    }): CancelablePromise<ApiResponse_CanvasSaved_> {
+        requestBody: CanvasDraftSave,
+    }): CancelablePromise<ApiResponse_CanvasDraftSaved_> {
         return __request(OpenAPI, {
             method: 'PUT',
             url: '/api/v1/studio/generation-canvases/drafts/{canvas_id}',
@@ -246,6 +258,170 @@ export class StudioGenerationCanvasesService {
             },
             errors: {
                 409: `Conflict`,
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Set Assistant Model
+     * Set the assistant model for this canvas independently of card generation.
+     * @returns ApiResponse_CanvasAssistantModelSelection_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantSetModel({
+        canvasId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        requestBody: CanvasAssistantModelSelection,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantModelSelection_> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/model',
+            path: {
+                'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Set Assistant Approval
+     * Set the assistant approval mode for this canvas.
+     * @returns ApiResponse_CanvasAssistantApprovalSetting_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantSetApproval({
+        canvasId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        requestBody: CanvasAssistantApprovalSetting,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantApprovalSetting_> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/approval',
+            path: {
+                'canvas_id': canvasId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Decide Assistant Proposal
+     * Approve a saved preview through the existing canvas save transaction, or reject it.
+     * @returns ApiResponse_CanvasAssistantProposalResult_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantDecideProposal({
+        canvasId,
+        sourceId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        requestBody: CanvasAssistantProposalDecision,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantProposalResult_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/proposals/{source_id}',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Reapprove Canvas Generation
+     * Accept the exact changed generation input without resubmitting earlier versions.
+     * @returns ApiResponse_CanvasAssistantGenerationRead_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantReapproveGeneration({
+        canvasId,
+        sourceId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        requestBody: CanvasAssistantGenerationApproval,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantGenerationRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/generations/{source_id}/approval',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Decide Layout
+     * Approve a local layout or record the editing browser's result.
+     * @returns ApiResponse_CanvasAssistantLayout_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasAssistantDecideLayout({
+        canvasId,
+        sourceId,
+        requestBody,
+        projectId = '',
+    }: {
+        canvasId: string,
+        sourceId: string,
+        requestBody: CanvasAssistantLayoutDecision,
+        projectId?: string,
+    }): CancelablePromise<ApiResponse_CanvasAssistantLayout_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{canvas_id}/assistant/layout/{source_id}',
+            path: {
+                'canvas_id': canvasId,
+                'source_id': sourceId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
                 422: `Validation Error`,
             },
         });

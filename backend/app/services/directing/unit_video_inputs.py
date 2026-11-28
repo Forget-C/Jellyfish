@@ -7,7 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.media import MediaReference, VideoFrameMediaReferences, VideoMediaInput, VideoSubjectMediaReference
 from app.core.contracts.video_generation import VideoGenerationInput, VideoFrameReferences, VideoSubjectReference, VideoReferenceCapabilities
-from app.core.integrations.video_capabilities import validate_video_options, resolve_video_capability
+from app.core.contracts.model_capabilities import VideoModeDeclaration, VideoOperationMode
+from app.services.llm.model_capabilities import model_operation_capabilities
+from app.core.integrations.video_capabilities import validate_video_declaration, resolve_video_capability
+from app.core.integrations.video_adapter_usage import resolve_video_adapter_usage
 from app.core.integrations.openai.video_capabilities import validate_openai_video_options
 from app.core.integrations.vidu.video_capabilities import validate_vidu_video_options
 from app.core.integrations.kling.video_capabilities import validate_kling_video_options
@@ -26,6 +29,7 @@ class VideoUnitModel:
     name: str
     provider_key: str
     reference_capabilities: VideoReferenceCapabilities
+    modes: dict[VideoOperationMode, VideoModeDeclaration]
 
 
 class UnitVideoInputError(ValueError):
@@ -47,28 +51,58 @@ async def read_video_unit_model(db: AsyncSession, project_id: str, model_or_id: 
     provider = await db.get(Provider, model.provider_id)
     config = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey.video)
     cap = resolve_video_capability(provider=config.provider_key, model=model.name)
-    roles = ["first_frame", "last_frame", "key_frame"]
-    max_frames = 1 if config.provider_key == "openai" else None
-    if config.provider_key == "openai":
-        roles = ["first_frame"]
-    if config.provider_key == "kling":
-        name = model.name.strip().lower()
-        if name not in {"kling-3.0", "kling-3.0-turbo"}:
-            raise ValueError("当前可灵接入不支持此视频模型")
-        roles = ["first_frame", "last_frame"] if name == "kling-3.0" else []
-        max_frames = len(roles)
-    # 只有 Vidu 的现有请求适配器会传递命名主体，不能仅凭覆盖配置宣称可用。
-    subjects = config.provider_key == "vidu"
+    usage = resolve_video_adapter_usage(provider=config.provider_key, model=model.name)
+    if not usage.model_supported:
+        raise ValueError("当前接入不支持此视频模型")
+    # 场次工作台在 OpenAI 上只提交一张首帧。
+    roles = ["first_frame"] if config.provider_key == "openai" else list(usage.frame_roles)
+    max_frames = len(roles) if config.provider_key in {"openai", "kling"} else None
+    modes = model_operation_capabilities(model, provider, "video_generation").video_modes
+    def frame_limit(mode, required, maximum):
+        rule = modes.get(mode)
+        if not rule:
+            return maximum
+        if rule.supported is False or (rule.reference_kinds is not None and "image" not in rule.reference_kinds):
+            return 0
+        if rule.max_references is None:
+            return maximum
+        if rule.max_references < required:
+            return 0
+        return min(maximum, rule.max_references) if maximum is not None else rule.max_references
+
+    # 两帧操作单独声明；关闭单帧模式后，仍可保留能成对使用的首尾帧。
+    single = frame_limit("first_frame", 1, 1)
+    pair = frame_limit("first_last_frames", 2, 2) if "last_frame" in roles else 0
+    keys = frame_limit("key_frames", 1, None) if "key_frame" in roles else 0
+    if not single and not pair:
+        roles = [role for role in roles if role == "key_frame"]
+    if keys == 0:
+        roles = [role for role in roles if role != "key_frame"]
+    if not roles:
+        max_frames = 0
+    elif modes and keys is not None:
+        max_frames = max(single, pair, keys)
+    subject_rule = modes.get("subject_reference")
+    kinds = subject_rule.reference_kinds if subject_rule else None
+    subjects = bool(usage.subject_media_kinds) and (not subject_rule or subject_rule.supported is not False)
+    total = subject_rule.max_references if subject_rule else None
+    subjects = subjects and total != 0
+
+    def subject_limit(limit):
+        if total is None:
+            return limit
+        return min(total, limit) if limit is not None else total
+
     capability = VideoReferenceCapabilities(model_id=model.id, frame_roles=roles, max_frames=max_frames,
-        subject_images=subjects and cap.supports_subject_image_reference,
-        subject_videos=subjects and cap.supports_subject_video_reference,
+        subject_images=subjects and cap.supports_subject_image_reference and (kinds is None or "image" in kinds),
+        subject_videos=subjects and cap.supports_subject_video_reference and (kinds is None or "video" in kinds),
         combine_subjects_and_frames=False,
-        max_subjects=cap.max_subjects, max_images_per_subject=cap.max_images_per_subject,
-        max_videos_per_subject=cap.max_videos_per_subject, max_media_per_subject=cap.max_media_per_subject,
-        max_total_subject_videos=cap.max_total_subject_videos,
+        max_subjects=subject_limit(cap.max_subjects), max_images_per_subject=subject_limit(cap.max_images_per_subject),
+        max_videos_per_subject=subject_limit(cap.max_videos_per_subject), max_media_per_subject=subject_limit(cap.max_media_per_subject),
+        max_total_subject_videos=subject_limit(cap.max_total_subject_videos),
         limits_status="partial" if max_frames is None else "known")
 
-    return VideoUnitModel(model.id, model.name, config.provider_key, capability)
+    return VideoUnitModel(model.id, model.name, config.provider_key, capability, modes)
 
 
 def validated_video_media(unit, model: VideoUnitModel, text: str = '准备检查') -> VideoMediaInput:
@@ -120,7 +154,7 @@ def validated_video_media(unit, model: VideoUnitModel, text: str = '准备检查
             seconds=unit.duration_ms // 1000, seed=unit.parameters.get("seed"),
             frame_references=VideoFrameReferences(first_frame=frame_media.first, last_frame=frame_media.last, key_frames=frame_media.keys),
             subject_references=[VideoSubjectReference(name=s.name, media=s.media) for s in subjects.values()])
-        validate_video_options(provider=model.provider_key, model=model.name, input_=options)
+        validate_video_declaration(model.provider_key, options, model.modes)
         validators = {"openai": validate_openai_video_options, "vidu": validate_vidu_video_options,
                       "kling": validate_kling_video_options, "volcengine": validate_volcengine_video_options}
         validators[model.provider_key](options)

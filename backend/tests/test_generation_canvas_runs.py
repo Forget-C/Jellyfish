@@ -44,7 +44,12 @@ async def runtime(tmp_path, request):
         from app.main import app
     else:
         app = FastAPI()
+        from app.api.v1.routes.studio.chat_sessions import router as chat_sessions_router
+        from app.api.v1.routes.studio.session_transport import router as session_transport_router
+        from tests.chat_events import CHAT_SESSIONS
         app.include_router(router, prefix='/canvases')
+        app.include_router(chat_sessions_router, prefix=CHAT_SESSIONS)
+        app.include_router(session_transport_router, prefix=CHAT_SESSIONS)
         from app.api.v1.routes.studio.projects import router as projects_router
         app.include_router(projects_router, prefix='/projects')
     async def database():
@@ -100,11 +105,12 @@ async def accept(runtime, request_id='run'):
 
 
 @pytest.mark.asyncio
-async def test_ordinary_omni_text_generation_keeps_its_frozen_request_without_check_options(runtime):
+@pytest.mark.parametrize("responses", [False, True])
+async def test_ordinary_omni_text_generation_keeps_its_frozen_request_without_check_options(runtime, responses):
     async with runtime.sessions.begin() as db:
         model = await db.get(Model, runtime.model_id)
         model.name = 'qwen3.8-omni-flash'
-        model.params = {'temperature': 0.3, 'extra_body': {'enable_thinking': True}}
+        model.params = {'temperature': 0.3, 'use_responses_api': responses}
         provider = await db.get(Provider, runtime.provider_id)
         provider.provider_key = 'aliyun_bailian'
     await accept(runtime)
@@ -116,6 +122,13 @@ async def test_ordinary_omni_text_generation_keeps_its_frozen_request_without_ch
     def provider_reply(request):
         body = json.loads(request.content)
         requests.append(body)
+        if responses:
+            assert request.url.path == '/v1/responses'
+            assert 'enable_thinking' not in body
+            events = [{'type': 'response.output_text.delta', 'delta': 'Ordinary text'},
+                      {'type': 'response.completed', 'response': {'status': 'completed'}}]
+            return httpx.Response(200, headers={'content-type': 'text/event-stream'},
+                                  text=''.join(f'data: {json.dumps(event)}\n\n' for event in events))
         assert request.url.path == '/v1/chat/completions'
         assert body['model'] == 'qwen3.8-omni-flash' and body['temperature'] == 0.3
         assert body['stream'] is True and body['enable_thinking'] is False
@@ -159,7 +172,7 @@ async def test_frozen_text_stream_persists_partial_then_publishes_only_complete_
             assert state['runs'][0]['nodes'][0]['text'] == 'First '
             assert state['current_outputs'] == {}
             yield SimpleNamespace(content='second')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', FakeModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', FakeModel)
     worker = TaskWorker(runtime.sessions)
     await worker.tick()
     await asyncio.gather(*worker.jobs.values())
@@ -193,7 +206,7 @@ async def test_success_current_output_receipt_replay_and_failure_keep_prior_publ
             assert params['max_retries'] == 0
         async def astream(self, messages):
             yield SimpleNamespace(content='Complete output')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', GoodModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', GoodModel)
     worker = TaskWorker(runtime.sessions)
     await worker.tick()
     await asyncio.gather(*worker.jobs.values())
@@ -216,7 +229,7 @@ async def test_success_current_output_receipt_replay_and_failure_keep_prior_publ
             calls.append('provider request')
             yield SimpleNamespace(content='Incomplete')
             raise httpx.ReadError('acceptance unknown')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', FailingModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', FailingModel)
     await worker.tick()
     await asyncio.gather(*worker.jobs.values())
     await worker.tick()
@@ -286,7 +299,7 @@ async def test_related_edit_keeps_completed_text_only_in_history(runtime, monkey
         async def astream(self, messages):
             assert messages[0].content == 'Frozen prompt'
             yield SimpleNamespace(content='Historical result')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', FakeModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', FakeModel)
     worker = TaskWorker(runtime.sessions)
     await worker.tick()
     await asyncio.gather(*worker.jobs.values())
@@ -387,7 +400,7 @@ async def test_single_card_uses_published_input_without_executing_upstream_and_r
         async def astream(self, messages):
             calls.append(messages[0].content)
             yield SimpleNamespace(content='Actual source')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', FakeModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', FakeModel)
     worker = TaskWorker(runtime.sessions)
     await accept(runtime)
     await worker.tick()
@@ -559,7 +572,7 @@ async def test_lost_cancel_response_observes_real_worker_without_reexecution(run
             started.set()
             await release.wait()
             yield SimpleNamespace(content='Discarded after cancellation')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     accepted, _ = await accept(runtime)
     worker = TaskWorker(runtime.sessions)
     await worker.tick()
@@ -643,7 +656,7 @@ async def test_bound_creative_basis_runs_through_worker_and_publishes_typed_outp
         async def astream(self, messages):
             assert messages[0].content == '张三望向门口'
             yield SimpleNamespace(content='门口传来敲门声')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', FakeModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', FakeModel)
     worker = TaskWorker(runtime.sessions)
     await worker.tick()
     await asyncio.gather(*worker.jobs.values())
@@ -669,7 +682,7 @@ async def test_snapshot_keeps_admission_order_when_run_timestamps_tie_and_events
             pass
         async def astream(self, _messages):
             yield SimpleNamespace(content='first result')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', FakeModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', FakeModel)
     first, _ = await accept(runtime, 'first-in-same-second')
     worker = TaskWorker(runtime.sessions)
     await worker.tick()

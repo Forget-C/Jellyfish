@@ -242,7 +242,7 @@ async def test_new_project_reads_current_canvas_assets_and_production(baseline_c
         await data(client.post(LLM + '/models', json={
             'id': model_id, 'name': name, 'category': category, 'provider_id': provider_id,
         }), 201)
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', DirectingModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', DirectingModel)
     await data(client.post(STUDIO + '/projects', json={
         'id': project_id, 'name': '新库验收', 'style': '真人都市', 'default_video_ratio': '9:16',
     }), 201)

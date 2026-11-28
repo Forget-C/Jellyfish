@@ -41,7 +41,7 @@ async def test_script_worker_preserves_inputs_and_result_or_fails_missing_data(m
             return result_type.model_validate(expected)
 
     monkeypatch.setattr(script_processing_worker, agent_name, Agent)
-    monkeypatch.setattr("app.task_worker.ChatOpenAI", lambda **kwargs: object())
+    monkeypatch.setattr("app.task_worker.build_langchain_chat", lambda **kwargs: object())
     worker = TaskWorker(sessions)
     try:
         async with sessions() as db:

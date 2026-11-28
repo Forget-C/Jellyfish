@@ -23,6 +23,12 @@ def build_create_video_request(input_: VideoGenerationInput) -> tuple[str, dict[
         body["duration"] = int(input_.seconds)
     if input_.seed is not None:
         body["seed"] = int(input_.seed)
+    if input_.resolution:
+        body["resolution"] = input_.resolution
+    if input_.audio is not None:
+        if not model.startswith("viduq3"):
+            raise ValueError("audio is not supported by this Vidu model")
+        body["audio"] = input_.audio
 
     if input_.subject_references:
         for subject in input_.subject_references:

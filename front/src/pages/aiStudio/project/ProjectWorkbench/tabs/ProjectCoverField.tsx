@@ -61,7 +61,7 @@ export function ProjectCoverField({ projectId, savedId, draft, disabled, onChang
         setError('')
         onChange(file)
       }} />
-    <Modal open={library} title={uiText("从文件管理选择图片")} onCancel={() => setLibrary(false)} footer={null} destroyOnClose>
+    <Modal open={library} title={uiText("从文件管理选择图片")} onCancel={() => setLibrary(false)} footer={null} destroyOnHidden>
       {library && <FileLibraryImagePicker onSelect={id => { onChange(id); setLibrary(false) }} disabled={disabled} />}
     </Modal>
   </div>

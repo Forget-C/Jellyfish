@@ -6,7 +6,7 @@
 
 1. 在 `app/services/llm/provider_bootstrap.py` 声明 `ProviderSpec`。使用稳定小写 key，声明别名、实际支持的模型类别、认证要求与可用的默认地址。与已有 key 或别名冲突时，注册会报错。
 2. 对图片与视频能力，核对 `app/core/contracts/provider.py` 中的 `ProviderKey`、类别能力解析、模型目录和提交前校验。只声明能映射到公共输入契约的选项。
-3. 在 `app/core/integrations/` 中实现供应商协议。独立 Worker 通过 `MediaProvider` 提交或按远端 ID 查询媒体任务；能力注册不会自动增加执行支持。对齐认证、地址、请求映射、返回状态与结果提取，保留提交一次及查询已有任务的执行边界。
+3. 按操作登记适配器。文本调用和模型目录在 `app/core/integrations/model_provider_registry.py` 显式绑定，媒体任务在 `app/core/integrations/media_provider.py` 绑定执行适配器。独立 Worker 通过公共异步协议执行一次提交或按原远端 ID 查询。对齐认证、地址、请求映射、返回状态与结果提取，保留提交一次及查询已有任务的执行边界。
 4. 使用 LLM 路由、解析和媒体供应商测试验证扩展。媒体适配可使用 HTTP 测试传输验证请求及响应映射；对外接口契约变化时按 [OpenAPI 同步指南](openapi.md)更新生成客户端。
 
 ## 与数据库里配置的 Provider 的关系
@@ -38,6 +38,10 @@
 - OpenAI 兼容 Provider 使用其 `/models` API 实时读取目录，需确保 Provider 的 Base URL 与 API Key 有列举模型的权限。
 - Vidu 当前没有公开模型列表 API，页面会显示从其官方 Model Map 维护的目录，并明确标记为官方目录；更新 Vidu 支持模型时应同步更新 `app/core/integrations/model_catalog.py` 与本说明。
 - 可灵同样使用后端维护的固定目录；更新其支持范围时应同步调整 `app/core/integrations/model_catalog.py`、可灵能力矩阵与本说明。
+
+### 声明模型能力
+
+在模型编辑抽屉按操作填写声明。普通文本支持流式、工具与结构化输出等能力字段。图片模式可限制画幅、尺寸、分辨率档位和数量。视频模式可为各分辨率配置时长，例如 `{"720p":{"min_seconds":5,"max_seconds":15},"1080p":[5,10]}` 表示 720p 接受 5～15 秒（含端点），1080p 接受 5 或 10 秒。有效能力也受接入适配器的范围约束。同名模型的声明随各自供应商配置保存。
 
 ### Base URL 优先级（按类别解析）
 

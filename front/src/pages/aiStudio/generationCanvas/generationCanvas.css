@@ -100,7 +100,7 @@
 .generation-card-list h2 { margin: 0; font-size: 16px; }
 .generation-card-list h3 { font-size: 12px; color: var(--wb-muted); margin: 16px 0 8px; }
 .generation-card-list section { display: flex; flex-direction: column; }
-.generation-card-list section .wb-action { width: 100%; margin-bottom: 4px; text-align: left; }
+.generation-card-list section .wb-action { width: 100%; justify-content: flex-start; margin-bottom: 4px; text-align: left; }
 .generation-card-list small { display: block; color: var(--wb-muted); margin-block: 4px; }
 @media(max-width: 600px) {
   .generation-card-list-host { top: 280px; }
@@ -432,7 +432,15 @@
 .canvas-settings-preview img { display: block; width: 100%; height: 100%; min-height: 0; object-fit: cover; }
 @media (max-width: 480px) {
   .canvas-toolbar-menu--compact > .canvas-toolbar-popover > .wb-action.ant-btn { min-height: 36px; }
-  .canvas-settings-dialog .ant-modal-content { padding: 16px; }
+  .canvas-settings-dialog .ant-modal-container { padding: 16px; }
   .canvas-settings-cover { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .canvas-settings-cover-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+}
+
+.generation-card[data-assistant-highlight="true"] .generation-card-body,
+.generation-group[data-assistant-highlight="true"] {
+  box-shadow: 0 0 0 3px rgb(21 170 146 / 60%), 0 0 16px rgb(21 170 146 / 34%);
+}
+.generation-edges [data-assistant-highlight="true"] .canvas-edge-line {
+  filter: drop-shadow(0 0 3px #15aa92) drop-shadow(0 0 2px #15aa92);
 }

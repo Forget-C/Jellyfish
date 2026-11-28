@@ -280,7 +280,7 @@ try {
       assert.ok(title.height < 24)
       assert.equal(create.height, 32)
       assert.equal((await page.locator('.project-lobby-controls .ant-input-affix-wrapper').boundingBox()).height, 32)
-      assert.equal((await page.locator('.project-lobby-controls .ant-select-selector').boundingBox()).height, 32)
+      assert.equal((await page.locator('.project-lobby-controls .ant-select').boundingBox()).height, 32)
       assert.equal((await displayOptions.boundingBox()).height, 32)
     } else {
       assert.ok(searchBox.y >= create.y + create.height)

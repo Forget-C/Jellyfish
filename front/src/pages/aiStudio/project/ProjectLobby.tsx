@@ -299,13 +299,13 @@ function ProjectLobby() {
       />
       <Select
         aria-label={uiText("制作阶段筛选")}
-        popupClassName="project-lobby-options"
+        classNames={{ popup: { root: "project-lobby-options" } }}
         virtual={false}
         value={filterTab}
         options={[{ value: 'all', label: uiText("全部状态") }, { value: 'editRaw', label: uiText("待补原文") }]}
         onChange={value => changeQuery('stage', value === 'editRaw' ? 'edit_raw' : '')}
       />
-      <Dropdown menu={optionsMenu} overlayClassName="project-lobby-options" trigger={['click']} autoFocus>
+      <Dropdown menu={optionsMenu} classNames={{ root: "project-lobby-options" }} trigger={['click']} autoFocus>
         <Button icon={<MoreOutlined />}>{uiText("排序与批量")}</Button>
       </Dropdown>
     </div>
@@ -462,7 +462,7 @@ function ProjectLobby() {
         keyboard={!deleting}
         maskClosable={false}
         closable={!deleting}
-        destroyOnClose
+        destroyOnHidden
       >
         <p>{uiText("确定删除「{{name}}」？此操作不可恢复。", { name: deleteTarget?.name })}</p>
         {deleteError && <Alert type="error" showIcon message={deleteError} />}

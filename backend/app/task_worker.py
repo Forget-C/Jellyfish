@@ -15,18 +15,25 @@ import httpx
 from fastapi import HTTPException
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
+from langchain_core.language_models.chat_models import BaseChatModel
 from openai import APIStatusError, APITimeoutError
 from sqlalchemy import func, or_, select
 
+from app.services.chat.turn_recovery import abandoned
+from app.services.chat.laboratory import recover_turn
 from app.core.db import async_session_maker, close_db
 from app.core.dev_runtime import process_identity
-from app.core.integrations.media_provider import MediaProvider, ProviderDataError
+from app.core.contracts.provider_media import RemoteTaskReference
+from app.core.contracts.model_capabilities import ModelCapabilityProfile
+from app.core.integrations.langchain_chat import build_langchain_chat
+from app.core.integrations.model_capabilities import describe_operation
+from app.core.contracts.model_provider import UnsupportedModelInput
+from app.core.integrations.media_provider import bind_media_provider, ProviderDataError
 from app.core.contracts.directing.scene_storyboard import SceneStoryboard, StoryboardApplication, StoryboardOrganization, StoryboardReviewReport
 from app.core.contracts.task import TaskStatus
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.task import Task
-from app.services.file_cleanup import FileCleaner
+from app.services.file_cleanup import FileCleaner, ORPHAN_AUDIT_LOGGER
 from app.services.directing.errors import DirectingOutputError
 from app.services.directing.review_revision import ReviewRevisionService
 from app.services.directing.storyboard_assembly import validate_storyboard
@@ -40,11 +47,18 @@ from app.services.directing.existing_storyboard_check import (
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.directing.store import DirectingStore, ContinuityNotReady, RevisionConflict
 from app.services.generation.media_execution import build_media_input, deliver_media, load_media_inputs, restore_media_config, store_media_output
+from app.services.generation_canvas.approved_edits import advance_approved_canvas_edits
+from app.services.generation_canvas.approved_generation import (
+    advance_approved_canvas_generations, begin_approved_provider_submission, preserve_approved_provider_submission,
+)
+from app.services.generation_canvas.assistant_generation import publish_generation_changes
+from app.services.generation_canvas.assistant_review import advance_assistant_reviews
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.script_processing_worker import generate_script_result
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
 from app.services.task_service import (
-    AUTO_CHECK_DISPATCH, MEDIA_KINDS, TASK_KINDS, TaskService, utcnow,
+    REMOTE_CANCEL_SENT,
+    AUTO_CHECK_DISPATCH, MEDIA_KINDS, SUBMISSION_UNKNOWN, TASK_KINDS, TaskService, utcnow,
 )
 
 logger = logging.getLogger(__name__)
@@ -89,14 +103,16 @@ class TaskWorker:
         self.limits = limits or WorkerLimits()
         self.worker_id = uuid4().hex
         self.client = client
+        self.chat_jobs: dict[tuple[str, str], asyncio.Task] = {}
         self.jobs: dict[str, asyncio.Task] = {}
         self.phases: dict[str, str] = {}
         self.download_slots = asyncio.Semaphore(self.limits.download)
         self.text_pool = ThreadPoolExecutor(max_workers=self.limits.text, thread_name_prefix="task-text")
         self.text_threads: dict[str, asyncio.Future] = {}
         self.stopping = asyncio.Event()
-        self.cleaner = FileCleaner(self.sessions)
+        self.cleaner = FileCleaner(self.sessions, worker_id=self.worker_id)
         self.maintenance: asyncio.Task | None = None
+        self.assistant_review: asyncio.Task | None = None
         self.next_cleanup_at = 0.0
 
     async def run(self) -> None:
@@ -113,6 +129,7 @@ class TaskWorker:
                 try:
                     await self.tick()
                     self._schedule_cleanup()
+                    self._schedule_assistant_review()
                 except Exception as error:
                     logger.error("task scheduler iteration failed: %s", type(error).__name__)
                 try:
@@ -120,12 +137,15 @@ class TaskWorker:
                 except TimeoutError:
                     pass
         finally:
-            for job in self.jobs.values():
+            for job in (*self.chat_jobs.values(), *self.jobs.values()):
                 job.cancel()
-            await asyncio.gather(*list(self.jobs.values()), return_exceptions=True)
+            await asyncio.gather(*self.chat_jobs.values(), *self.jobs.values(), return_exceptions=True)
             if self.maintenance is not None:
                 self.maintenance.cancel()
                 await asyncio.gather(self.maintenance, return_exceptions=True)
+            if self.assistant_review is not None:
+                self.assistant_review.cancel()
+                await asyncio.gather(self.assistant_review, return_exceptions=True)
             self.text_pool.shutdown(wait=False, cancel_futures=True)
             if owns_client:
                 await self.client.aclose()
@@ -146,12 +166,42 @@ class TaskWorker:
 
         self.maintenance = asyncio.create_task(clean())
 
+    def _schedule_assistant_review(self) -> None:
+        """Keep model review outside the scheduling loop for existing generation tasks."""
+        if self.assistant_review is not None and not self.assistant_review.done():
+            return
+
+        async def review():
+            try:
+                await advance_assistant_reviews(self.sessions)
+            except Exception as error:
+                logger.warning("canvas assistant review failed: %s", type(error).__name__)
+
+        self.assistant_review = asyncio.create_task(review())
+
     async def tick(self) -> None:
         """只在资源有空位时领取任务；远端任务只读取状态，不重新入队。"""
+        for key in await abandoned(self.sessions):
+            key = tuple(key)
+            if key not in self.chat_jobs:
+                job = asyncio.create_task(self._recover_chat(*key))
+                self.chat_jobs[key] = job
+        try:
+            await advance_approved_canvas_edits(self.sessions)
+        except Exception as error:
+            logger.warning("canvas edit approval processing failed: %s", type(error).__name__)
+        try:
+            await advance_approved_canvas_generations(self.sessions)
+        except Exception as error:
+            logger.warning("canvas generation approval processing failed: %s", type(error).__name__)
+        try:
+            await publish_generation_changes(self.sessions)
+        except Exception as error:
+            logger.warning("canvas assistant generation projection failed: %s", type(error).__name__)
         async with self.sessions() as db:
             await TaskService(db).expire_tasks()
             remote_count = await db.scalar(select(func.count()).select_from(Task).where(
-                Task.status == "running", Task.execution_mode == "remote",
+                Task.status == "running", Task.execution_mode == "remote", Task.stage != SUBMISSION_UNKNOWN,
             )) or 0
             for phase, kinds, capacity in (("text", TASK_KINDS - MEDIA_KINDS, self.limits.text),
                                            ("submit", MEDIA_KINDS, self.limits.submit)):
@@ -177,11 +227,22 @@ class TaskWorker:
             due = list(await db.scalars(select(Task.id).where(
                 Task.status == "running", Task.execution_mode == "remote", Task.provider_task_id.is_not(None),
                 Task.id.not_in(list(self.jobs)),
-                or_(Task.next_poll_at <= utcnow(), Task.cancel_requested_at.is_not(None), Task.deadline_at <= utcnow()),
+                or_(Task.next_poll_at <= utcnow(), Task.deadline_at <= utcnow(),
+                    Task.cancel_requested_at.is_not(None) & or_(
+                        Task.remote_status.is_(None), Task.remote_status.not_in(REMOTE_CANCEL_SENT),
+                    )),
             ).order_by(Task.next_poll_at, Task.id).limit(max(0, available))))
             await db.commit()
         for task_id in due:
             self._start(task_id, "poll", self._poll(task_id))
+
+    async def _recover_chat(self, session_id, turn_id):
+        try:
+            await recover_turn(self.sessions, session_id, turn_id)
+        except Exception as error:
+            logger.warning("laboratory turn recovery failed: %s", type(error).__name__)
+        finally:
+            self.chat_jobs.pop((session_id, turn_id), None)
 
     def _start(self, task_id: str, phase: str, operation) -> None:
         """同进程每个任务最多一个活动操作；结束时释放调度名额。"""
@@ -198,13 +259,13 @@ class TaskWorker:
 
         job.add_done_callback(done)
 
-    async def _load(self, task_id: str):
+    async def _load(self, task_id: str, *, handle_remote_cancel: bool = False):
         """读取最新活动任务并裁决取消，返回脱离数据库会话的任务数据。"""
         async with self.sessions() as db:
             task = await db.get(Task, task_id)
             if task is None or task.status != TaskStatus.running:
                 return None
-            if task.cancel_requested_at:
+            if task.cancel_requested_at and not (handle_remote_cancel and task.provider_task_id):
                 await TaskService(db).finish(task_id, cancelled=True)
                 await db.commit()
                 return None
@@ -234,10 +295,18 @@ class TaskWorker:
                 if task.target_type == "directing_unit":
                     async with self.sessions() as db:
                         await DirectingStore(db, task.project_id).validate_task_continuity(task)
-                result = await MediaProvider(self.client).submit(cfg, inp)
-                if isinstance(result, str):
+                if task.target_type == 'canvas_node':
+                    async with self.sessions.begin() as db:
+                        if not await begin_approved_provider_submission(db, task_id, worker_id=self.worker_id):
+                            return
+                elif task.execution_mode == "remote":
+                    async with self.sessions.begin() as db:
+                        if not await TaskService(db).begin_provider_submission(task_id, worker_id=self.worker_id):
+                            return
+                result = await bind_media_provider(cfg, client=self.client).invoke(inp)
+                if isinstance(result, RemoteTaskReference):
                     async with self.sessions() as db:
-                        await TaskService(db).record_submission(task_id, provider_task_id=result, tracking_seconds=self.limits.tracking_seconds)
+                        await TaskService(db).record_submission(task_id, provider_task_id=result.task_id, tracking_seconds=self.limits.tracking_seconds)
                         await db.commit()
                 else:
                     await self._save(task, result)
@@ -247,20 +316,38 @@ class TaskWorker:
                 if current is not None and not (current.execution_mode == "remote" and current.provider_task_id):
                     service = TaskService(db)
                     requeued = current.kind == AUTO_CHECK_DISPATCH and await service.requeue_automatic_dispatch(task_id)
-                    if not requeued:
+                    if not requeued and not await service.mark_provider_submission_unknown(task_id):
                         await service.finish(task_id, error_code="execution_interrupted", error="执行进程已停止，请重新提交")
                     await db.commit()
             raise
         except TimeoutError:
-            await self._fail(task_id, "execution_timeout", "任务执行超时")
+            if not await self._preserve_unknown_submission(task_id):
+                await self._fail(task_id, "execution_timeout", "任务执行超时")
         except ContinuityNotReady as error:
             await self._fail(task_id, "continuity_changed", str(error))
         except DirectingOutputError as error:
             await self._fail(task_id, 'directing_output_invalid', str(error),
                 result=({'storyboard_structure': error.storyboard_structure} if error.storyboard_structure else
                         {'design_diagnostics': error.diagnostics.model_dump(mode='json')} if error.diagnostics else None))
-        except Exception as error:
+        except ProviderDataError as error:
             await self._fail(task_id, "submission_failed", self._error_message(error))
+        except httpx.HTTPStatusError as error:
+            status_code = error.response.status_code
+            rejected = 400 <= status_code < 500 and status_code != 408
+            if rejected or not await self._preserve_unknown_submission(task_id):
+                await self._fail(task_id, "submission_failed", self._error_message(error))
+        except Exception as error:
+            if not await self._preserve_unknown_submission(task_id):
+                await self._fail(task_id, "submission_failed", self._error_message(error))
+
+    async def _preserve_unknown_submission(self, task_id: str) -> bool:
+        async with self.sessions.begin() as db:
+            if await preserve_approved_provider_submission(db, task_id):
+                return True
+            task = await db.get(Task, task_id, with_for_update=True, populate_existing=True)
+            if task is None or task.execution_mode != "remote" or task.target_type == "canvas_node":
+                return False
+            return bool(task.provider_task_id) or await TaskService(db).mark_provider_submission_unknown(task_id)
 
     async def _poll(self, task_id: str) -> None:
         """单次查询失败可延后再查；跟踪截止后最终查询仍未完成则结束本地任务。"""
@@ -268,12 +355,27 @@ class TaskWorker:
         # pylint: disable=try-except-raise
         try:
             async with asyncio.timeout(self.limits.execution_seconds):
-                task = await self._load(task_id)
+                task = await self._load(task_id, handle_remote_cancel=True)
                 if task is None:
                     return
                 cfg = restore_media_config(task)
+                provider = bind_media_provider(cfg, client=self.client)
+                reference = RemoteTaskReference(task.kind, task.provider_task_id)
                 try:
-                    observed = await MediaProvider(self.client).poll(cfg, kind=task.kind, task_id=task.provider_task_id)
+                    if task.cancel_requested_at and task.remote_status not in REMOTE_CANCEL_SENT:
+                        async with self.sessions.begin() as db:
+                            sending = await TaskService(db).begin_remote_cancel(task_id)
+                        if not sending:
+                            return
+                        profile = ModelCapabilityProfile.model_validate(
+                            (task.input_snapshot.get("execution_config") or {}).get("capability_profile") or {},
+                        )
+                        outcome = ("unsupported" if "remote_cancel" in profile.model_fields_set and not profile.remote_cancel
+                                   else await provider.cancel(reference))
+                        async with self.sessions.begin() as db:
+                            await TaskService(db).record_remote_cancel(task_id, outcome)
+                        return
+                    observed = await provider.poll(reference)
                 except (httpx.TransportError, httpx.HTTPStatusError) as error:
                     if task.deadline_at and task.deadline_at <= utcnow():
                         await self._fail(task_id, "tracking_timeout", "供应商状态跟踪超时")
@@ -330,16 +432,21 @@ class TaskWorker:
                 raise ProviderDataError("provider_route_changed")
             params = dict(model.params or {})
             params.update(model=task.input_snapshot["model_name"], api_key=cfg.api_key, base_url=cfg.base_url,
-                          max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
+                          max_retries=0, timeout=self.limits.request_seconds)
+            if task.kind == "text_chat":
+                params["http_async_client"] = self.client
             if task.kind != "text_chat":
                 params["callbacks"] = [ScriptStopHandler(stopped, monotonic() + self.limits.execution_seconds)]
             directing = task.kind in {"directing_storyboard", STORYBOARD_CHECK_KIND, "directing_object_extract", "directing_shooting_check", "directing_divide", "directing_design", "directing_review", "directing_review_revision"}
             if directing:
                 # 长工作单持续接收分片，避免非流式等待完整响应触发读取超时。
                 params["streaming"] = True
-            if directing or task.kind == "text_chat":
+            if (directing or task.kind == "text_chat") and not params.get("use_responses_api"):
                 params["extra_body"] = {**params.get("extra_body", {}), "enable_thinking": False}
-            llm = ChatOpenAI(**params)
+            capability = describe_operation(cfg.provider_key, model.name, ModelCapabilityProfile.model_validate(
+                model.capability_profile or {},
+            ), operation="chat").features
+            llm = build_langchain_chat(provider_key=cfg.provider_key, tools_available=capability.tool_results, **params)
             stage = {"directing_storyboard": "extracting_storyboard", STORYBOARD_CHECK_KIND: 'reviewing_storyboard',
                      "directing_object_extract": "extracting_objects"}.get(task.kind)
             if task.input_snapshot.get('review_retry_from'):
@@ -716,21 +823,23 @@ class TaskWorker:
         checkpoint = await self._write_storyboard_prompts(task, llm, stopped, checkpoint, prior_prompts)
         return checkpoint, await self._review_storyboard_checkpoint(task, llm, stopped, checkpoint)
 
-    def _frozen_text_model(self, task: Task, *, multimodal: bool = False) -> ChatOpenAI:
+    def _frozen_text_model(self, task: Task) -> BaseChatModel:
         """Use only the provider and model configuration captured at admission."""
         from app.core.contracts.generation import FrozenGenerationConfig
         from app.services.generation_canvas.check_models import check_model_parameters
         frozen = FrozenGenerationConfig.model_validate(task.input_snapshot.get('execution_config'))
         if task.kind == 'canvas_check':
-            params = check_model_parameters(frozen, multimodal=multimodal)
+            params = check_model_parameters(frozen)
         else:
             params = dict(frozen.model_params)
-            params['extra_body'] = {**params.get('extra_body', {}), 'enable_thinking': False}
-            if multimodal:
-                params['use_responses_api'] = False
+            if not params.get('use_responses_api'):
+                params['extra_body'] = {**params.get('extra_body', {}), 'enable_thinking': False}
         params.update(model=frozen.model_name, api_key=frozen.api_key, base_url=frozen.base_url,
                       max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
-        return ChatOpenAI(**params)
+        capability = describe_operation(frozen.provider_key, frozen.model_name, ModelCapabilityProfile.model_validate(
+            frozen.capability_profile or {},
+        ), operation="chat").features
+        return build_langchain_chat(provider_key=frozen.provider_key, tools_available=capability.tool_results, **params)
 
     async def _canvas_check(self, task: Task) -> None:
         """Execute one semantic item and publish only its validated observation."""
@@ -790,7 +899,7 @@ class TaskWorker:
             {'type': 'text', 'text': json.dumps(context, ensure_ascii=False)},
             {'type': 'image_url', 'image_url': {'url': image_url}},
         ])]
-        reply = await self._frozen_text_model(task, multimodal=True).ainvoke(messages)
+        reply = await self._frozen_text_model(task).ainvoke(messages)
         return parse_reference_reply(item_id, observation, reply.content)
 
     async def _canvas_product_visual(self, task: Task, observation: dict):
@@ -827,7 +936,7 @@ class TaskWorker:
         content = [{'type': 'text', 'text': json.dumps(context, ensure_ascii=False)}]
         content += [{'type': 'image_url', 'image_url': {'url': value}} for value in images]
         messages = [SystemMessage(content=instructions), HumanMessage(content=content)]
-        reply = await self._frozen_text_model(task, multimodal=True).ainvoke(messages)
+        reply = await self._frozen_text_model(task).ainvoke(messages)
         return parse_product_visual(observation, reply.content, at_ms)
 
     async def _canvas_product_video(self, task: Task, observation: dict):
@@ -855,7 +964,7 @@ class TaskWorker:
             {'type': 'video_url', 'video_url': {'url': sequence.data_url}, 'fps': observation['sampling_fps']},
         ]
         messages = [SystemMessage(content=instructions), HumanMessage(content=content)]
-        reply = await self._frozen_text_model(task, multimodal=True).ainvoke(messages)
+        reply = await self._frozen_text_model(task).ainvoke(messages)
         return parse_product_video(observation, reply.content, sequence)
 
     async def _canvas_text(self, task: Task) -> None:
@@ -930,7 +1039,7 @@ class TaskWorker:
     @staticmethod
     def _error_message(error: Exception) -> str:
         """保存稳定且不含上游正文、URL 或凭据的错误摘要。"""
-        if isinstance(error, (ProviderDataError, DirectingOutputError)):
+        if isinstance(error, (ProviderDataError, DirectingOutputError, UnsupportedModelInput)):
             return str(error)
         if isinstance(error, APIStatusError):
             if error.code == "AllocationQuota.FreeTierOnly":
@@ -945,6 +1054,10 @@ class TaskWorker:
 
 async def main() -> None:
     """命令行入口，停止信号只结束本地工作，不重新提交远端生成。"""
+    audit = logging.getLogger(ORPHAN_AUDIT_LOGGER)
+    audit.setLevel(logging.INFO)
+    if not audit.hasHandlers():
+        audit.addHandler(logging.StreamHandler())
     worker = TaskWorker()
     for sig in (signal.SIGINT, signal.SIGTERM):
         asyncio.get_running_loop().add_signal_handler(sig, worker.stopping.set)

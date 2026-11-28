@@ -11,12 +11,12 @@ from alembic.migration import MigrationContext
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import Boolean, CheckConstraint, Integer, inspect, text
-from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.db import Base
 from app.models.task import Task
 from app.services.task_service import TaskService
+from tests.isolated_mysql import isolated_mysql_url, require_separate_mysql_database, validate_canonical_environment
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
@@ -26,9 +26,9 @@ def isolated_database_url():
     value = os.environ.get("JELLYFISH_TEST_MYSQL_URL")
     if not value:
         pytest.skip("JELLYFISH_TEST_MYSQL_URL is required for isolated MySQL checks")
-    url = make_url(value)
-    if url.get_backend_name() != "mysql" or not (url.database or "").startswith("jellyfish_check"):
-        raise ValueError("MySQL checks require a database named jellyfish_check...")
+    validate_canonical_environment(os.environ)
+    url = isolated_mysql_url(value)
+    require_separate_mysql_database(url, allow_dispatched=True)
     return value
 
 

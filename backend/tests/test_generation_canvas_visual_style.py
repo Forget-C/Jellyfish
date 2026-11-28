@@ -73,7 +73,7 @@ async def test_style_whole_output_reaches_real_worker_without_implicit_media(run
         async def astream(self, messages):
             received.append(messages[0].content)
             yield SimpleNamespace(content='摄影分析完成')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', TextProvider)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', TextProvider)
     def provider_http(request):
         if request.method == 'POST':
             body = json.loads(request.content)

@@ -72,7 +72,8 @@ async def test_image_submission_accepts_direct_and_remote_providers(provider_nam
             db.add(ExperimentSession(id="session", lab_type="image"))
             db.add(FileItem(id="input", type="image", name="reference", storage_key="input.png"))
             await db.flush()
-            db.add(Model(id="model", name="test-model", category="image", provider_id="provider"))
+            model_name = "gpt-image-1" if provider_name == "OpenAI" else "viduq2"
+            db.add(Model(id="model", name=model_name, category="image", provider_id="provider"))
             await db.flush()
             command = GenerationCommand.model_validate({
                 "modality": "image", "operation": "image_generation", "delivery": "async_polling",
@@ -99,7 +100,7 @@ async def test_image_submission_accepts_direct_and_remote_providers(provider_nam
             assert task.execution_mode == mode
             assert task.provider_id == "provider"
             assert task.input_snapshot["execution_config"] == {
-                "model_name": "test-model", "model_params": {}, "provider_id": "provider",
+                "model_name": model_name, "model_params": {}, "provider_id": "provider",
                 "provider_key": provider_name.lower(), "api_key": "test-secret", "base_url": "https://images.invalid",
             }
             from app.services.task_queries import TaskQueries
@@ -129,7 +130,7 @@ async def test_image_submission_accepts_direct_and_remote_providers(provider_nam
             return b"png-bytes"
         monkeypatch.setattr("app.core.storage.download_file", download)
         input_ = await build_media_input(task, snapshot, files)
-        assert input_.prompt == "test" and input_.model == "test-model"
+        assert input_.prompt == "test" and input_.model == model_name
         assert input_.images[0].image_url == "data:image/png;base64,cG5nLWJ5dGVz"
         assert input_.images[0].file_id is None
         assert "data:image" not in str(task.input_snapshot)

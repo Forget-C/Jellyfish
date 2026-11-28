@@ -30,137 +30,78 @@
 
 A production workspace for AI short dramas. Divide a chapter into scenes, prepare visual references and generate candidate frames on a storyboard canvas. The interface supports Chinese (default) and English.
 
-[Quick start](#-docker-compose) · [Local development](docs/development/guides/local-development.md)
+[Quick start](#quick-start) · [Local development](docs/development/guides/local-development.md)
 
-## 📷 Screenshots
+## What is Jellyfish?
 
-<a href="site/static/images/screenshots/home/storyboard.webp"><img src="site/static/images/screenshots/home/storyboard.webp" alt="View this shot on the storyboard canvas" width="720" /></a>
+<p align="center">
+  <a href="site/static/images/sea-letter/canvas-walkthrough.mp4"><img src="docs/img/canvas-walkthrough.gif" width="960" alt="Storyboard canvas demo showing the shot description and a candidate frame of Lin Xia reading a letter on the platform" /></a>
+</p>
 
-**How this shot was made**　The storyboard for a seaside station scene connects the shot description and three visual references to an image model. The creator picked a frame from its outputs for a slow push-in.
+Jellyfish helps short-drama creators turn a script into shots. Split a chapter into scenes, choose visual references for each scene, then generate and compare frames on the storyboard. Here, the shot description and references guide the image of Lin Xia reading a letter on the platform.
 
-[Selected first frame](site/static/images/docs/labs/letter-frame.jpg) · [▶ 3-second camera test (local demo)](site/static/images/sea-letter/letter-push-in.mp4)
+## Features
 
-<details>
-<summary>Scene references and screenshots</summary>
+1. **Script breakdown.** Split a chapter into scenes and trace each scene back to its source passage.
+2. **Shared asset library.** Reuse actors, locations, props and costumes across projects.
+3. **Storyboard canvas.** Connect a shot description and reference images to an image model, then generate and compare candidate frames.
+4. **Canvas assistant.** Describe a change to a shot in your own words and review the proposed edit before applying it.
+5. **Image-to-video chat.** Generate a still and use it as the first frame of a video in the same conversation.
+6. **MCP integration.** Read, edit and run a canvas from an external MCP client and retrieve the results.
 
-| Lin Xia | Seaside platform | Old envelope |
-| --- | --- | --- |
-| <a href="site/static/images/docs/assets/samples/character.jpg"><img src="site/static/images/docs/assets/samples/character.jpg" alt="Lin Xia" width="180" /></a> | <a href="site/static/images/docs/assets/samples/scene.jpg"><img src="site/static/images/docs/assets/samples/scene.jpg" alt="Seaside platform" width="180" /></a> | <a href="site/static/images/docs/assets/samples/prop.jpg"><img src="site/static/images/docs/assets/samples/prop.jpg" alt="Old envelope" width="180" /></a> |
+## Core Features
 
-| Scene division | Scene references |
-| --- | --- |
-| <a href="site/static/images/screenshots/home/scene-division.webp"><img src="site/static/images/screenshots/home/scene-division.webp" alt="Scene division" width="320" /></a> | <a href="site/static/images/screenshots/home/object-references.webp"><img src="site/static/images/screenshots/home/object-references.webp" alt="Scene references" width="320" /></a> |
+### From chapter to storyboard
 
-</details>
+Split a chapter into scenes, check the passage for each scene and generate an editable storyboard. On the canvas, connect shot descriptions, references and model cards, then adjust the inputs to generate and compare candidate frames.
 
-## ✨ Core Value
+<p align="center">
+  <a href="site/static/images/screenshots/home/scene-division.webp"><img src="site/static/images/screenshots/home/scene-division.webp" width="32%" alt="Two scenes marked in the chapter text" /></a>
+  <a href="site/static/images/screenshots/home/storyboard.webp"><img src="site/static/images/screenshots/home/storyboard.webp" width="32%" alt="Storyboard canvas with shot references for the seaside platform" /></a>
+  <a href="site/static/images/docs/canvas/graph.webp"><img src="site/static/images/docs/canvas/graph.webp" width="32%" alt="Text card connected to an image model, with the result on the right" /></a>
+</p>
 
-- Trace each scene back to the passage it adapts.
-- Reuse the same character, location and prop references across shots.
-- Inspect the inputs and results of a generation run before choosing a candidate.
+### Refine a shot and generate video
 
-## ✨ Core Capabilities
+Select a shot card, describe the change you want and review the assistant’s proposal before applying it. Preview a generated frame on the canvas. In chat, the main model handles the conversation. Generate a still with your chosen image model, then use it as the first frame for your video model.
 
-### 1. AI script understanding and storyboard breakdown
+<p align="center">
+  <a href="docs/img/canvas-assistant-proposal.webp"><img src="docs/img/previews/canvas-assistant.webp" width="32%" alt="Canvas assistant proposing an edit to the selected shot" /></a>
+  <a href="site/static/images/screenshots/home/generation-preview.webp"><img src="site/static/images/screenshots/home/generation-preview.webp" width="32%" alt="Canvas preview of Lin Xia reading the letter under the platform lights" /></a>
+  <a href="docs/img/chat-image-to-video.webp"><img src="docs/img/previews/chat-image-to-video.webp" width="32%" alt="A generated still and the video that follows it in the same chat" /></a>
+</p>
 
-Save the chapter text, mark scene boundaries, then generate and edit a storyboard for a selected scene.
+### Organize projects and visual references
 
-### 2. Shot preparation and confirmation workflow
+Organize chapters and scenes within a project and open the storyboard from its chapter. Reuse actors, locations, props and costumes from the shared library. For each scene, choose the character, location and prop images to use as visual references.
 
-Chapter text → scene division → reference selection → storyboard canvas → precheck → candidate review.
+<p align="center">
+  <a href="site/static/images/docs/chapter/chapter.webp"><img src="docs/img/previews/chapter.webp" width="32%" alt="Chapter editor showing the title and script text" /></a>
+  <a href="docs/img/previews/assets.webp"><img src="docs/img/previews/assets.webp" width="32%" alt="Cast portraits of Lin Xia, the mountain guide and the radio operator in the asset library" /></a>
+  <a href="site/static/images/screenshots/home/object-references.webp"><img src="site/static/images/screenshots/home/object-references.webp" width="32%" alt="Reference cards for Lin Xia, the seaside platform and the envelope" /></a>
+</p>
 
-### 3. Asset consistency and reuse
+### Connect via Canvas MCP
 
-Link characters, locations, props and costumes to project assets. Choose the reference images needed for each scene.
+Read, edit and run a Jellyfish canvas from an external MCP client and retrieve the results. [Connection guide](site/content/docs/tools/generation-canvas.md#从-mcp-客户端连接画布)
 
-### 4. Shot-level image and video orchestration
+## Quick Start
 
-On the canvas, connect shot descriptions and references to a model card, check its inputs and review the generated media.
-
-### 5. Unified async task center
-
-Track text, image and video jobs, inspect failures and cancel eligible tasks.
-
-### 6. Model, prompt, and generation infrastructure
-
-Configure providers and default models, manage prompt templates and access the backend through its OpenAPI contract.
-
-## 🚀 Feature Overview
-
-### Project and chapter management
-
-Create a project, save chapter text and reopen earlier scene divisions.
-
-### AI script processing
-
-Use the text lab to explore alternate dialogue, actions and shot descriptions.
-
-### Shot preparation workflow
-
-Review the source passage alongside the scene references and refine each shot description.
-
-### Asset and entity management
-
-Maintain project assets and choose which reference images a scene uses.
-
-### Shot generation workspace
-
-Edit prompts and model parameters, run a precheck and preview candidate outputs.
-
-### Task center
-
-Monitor progress and open a task to inspect its result.
-
-### Model and prompt infrastructure
-
-Choose defaults for different generation tasks and maintain reusable prompt templates.
-
-### File and media management
-
-Preview uploaded and generated media and reuse them as references.
-
-## 🎯 Use Cases
-
-- Short-drama teams preparing storyboards and reviewing candidate frames together.
-- Independent creators trying different shots for the same scene.
-- Education, brand and e-commerce teams developing scripts into short videos.
-
-## 🔁 Frontend OpenAPI client and type generation
-
-With the API serving the current code at `http://127.0.0.1:8000`, run the following from the repository root to refresh `front/openapi.json` and `front/src/services/generated/`.
+For a first local run, install Git and start Docker with the Compose plugin. Then run:
 
 ```bash
-pnpm --dir front run openapi:update
-```
-
-## 🐳 Docker Compose
-
-### Ports
-
-- Frontend: `http://localhost:7788`
-- API: `http://localhost:8000` (Swagger UI: `/docs`)
-- MySQL: `localhost:${MYSQL_PORT:-3306}`
-- RustFS: `http://localhost:${RUSTFS_PORT:-9000}`
-
-### Start
-
-From the repository root, create the environment file on first setup and start the services.
-
-```bash
+git clone https://github.com/Forget-C/Jellyfish.git
+cd Jellyfish
 cp deploy/compose/.env.example deploy/compose/.env
-docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up --build
+docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up --build -d
 ```
 
-Once the frontend opens, [create your first project](site/content/docs/guide/first-project.md). Before generating media, [configure a model](site/content/docs/getting-started/model-setup.md).
+Open [Jellyfish](http://localhost:7788), go to **Projects** and [create your first project](site/content/docs/guide/first-project.md). [Configure a model](site/content/docs/getting-started/model-setup.md) before generating media.
 
-## 🧑‍💻 Local Development
+[Deployment guide](site/content/docs/getting-started/docker.md) · [Canvas MCP](site/content/docs/tools/generation-canvas.md#从-mcp-客户端连接画布) · [OpenAPI client](docs/development/guides/openapi.md)
 
-Follow the [local development guide](docs/development/guides/local-development.md) to start the API, task worker and Vite frontend. See the [developer documentation](docs/development/README.md) for architecture and standards, or the [site guide](site/README.md) to work on the website.
+## Star History
 
-## 📄 License
+[![Jellyfish stars over time](https://api.star-history.com/svg?repos=Forget-C%2FJellyfish&type=Date)](https://www.star-history.com/?repos=Forget-C%2FJellyfish&type=date)
 
-This project is licensed under [Apache-2.0](LICENSE).
-
-## 💬 Community & Feedback
-
-- [GitHub Issues](https://github.com/Forget-C/Jellyfish/issues)
+[Report an issue](https://github.com/Forget-C/Jellyfish/issues) · [Contribute](site/content/docs/community/contributing.md) · [Apache 2.0 license](LICENSE)

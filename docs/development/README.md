@@ -50,7 +50,7 @@
 - [声音设计与生成职责](adr/0004-sound-design-and-generation-responsibilities.md)
 - [场次工作台与自由生成共享画布基础](adr/0005-shared-canvas-foundation.md)
 - [项目角色身份与共享资产复用](adr/0006-project-character-and-shared-assets.md)
-- [项目专属资源与独立入库副本（完整方案已最终确认，尚未实施）](adr/0007-project-resource-ownership-and-library-copies.md)
+- [项目专属资源与独立入库副本（已实施，部分规则由 ADR 0008 调整）](adr/0007-project-resource-ownership-and-library-copies.md)
 - [图片来源资源与独立项目导入](adr/0008-image-source-resources-and-project-imports.md)
 - [场次对象身份引用与生产用图分离](adr/0009-scene-object-resource-references.md)
 - [生成画布独立归属与场次隔离](adr/0010-independent-canvas-ownership.md)
@@ -58,6 +58,13 @@
 - [分镜生成前拍摄准备的归属与固定采用（历史决策）](adr/0012-pre-generation-shooting-preparation.md)
 - [拍摄解释按章节原文版本维护](adr/0013-chapter-shooting-explanations.md)
 - [退役旧场次版本 HTTP 接口](adr/0014-retire-scene-version-api.md)
+- [自由画布与分镜画布共用 Deep Agents 助手](adr/0015-canvas-assistant-harness.md)
+- [双画布助手的专业技能与批量修改提案](adr/0016-canvas-assistant-skills-and-change-proposals.md)
+- [实验室与画布助手共用交互会话协议](adr/0017-interaction-session-protocol.md)
+- [画布能力协议与独立审批](adr/0018-canvas-capabilities-and-approval.md)
+- [通过 MCP 暴露统一画布协议](adr/0019-unified-canvas-mcp.md)
+- [模型供应商协议与能力声明](adr/0020-model-provider-protocol.md)
+- [实验室多模态聊天与单模态试模](adr/0021-experiment-chat-and-model-trials.md)
 
 ## 开发与维护指南
 
@@ -70,8 +77,7 @@
 - [旧场次版本 graph 契约与接入参考](guides/canvas-graph.md)
 - [运行与排查异步任务](guides/task-operations.md)
 - [数据库升级与回退](guides/database-upgrade.md)
-- [身份参考存量整理](guides/identity-reference-cleanup.md)
-- [开发与站点维护 FAQ](guides/developer-faq.md)
+- [旧版身份参考存量整理（历史参考）](guides/identity-reference-cleanup.md)
 - [站点维护](../../site/README.md)
 
 ## 技术参考

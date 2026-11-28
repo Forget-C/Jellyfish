@@ -5,20 +5,19 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
-from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
+from app.models.experiment_sessions import ExperimentMessage, ExperimentSession, ExperimentSessionEvent
 from app.schemas.common import ApiResponse, created_response, empty_response, success_response
 from app.schemas.studio.experiment_sessions import (
-    ExperimentMessageRead,
     ExperimentSessionCreate,
     ExperimentSessionRead,
     ExperimentSessionUpdate,
     LabType,
 )
-from app.services.studio.experiment_messages import read_experiment_messages, has_active_experiment_tasks
+from app.services.studio.experiment_messages import has_active_experiment_tasks
 
 router = APIRouter()
 
@@ -74,16 +73,6 @@ async def update_experiment_session(session_id: str, body: ExperimentSessionUpda
     return success_response(ExperimentSessionRead.model_validate(session))
 
 
-@router.get("/{session_id}/messages", response_model=ApiResponse[list[ExperimentMessageRead]])
-async def list_experiment_messages(session_id: str, db: AsyncSession = Depends(get_db), page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=100)) -> ApiResponse[list[ExperimentMessageRead]]:
-    """分页读取一个会话的用户可见消息历史。"""
-    if await db.get(ExperimentSession, session_id) is None:
-        raise HTTPException(status_code=404, detail="Experiment session not found")
-    rows = (await db.execute(select(ExperimentMessage).where(ExperimentMessage.session_id == session_id).order_by(ExperimentMessage.sequence.desc()).offset((page - 1) * page_size).limit(page_size))).scalars().all()
-    rows.reverse()
-    return success_response(await read_experiment_messages(db, rows))
-
-
 @router.delete("/{session_id}", response_model=ApiResponse[None])
 async def delete_experiment_session(session_id: str, db: AsyncSession = Depends(get_db)) -> ApiResponse[None]:
     """锁定会话并检查活动任务，避免与新任务提交交错。
@@ -94,7 +83,7 @@ async def delete_experiment_session(session_id: str, db: AsyncSession = Depends(
     if session is None:
         raise HTTPException(status_code=404, detail="Experiment session not found")
     has_task = await has_active_experiment_tasks(db, session_id)
-    if has_task:
+    if session.active_turn or has_task:
         raise HTTPException(status_code=409, detail="Session with generation tasks cannot be deleted")
     await db.delete(session)
     await db.commit()
@@ -107,11 +96,13 @@ async def clear_experiment_messages(session_id: str, db: AsyncSession = Depends(
 
     P2 的保留策略落地前维持物理删除；后续归档策略不能影响运行中任务保护。
     """
-    if await db.get(ExperimentSession, session_id, with_for_update=True) is None:
+    session = await db.get(ExperimentSession, session_id, with_for_update=True)
+    if session is None:
         raise HTTPException(status_code=404, detail="Experiment session not found")
     has_task = await has_active_experiment_tasks(db, session_id)
-    if has_task:
+    if session.active_turn or has_task:
         raise HTTPException(status_code=409, detail="Session with generation tasks cannot be cleared")
+    await db.execute(delete(ExperimentSessionEvent).where(ExperimentSessionEvent.session_id == session_id))
     rows = (await db.execute(select(ExperimentMessage).where(ExperimentMessage.session_id == session_id))).scalars().all()
     for row in rows:
         await db.delete(row)

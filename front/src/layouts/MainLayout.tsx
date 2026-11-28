@@ -35,6 +35,16 @@ function OrdinaryLayout() {
   const setAppearance = useAppStore(state => state.setAppearance)
   const accountButton = useRef<HTMLButtonElement>(null)
   const [accountOpen, setAccountOpen] = useState(false)
+  useEffect(() => {
+    if (!accountOpen) return
+    const restoreOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setAccountOpen(false)
+      requestAnimationFrame(() => accountButton.current?.focus())
+    }
+    window.addEventListener('keydown', restoreOnEscape, true)
+    return () => window.removeEventListener('keydown', restoreOnEscape, true)
+  }, [accountOpen])
   const titles = useNavigationTitles()
   const projectIndex = !!projectId && pathname.split('/').filter(Boolean).length === 2
   const activeNavigation = activeMainNavigation(pathname)
@@ -69,7 +79,7 @@ function OrdinaryLayout() {
         </nav>
         <div className="app-global-actions">
           <TaskCenter />
-          <Dropdown overlayClassName="app-context-menu" trigger={['click']} placement="bottomRight" autoFocus open={accountOpen} onOpenChange={setAccountOpen} menu={{ selectable: true, selectedKeys: [language, appearance], onClick: () => setAccountOpen(false), items: [
+          <Dropdown classNames={{ root: "app-context-menu" }} trigger={['click']} placement="bottomRight" autoFocus open={accountOpen} onOpenChange={setAccountOpen} menu={{ selectable: true, selectedKeys: [language, appearance], onClick: () => setAccountOpen(false), items: [
             { key: 'user', label: `${user.name} · ${t(`settings:roleOptions.${user.role}`)}`, disabled: true },
             { key: 'settings', label: t('user.profile'), onClick: () => navigate('/settings') },
             { type: 'divider' },

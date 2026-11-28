@@ -17,6 +17,7 @@ def test_initial_revision_is_a_frozen_root():
     scripts = ScriptDirectory.from_config(Config(str(BACKEND / "alembic.ini")))
     assert scripts.get_bases() == ["68e14fd0c209"]
     assert len(scripts.get_heads()) == 1
+    assert scripts.get_revision("a9d237cc18e1").down_revision == "174afba8895d"
 
 
 def test_empty_database_is_migrated_and_seeded_without_replacing_user_data(tmp_path):

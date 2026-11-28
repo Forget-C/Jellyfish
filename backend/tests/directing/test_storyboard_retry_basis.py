@@ -34,7 +34,7 @@ async def test_storyboard_retry_confirms_current_basis_and_recovers_same_canvas(
             observed.append((args['mode'], args['script_text'], args['objects']))
             return SimpleNamespace(content=json.dumps({'shots': [{'id': 'shot', 'excerpt': excerpt}]}))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             db.add(Provider(id='retry-provider', provider_key='openai', name='openai', base_url='https://story.test/v1', api_key='test'))

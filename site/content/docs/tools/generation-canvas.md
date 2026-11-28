@@ -50,3 +50,42 @@ url: "/docs/guide/generation-canvas/"
 <span id="按需使用检查卡"></span>自由画布保留「基础卡」「参考卡」「模型生成」三类。设计与检查六类卡片属于分镜画布，需从项目的场次工作台使用；两类画布通过文件管理复用媒体，不提供整图转换或跨画布动态引用。
 
 技术契约见[生成画布架构与执行边界](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/architecture/generation-canvas.md)，已确认设计范围见[首版检查项目录](https://github.com/Forget-C/Jellyfish/blob/main/docs/development/design/generation-canvas-check-catalog.md)。
+
+## 从 MCP 客户端连接画布
+
+先生成一个 64 位十六进制随机密钥。
+
+**macOS / Linux（已安装 OpenSSL）**
+
+```sh
+openssl rand -hex 32
+```
+
+**Windows PowerShell 5.1 / PowerShell 7**
+
+```powershell
+$bytes = New-Object byte[] 32
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$rng.GetBytes($bytes)
+$rng.Dispose()
+[BitConverter]::ToString($bytes).Replace('-', '').ToLowerInvariant()
+```
+
+1. Docker Compose 部署在 `deploy/compose/.env` 中设置 `MCP_SECRET_KEY`。本地开发在 `backend/.env` 中设置。将命令输出粘贴为配置值。`MCP_ENABLED` 默认为 `true`，设为 `false` 可关闭 MCP。
+2. 本地开发时重启 API。Docker Compose 部署时，从仓库根目录运行以下命令重新创建后端容器。
+
+   ```sh
+   docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up -d --force-recreate backend
+   ```
+
+   如果是从旧版源码升级，增加 `--build`，让 Compose 用当前源码重建 API 镜像。
+
+3. 在 MCP 客户端选择 **Streamable HTTP**，填写 `http://localhost:8000/mcp`。远程部署使用实际的 API 地址加 `/mcp`。将密钥填入客户端的 Bearer Token 字段，或配置请求头 `Authorization: Bearer <key>`。
+
+同一密钥可访问所有自由画布及所有项目的场次分镜画布。连接后可列出工具，读取、编辑和运行画布，也可查询结果、执行画布检查，以及提取和采用场次分镜。
+
+升级前在系统设置中签发的临时令牌会失效。将已有客户端改用配置中的密钥。密钥在重启后继续有效。轮换时，生成新密钥、更新配置并重启所有 API 实例，再更新客户端。已受理的画布任务由任务中心继续跟踪。
+
+- `401` 表示令牌缺失或不匹配。核对客户端密钥和 `Authorization` 请求头。
+- `404` 时检查 API 地址、`MCP_ENABLED` 和 `MCP_SECRET_KEY`，并确认配置已生效。
+- 浏览器客户端带有 `Origin` 时，来源未列在后端 `CORS_ORIGINS` 中会收到 `403`。本地开发在 `backend/.env` 添加来源。Compose 部署在 `deploy/compose/docker-compose.yml` 的 `backend.environment.CORS_ORIGINS` 添加来源，然后重新创建后端容器。

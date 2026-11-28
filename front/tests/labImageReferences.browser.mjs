@@ -1,3 +1,4 @@
+import { mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -37,10 +38,13 @@ try {
   await page.route('**/api/**', async route => {
     const request = route.request()
     const url = new URL(request.url())
+    const admission = mediaAdmissionStream(route, url)
+    if (admission) return admission
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (request.method() === 'DELETE') deletions.push(url.pathname)
     if (url.pathname.endsWith('/experiment-sessions')) return respond(url.searchParams.get('lab_type') === 'image' ? sessions : [])
-    if (url.pathname.endsWith('/models')) return respond({ items: [{ id: 'model-1', name: '验收图片模型', category: 'image' }] })
+    if (url.pathname.endsWith('/model-settings')) return respond({ default_image_model_id: 'model-1' })
+    if (url.pathname.endsWith('/models')) return respond({ items: [{ id: 'other', name: '其他图片模型', category: 'image' }, { id: 'model-1', name: '验收图片模型', category: 'image' }] })
     if (url.pathname.endsWith('/files/upload')) {
       const attempt = ++uploadCount
       await uploadGate
@@ -59,13 +63,14 @@ try {
       if (url.pathname.includes('/file-6/')) return route.fulfill({ status: 404 })
       return route.fulfill({ body: png, contentType: 'image/png' })
     }
-    const run = url.pathname.match(/\/labs\/image\/sessions\/([^/]+)\/tasks$/)
+    const run = url.pathname.match(/\/chat\/sessions\/image\/([^/]+)\/turns$/)
     if (run) {
       const body = request.postDataJSON()
       submissions.push({ session: run[1], body })
       const taskId = `task-${submissions.length}`
-      return respond({ task_id: taskId, messages: [{ id: taskId, session_id: run[1], role: 'task', content: '已完成', sequence: 1, task_id: taskId, status: 'succeeded', created_at: timestamp, updated_at: timestamp }] })
+      return respond(mediaTurnReceipt(route, { task_id: taskId, messages: [{ id: taskId, session_id: run[1], role: 'task', content: '已完成', sequence: 1, task_id: taskId, status: 'succeeded', created_at: timestamp, updated_at: timestamp }] }))
     }
+    if (/\/chat\/sessions\/image\/[^/]+\/snapshot$/.test(url.pathname)) return respond(boundTrialSnapshot(url, []))
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])
   })
@@ -97,12 +102,12 @@ try {
   await page.getByRole('button', { name: '预览参考图：参考图片 2', exact: true }).waitFor()
   assert.equal(await page.getByRole('button', { name: '预览参考图：参考图片 3', exact: true }).count(), 0)
 
-  await page.getByRole('button', { name: /选择模型/ }).click()
-  await page.getByRole('button', { name: /验收图片模型/ }).waitFor()
+  await page.locator('.experiment-model-trigger').click()
+  await page.getByRole('menuitemradio', { name: '验收图片模型', exact: true, checked: true }).waitFor()
   await page.keyboard.press('Escape')
   await page.getByRole('textbox', { name: '图片提示词', exact: true }).fill('参考图次序验证')
   await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/image-a/tasks')),
+    page.waitForResponse(response => response.url().endsWith('/sessions/image/image-a/turns')),
     page.getByRole('button', { name: /^发\s*送$/, exact: true }).click(),
   ])
   assert.deepEqual(submissions.map(({ session, body }) => [session, body.media.references]), [[
@@ -127,7 +132,7 @@ try {
   await page.keyboard.press('Escape')
   await panel.waitFor({ state: 'hidden' })
   await trigger.and(page.locator(':focus')).waitFor()
-  for (const dismiss of [() => panel.getByRole('button', { name: 'Close', exact: true }).click(), () => page.mouse.click(20, 120)]) {
+  for (const dismiss of [() => panel.getByRole('button', { name: /^(Close|关闭)$/ }).click(), () => page.mouse.click(20, 120)]) {
     await openLabAddition(page, '添加参考图')
     await panel.getByRole('button', { name: '移除参考图：参考图片 1', exact: true }).click()
     await dismiss()
@@ -233,8 +238,8 @@ try {
   await panel.getByText('上传图片 5 已上传，尚未应用', { exact: true }).waitFor()
   await panel.getByRole('button', { name: '应用参考图', exact: true }).click()
   await panel.waitFor({ state: 'hidden' })
-  await page.getByRole('button', { name: /选择模型/ }).click()
-  await page.getByRole('button', { name: /验收图片模型/ }).waitFor()
+  await page.locator('.experiment-model-trigger').click()
+  await page.getByRole('menuitemradio', { name: '验收图片模型', exact: true, checked: true }).waitFor()
   await page.keyboard.press('Escape')
   await page.getByRole('textbox', { name: '图片提示词', exact: true }).fill('应用已上传的参考图')
   await page.getByRole('button', { name: '用户与语言设置' }).click()
@@ -242,7 +247,7 @@ try {
   assert.equal(await page.getByRole('textbox', { name: 'Image prompt', exact: true }).inputValue(), '应用已上传的参考图')
   await page.getByRole('button', { name: 'View all media (6)', exact: true }).waitFor()
   await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/image-a/tasks')),
+    page.waitForResponse(response => response.url().endsWith('/sessions/image/image-a/turns')),
     page.getByRole('button', { name: 'Send', exact: true }).click(),
   ])
   assert.equal(submissions[1].body.execution_prompt, '应用已上传的参考图')

@@ -14,7 +14,7 @@ from app.models.generation_canvas import (
 )
 from app.schemas.generation_canvas import (
     CanvasNodeRead, CanvasPrecheck, CanvasPrecheckRequest,
-    CanvasRunRead, CanvasRunSubmit, CanvasSnapshot,
+    CanvasRunRead, CanvasRunAccepted, CanvasRunSubmit, CanvasRuntimeEvent, CanvasSnapshot,
 )
 from app.services.generation_canvas.automatic_checks import automatic_check_plan
 from app.services.generation_canvas.execution_basis import digest
@@ -107,6 +107,40 @@ class CanvasRuntime:
         self.db.add(CanvasRunReceipt(canvas_id=canvas_id, request_id=command.request_id, request_hash=request_hash, response=response))
         await self.db.flush()
         return response
+
+    async def read_receipt(self, canvas_id: str, request_id: str) -> CanvasRunAccepted | None:
+        """按原请求身份查受理，不需要预检凭据，不创建运行。"""
+        await CanvasStore(self.db, self.project_id).get(canvas_id)
+        receipt = await self.db.get(CanvasRunReceipt, (canvas_id, request_id))
+        return CanvasRunAccepted.model_validate(receipt.response) if receipt else None
+
+    async def read_task_run(self, canvas_id: str, task_id: str) -> CanvasRunRead | None:
+        """按同一画布内的任务身份返回关联运行和节点事实。"""
+        await CanvasStore(self.db, self.project_id).get(canvas_id)
+        row = (await self.db.execute(select(CanvasRun, CanvasRunNode)
+            .join(CanvasRunNode, CanvasRunNode.run_id == CanvasRun.id)
+            .where(CanvasRun.canvas_id == canvas_id, CanvasRunNode.task_id == task_id)
+            .execution_options(populate_existing=True))).one_or_none()
+        if row is None:
+            return None
+        run, node = row
+        return CanvasRunRead(id=run.id, canvas_id=canvas_id, lifecycle=run.lifecycle,
+                             nodes=[CanvasNodeRead.model_validate(node)])
+
+    async def read_events(self, canvas_id: str, cursor: int | None = None) -> list[CanvasRuntimeEvent]:
+        """读取一批已提交事件。无法续接时返回一致快照作为新起点。"""
+        head = await event_head(self.db, canvas_id)
+        await CanvasStore(self.db, self.project_id).get(canvas_id)
+        oldest = await self.db.scalar(select(CanvasEvent.cursor).where(CanvasEvent.canvas_id == canvas_id)
+                                      .order_by(CanvasEvent.cursor).limit(1))
+        earliest = oldest - 1 if oldest is not None else head.cursor
+        if cursor is None or cursor < earliest or cursor > head.cursor:
+            snapshot = await self.snapshot(canvas_id)
+            return [CanvasRuntimeEvent(cursor=snapshot.cursor, type='snapshot', canvas_id=canvas_id,
+                                       payload=snapshot.model_dump())]
+        records = await self.db.scalars(select(CanvasEvent.envelope).where(
+            CanvasEvent.canvas_id == canvas_id, CanvasEvent.cursor > cursor).order_by(CanvasEvent.cursor).limit(100))
+        return [CanvasRuntimeEvent.model_validate(record) for record in records]
 
     async def cancel(self, canvas_id: str, run_id: str, node_id: str | None = None) -> CanvasRunRead:
         """明确取消范围；先确定性锁住全部既有 Task，再触发任何事件写入。

@@ -54,7 +54,7 @@ try{
   assert.deepEqual((await runtime()).current_outputs.m,originals,'previewing a result preserves the complete published output')
   const revision=(await read()).revision
   await card.getByRole('button',{name:'打开完整图片',exact:true}).click()
-  const full=page.getByRole('dialog',{name:'图片预览',exact:true});await full.waitFor();await full.getByRole('button',{name:'Close',exact:true}).click()
+  const full=page.getByRole('dialog',{name:'图片预览',exact:true});await full.waitFor();await page.keyboard.press('Escape');await full.waitFor({state:'hidden'})
   assert.equal((await read()).revision,revision,'full preview does not modify document')
   const manifest=[]
   for(const [width,height] of [[1440,960],[390,844],[3830,1688]]){
@@ -118,5 +118,13 @@ try{
   for(let i=0;i<80;i++){if((await read()).document.cards.find(c=>c.id==='m').config.count===3)break;await delay(100)}
   const afterLocale=(await read()).document.cards.find(c=>c.id==='m')
   assert.deepEqual(afterLocale,{...beforeLocale,config:{...beforeLocale.config,count:3}})
+  await request(`${api}/api/v1/llm/models/canvas-image-model`, {
+    capability_profile: {image_modes: {text_to_image: {max_outputs: 1}, edit: {max_outputs: 2}}},
+  }, 'PATCH')
+  await page.reload()
+  await open('empty')
+  await editor.locator('input[aria-label="Image count"][aria-valuemax="1"]').waitFor()
+  await open('m')
+  await editor.locator('input[aria-label="Image count"][aria-valuemax="2"]').waitFor()
   writeFileSync(join(output,'manifest.json'),JSON.stringify(manifest,null,2));console.log('PASS C59 real image outputs/parameters/preview and F10–F12 threeviewports',output)
 }catch(error){if(page)await page.screenshot({path:join(output,'failure.png'),fullPage:true});throw error}finally{await cleanup()}

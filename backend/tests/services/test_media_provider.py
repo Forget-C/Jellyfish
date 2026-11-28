@@ -6,8 +6,8 @@ import httpx
 import pytest
 
 from app.core.contracts.provider import ProviderConfig
-from app.core.contracts.provider_media import ProviderImageInput, ProviderImageReference, ProviderVideoInput
-from app.core.integrations.media_provider import MediaProvider, ProviderDataError
+from app.core.contracts.provider_media import ProviderImageInput, ProviderImageReference, ProviderVideoInput, RemoteTaskReference
+from app.core.integrations.media_provider import bind_media_provider, ProviderDataError
 
 
 @pytest.mark.asyncio
@@ -22,14 +22,14 @@ async def test_create_error_is_not_retried_and_missing_id_is_failure():
         return responses.pop(0)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
-        provider = MediaProvider(client)
         config = ProviderConfig(provider="vidu", api_key="test", base_url="https://provider.invalid")
+        provider = bind_media_provider(config, client=client)
         inp = ProviderVideoInput(prompt="test", model="viduq2", ratio="16:9")
         with pytest.raises(httpx.HTTPStatusError):
-            await provider.submit(config, inp)
+            await provider.invoke(inp)
         assert len(requests) == 1
         with pytest.raises(ProviderDataError, match="provider_task_id_missing"):
-            await provider.submit(config, inp)
+            await provider.invoke(inp)
         assert len(requests) == 2
 
 
@@ -52,10 +52,9 @@ async def test_each_poll_uses_one_request_and_preserves_remote_id(provider_key, 
         return httpx.Response(200, json=payload)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
-        result = await MediaProvider(client).poll(
-            ProviderConfig(provider=provider_key, api_key="test", base_url="https://provider.invalid"),
-            kind=kind, task_id="remote-123",
-        )
+        result = await bind_media_provider(
+            ProviderConfig(provider=provider_key, api_key="test", base_url="https://provider.invalid"), client=client,
+        ).poll(RemoteTaskReference(kind, "remote-123"))
         assert len(requests) == 1 and requests[0].method == "GET"
         assert "remote-123" in str(requests[0].url)
         assert result.status == "succeeded" and len(result.outputs) == 1
@@ -77,9 +76,9 @@ async def test_vidu_accepted_and_queued_tasks_remain_running(kind, state):
         return httpx.Response(200, json={"state": state})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
-        result = await MediaProvider(client).poll(
-            ProviderConfig(provider="vidu", api_key="test"), kind=kind, task_id="original-id",
-        )
+        result = await bind_media_provider(
+            ProviderConfig(provider="vidu", api_key="test"), client=client,
+        ).poll(RemoteTaskReference(kind, "original-id"))
     assert result.status == "running" and not result.outputs
     assert len(requests) == 1 and requests[0].method == "GET"
     assert requests[0].url.path == "/ent/v2/tasks/original-id/creations"
@@ -96,8 +95,9 @@ async def test_direct_image_uses_explicit_provider_reference_contract():
         return httpx.Response(200, json={"data": [{"b64_json": "aW1hZ2U="}]})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
-        result = await MediaProvider(client).submit(
-            ProviderConfig(provider="openai", api_key="test", base_url="https://provider.invalid"),
+        result = await bind_media_provider(
+            ProviderConfig(provider="openai", api_key="test", base_url="https://provider.invalid"), client=client,
+        ).invoke(
             ProviderImageInput(prompt="test", model="gpt-image-1", images=[ProviderImageReference(image_url="data:image/png;base64,aW1hZ2U=")]),
         )
         assert result[0].b64_json == "aW1hZ2U="
@@ -115,9 +115,9 @@ async def test_poll_http_failure_and_success_without_output_are_distinct():
         return responses.pop(0)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
-        provider = MediaProvider(client)
         config = ProviderConfig(provider="volcengine", api_key="test")
+        provider = bind_media_provider(config, client=client)
         with pytest.raises(httpx.HTTPStatusError):
-            await provider.poll(config, kind="video_generation", task_id="remote")
+            await provider.poll(RemoteTaskReference("video_generation", "remote"))
         with pytest.raises(ProviderDataError):
-            await provider.poll(config, kind="video_generation", task_id="remote")
+            await provider.poll(RemoteTaskReference("video_generation", "remote"))

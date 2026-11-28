@@ -123,7 +123,7 @@ description: "记录场次提取、对象参考、共同卡片编辑与单卡生
 
 现有数据库的已保存场次版本和成功设计任务已进行只读检查。代表场次“胡同路边等待”包含两个镜头、129 项设计内容及 122 项适用性声明；文字可映射到现有卡片，但字段来源、用途、范围和生成缺项不能仅凭文字保存判为无损。
 
-共同画布当前的范围主要为卡片级文字说明，场次设计则包含字段级对象与镜头／出现项范围，见 [DesignScope](../../../backend/app/core/contracts/generation_canvas.py) 与 [DesignApplicability](../../../backend/app/core/contracts/directing/design_applicability.py)。人工编辑当前会重置状态、用途并清除来源，见 [designFieldMetadata](../../../front/src/pages/aiStudio/generationCanvas/designFieldMetadata.ts)，目标行为需补齐。
+样本核查时，共同画布的范围主要为卡片级文字说明，场次设计则包含字段级对象与镜头／出现项范围，见 [DesignScope](https://github.com/Forget-C/Jellyfish/blob/1eb9e28c721dd803d3e09c503aac31c631fa8e53/backend/app/core/contracts/generation_canvas.py) 与 [DesignApplicability](https://github.com/Forget-C/Jellyfish/blob/1eb9e28c721dd803d3e09c503aac31c631fa8e53/backend/app/core/contracts/directing/design_applicability.py)。当时人工编辑会重置状态、用途并清除来源，见 [designFieldMetadata](https://github.com/Forget-C/Jellyfish/blob/1eb9e28c721dd803d3e09c503aac31c631fa8e53/front/src/pages/aiStudio/generationCanvas/designFieldMetadata.ts)。
 
 代表样本的初步映射有 12 张用途或范围混合的卡片，其中 4 张仅用途不同，可保留现有字段级用途；其余 8 张按适用目标、阶段和条件静态分组可拆为 17 张，净增 9 张。这支持优先评估按范围拆卡的更小方案，但只是映射计数，尚未完成拆卡后的编译与交互验证。
 

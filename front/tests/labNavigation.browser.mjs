@@ -1,3 +1,4 @@
+import { successfulTextTrial, turnReceipt, mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot, textTrialSnapshot } from './text-trial-events.mjs'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -30,9 +31,6 @@ let lookupImage
 let imageLookupPending = false
 const prematureImageMessages = []
 const message = (id, session_id, role, content, sequence) => ({ id, session_id, role, content, sequence, created_at: timestamp, updated_at: timestamp })
-const frame = (event, sequence, data) =>
-  'id: ' + sequence + '\nevent: ' + event + '\ndata: ' + JSON.stringify({ version: 1, event, sequence, created_at: timestamp, data }) + '\n\n'
-
 const server = await createServer({ root, cacheDir: output + '/vite-cache', server: { host: '127.0.0.1', port: 4197, strictPort: true, open: false } })
 let browser
 const cleanup = browserCleanup(() => ({ browser, server }))
@@ -47,6 +45,8 @@ try {
   await page.route('**/api/**', async route => {
     const request = route.request()
     const url = new URL(request.url())
+    const admission = mediaAdmissionStream(route, url)
+    if (admission) return admission
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (url.pathname.endsWith('/experiment-sessions')) {
       if (request.method() === 'POST') {
@@ -77,33 +77,32 @@ try {
       deleteAttempts += 1
       return respond(null)
     }
-    const mediaRun = url.pathname.match(/\/labs\/(image|video)\/sessions\/([^/]+)\/tasks$/)
-    if (mediaRun) {
-      const [, mode, sessionId] = mediaRun
+    const mediaRun = url.pathname.match(/\/chat\/sessions\/(?:image|video)\/([^/]+)\/turns$/)
+    if (mediaRun && request.postDataJSON().operation_input) {
+      const sessionId = mediaRun[1]
       const body = request.postDataJSON()
+      const mode = body.operation_input.kind.split('_')[0]
       mediaRequests.push({ mode, sessionId, prompt: body.execution_prompt })
       const messages = [
         message(mode + '-user', sessionId, 'user', body.execution_prompt, 1),
         { ...message(mode + '-result', sessionId, 'assistant', mode + ' 已提交', 2), task_id: mode + '-task', status: 'succeeded' },
       ]
       persisted.set(sessionId, messages)
-      return respond({ task_id: mode + '-task', messages })
+      return respond(mediaTurnReceipt(route, { task_id: mode + '-task', messages }))
     }
-    if (url.pathname.endsWith('/new-text/stream')) {
+    if (url.pathname.endsWith('/chat/sessions/text/new-text/turns')) {
       const user = message('user-1', 'new-text', 'user', request.postDataJSON().content, 1)
       const assistant = message('assistant-1', 'new-text', 'assistant', '验收回复', 2)
       persisted.set('new-text', [user, assistant])
-      return route.fulfill({
-        contentType: 'text/event-stream',
-        body: frame('accepted', 1, { task_id: 'lab-run', user_message: user }) +
-          frame('completed', 2, {
-            task_id: 'lab-run', assistant_message: assistant,
-            result: { text: assistant.content, model_id: 'model-1', provider_request_id: null, input_tokens: null, output_tokens: null },
-          }),
-      })
+      return respond(turnReceipt(route, 'lab-run'))
     }
-    if (url.pathname.endsWith('/image-1/messages') && imageLookupPending) prematureImageMessages.push(url.pathname)
-    if (url.pathname.endsWith('/messages')) return respond(persisted.get(url.pathname.split('/').at(-2)) ?? [])
+    if (url.pathname.endsWith('/new-text/events')) {
+      const [user, assistant] = persisted.get('new-text') ?? []
+      return route.fulfill({ contentType: 'text/event-stream', body: user && assistant && !Number(url.searchParams.get('after')) ? successfulTextTrial('new-text', 'lab-run', user, assistant) : '' })
+    }
+    if (/\/chat\/sessions\/text\/[^/]+\/snapshot$/.test(url.pathname)) return textTrialSnapshot(route, persisted.get(url.pathname.split('/').at(-2)) ?? [])
+    if (url.pathname.endsWith('/chat/sessions/image/image-1/snapshot') && imageLookupPending) prematureImageMessages.push(url.pathname)
+    if (/\/chat\/sessions\/(image|video)\/[^/]+\/snapshot$/.test(url.pathname)) return respond(boundTrialSnapshot(url, persisted.get(url.pathname.split('/').at(-2)) ?? []))
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])
   })
@@ -124,8 +123,8 @@ try {
   await page.waitForURL(url => url.pathname === '/lab' && url.searchParams.get('mode') === 'image' && url.searchParams.get('keep') === '1')
   const types = page.locator('.experiment-navigation')
   const startDraft = async label => {
-    await page.getByRole('button', { name: '新建会话', exact: true }).click()
-    await page.getByRole('menuitem', { name: label + '会话', exact: true }).click()
+    await page.getByRole('button', { name: '选择聊天类型', exact: true }).click()
+    await page.getByRole('menuitem', { name: label + '聊天', exact: true }).click()
   }
   const history = page.getByRole('navigation', { name: '最近会话' })
   await history.getByRole('button', { name: '图片历史 1', exact: true }).waitFor()
@@ -153,7 +152,7 @@ try {
 
   await startDraft('文本')
   await page.waitForURL(url => url.searchParams.get('mode') === 'text')
-  await page.getByRole('button', { name: '新建会话', exact: true }).click()
+  await page.getByRole('button', { name: '选择聊天类型', exact: true }).click()
   await page.keyboard.press('Escape')
   assert.equal(created, 0)
   await page.getByRole('button', { name: /选择模型/ }).click()
@@ -262,12 +261,12 @@ try {
 
   hideHistory = true
   await page.goto(origin + '/lab')
-  await history.getByText('暂无会话，从右上方新建开始', { exact: true }).waitFor()
+  await history.getByText('暂无会话', { exact: true }).waitFor()
   await startDraft('图片')
   await imageInput.waitFor()
   await page.goBack()
   await page.waitForURL(origin + '/lab')
-  await textInput.waitFor()
+  await page.getByRole('textbox', {name: '聊天消息'}).waitFor()
   hideHistory = false
 
   failHistory = true
@@ -283,7 +282,8 @@ try {
     await trigger.focus()
     await trigger.press('Enter')
     const drawer = page.getByRole('dialog').filter({ has: types })
-    await drawer.getByRole('button', { name: '新建会话', exact: true }).waitFor()
+    await drawer.getByRole('button', { name: '选择聊天类型', exact: true }).waitFor()
+    await page.waitForFunction(element => Math.abs(element.getBoundingClientRect().left) < 1, await drawer.elementHandle())
     await page.keyboard.press('Escape')
     await drawer.waitFor({ state: 'hidden' })
     await trigger.and(page.locator(':focus')).waitFor()
@@ -316,11 +316,16 @@ try {
       assert.ok(layout.barHeight >= 52 && layout.barHeight <= 56)
       assert.equal(layout.hasOverflow, false)
       if (width < 1024) await page.getByRole('button', { name: '会话导航', exact: true }).waitFor()
-      else assert.equal(Math.round((await types.boundingBox()).width), 216)
+      else {
+        const sidebar = await types.boundingBox()
+        const main = await page.getByRole('region', { name: '实验室 · 文本', exact: true }).boundingBox()
+        assert.equal(Math.round(sidebar.width), 272)
+        assert.ok(sidebar.x + sidebar.width <= main.x, 'Session navigation sits to the left of the conversation')
+      }
       await page.waitForFunction(({ button, controlHeight }) => {
         const bounds = button.getBoundingClientRect()
         return Math.abs(bounds.height - controlHeight) < 0.5 && bounds.bottom <= innerHeight
-      }, { button: await send.elementHandle(), controlHeight: width >= 1024 ? 32 : 36 })
+      }, { button: await send.elementHandle(), controlHeight: 36 })
       await page.waitForFunction(expectedRows => {
         const editor = document.querySelector('textarea[aria-label="文本提示词"]')
         const rows = editor.clientHeight / parseFloat(getComputedStyle(editor).lineHeight)
@@ -338,6 +343,8 @@ try {
   const compactInput = page.getByRole('textbox', { name: '文本提示词', exact: true })
   await compactInput.scrollIntoViewIfNeeded()
   await compactInput.focus()
+  await page.keyboard.press('Tab')
+  await page.getByRole('button', { name: '添加内容', exact: true }).and(page.locator(':focus-visible')).waitFor()
   await page.keyboard.press('Tab')
   const compactModel = page.getByRole('button', { name: '选择模型', exact: true })
   await compactModel.and(page.locator(':focus-visible')).waitFor()

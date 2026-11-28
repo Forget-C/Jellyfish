@@ -17,7 +17,7 @@ export function GenerationCanvasPage() {
 function IndependentCanvasEditor({ canvasId }: { canvasId?: string }) {
   const uiText = useUiText()
   const navigate = useNavigate()
-  const { state, pathname, search: locationSearch } = useLocation()
+  const { state } = useLocation()
   const [openedAsDraft] = useState(state?.canvasDraft === true)
   const listSearch = typeof state?.canvasListSearch === 'string' ? state.canvasListSearch : ''
   const listLocation = { pathname: '/canvases', search: listSearch }
@@ -28,12 +28,16 @@ function IndependentCanvasEditor({ canvasId }: { canvasId?: string }) {
   return <GenerationCanvasWorkspace projectId="" canvasId={canvasId || null} freeDraft={openedAsDraft}
     onCanvasRead={current => {
       if (state?.canvasDraft && current.revision >= 0) {
-        navigate({ pathname, search: locationSearch }, { replace: true, state: { ...state, canvasDraft: false } })
+        // Update the draft marker without navigating away from the active assistant.
+        const entry = window.history.state
+        if (entry?.usr?.canvasDraft) {
+          window.history.replaceState({ ...entry, usr: { ...entry.usr, canvasDraft: false } }, '')
+        }
       }
     }}
     back={{ label: uiText("返回画布列表"), onClick: () => navigate(listLocation) }} hostError={error}
     targetRun={search.get('run')} targetNode={search.get('node')} targetCheck={null} targetReport={null}
-    onCloseRunHistory={() => setSearch(withoutRunTarget, { replace: true, state })}
+    onCloseRunHistory={() => setSearch(withoutRunTarget, { replace: true, state: window.history.state?.usr ?? state })}
     renderCanvasManagement={({ current, document, running, editable, saving, settingsBlocked, settingsPending, settingsDraft, clearSettingsDraft, settingsError, saveSettings, requestLeave, canEdit }, focusMenu) => <>
       <Button variant="quiet" icon={<SettingOutlined />} data-menu-close disabled={!document || !editable || saving || settingsBlocked || settingsPending}
         onClick={() => setSettingsOpen(true)}>{uiText("设置")}</Button>

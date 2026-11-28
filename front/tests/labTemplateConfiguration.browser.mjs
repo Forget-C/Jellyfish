@@ -1,3 +1,4 @@
+import { successfulTextTrial, turnReceipt, mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot, textTrialSnapshot } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -25,7 +26,6 @@ const message = (id, session_id, role, content, sequence, input) => ({
   id, session_id, role, content, sequence, created_at: timestamp, updated_at: timestamp,
   ...(input ? { payload: { input_snapshot: { version: 1, prompt: content, ...input } } } : {}),
 })
-const frame = (event, sequence, data) => `id: ${sequence}\nevent: ${event}\ndata: ${JSON.stringify({ version: 1, event, sequence, created_at: timestamp, data })}\n\n`
 const submitted = []
 const writes = []
 let failTemplates = false
@@ -46,6 +46,8 @@ try {
   await page.route('**/api/**', async route => {
     const request = route.request()
     const url = new URL(request.url())
+    const admission = mediaAdmissionStream(route, url)
+    if (admission) return admission
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (request.method() !== 'GET') writes.push(url.pathname)
     if (url.pathname.endsWith('/experiment-sessions')) return respond([session(url.searchParams.get('lab_type') ?? 'text')])
@@ -66,9 +68,15 @@ try {
         { ...template, id: category + '-long', name: longName, variables: manyVariables, variable_defaults: {} },
       ] })
     }
-    const run = url.pathname.match(/\/labs\/(text|image|video)\/sessions\/([^/]+)\/(stream|tasks)$/)
-    if (run) {
-      const [, mode, sessionId] = run
+    const turn = url.pathname.match(/\/chat\/sessions\/(?:text|image|video)\/([^/]+)\/turns$/)
+    if (url.pathname.endsWith('/text-session/events')) {
+      const sessionId = url.pathname.split('/').at(-2)
+      const [user, assistant] = persisted.get(sessionId) ?? []
+      return route.fulfill({ contentType: 'text/event-stream', body: user && assistant && !Number(url.searchParams.get('after')) ? successfulTextTrial(sessionId, 'text-run', user, assistant) : '' })
+    }
+    if (turn) {
+      const sessionId = turn[1]
+      const mode = sessionId === 'text-session' ? 'text' : request.postDataJSON().operation_input.kind.split('_')[0]
       const requestBody = request.postDataJSON()
       const content = requestBody.content ?? requestBody.execution_prompt
       submitted.push({ mode, content })
@@ -79,13 +87,14 @@ try {
       const runId = mode + '-run'
       if (mode === 'text') {
         persisted.set(sessionId, [user, result])
-        return route.fulfill({ contentType: 'text/event-stream', body: frame('accepted', 1, { task_id: runId, user_message: user }) + frame('completed', 2, { task_id: runId, assistant_message: result, result: { text: result.content, model_id: 'text-model', provider_request_id: null, input_tokens: null, output_tokens: null } }) })
+        return respond(turnReceipt(route, runId))
       }
       const messages = [user, { ...result, task_id: runId, status: 'succeeded' }]
       persisted.set(sessionId, messages)
-      return respond({ task_id: runId, messages })
+      return respond(mediaTurnReceipt(route, { task_id: runId, messages }))
     }
-    if (url.pathname.endsWith('/messages')) return respond(persisted.get(url.pathname.split('/').at(-2)) ?? [])
+    if (/\/chat\/sessions\/text\/[^/]+\/snapshot$/.test(url.pathname)) return textTrialSnapshot(route, persisted.get(url.pathname.split('/').at(-2)) ?? [])
+    if (/\/chat\/sessions\/(image|video)\/[^/]+\/snapshot$/.test(url.pathname)) return respond(boundTrialSnapshot(url, persisted.get(url.pathname.split('/').at(-2)) ?? []))
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])
   })
@@ -135,7 +144,7 @@ try {
   // Each close route discards temporary edits and returns focus to the trigger.
   for (const dismiss of [
     () => cancel.click(),
-    () => editor.getByRole('button', { name: 'Close', exact: true }).click(),
+    () => editor.getByRole('button', { name: /^(Close|关闭)$/ }).click(),
     () => page.keyboard.press('Escape'),
     () => page.mouse.click(20, 400),
   ]) {
@@ -169,12 +178,12 @@ try {
   assert.deepEqual(writes, [])
 
   const selectModel = async (mode) => {
-    await page.getByRole('button', { name: '选择模型', exact: true }).click()
+    await page.locator('.experiment-model-trigger').click()
     await page.getByRole('button', { name: labNames[mode] + '测试模型', exact: true }).click()
   }
   const send = async (mode) => {
     await selectModel(mode)
-    const run = page.waitForResponse(response => response.url().includes(`/labs/${mode}/sessions/`) && response.request().method() === 'POST')
+    const run = page.waitForResponse(response => response.url().includes('/chat/sessions/') && response.request().method() === 'POST')
     await page.getByRole('button', { name: /^发\s*送$/ }).click()
     assert.ok((await run).ok())
     await page.getByText('测试结果', { exact: true }).waitFor()

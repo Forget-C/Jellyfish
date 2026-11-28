@@ -1,6 +1,7 @@
 .experiment-workspace {
   --experiment-control-height: 32px;
   --experiment-section-gap: 16px;
+  --experiment-action-size: 36px;
 }
 
 .app-lab-layout { display: flex; flex: 1; min-height: 0; }
@@ -11,14 +12,36 @@
   flex-direction: column;
   gap: var(--experiment-section-gap);
   min-height: 0;
-  padding: 0 var(--app-page-gutter) var(--experiment-section-gap);
+  padding-block-end: var(--experiment-section-gap);
+  container-type: inline-size;
 }
-.app-lab-history { container-type: inline-size; }
+/* 消息与输入框共用阅读宽度，草稿和会话间移动输入框时保留焦点与内容。 */
+.experiment-history-list,
+.experiment-composition {
+  width: min(760px, calc(100cqw - 2 * var(--app-page-gutter)));
+  margin-inline: auto;
+}
+.experiment-conversation:not([hidden]) { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.app-lab-welcome { overflow-y: auto; padding-block: 16px clamp(16px, 10vh, 96px); }
+.app-lab-welcome .experiment-composition { flex-shrink: 0; margin-block: auto; }
+.experiment-composition > h2 {
+  margin: 0 0 24px;
+  color: var(--app-text);
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 600;
+  text-align: center;
+}
+.app-lab-history {
+  scrollbar-gutter: stable both-edges;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.app-lab-history:hover { scrollbar-color: #aab8ca transparent; }
 .experiment-history-panel { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; }
-.experiment-history-list { min-height: 100%; }
+.experiment-history-list { min-height: 100%; container-type: inline-size; }
 .experiment-history-list > * + * { margin-top: 16px; }
 .app-lab-history:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -2px; }
-.experiment-history-jump { position: absolute; right: 12px; bottom: 8px; box-shadow: 0 2px 8px rgb(38 50 68 / 12%); }
+.experiment-history-jump { position: absolute; inset-inline-end: max(var(--app-page-gutter), (100% - 760px) / 2); bottom: 8px; box-shadow: 0 2px 8px rgb(38 50 68 / 12%); }
 
 .experiment-empty-state { display: grid; min-height: 100%; place-items: center; padding: 8px; }
 .experiment-empty-state .ant-empty { margin: 0; }
@@ -51,8 +74,9 @@
   color: var(--app-text);
   background: #fff;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: 20px;
 }
+.app-lab-welcome .experiment-composer { box-shadow: 0 6px 20px rgb(38 50 68 / 6%); }
 .experiment-composer:focus-within { border-color: var(--app-accent); }
 .experiment-composer-input { max-height: 45dvh; overflow-y: auto; }
 .experiment-composer-input .experiment-prompt-input {
@@ -64,19 +88,35 @@
 }
 .experiment-composer-toolbar,
 .experiment-composer-options,
-.experiment-composer-submit {
+.experiment-composer-actions {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
 }
 .experiment-composer-toolbar { margin-top: 8px; }
-.experiment-composer-options { flex: 1; min-width: 0; }
-.experiment-composer-submit { flex-shrink: 0; justify-content: flex-end; margin-inline-start: auto; }
+.experiment-composer-options,
+.experiment-chat-model { min-width: 0; }
+.experiment-composer-actions { min-width: 0; justify-content: flex-end; margin-inline-start: auto; }
 .experiment-composer-toolbar :is(.ant-btn, .ant-select) { height: var(--experiment-control-height); font-size: 13px; }
-.experiment-composer-toolbar .ant-select .ant-select-selector { height: 100%; }
-.experiment-composer-toolbar .ant-btn-primary:not(:disabled) { background: var(--app-accent); }
-.experiment-composer-toolbar .ant-btn-primary:not(:disabled):hover { background: #1d50aa; }
+.experiment-composer-toolbar .ant-select { height: 100%; }
+.experiment-composer-toolbar .experiment-composer-action.ant-btn {
+  flex: none;
+  width: var(--experiment-action-size);
+  min-width: var(--experiment-action-size);
+  height: var(--experiment-action-size);
+  padding: 0;
+  border: 0;
+  background: var(--app-accent);
+  color: #fff;
+  font-size: 17px;
+}
+.experiment-composer-toolbar .experiment-composer-action.ant-btn:not(:disabled):hover { background: #1d50aa; }
+.experiment-composer-toolbar .experiment-composer-action.ant-btn:disabled {
+  background: #dfe7f2;
+  color: var(--app-muted);
+}
+.experiment-stop-icon { width: 10px; height: 10px; background: currentColor; border-radius: 2px; }
 .experiment-workspace :is(button, textarea):focus-visible {
   outline: 2px solid var(--app-accent);
   outline-offset: 2px;
@@ -117,17 +157,19 @@
 
 .experiment-navigation {
   display: flex;
-  flex: 0 0 216px;
+  flex: 0 0 272px;
   flex-direction: column;
   gap: 10px;
   min-width: 0;
   min-height: 0;
   padding: 12px;
+  border-inline-end: 1px solid var(--app-border);
 }
 
 .ant-drawer-body > .experiment-navigation {
   height: 100%;
   padding: 2px;
+  border: 0;
 }
 
 .experiment-session-list {
@@ -173,8 +215,9 @@
   padding-inline: 8px;
 }
 
-.experiment-session-heading h2 {
-  margin: 0;
+.experiment-session-caption {
+  margin: 6px 0 0;
+  padding-inline: 11px;
   color: var(--app-muted, #536174);
   font-size: 14px;
   font-weight: 600;
@@ -229,32 +272,46 @@
 
 .experiment-history-loading { padding: 12px; color: var(--app-muted); font-size: 13px; }
 .experiment-message {
-  width: fit-content;
-  max-width: min(100%, 80ch);
+  min-width: 0;
+  max-width: 100%;
   color: var(--app-text);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 16px;
+  line-height: 26px;
 }
-.experiment-message-user { margin-inline-start: auto; }
+.experiment-message-user,
+.experiment-message-result { width: fit-content; }
+.experiment-message-user { max-width: 75%; margin-inline-start: auto; }
+
+@media (max-width: 767px) {
+  .experiment-message-user { max-width: 90%; }
+}
+
 .experiment-message-header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 8px;
-  margin-block-end: 4px;
+  margin-block-end: 8px;
   color: var(--app-muted);
   font-size: 12px;
+  line-height: 1.5;
 }
 .experiment-message-user .experiment-message-header { justify-content: flex-end; }
-.experiment-message-body {
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: white;
+.experiment-message .experiment-message-body {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  word-break: normal;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 .experiment-message-body:empty { display: none; }
+.experiment-message-user .experiment-message-body {
+  padding: 8px 12px;
+  border-radius: 12px;
+}
 .experiment-message-user .experiment-message-body { background: var(--app-selected); }
+.experiment-message-result .experiment-message-body { background: transparent; padding: 0; }
 .experiment-message-footer { display: flex; justify-content: flex-end; margin-block-start: 4px; }
 .experiment-task-status,
 .experiment-task-read-state { display: inline-flex; align-items: center; gap: 4px; }
@@ -266,7 +323,8 @@
 .experiment-result-note { color: var(--app-muted); font-size: 12px; margin: 4px 0 0; }
 .experiment-result-error { color: #ad2838; }
 
-.experiment-session-heading .ant-btn { height: 32px; padding-inline: 8px; font-size: 13px; }
+.experiment-session-heading .ant-btn { height: 36px; padding-inline: 8px; font-size: 14px; }
+.experiment-session-heading .experiment-new-chat { flex: 1; justify-content: flex-start; }
 .experiment-session-type { flex-shrink: 0; color: var(--app-muted); font-size: 16px; }
 .experiment-session-name { min-width: 0; overflow: hidden; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
 @media (pointer: coarse) {
@@ -275,11 +333,10 @@
   .experiment-session-link { min-height: 44px; }
 }
 
-/* 输入区底栏始终按模型、素材、添加、提交的顺序浏览。 */
-.experiment-model-trigger.ant-btn { display: inline-flex; align-items: center; min-width: 0; max-width: 180px; padding-inline: 8px; }
+/* 输入区底栏从添加开始，提交保持在最右侧。 */
+.experiment-model-trigger.ant-btn { display: inline-flex; align-items: center; min-width: 0; max-width: min(200px, 100%); padding-inline: 8px; border-radius: 999px; }
 .experiment-model-trigger > span:not(.anticon) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.experiment-model-trigger .anticon { flex: none; }
-.experiment-model-trigger[aria-expanded='true'],
+.experiment-model-trigger.ant-btn:not(:disabled):is(:hover, :focus-visible, [aria-expanded='true']),
 .experiment-add-trigger[aria-expanded='true'] { color: var(--app-accent); background: var(--app-selected); }
 .experiment-add-trigger.ant-btn { width: var(--experiment-control-height); padding: 0; flex: none; }
 .experiment-composer-feedback { display: grid; gap: 4px; margin-top: 8px; }
@@ -293,11 +350,47 @@
 .experiment-add-menu .ant-dropdown-menu-item { font-size: 13px; }
 .experiment-model-panel :is(button, input, li):focus-visible { outline: 2px solid var(--app-accent, #245fc5); outline-offset: -2px; }
 @media (max-width: 767px) {
-  .experiment-composer-toolbar, .experiment-composer-options, .experiment-composer-submit { gap: 4px; }
+  .experiment-composer-toolbar, .experiment-composer-options, .experiment-composer-actions { gap: 4px; }
   .experiment-model-trigger.ant-btn { padding-inline: 4px; }
 }
 @media (pointer: coarse) {
+  .experiment-workspace { --experiment-action-size: 44px; }
   .experiment-composer-toolbar :is(.ant-btn, .ant-select) { min-height: 44px; height: 44px; }
   .experiment-add-trigger.ant-btn { width: 44px; }
   .experiment-add-menu .ant-dropdown-menu-item, .experiment-model-panel .ant-menu-item { min-height: 44px; }
+}
+
+.experiment-chat-attachments,
+.experiment-video-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.experiment-chat-attachments { max-height: 112px; overflow-y: auto; }
+.experiment-chat-attachments .ant-btn { max-width: 100%; }
+.experiment-chat-attachments .ant-btn > span:not(.ant-btn-icon) { overflow: hidden; text-overflow: ellipsis; }
+.experiment-chat-attachments .experiment-reference-image { width: 24px; height: 24px; }
+.experiment-chat-attachments .experiment-reference-placeholder > span:not(.anticon) { display: none; }
+.experiment-video-settings .ant-select { min-width: 80px; }
+.experiment-modality-settings { margin-top: 8px; }
+.experiment-modality-settings summary { cursor: pointer; }
+
+@media (min-width: 600px) {
+  .app-lab-welcome .experiment-composer-inline {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 42%);
+    align-items: center;
+    column-gap: 8px;
+    border-radius: 26px;
+  }
+  .app-lab-welcome .experiment-composer-inline .experiment-composer-toolbar { display: contents; }
+  .app-lab-welcome .experiment-composer-inline .experiment-composer-input { grid-area: 1 / 2; }
+  .app-lab-welcome .experiment-composer-inline .experiment-composer-toolbar > :first-child { grid-area: 1 / 1; }
+  .app-lab-welcome .experiment-composer-inline .experiment-composer-actions { grid-area: 1 / 3; }
+  .app-lab-welcome .experiment-composer-inline .experiment-composer-feedback { grid-column: 1 / -1; }
+}
+
+@media (max-height: 540px) {
+  .app-lab-welcome { padding-block: 8px; }
+  .experiment-composition > h2 { margin-bottom: 12px; }
 }

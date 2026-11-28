@@ -1,77 +1,102 @@
-import { useUiText } from '../../../../uiText'
-import { useEffect, useState } from 'react'
-import { FilmService, type TaskResultRead } from '../../../../services/generated'
+import { useEffect, useRef, useState } from 'react'
+import type { bindChatSession } from '../../../../services/chatSession'
+import { observeChatSession } from '../../../../services/chatSessionObservation'
+import type { ChatTurnReceipt, MediaTaskReceipt } from '../../../../services/generated'
+import type { ExperimentHistoryState } from './useExperimentHistory'
 
-type TaskMessage = { taskId?: string; status?: string }
-type TaskRead = { result?: TaskResultRead; unavailable: boolean }
-
-function isTerminal(status?: string) {
-  return status === 'succeeded' || status === 'failed' || status === 'cancelled'
+type TaskMessage = { taskId?: string; status?: string; receipt?: MediaTaskReceipt }
+type Observation = {
+  sessionId: string
+  epoch: number
+  cursor: number
+  tasks: Record<string, {receipt: MediaTaskReceipt; cursor: number}>
+  unavailable: boolean
 }
+const isTerminal = (status?: string) => status === 'succeeded' || status === 'failed' || status === 'cancelled'
 
-/** 合成历史与轮询状态；读取错误保留可靠状态，媒体解析由各模态提供。 */
+/** Observe one media session and overlay its live task receipts on paginated history. */
 export function useExperimentTaskResults<T extends TaskMessage>(
-  messages: T[], refreshHistory: () => Promise<void>, projectMedia: (message: T, result: TaskResultRead) => T,
+  session: ReturnType<typeof bindChatSession> | undefined, history: ExperimentHistoryState, messages: T[],
+  projectMedia: (message: T, receipt: MediaTaskReceipt) => T,
 ) {
-  const uiText = useUiText()
-  const [reads, setReads] = useState<Record<string, TaskRead>>({})
+  const [observation, setObservation] = useState<Observation>()
+  const [admission, setAdmission] = useState<{receipt: ChatTurnReceipt; epoch: number}>()
   const [retry, setRetry] = useState(0)
-  const runningTaskId = messages.find((message) => {
-    if (!message.taskId || isTerminal(message.status)) return false
-    const status = reads[message.taskId]?.result?.status ?? message.status
-    return status === 'queued' || status === 'running' || status === 'pending'
-  })?.taskId
+  const checkpointRef = useRef<Observation>()
+  const historyRef = useRef(history)
+  historyRef.current = history
+  const admissionRef = useRef(admission)
+  admissionRef.current = admission
+  const {checkpointEpoch} = history
+  const current = observation?.sessionId === session?.sessionId && observation?.epoch === checkpointEpoch ? observation : undefined
+  const accepted = admission?.receipt.session_id === session?.sessionId && admission?.epoch === checkpointEpoch ? admission.receipt : undefined
+  const ready = history.eventCursor !== undefined || Boolean(accepted)
 
   useEffect(() => {
-    if (!runningTaskId) return
-    const taskId = runningTaskId
-    let cancelled = false
-    let timer: number | undefined
-    let request: ReturnType<typeof FilmService.getTaskResultApiV1FilmTasksTaskIdResultGet> | undefined
-
-    const poll = async () => {
-      try {
-        request = FilmService.getTaskResultApiV1FilmTasksTaskIdResultGet({ taskId })
-        const { data } = await request
-        if (cancelled) return
-        if (!data || data.task_id !== taskId) throw new Error(uiText("任务状态不可用"))
-        setReads((current) => ({ ...current, [taskId]: { result: data, unavailable: false } }))
-        if (isTerminal(data.status)) {
-          void refreshHistory()
+    if (!session || !ready) return
+    const sessionId = session.sessionId
+    const abort = new AbortController()
+    const previous = checkpointRef.current?.sessionId === sessionId && checkpointRef.current.epoch === checkpointEpoch
+      ? checkpointRef.current : undefined
+    const accepted = admissionRef.current
+    const receipt = accepted?.receipt.session_id === sessionId && accepted.epoch === checkpointEpoch ? accepted.receipt : undefined
+    // If history is temporarily unavailable, an admitted command can still be replayed.
+    const start = previous?.cursor ?? historyRef.current.eventCursor ?? receipt?.cursor
+    if (start === undefined) return
+    let observed: Observation = previous ?? {sessionId, epoch: checkpointEpoch, cursor: start, unavailable: false, tasks: {}}
+    const publish = (next: Observation) => {
+      observed = next
+      checkpointRef.current = next
+      setObservation(next)
+    }
+    publish(observed)
+    void observeChatSession({
+      signal: abort.signal,
+      cursor: () => observed.cursor,
+      load: async () => {},
+      events: session.events,
+      apply(event) {
+        if (event.category !== 'task' || event.cursor <= (historyRef.current.eventCursor ?? -1)) {
+          publish({...observed, cursor: event.cursor})
           return
         }
-      } catch {
-        if (cancelled) return
-        setReads((current) => ({ ...current, [taskId]: { result: current[taskId]?.result, unavailable: true } }))
-      }
-      // 上一次读取结束后再调度，避免慢响应覆盖更新的任务状态。
-      if (!cancelled) timer = window.setTimeout(() => void poll(), 1500)
-    }
-    void poll()
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-      request?.cancel()
-    }
-  }, [uiText, refreshHistory, retry, runningTaskId])
+        const {task_id, status, messages: rows} = event.payload
+        if (rows?.length) {
+          historyRef.current.adoptCanonicalMessages(sessionId, rows.filter(row => row.session_id === sessionId))
+        } else if (event.type === 'task.accepted') {
+          void historyRef.current.refresh()
+        }
+        publish({...observed, cursor: event.cursor, unavailable: false, tasks: {...observed.tasks, [task_id]: {receipt: event.payload, cursor: event.cursor}}})
+        if (isTerminal(status)) void historyRef.current.refresh()
+      },
+      connected: () => publish({...observed, unavailable: false}),
+      disconnected: () => publish({...observed, unavailable: true}),
+    })
+    return () => abort.abort()
+  }, [checkpointEpoch, ready, retry, session])
 
-  // 历史已确认终态时，旧的轮询进度和读取失败不再代表当前状态。
-  const currentReads = { ...reads }
-  for (const { taskId, status } of messages) {
-    if (!taskId || !isTerminal(status)) continue
-    const result = reads[taskId]?.result
-    if (result?.status === status) currentReads[taskId] = { result, unavailable: false }
-    else delete currentReads[taskId]
-  }
-
-  const currentMessages = messages.map(message => {
-    const read = message.taskId ? currentReads[message.taskId] : undefined
-    const result = read?.result
+  const currentMessages = messages.map(item => {
+    const observed = item.taskId ? current?.tasks[item.taskId] : undefined
+    const recent = observed && observed.cursor > (history.eventCursor ?? -1) ? observed.receipt : undefined
+    const receipt = isTerminal(item.status) ? item.receipt : recent ?? item.receipt
+    const status = receipt?.status ?? item.status
     return {
-      ...(result ? projectMedia(message, result) : message),
-      ...(result ? { status: result.status, progress: result.progress, error: result.error } : {}),
-      unavailable: read?.unavailable,
+      ...(receipt ? projectMedia(item, receipt) : item),
+      ...(receipt ? { receipt, status, progress: receipt.progress, error: receipt.error } : {}),
+      unavailable: Boolean(item.taskId && !isTerminal(status) && current?.unavailable),
     }
   })
-  return { messages: currentMessages, runningTaskId, retryStatus: () => setRetry((current) => current + 1) }
+  const applied = Math.max(current?.cursor ?? -1, history.eventCursor ?? -1)
+  const pending = accepted && applied <= accepted.cursor
+  const visibleTaskIds = new Set(currentMessages.map(item => item.taskId))
+  const unprojected = Object.values(current?.tasks ?? {}).find(({receipt, cursor}) =>
+    cursor > (history.eventCursor ?? -1) && !isTerminal(receipt.status) && !visibleTaskIds.has(receipt.task_id))
+  const runningTaskId = currentMessages.find(item => item.taskId && !isTerminal(item.status))?.taskId
+    ?? unprojected?.receipt.task_id ?? (pending ? accepted.turn_id : undefined)
+  return {
+    messages: currentMessages,
+    runningTaskId,
+    observeAdmission: (receipt: ChatTurnReceipt) => setAdmission({receipt, epoch: checkpointEpoch}),
+    retryStatus: () => setRetry(value => value + 1),
+  }
 }

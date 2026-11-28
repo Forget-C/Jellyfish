@@ -59,7 +59,7 @@ async def test_text_product_check_retains_original_basis_and_allows_partial(runt
                 results[1]['outcome'] = 'unsupported'
             return SimpleNamespace(content=json.dumps({'results': results}))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', Model)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', Model)
     worker = TaskWorker(runtime.sessions)
 
     async def advance():

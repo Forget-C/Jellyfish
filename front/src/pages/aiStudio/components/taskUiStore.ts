@@ -15,6 +15,7 @@ export type TaskUiItem = {
   status: TaskStatus
   progress: number | null
   cancelRequested: boolean
+  remoteCancellation?: TaskListItemRead['remote_cancellation']
   startedAtTs?: number | null
   finishedAtTs?: number | null
   elapsedMs?: number | null
@@ -72,6 +73,7 @@ export function mergeTaskUiItems(
       status: server?.status ?? optimistic?.status ?? 'queued',
       progress: server ? server.progress ?? null : optimistic?.progress ?? null,
       cancelRequested: !!(server?.cancel_requested ?? optimistic?.cancelRequested),
+      remoteCancellation: server?.remote_cancellation ?? optimistic?.remoteCancellation,
       startedAtTs: server?.started_at_ts ?? optimistic?.startedAtTs,
       finishedAtTs: server?.finished_at_ts ?? optimistic?.finishedAtTs,
       elapsedMs: server?.elapsed_ms ?? optimistic?.elapsedMs,

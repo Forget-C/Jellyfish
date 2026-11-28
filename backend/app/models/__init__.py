@@ -2,10 +2,14 @@
 
 from app.core.db import Base
 from app.models.base import TimestampMixin
+from app.models.approval import ApprovalSubject, ApprovalRequest, ApprovalDecision
+from app.models.canvas_edit_approval import CanvasEditApprovalExecution, CanvasEditApprovalSnapshot
+from app.models.canvas_generation_approval import CanvasGenerationApproval
 from app.models.task import Task, TaskInput, TaskOutput
 from app.models.directing import Sequence, DirectingRevision, RevisionDependency, Take, CutTakeReference, DirectingAction
 
 from app.models.llm import Model, ModelSettings, Provider
+from app.models.canvas_assistant import CanvasAssistantPreview, CanvasAssistantSession, CanvasAssistantTurn
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.types import FileUsageKind
 
@@ -33,6 +37,8 @@ from app.models.studio import (
 
 __all__ = [
     "Sequence", "DirectingRevision", "RevisionDependency", "Take", "CutTakeReference", "DirectingAction",
+    "ApprovalSubject", "ApprovalRequest", "ApprovalDecision",
+    "CanvasEditApprovalExecution", "CanvasEditApprovalSnapshot", "CanvasGenerationApproval",
     "Task",
     "TaskInput",
     "TaskOutput",
@@ -61,6 +67,9 @@ __all__ = [
     "Provider",
     "Model",
     "ModelSettings",
+    "CanvasAssistantPreview",
+    "CanvasAssistantSession",
+    "CanvasAssistantTurn",
     "ExperimentSession",
     "ExperimentMessage",
 ]

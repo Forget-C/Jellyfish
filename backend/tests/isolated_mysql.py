@@ -4,13 +4,16 @@ import argparse
 import os
 import re
 import sys
+from collections.abc import Mapping
 from pathlib import Path
+from uuid import uuid4
 
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
 
 
 TARGET_ENV = "JELLYFISH_TEST_MYSQL_URL"
+DISPATCHED_TARGET_ENV = "JELLYFISH_TEST_MYSQL_DISPATCHED_TARGET"
 ENTRYPOINTS = {
     "migrate": "app.scripts.migrate_database",
     "seed": "app.scripts.seed_system_data",
@@ -19,20 +22,24 @@ ENTRYPOINTS = {
 BACKEND = Path(__file__).resolve().parents[1]
 
 
-def test_environment() -> dict[str, str]:
-    """在导入应用的数据库模块前检查目标，并统一子进程的连接配置。"""
-    target = os.environ.get(TARGET_ENV, "").strip()
-    if not target:
+def validate_canonical_environment(env: Mapping[str, str]) -> None:
+    """Prevent case-insensitive settings aliases from overriding checked values."""
+    guarded = {
+        "DATABASE_URL", TARGET_ENV, DISPATCHED_TARGET_ENV, "S3_BASE_PATH", "S3_BUCKET_NAME",
+        "S3_ENDPOINT_URL", "S3_ORPHAN_CLEANUP_SCOPE",
+    }
+    if any(key.upper() in guarded and key not in guarded for key in env):
+        raise ValueError("Use uppercase names for test database and storage settings")
+
+
+def isolated_mysql_url(value: str | None) -> URL:
+    """Parse an explicitly named test database without connection overrides."""
+    if not value or not value.strip():
         raise ValueError(f"{TARGET_ENV} is required for isolated MySQL checks")
-
-    from app.config import settings  # pylint: disable=import-outside-toplevel
-
     try:
-        url = make_url(target)
-        current = make_url(settings.database_url)
+        url = make_url(value.strip())
     except (ArgumentError, ValueError) as exc:
-        raise ValueError("Invalid database URL in the test or application configuration") from exc
-
+        raise ValueError("Invalid isolated MySQL URL") from exc
     if (
         url.drivername != "mysql+aiomysql"
         or not url.host
@@ -40,12 +47,45 @@ def test_environment() -> dict[str, str]:
         or url.query
     ):
         raise ValueError("Use a mysql+aiomysql URL for a dedicated jellyfish_check_ database without query options")
-    if current.get_backend_name() == "mysql" and url.database.casefold() == (current.database or "").casefold():
+    return url
+
+
+def require_separate_mysql_database(url: URL, *, allow_dispatched: bool = False) -> None:
+    """Reject the application database unless the isolated runner already replaced it."""
+    from app.config import settings
+
+    try:
+        current = make_url(settings.database_url)
+    except (ArgumentError, ValueError) as exc:
+        raise ValueError("Invalid application database URL") from exc
+    same_database = current.get_backend_name() == "mysql" and (
+        (url.database or "").casefold() == (current.database or "").casefold()
+    )
+    dispatched = (allow_dispatched and current == url
+                  and os.environ.get(DISPATCHED_TARGET_ENV) == url.render_as_string())
+    if same_database and not dispatched:
         raise ValueError("The isolated MySQL test target cannot be the current database")
 
-    env = os.environ.copy()
+
+def test_environment() -> dict[str, str]:
+    """在导入应用的数据库模块前检查目标，并统一子进程的连接配置。"""
+    validate_canonical_environment(os.environ)
+    url = isolated_mysql_url(os.environ.get(TARGET_ENV))
+    require_separate_mysql_database(url)
+    target = os.environ[TARGET_ENV].strip()
+    env = {**os.environ, **isolated_storage_environment()}
     env.update(DATABASE_URL=target, JELLYFISH_TEST_MYSQL_URL=target, JELLYFISH_DIRECTING_MYSQL_URL=target)
+    env[DISPATCHED_TARGET_ENV] = url.render_as_string()
     return env
+
+
+def isolated_storage_environment() -> dict[str, str]:
+    """Keep test media outside the configured worker's files/ and generated/ scans."""
+    from app.config import settings
+
+    base = settings.s3_base_path.strip().strip("/")
+    prefix = "/".join(filter(None, (base, "validation", uuid4().hex)))
+    return {"S3_BASE_PATH": prefix, "S3_ORPHAN_CLEANUP_SCOPE": ""}
 
 
 def main() -> None:

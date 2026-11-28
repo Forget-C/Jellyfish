@@ -29,13 +29,13 @@ export function ImageContentReader({ fileId, origin, generatedResult = false, ch
   return <section className="generation-image-content" data-empty={false}
     data-portrait={!!size && size.height > size.width} aria-label={generatedResult ? uiText("图片内容阅读") : uiText("图片内容编辑")}>
     <div className="generation-image-preview">
-      <img alt={uiText("图片预览")} src={buildFileDownloadUrl(fileId)} onLoad={event => {
+      {imageState !== 'failed' && <img alt={uiText("图片预览")} src={buildFileDownloadUrl(fileId)} onLoad={event => {
         const image = event.currentTarget
         setSize({ width: image.naturalWidth, height: image.naturalHeight })
         setImageState('loaded')
-      }} onError={() => setImageState('failed')} />
+      }} onError={() => setImageState('failed')} />}
       {!imageState && <small role="status">{uiText("图片加载中")}</small>}
-      {imageState === 'failed' && <small role="status">{uiText("图片暂不可预览，文件仍保留")}</small>}
+      {imageState === 'failed' && <small role="status">{uiText("图片暂不可预览")}</small>}
     </div>
     <div className="generation-image-file-info">
       <strong title={currentInfo?.name}>{currentInfo?.name || (readingFile ? uiText("读取文件信息…") : uiText("文件信息不可用"))}</strong>

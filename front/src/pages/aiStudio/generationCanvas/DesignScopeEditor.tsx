@@ -10,7 +10,7 @@ function ScopeInput({ label, placeholder, options, value, disabled, open, onOpen
   return <div onFocusCapture={() => onOpenChange(true)} onClick={event => { if (event.target instanceof HTMLInputElement) onOpenChange(true) }} onKeyDownCapture={event => {
     if (event.key === 'Escape' && open) { event.preventDefault(); event.stopPropagation(); onOpenChange(false) }
   }} onKeyDown={event => { if (event.key === 'Enter') { event.stopPropagation(); onOpenChange(false) } }}>
-    <AutoComplete transitionName="" popupClassName="design-scope-dropdown" value={options.includes(value) ? uiText(value) : value} disabled={disabled} open={!disabled && open} onDropdownVisibleChange={onOpenChange} onBlur={() => onOpenChange(false)} defaultActiveFirstOption={false} allowClear options={options.map(option => ({ value: option, label: uiText(option) }))} onChange={onChange} filterOption={(input, option) => [option?.value, option?.label].some(text => String(text).toLowerCase().includes(input.toLowerCase()))} style={{ width: '100%' }}>
+    <AutoComplete transitionName="" classNames={{ popup: { root: "design-scope-dropdown" } }} value={options.includes(value) ? uiText(value) : value} disabled={disabled} open={!disabled && open} onOpenChange={onOpenChange} onBlur={() => onOpenChange(false)} defaultActiveFirstOption={false} allowClear options={options.map(option => ({ value: option, label: uiText(option) }))} onChange={onChange} filterOption={(input, option) => [option?.value, option?.label].some(text => String(text).toLowerCase().includes(input.toLowerCase()))} style={{ width: '100%' }}>
       <Input aria-label={label} placeholder={placeholder} />
     </AutoComplete>
   </div>

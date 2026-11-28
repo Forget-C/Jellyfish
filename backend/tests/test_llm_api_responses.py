@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator, Iterator
 from datetime import UTC, datetime
 
 import pytest
+import httpx
 from fastapi.testclient import TestClient
 
 from app.dependencies import get_db
@@ -270,6 +271,32 @@ def test_get_vidu_model_catalog_returns_importable_official_models(client: TestC
     assert {item["name"] for item in body["data"]["models"]} >= {"viduq2", "viduq3-turbo"}
 
 
+def test_catalog_uses_default_endpoint_when_base_url_is_blank(client: TestClient, monkeypatch) -> None:
+    db = _FakeLlmDB()
+    provider = _seed_provider(db, "p-openai-catalog")
+    provider.base_url = "   "
+    requests = []
+    async_client = httpx.AsyncClient
+
+    def get_models(request: httpx.Request) -> httpx.Response:
+        requests.append((str(request.url), request.headers["Authorization"]))
+        return httpx.Response(200, json={"data": [{"id": "gateway-text"}]})
+
+    transport = httpx.MockTransport(get_models)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: async_client(transport=transport, **kwargs))
+    llm_app.dependency_overrides[get_db] = _override_db(db)
+    try:
+        response = client.get("/api/v1/llm/providers/p-openai-catalog/models/catalog")
+    finally:
+        llm_app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["source"] == "provider_api"
+    assert [model["name"] for model in data["models"]] == ["gateway-text"]
+    assert requests == [("https://api.openai.com/v1/models", "Bearer secret")]
+
+
 def test_get_video_generation_options_returns_ratio_capability(client: TestClient) -> None:
     db = _FakeLlmDB()
     _seed_video_model(db)
@@ -373,14 +400,14 @@ def test_provider_call_once(client, monkeypatch, status, payload, outcome):
 
     db = _FakeLlmDB()
     provider = _seed_provider(db)
-    provider.video_base_url = "https://video.invalid/v1"
+    provider.video_base_url = "https://video.invalid/tenant%2Fzone/v1?version=test"
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", send)
     llm_app.dependency_overrides[get_db] = _override_db(db)
     try:
         response = client.post("/api/v1/llm/providers/p-1/test-call", json={"model": "custom", "category": "video"})
         assert response.status_code == 200
         assert response.json()["data"]["outcome"] == outcome
-        assert [str(call.url) for call in calls] == ["https://video.invalid/v1/videos"]
+        assert [str(call.url) for call in calls] == ["https://video.invalid/tenant%2Fzone/v1/videos?version=test"]
         assert calls[0].headers["authorization"] == "Bearer secret"
         assert b'"model":"custom"' in calls[0].content
     finally:
@@ -416,6 +443,9 @@ def test_provider_call_protocol(client, monkeypatch, key, category, path, payloa
     provider_db = _FakeLlmDB()
     provider = _seed_provider(provider_db)
     provider.provider_key = key
+    if category == "text":
+        provider_db.add(Model(id="registered", provider_id=provider.id, category="text", name="custom",
+                              params={"use_responses_api": True}))
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", send)
     llm_app.dependency_overrides[get_db] = _override_db(provider_db)
     try:

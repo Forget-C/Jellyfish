@@ -66,7 +66,7 @@ try {
     await dropdown.waitFor({state:'visible'})
     await dropdown.locator('.ant-select-item-option').filter({hasText:new RegExp(`^${label}$`)}).click()
     await dropdown.waitFor({state:'hidden'})
-    await page.waitForFunction(([id,label])=>document.getElementById(id)?.closest('.ant-select')?.querySelector('.ant-select-selection-item')?.textContent===label,[await input.getAttribute('id'),label])
+    await page.waitForFunction(([id,label])=>document.getElementById(id)?.closest('.ant-select')?.querySelector('.ant-select-content-value')?.textContent===label,[await input.getAttribute('id'),label])
   }
   const world=()=>page.locator('.generation-world').getAttribute('style')
   await page.getByRole('button',{name:'适应全部',exact:true}).click()

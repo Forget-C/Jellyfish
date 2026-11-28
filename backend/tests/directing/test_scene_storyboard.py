@@ -47,7 +47,7 @@ async def test_faithful_storyboard_builds_real_canvas_candidate_with_verified_so
             output = {'shots': [{'id': 'bad', 'excerpt': '不存在的原文'}]} if len(calls) not in (2, 3, 6) else result
             return SimpleNamespace(content=json.dumps(output, ensure_ascii=False))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
@@ -235,7 +235,7 @@ async def test_storyboard_repairs_the_invalid_design_subject(tmp_path, monkeypat
                            'designs': [design, lighting]}],
             }, ensure_ascii=False))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
@@ -307,7 +307,7 @@ async def test_default_complete_storyboard_keeps_proposals_distinct_from_source_
                 result = {'shots': [shot]} if len(calls) == 4 else complete
             return SimpleNamespace(content=json.dumps(result, ensure_ascii=False))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original
@@ -395,7 +395,7 @@ async def test_reextract_requires_confirmed_revised_scene_and_undo_restores_sour
                 output['missed_objects'] = [{'id': 'handle', 'name': '门把', 'kind': 'prop', 'excerpt': old}]
             return SimpleNamespace(content=json.dumps(output, ensure_ascii=False))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = old

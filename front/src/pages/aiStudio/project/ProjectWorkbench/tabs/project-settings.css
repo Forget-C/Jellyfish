@@ -6,7 +6,7 @@
 .project-settings-group .ant-form-item-label > label { font-size: 13px; }
 .project-settings-group .ant-input:not(textarea), .project-settings-group .ant-input-number, .project-settings-group .ant-select-single { min-height: 36px; }
 .project-settings-group .ant-input-number-input { height: 34px; }
-.project-settings-group .ant-select-single .ant-select-selector { min-height: 36px; align-items: center; }
+.project-settings-group .ant-select-single { min-height: 36px; align-items: center; }
 .project-settings-group textarea { width: 100%; }
 .project-settings-actions .ant-btn { font-size: 13px; border-radius: 8px; }
 @media (max-width: 767px) { .project-settings-actions .ant-btn { min-height: 36px; } }

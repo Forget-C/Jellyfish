@@ -4,6 +4,9 @@ import hashlib
 import json
 from fastapi import HTTPException
 from app.core.contracts.generation_canvas import DesignTextPayload, InputBinding
+from app.core.contracts.generation import FrozenGenerationConfig, ImageGenerationOperationInput, VideoGenerationOperationInput
+from app.core.contracts.media import ImageMediaInput, MediaReference
+from app.core.integrations.media_validation import validate_media_parameters
 from app.schemas.generation_canvas import (
     CanvasCompiledInput, CanvasDiagnostic, CanvasDocument, CanvasModelCapability,
     CanvasResolvedOutput, ModelCard,
@@ -115,6 +118,22 @@ def build_basis(document: CanvasDocument, card_id: str, outputs: dict[str, list[
     if any(not item.basis_current for item in compiled.used):
         issues.append(CanvasDiagnostic(code="INPUT_STALE", message="实际引用的模型输出依据已变，请先执行来源",
             target={"card_id": card_id}, blocks=["run"]))
+    config = model_context.execution_config
+    if compiled.can_run and config and card.type in ('model.image', 'model.video') and (
+        compiled.text.strip() or (card.type == 'model.video' and compiled.media)
+    ):
+        try:
+            if card.type == 'model.video':
+                operation = VideoGenerationOperationInput(**card.config.model_dump())
+                media = compiled.video_media
+            else:
+                operation = ImageGenerationOperationInput(**card.config.model_dump())
+                media = ImageMediaInput(references=[MediaReference(file_id=item.file_id, media_kind='image', ordinal=index)
+                                                    for index, item in enumerate(compiled.media)])
+            validate_media_parameters(FrozenGenerationConfig.model_validate(config), operation, media, compiled.text)
+        except ValueError as exc:
+            issues.append(CanvasDiagnostic(code='INVALID_PARAMETER', message=str(exc),
+                                           target={'card_id': card_id, 'path': ['config']}, blocks=['run']))
     compiled.diagnostics += issues
     compiled.can_run = compiled.can_run and not issues
     model = model_context.model

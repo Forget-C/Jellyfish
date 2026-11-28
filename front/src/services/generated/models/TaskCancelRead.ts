@@ -10,7 +10,7 @@ export type TaskCancelRead = {
     task_id: string;
     status: TaskStatus;
     cancel_requested: boolean;
+    remote_cancellation?: ('requested' | 'unsupported' | 'accepted' | 'confirmed' | 'rejected' | 'unconfirmed' | null);
     cancel_requested_at_ts?: (number | null);
     effective_immediately?: boolean;
 };
-

@@ -7,6 +7,5 @@
  */
 export type TextLabRunStatus = {
     task_id: string;
-    status: 'streaming' | 'succeeded' | 'failed' | 'cancelled';
+    status: 'streaming' | 'succeeded' | 'failed' | 'cancelled' | 'unknown';
 };
-

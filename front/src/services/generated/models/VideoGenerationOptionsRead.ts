@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { VideoModeDeclaration } from './VideoModeDeclaration';
 /**
  * 当前默认视频模型对应的生成参数选项。
  */
@@ -26,6 +27,7 @@ export type VideoGenerationOptionsRead = {
      * 当前模型默认比例
      */
     default_ratio: string;
+    video_modes?: Record<string, VideoModeDeclaration>;
     /**
      * 是否支持参考主体图片
      */
@@ -59,4 +61,3 @@ export type VideoGenerationOptionsRead = {
      */
     max_total_subject_videos?: (number | null);
 };
-

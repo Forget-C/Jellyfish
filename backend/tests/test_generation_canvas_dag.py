@@ -41,7 +41,7 @@ async def chain(state, monkeypatch):
         async def astream(self, messages):
             calls.append((messages[0].content, self.params))
             yield SimpleNamespace(content='out(' + messages[0].content + ')')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', Model)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', Model)
     worker = TaskWorker(state.sessions)
     doc = deepcopy(state.document)
     doc['cards'] = [{'id': name, 'type': 'model.text', 'model_id': state.model_id,
@@ -131,6 +131,7 @@ async def test_missing_positions_block_consumer_and_admitted_files_remain_pinned
     async with runtime.sessions.begin() as db:
         model = await db.get(Model, runtime.model_id)
         model.category, model.name = 'image', 'image-model'
+        model.capability_profile = {'image_modes': {'edit': {'supported': True}}}
         image_storage['known'] = (b'known', 'image/png', {})
         db.add(FileItem(id='known', name='known', type='image', storage_key='known', content_type='image/png'))
         await db.flush()
@@ -224,7 +225,7 @@ async def test_single_terminal_paths_do_not_run_downstream_or_fallback(runtime, 
             if text == 'new A' and outcome == 'failure':
                 raise RuntimeError('controlled provider failure')
             yield SimpleNamespace(content='out(' + text + ')')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', Model)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', Model)
     if outcome in ('node_cancel', 'run_cancel'):
         suffix = f"/nodes/{node['id']}" if outcome == 'node_cancel' else ''
         response = await runtime.client.post(runtime.url + f"/runs/{accepted['run_id']}" + suffix + '/cancel')

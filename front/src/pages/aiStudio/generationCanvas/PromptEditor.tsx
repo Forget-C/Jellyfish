@@ -34,7 +34,7 @@ function contentKey(document: PromptDocument) {
 }
 
 /** 关联区与正文候选共用引用插入入口；模型通过绑定保存来源，设计宿主通过字段文档保存来源。 */
-export type PromptEditorHandle = { insertReference: (source: OutputIdentity) => void }
+export type PromptEditorHandle = { insertReference: (source: OutputIdentity) => void; readVisible: () => PromptDocument }
 
 /** DOM 仅作为输入表面；持久值是有稳定身份的片段，组合输入期间不重建 DOM。 */
 export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsHost, document, card, value, onChange, disabled, candidates: incomingCandidates = [], referenceActionsRef, fieldLabel, fieldDescriptionId, fieldPlaceholder, allReferences = false }: { fieldLabel?: string; fieldDescriptionId?: string; fieldPlaceholder?: string; allReferences?: boolean; referenceActionsRef?: Ref<PromptEditorHandle>; compact?: boolean; onSubmit?: () => void; submitDisabled?: boolean; toolsHost?: HTMLElement | null; document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; candidates?: Candidate[] }) {
@@ -267,7 +267,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
     root.current.focus(); selection?.removeAllRanges(); selection?.addRange(range)
     publish(read()); rememberSelection()
   }
-  useImperativeHandle(referenceActionsRef, () => ({ insertReference: source => {
+  useImperativeHandle(referenceActionsRef, () => ({ readVisible: read, insertReference: source => {
     const candidate = candidates.find(item => sourceKey(item.source) === sourceKey(source))
     if (candidate?.available && !candidate.disabledReason) insert({ id: crypto.randomUUID(), kind: 'reference', source: candidate.source })
   } }))
@@ -296,7 +296,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
       {!instruction.references?.length && <small role="alert">{uiText("指令缺少引用，可继续编辑保存")}</small>}
     </section>)}
     {!imageMentions && candidateList}
-    {imageMentions && query && createPortal(<Popover open placement="topLeft" arrow={false} trigger={[]} overlayClassName="canvas-workbench-dialog generation-prompt-popup" content={candidateList} overlayStyle={{ width: popupAnchor.width }}>
+    {imageMentions && query && createPortal(<Popover open placement="topLeft" arrow={false} trigger={[]} classNames={{ root: "canvas-workbench-dialog generation-prompt-popup" }} content={candidateList} overlayStyle={{ width: popupAnchor.width }}>
       <span aria-hidden="true" style={{ position: 'fixed', pointerEvents: 'none', left: popupAnchor.left, top: popupAnchor.top, height: popupAnchor.height, width: 1 }} />
     </Popover>, window.document.body)}
     <div ref={root} data-diagnostic-control="prompt" role="textbox" aria-label={fieldLabel || uiText("模型正文")} aria-describedby={fieldDescriptionId} aria-multiline="true" aria-readonly={disabled} aria-disabled={disabled} aria-autocomplete="list" aria-controls={query ? listId : undefined} aria-activedescendant={query && active ? `${listId}-${matches.indexOf(active)}` : undefined} contentEditable={!disabled} suppressContentEditableWarning className="generation-prompt-editor" aria-placeholder={compact ? placeholder : undefined} data-placeholder={placeholder} data-empty={!(value.segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())}

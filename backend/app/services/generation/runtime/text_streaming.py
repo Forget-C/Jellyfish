@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
@@ -45,14 +44,14 @@ class TextStreamRunStateError(RuntimeError):
 
 @dataclass
 class _TextStreamRun:
-    """单个流式运行的事件日志和订阅协调原语。"""
+    """单个流式运行的事件日志、状态和写入锁。"""
 
     task_id: str
     events: list[GenerationStreamEvent] = field(default_factory=list)
     state: TextStreamRunState = TextStreamRunState.streaming
     cancel_requested: bool = False
     cancel_reason: str | None = None
-    condition: asyncio.Condition = field(default_factory=asyncio.Condition)
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     @property
     def is_terminal(self) -> bool:
@@ -61,11 +60,10 @@ class _TextStreamRun:
 
 
 class TextStreamingRuntime:
-    """协调隐藏文本运行、递增 SSE id 和断线后的事件重放。
+    """维护隐藏文本运行的进程内状态和有序事件。
 
-    ``GenerationStreamEvent.sequence`` 就是 SSE ``id``：每次写入均由运行时按
-    日志长度生成，调用方不能自行指定，因此重放和实时订阅共享同一单调序列。
-    该对象是进程内运行时；多进程部署时应由上层将事件镜像到共享存储。
+    ``GenerationStreamEvent.sequence`` 按运行日志长度递增。公开 SSE 使用持久化
+    会话事件的 ``cursor`` 作为 ``id``，用于订阅和断线回放。
     """
 
     def __init__(self) -> None:
@@ -93,7 +91,7 @@ class TextStreamingRuntime:
     async def complete(self, task_id: str, data: StreamCompletedData) -> GenerationStreamEvent:
         """写入成功终态；成功前若已收到取消请求则拒绝错误终结。"""
         run = await self._get_run(task_id)
-        async with run.condition:
+        async with run.lock:
             if run.cancel_requested:
                 raise TextStreamRunStateError("a cancellation was requested; complete is not allowed")
         return await self._append_for_task(task_id, StreamEventType.completed, data)
@@ -108,24 +106,23 @@ class TextStreamingRuntime:
         返回 ``False`` 表示运行已经结束，不得再改变其结果。
         """
         run = await self._get_run(task_id)
-        async with run.condition:
+        async with run.lock:
             if run.is_terminal:
                 return False
             run.cancel_requested = True
             run.cancel_reason = reason
-            run.condition.notify_all()
             return True
 
     async def is_cancel_requested(self, task_id: str) -> bool:
         """供长时间运行的 Provider/Agent 循环在安全边界检查取消标记。"""
         run = await self._get_run(task_id)
-        async with run.condition:
+        async with run.lock:
             return run.cancel_requested
 
     async def cancel(self, task_id: str, reason: str | None = None) -> GenerationStreamEvent:
         """写入取消终态，并保留先前取消请求中记录的原因。"""
         run = await self._get_run(task_id)
-        async with run.condition:
+        async with run.lock:
             if not run.cancel_requested:
                 run.cancel_requested = True
                 run.cancel_reason = reason
@@ -141,32 +138,13 @@ class TextStreamingRuntime:
         if after_event_id < 0:
             raise ValueError("after_event_id must be greater than or equal to zero")
         run = await self._get_run(task_id)
-        async with run.condition:
+        async with run.lock:
             return tuple(event for event in run.events if event.sequence > after_event_id)
 
-    async def subscribe(self, task_id: str, *, after_event_id: int = 0) -> AsyncIterator[GenerationStreamEvent]:
-        """持续订阅事件日志；先重放，再等待新事件，终态发送后自动结束。"""
-        if after_event_id < 0:
-            raise ValueError("after_event_id must be greater than or equal to zero")
-        run = await self._get_run(task_id)
-        next_event_id = after_event_id
-        while True:
-            async with run.condition:
-                pending = [event for event in run.events if event.sequence > next_event_id]
-                if not pending and not run.is_terminal:
-                    await run.condition.wait()
-                    continue
-                terminal = run.is_terminal
-            for event in pending:
-                next_event_id = event.sequence
-                yield event
-            if terminal:
-                return
-
     async def state_of(self, task_id: str) -> TextStreamRunState:
-        """读取当前运行状态，供路由决定是否允许再次连接或取消。"""
+        """读取进程内的运行状态。"""
         run = await self._get_run(task_id)
-        async with run.condition:
+        async with run.lock:
             return run.state
 
     async def _append_for_task(
@@ -186,8 +164,8 @@ class TextStreamingRuntime:
         event_type: StreamEventType,
         data: StreamEventData,
     ) -> GenerationStreamEvent:
-        """按唯一状态机写入事件，并通知所有等待中的订阅者。"""
-        async with run.condition:
+        """按状态机追加事件。"""
+        async with run.lock:
             if run.is_terminal:
                 raise TextStreamRunStateError("cannot append an event after the stream has terminated")
             if event_type == StreamEventType.accepted and run.events:
@@ -203,7 +181,6 @@ class TextStreamingRuntime:
             )
             run.events.append(event)
             run.state = _state_after(event_type)
-            run.condition.notify_all()
             return event
 
     async def _get_run(self, task_id: str) -> _TextStreamRun:

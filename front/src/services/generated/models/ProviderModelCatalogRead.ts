@@ -2,7 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { ProviderModelCandidate } from './ProviderModelCandidate';
+import type { ProviderModelCandidate_Output } from './ProviderModelCandidate_Output';
 /**
  * 指定 Provider 刷新到的可导入模型目录。
  */
@@ -22,6 +22,6 @@ export type ProviderModelCatalogRead = {
     /**
      * 可选择导入的模型
      */
-    models?: Array<ProviderModelCandidate>;
+    models?: Array<ProviderModelCandidate_Output>;
 };
 

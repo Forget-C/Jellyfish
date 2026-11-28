@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.core.contracts.directing.storyboard_prompt import GeneratedVideoPrompt
 from app.schemas.common import ApiResponse
 from app.core.contracts.media import VideoMediaInput
+from app.core.contracts.model_capabilities import VideoModeDeclaration, VideoOperationMode
 from app.core.contracts.video_generation import AudioCapability
 from app.core.contracts.generation_canvas import DesignMediaUse, CompositionDesignFields, DesignFrameTarget, DesignMediaOrigin, BasisTextOutputPayload, DialogueReferencePayload, OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignScope, CriterionReferencePayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload
 
@@ -187,6 +188,8 @@ class VideoModelConfig(BaseModel):
     model_config = ConfigDict(extra='forbid')
     ratio: str | None = None
     seconds: int | None = None
+    resolution: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    audio: bool | None = Field(default=None, exclude_if=lambda value: value is None)
     seed: int | None = None
 
 
@@ -287,10 +290,12 @@ class CanvasModelCapability(BaseModel):
     resolution_profiles: dict[str, dict[str, str]] = Field(default_factory=dict)
     min_count: int = 1
     max_count: int = 10
+    reference_max_count: int | None = None
     max_reference_images: int | None = None
     supports_duplicate_reference_images: bool = True
     min_seconds: int | None = None
     max_seconds: int | None = None
+    video_modes: dict[VideoOperationMode, VideoModeDeclaration] = Field(default_factory=dict)
     supports_seed: bool = False
     supports_subject_reference_with_frame_reference: bool = False
     max_subjects: int | None = None
@@ -871,6 +876,49 @@ class CanvasStoryboard(BaseModel):
     visual_continuity: dict[str, CanvasVisualContinuity] = Field(default_factory=dict, exclude_if=lambda value: not value)
 
 
+CanvasCard = (
+    MovementCard
+    | CompositionCard
+    | CameraCard
+    | LightingCard
+    | FocusCard
+    | VisualStyleCard
+    | SpaceRuleCard
+    | ContinuityCard
+    | ImmutableFactCard
+    | CreativeControlCard
+    | GenerationGuidanceCard
+    | AcceptanceCriterionCard
+    | DialogueCard
+    | SoundArrangementCard
+    | NarrativeOverviewCard
+    | NarrativeBeatCard
+    | NarrativeEventCard
+    | ShotDesignCard
+    | SpatialAnchorCard
+    | BlockingDirectionCard
+    | InFrameActivityCard
+    | EnvironmentActivityCard
+    | CharacterSituationCard
+    | CharacterPerformanceCard
+    | PerformanceRuleCard
+    | NamedImageReferenceCard
+    | TextContentCard
+    | CreativeBasisCard
+    | CharacterDescriptionCard
+    | PropDescriptionCard
+    | CostumeDescriptionCard
+    | PlaceDescriptionCard
+    | ImageContentCard
+    | VideoContentCard
+    | AudioContentCard
+    | TextModelCard
+    | ImageModelCard
+    | VideoModelCard
+    | CheckCard
+)
+
+
 class CanvasDocument(BaseModel):
     """完整编辑文档；位置、尺寸和视角由浏览器另存。"""
     model_config = ConfigDict(extra='forbid')
@@ -879,7 +927,7 @@ class CanvasDocument(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
     cover_file_id: str | None = Field(default=None, min_length=1, max_length=36)
-    cards: list[MovementCard | CompositionCard | CameraCard | LightingCard | FocusCard | VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | CreativeControlCard | GenerationGuidanceCard | AcceptanceCriterionCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | CharacterDescriptionCard | PropDescriptionCard | CostumeDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard | CheckCard] = Field(default_factory=list)
+    cards: list[CanvasCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)

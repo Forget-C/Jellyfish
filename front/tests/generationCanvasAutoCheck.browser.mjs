@@ -86,7 +86,7 @@ try {
   assert.deepEqual(reports.map(row => row.product.position).sort(), [0, 1, 2])
   assert.ok(reports.every(row => row.automatic))
   assert.equal((await request(`${api}/test/image-controls`)).check_calls.length, 3)
-  const selectedReportText = await report.getByRole('combobox', { name: '选择检查报告' }).evaluate(node => node.closest('.ant-select').querySelector('.ant-select-selection-item')?.textContent)
+  const selectedReportText = await report.getByRole('combobox', { name: '选择检查报告' }).evaluate(node => node.closest('.ant-select').querySelector('.ant-select-content-value')?.textContent)
   assert.ok(selectedReportText, 'a concrete automatic report is selected')
   await page.getByRole('tab', { name: '生成后检查', exact: true }).click()
   await editor.getByRole('combobox', { name: '历史产物' }).click()
@@ -94,7 +94,7 @@ try {
   await page.locator('.generation-card-editor:visible').getByRole('button', { name: '重新检查所选产物', exact: true }).click()
   await page.getByRole('tab', { name: '检查记录', exact: true }).click()
   await report.getByRole('button', { name: '查看最新报告', exact: true }).waitFor()
-  assert.equal(await report.getByRole('combobox', { name: '选择检查报告' }).evaluate(node => node.closest('.ant-select').querySelector('.ant-select-selection-item')?.textContent), selectedReportText, 'first automatic report stays selected after another report arrives')
+  assert.equal(await report.getByRole('combobox', { name: '选择检查报告' }).evaluate(node => node.closest('.ant-select').querySelector('.ant-select-content-value')?.textContent), selectedReportText, 'first automatic report stays selected after another report arrives')
 
   const observedReport = reports.find(row => row.product.position === 1)
   const observeIssues = async route => {

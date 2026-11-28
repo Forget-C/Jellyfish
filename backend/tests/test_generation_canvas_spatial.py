@@ -159,7 +159,7 @@ async def test_actual_worker_receives_complete_spatial_design_with_explicit_ance
         async def astream(self, messages):
             received.append(messages[0].content)
             yield SimpleNamespace(content='完整空间分析')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ProviderText)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ProviderText)
     def provider_http(request):
         if request.method == 'POST':
             body = json.loads(request.content)

@@ -13,10 +13,14 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.task import TERMINAL_TASK_STATUSES, TaskExecutionMode, TaskStatus
+from app.core.contracts.provider_media import RemoteCancellation
 from app.models.studio import FileItem
 from app.models.task import Task, TaskInput, TaskOutput
 
 AUTO_CHECK_DISPATCH = 'canvas_auto_check'
+SUBMISSION_IN_FLIGHT = 'submission_in_flight'
+SUBMISSION_UNKNOWN = 'submission_unknown'
+REMOTE_CANCEL_SENT = {"cancel_sending", "cancel_accepted"}
 TASK_KINDS = frozenset({
     "text_chat", "canvas_check", AUTO_CHECK_DISPATCH, "image_generation", "video_generation",
     "script_consistency",
@@ -92,7 +96,7 @@ class TaskService:
         )
         if result.rowcount:
             row = await self.db.get(Task, task_id, populate_existing=True)
-            await self._sync_canvas(row)
+            await self._sync_target(row)
         return bool(result.rowcount)
 
     async def claim_next(self, *, worker_id: str, kinds: Sequence[str], timeout_seconds: int = 1800) -> Task | None:
@@ -116,6 +120,7 @@ class TaskService:
             return row
         if row.execution_mode != TaskExecutionMode.remote:
             raise ValueError("direct task cannot record a remote submission")
+        tracked_approval = row.stage in (SUBMISSION_IN_FLIGHT, SUBMISSION_UNKNOWN)
         remote_id = (provider_task_id or "").strip()
         if not remote_id:
             return await self.finish(task_id, error_code="provider_task_id_missing", error="供应商成功响应缺少任务 ID")
@@ -130,8 +135,43 @@ class TaskService:
         row.stage = "polling"
         row.next_poll_at = utcnow()
         row.deadline_at = utcnow() + timedelta(seconds=tracking_seconds)
+        if tracked_approval:
+            row.error_code = row.error_message = None
         await self.db.flush()
+        if tracked_approval:
+            await self._sync_target(row)
         return row
+
+    async def begin_provider_submission(self, task_id: str, *, worker_id: str) -> bool:
+        """对已获批媒体调用，在网络 I/O 之前记录不可自动重提的边界。"""
+        row = await self._lock(task_id)
+        if (row is None or row.status != TaskStatus.running or row.stage != 'submitting'
+                or row.worker_instance_id != worker_id):
+            return False
+        if row.cancel_requested_at:
+            await self.finish(task_id, cancelled=True)
+            return False
+        row.stage = SUBMISSION_IN_FLIGHT
+        await self.db.flush()
+        await self._sync_target(row)
+        return True
+
+    async def mark_provider_submission_unknown(self, task_id: str) -> bool:
+        """保留原提交身份，等待可信对账事实。"""
+        row = await self._lock(task_id)
+        if (row is None or row.status != TaskStatus.running or row.provider_task_id
+                or row.stage not in (SUBMISSION_IN_FLIGHT, SUBMISSION_UNKNOWN)):
+            return False
+        if row.cancel_requested_at:
+            await self.finish(task_id, cancelled=True)
+        elif row.stage != SUBMISSION_UNKNOWN:
+            row.stage = SUBMISSION_UNKNOWN
+            row.deadline_at = row.next_poll_at = None
+            row.error_code = SUBMISSION_UNKNOWN
+            row.error_message = '供应商受理结果未确定，系统会保留原任务等待核对'
+            await self.db.flush()
+            await self._sync_target(row)
+        return True
 
     async def record_poll_result(
         self, task_id: str, *, remote_status: str | None = None, error: str | None = None,
@@ -149,7 +189,8 @@ class TaskService:
         if error:
             await self.db.flush()
             return row
-        row.remote_status = remote_status
+        if remote_status != "running" or row.remote_status not in REMOTE_CANCEL_SENT:
+            row.remote_status = remote_status
         if remote_status == "failed":
             return await self.finish(task_id, error_code="provider_failed", error="供应商生成失败")
         if remote_status == "cancelled":
@@ -157,6 +198,28 @@ class TaskService:
         row.stage = "saving" if remote_status == "succeeded" else "polling"
         await self.db.flush()
         return row
+
+    async def begin_remote_cancel(self, task_id: str) -> bool:
+        """保存取消请求发送边界，恢复时查询原任务，避免重复发送。"""
+        row = await self._lock(task_id)
+        if (row is None or row.status != TaskStatus.running or not row.provider_task_id
+                or not row.cancel_requested_at or row.remote_status in REMOTE_CANCEL_SENT):
+            return False
+        row.remote_status = "cancel_sending"
+        row.next_poll_at = utcnow() + timedelta(seconds=5)
+        await self.db.flush()
+        return True
+
+    async def record_remote_cancel(self, task_id: str, outcome: RemoteCancellation) -> None:
+        """保存供应商回执；只在供应商确认时登记远端已取消。"""
+        row = await self._lock(task_id)
+        if row is None or row.status != TaskStatus.running or row.remote_status != "cancel_sending":
+            return
+        row.remote_status = "cancelled" if outcome == "confirmed" else f"cancel_{outcome}"
+        if outcome == "accepted":
+            await self.db.flush()
+        else:
+            await self.finish(task_id, cancelled=True)
 
     async def report_progress(self, task_id: str, *, progress: int | None, stage: str) -> None:
         """更新活动任务进度；终态不可被迟到事件修改。"""
@@ -166,7 +229,7 @@ class TaskService:
                               .values(progress=progress, stage=stage))
         row = await self._lock(task_id)
         if row is not None and row.status == TaskStatus.running:
-            await self._sync_canvas(row)
+            await self._sync_target(row)
 
     async def checkpoint_storyboard_review(self, task_id: str, draft: dict, *, stage: str) -> bool:
         """Persist the validated draft and repair progress before calling the model."""
@@ -187,10 +250,10 @@ class TaskService:
         if row.cancel_requested_at is None:
             row.cancel_requested_at = utcnow()
             row.cancel_reason = (reason or "")[:255] or None
-        if row.status == TaskStatus.queued:
+        if row.status == TaskStatus.queued or row.stage == SUBMISSION_UNKNOWN:
             return await self.finish(task_id, cancelled=True)
         await self.db.flush()
-        await self._sync_canvas(row)
+        await self._sync_target(row)
         return row
 
     async def add_output(self, task_id: str, *, ordinal: int, file_id: str) -> TaskOutput | None:
@@ -253,7 +316,7 @@ class TaskService:
         if status == TaskStatus.succeeded:
             row.progress = 100
         await self.db.flush()
-        await self._sync_canvas(row)
+        await self._sync_target(row)
         return row
 
     async def interrupt_previous_workers(self, *, worker_id: str) -> int:
@@ -265,6 +328,8 @@ class TaskService:
         )))
         for row in rows:
             if row.kind == AUTO_CHECK_DISPATCH and await self.requeue_automatic_dispatch(row.id):
+                continue
+            if row.stage in (SUBMISSION_IN_FLIGHT, SUBMISSION_UNKNOWN) and await self.mark_provider_submission_unknown(row.id):
                 continue
             await self.finish(row.id, error_code="submission_interrupted" if row.execution_mode == "remote" else "execution_interrupted",
                               error="服务重启，任务已中断，请重新提交")
@@ -289,6 +354,8 @@ class TaskService:
                 Task.provider_task_id.is_(None)),
         )))
         for row in rows:
+            if row.stage == SUBMISSION_IN_FLIGHT and await self.mark_provider_submission_unknown(row.id):
+                continue
             await self.finish(row.id, error_code="queue_expired" if row.status == TaskStatus.queued else "execution_timeout",
                               error="任务等待或执行超时")
         return len(rows)
@@ -300,11 +367,14 @@ class TaskService:
                                     .execution_options(populate_existing=True))
 
 
-    async def _sync_canvas(self, row: Task, *, delta: str | None = None) -> None:
-        """Canvas fact hook keeps Task and business events in the same transaction."""
+    async def _sync_target(self, row: Task, *, delta: str | None = None) -> None:
+        """Publish target updates in the transaction that changes the task."""
         if row.target_type == 'canvas_node':
             from app.services.generation_canvas.settlement import sync_task_fact
             await sync_task_fact(self.db, row, delta=delta)
+        elif row.target_type == "experiment_session" and row.kind in MEDIA_KINDS:
+            from app.services.studio.media_receipts import publish_media_fact
+            await publish_media_fact(self.db, row.id, row.target_id)
 
     async def append_canvas_text(self, task_id: str, delta: str) -> bool:
         """Persist a provider chunk under the Task lock; cancellation wins before append."""
@@ -317,5 +387,5 @@ class TaskService:
             raise ValueError('stream target is not a canvas node')
         row.stage = 'generating'
         await self.db.flush()
-        await self._sync_canvas(row, delta=delta)
+        await self._sync_target(row, delta=delta)
         return True

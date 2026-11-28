@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from botocore.exceptions import ClientError
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import delete, exists
 from fastapi.responses import StreamingResponse
@@ -212,7 +213,12 @@ async def build_download_response(
 ) -> StreamingResponse:
     """下载文件并支持浏览器单区间读取，保证视频可跳转到真实入出点。"""
     file_item = await require_available_file(db, file_id=file_id, lock=False, allow_project_cover=True)
-    content = await storage.download_file(key=file_item.storage_key)
+    try:
+        content = await storage.download_file(key=file_item.storage_key)
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") in {"NoSuchKey", "NotFound", "404"}:
+            raise HTTPException(status_code=404, detail="File content not found") from error
+        raise
     filename = Path(file_item.storage_key).name or "download"
     media_type = file_item.content_type if file_item.content_type != "application/octet-stream" else _resolve_download_media_type(filename)
     headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}", "Accept-Ranges": "bytes"}

@@ -1,3 +1,4 @@
+import { mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
@@ -49,9 +50,12 @@ try {
   await page.route('**/api/**', async route => {
     const request = route.request()
     const url = new URL(request.url())
+    const admission = mediaAdmissionStream(route, url)
+    if (admission) return admission
     const respond = data => route.fulfill({ json: { success: true, data } })
     if (request.method() === 'DELETE') deletions.push(url.pathname)
     if (url.pathname.endsWith('/experiment-sessions')) return respond(url.searchParams.get('lab_type') === 'video' ? sessions : [])
+    if (url.pathname.endsWith('/model-settings')) return respond({ default_video_model_id: 'a' })
     if (url.pathname.endsWith('/models')) return respond({ items: models })
     if (url.pathname.endsWith('/video-generation-options')) {
       const modelId = url.searchParams.get('model_id')
@@ -75,12 +79,13 @@ try {
       ? route.fulfill({ status: 503 })
       : route.fulfill({ body: referenceVideo, contentType: 'video/mp4' })
     if (url.pathname.endsWith('/download')) return route.fulfill({ body: png, contentType: 'image/png' })
-    const run = url.pathname.match(/\/labs\/video\/sessions\/([^/]+)\/tasks$/)
+    const run = url.pathname.match(/\/chat\/sessions\/video\/([^/]+)\/turns$/)
     if (run) {
       submissions.push({ session: run[1], body: request.postDataJSON() })
       const taskId = `task-${submissions.length}`
-      return respond({ task_id: taskId, messages: [{ id: taskId, session_id: run[1], role: 'task', content: '已完成', sequence: submissions.length, task_id: taskId, status: 'succeeded', created_at: timestamp, updated_at: timestamp }] })
+      return respond(mediaTurnReceipt(route, { task_id: taskId, messages: [{ id: taskId, session_id: run[1], role: 'task', content: '已完成', sequence: submissions.length, task_id: taskId, status: 'succeeded', created_at: timestamp, updated_at: timestamp }] }))
     }
+    if (/\/chat\/sessions\/video\/[^/]+\/snapshot$/.test(url.pathname)) return respond(boundTrialSnapshot(url, []))
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])
   })
@@ -107,7 +112,9 @@ try {
     selectModel(from, model),
   ])
 
-  await getCapability('A')
+  await page.locator('.experiment-model-trigger').click()
+  await page.getByRole('menuitemradio', { name: '验收模型 A', exact: true, checked: true }).waitFor()
+  await page.keyboard.press('Escape')
   await prompt.fill('验证混合主体素材与帧引用')
   await openLabAddition(page, '配置参考素材')
   await panel.getByRole('button', { name: '选择首帧', exact: true }).click()
@@ -233,7 +240,7 @@ try {
   await picture.click()
   const preview = page.getByRole('dialog', { name: '预览参考素材：验收图片 A', exact: true })
   await preview.getByRole('img', { name: '验收图片 A', exact: true }).waitFor()
-  await preview.getByRole('button', { name: 'Close', exact: true }).press('Escape')
+  await preview.getByRole('button', { name: /^(Close|关闭)$/ }).press('Escape')
   await preview.waitFor({ state: 'hidden' })
   await picture.and(page.locator(':focus')).waitFor()
   assert.ok(await panel.isVisible())
@@ -248,7 +255,7 @@ try {
   assert.equal(await player.evaluate(element => element.paused), true)
   await player.evaluate(element => element.play())
   await page.screenshot({ path: join(output, 'video-reference-playback-narrow.png'), animations: 'disabled' })
-  await videoPreview.getByRole('button', { name: 'Close', exact: true }).press('Escape')
+  await videoPreview.getByRole('button', { name: /^(Close|关闭)$/ }).press('Escape')
   await videoPreview.waitFor({ state: 'hidden' })
   await video.and(page.locator(':focus')).waitFor()
   assert.equal(await player.evaluate(element => element.paused), true)
@@ -257,7 +264,7 @@ try {
   await panel.getByRole('button', { name: '取消参考配置', exact: true }).click()
   await panel.waitFor({ state: 'hidden' })
   await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/video-a/tasks')),
+    page.waitForResponse(response => response.url().endsWith('/sessions/video/video-a/turns')),
     generate.click(),
   ])
   assert.deepEqual(submissions, [{ session: 'video-a', body: {
@@ -279,7 +286,7 @@ try {
   await getCapability('A', 'C')
   await prompt.fill('明确支持的模型提交组合')
   await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/video-a/tasks')),
+    page.waitForResponse(response => response.url().endsWith('/sessions/video/video-a/turns')),
     generate.click(),
   ])
   assert.equal(submissions[1].body.model_id, 'a')
@@ -289,6 +296,7 @@ try {
   await getCapability('B', 'A')
   await page.getByText('当前模型不支持比例 16:9，请重新选择', { exact: true }).waitFor()
   await prompt.fill('修正模型冲突后提交')
+  await page.getByRole('button', { name: '生成参数', exact: true }).click()
   await page.getByText('16:9（当前模型不支持）', { exact: true }).click()
   await page.getByText('9:16', { exact: true }).last().click()
   await page.getByText('当前模型不支持比例 16:9，请重新选择', { exact: true }).waitFor({ state: 'hidden' })
@@ -302,7 +310,7 @@ try {
   await apply.click()
   await panel.waitFor({ state: 'hidden' })
   await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/video-a/tasks')),
+    page.waitForResponse(response => response.url().endsWith('/sessions/video/video-a/turns')),
     generate.click(),
   ])
   assert.deepEqual(submissions[2], { session: 'video-a', body: {

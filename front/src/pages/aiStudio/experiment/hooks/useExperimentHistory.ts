@@ -1,14 +1,13 @@
 import { useUiText } from '../../../../uiText'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  StudioExperimentSessionsService,
-  type ExperimentMessageRead,
-} from '../../../../services/generated'
+import type { ExperimentMessageRead } from '../../../../services/generated'
 
 /** 共享历史 Hook 的可选配置，用于按页面展示容量调整分页大小。 */
 export interface UseExperimentHistoryOptions {
   /** 单页消息数量；服务端允许的范围为 1 到 100。 */
   pageSize?: number
+  readPage: (options: {sessionId: string; page: number; pageSize: number; signal: AbortSignal}) =>
+    Promise<{data?: ExperimentMessageRead[] | null; meta?: {cursor?: unknown; activeTurnIds?: string[] | null} | null}>
 }
 
 /** 共享历史 Hook 暴露给实验室模态组件的状态和操作。 */
@@ -27,6 +26,10 @@ export interface ExperimentHistoryState {
   error: Error | null
   /** 是否已经成功读取过本会话，包括成功返回空列表。 */
   hasLoadedHistory: boolean
+  eventCursor?: number
+  checkpointEpoch: number
+  activeTurnIds?: string[]
+  readLatest: (targetSessionId: string) => ReturnType<UseExperimentHistoryOptions['readPage']>
   /** 分页错误重试原页，避免重试时重置已经加载的历史。 */
   errorOnLoadMore: boolean
   /** 从第一页重新读取当前会话历史。 */
@@ -70,8 +73,8 @@ function releaseAdoptedMessages(sessionId: string, persistedItems: ExperimentMes
  * 当 sessionId 为空时代表未持久化草稿，本 Hook 只维护一个空的本地历史。
  */
 export function useExperimentHistory(
-  sessionId?: string,
-  { pageSize = 50 }: UseExperimentHistoryOptions = {},
+  sessionId: string | undefined,
+  { pageSize = 50, readPage }: UseExperimentHistoryOptions,
 ): ExperimentHistoryState {
   const uiText = useUiText()
   const [messages, setMessages] = useState<ExperimentMessageRead[]>([])
@@ -80,6 +83,10 @@ export function useExperimentHistory(
   const [loading, setLoading] = useState(Boolean(sessionId))
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const [eventCursor, setEventCursor] = useState<number>()
+  const eventCursorRef = useRef<number>()
+  const [checkpointEpoch, setCheckpointEpoch] = useState(0)
+  const [activeTurnIds, setActiveTurnIds] = useState<string[]>()
   const [hasLoadedHistory, setHasLoadedHistory] = useState(false)
   const [errorOnLoadMore, setErrorOnLoadMore] = useState(false)
   const requestVersionRef = useRef(0)
@@ -87,6 +94,27 @@ export function useExperimentHistory(
   const historyPageRef = useRef(1)
   const currentSessionIdRef = useRef(sessionId)
   currentSessionIdRef.current = sessionId
+
+  const requests = useRef(new Map<AbortController, string>())
+  const abortHistoryRequests = useCallback((target?: string) => {
+    for (const [controller, owner] of requests.current) {
+      if (target === undefined || target === owner) controller.abort()
+    }
+  }, [])
+  useEffect(() => () => {
+    if (sessionId) abortHistoryRequests(sessionId)
+  }, [abortHistoryRequests, sessionId])
+  useEffect(() => () => abortHistoryRequests(), [abortHistoryRequests])
+
+  const requestPage = useCallback(async (targetSessionId: string, page: number) => {
+    const controller = new AbortController()
+    requests.current.set(controller, targetSessionId)
+    try {
+      return await readPage({sessionId: targetSessionId, page, pageSize, signal: controller.signal})
+    } finally {
+      requests.current.delete(controller)
+    }
+  }, [pageSize, readPage])
 
   /** 接管创建接口返回的正式消息，避免再次从 task_id 猜测用户消息归属。 */
   const adoptCanonicalMessages = useCallback((targetSessionId: string, items: ExperimentMessageRead[]) => {
@@ -101,9 +129,16 @@ export function useExperimentHistory(
   /** 清除本地缓存，并让尚未返回的请求失效，避免旧会话覆盖新会话。 */
   const clearLocalHistory = useCallback(() => {
     const currentSessionId = currentSessionIdRef.current
-    if (currentSessionId) adoptedMessagesBySession.delete(currentSessionId)
+    if (currentSessionId) {
+      adoptedMessagesBySession.delete(currentSessionId)
+      abortHistoryRequests(currentSessionId)
+    }
+    setCheckpointEpoch(epoch => epoch + 1)
+    eventCursorRef.current = undefined
     requestVersionRef.current += 1
     setMessages([])
+    setEventCursor(undefined)
+    setActiveTurnIds(undefined)
     setHasLoadedHistory(false)
     historyPageRef.current = 1
     setHistoryPage(1)
@@ -112,7 +147,7 @@ export function useExperimentHistory(
     setLoadingMore(false)
     setErrorOnLoadMore(false)
     setError(null)
-  }, [])
+  }, [abortHistoryRequests])
 
   /** 从第一页重新读取当前会话的完整可见历史。 */
   const refresh = useCallback(async () => {
@@ -130,14 +165,15 @@ export function useExperimentHistory(
     setError(null)
 
     try {
-      const response = await StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet({
-        sessionId,
-        page: 1,
-        pageSize,
-      })
+      const response = await requestPage(sessionId, 1)
       if (sessionId !== currentSessionIdRef.current || requestVersion !== requestVersionRef.current) return
 
+      const cursor = typeof response.meta?.cursor === 'number' ? response.meta.cursor : 0
+      if (eventCursorRef.current !== undefined && cursor < eventCursorRef.current) return
+      eventCursorRef.current = cursor
       const items = response.data ?? []
+      setEventCursor(cursor)
+      setActiveTurnIds(response.meta?.activeTurnIds ?? [])
       const adopted = adoptedMessagesBySession.get(sessionId) ?? []
       // 刷新第一页时保留已分页读取的更早消息，避免读者失去当前位置。
       const preserveEarlier = items.length === pageSize && historyPageRef.current > 1
@@ -160,7 +196,7 @@ export function useExperimentHistory(
     } finally {
       if (sessionId === currentSessionIdRef.current && requestVersion === requestVersionRef.current) setLoading(false)
     }
-  }, [uiText, clearLocalHistory, pageSize, sessionId])
+  }, [uiText, clearLocalHistory, pageSize, requestPage, sessionId])
 
   /** 读取当前会话更早的一页消息，并按服务端序号合并到本地历史。 */
   const loadMore = useCallback(async () => {
@@ -173,11 +209,7 @@ export function useExperimentHistory(
     setError(null)
 
     try {
-      const response = await StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet({
-        sessionId,
-        page: nextPage,
-        pageSize,
-      })
+      const response = await requestPage(sessionId, nextPage)
       if (sessionId !== currentSessionIdRef.current || requestVersion !== requestVersionRef.current) return
 
       const items = response.data ?? []
@@ -192,12 +224,15 @@ export function useExperimentHistory(
     } finally {
       if (sessionId === currentSessionIdRef.current && requestVersion === requestVersionRef.current) setLoadingMore(false)
     }
-  }, [uiText, hasMoreHistory, historyPage, loading, loadingMore, pageSize, sessionId])
+  }, [uiText, hasMoreHistory, historyPage, loading, loadingMore, pageSize, requestPage, sessionId])
 
   useEffect(() => {
     historySessionIdRef.current = sessionId
+    eventCursorRef.current = undefined
     historyPageRef.current = 1
     setMessages(sessionId ? adoptedMessagesBySession.get(sessionId) ?? [] : [])
+    setEventCursor(undefined)
+    setActiveTurnIds(undefined)
     setHasLoadedHistory(false)
     setHistoryPage(1)
     setHasMoreHistory(false)
@@ -208,6 +243,9 @@ export function useExperimentHistory(
   return {
     messages: isCurrentHistory ? messages : emptyHistory,
     historyPage,
+    eventCursor: isCurrentHistory ? eventCursor : undefined,
+    checkpointEpoch,
+    activeTurnIds: isCurrentHistory ? activeTurnIds : undefined,
     hasMoreHistory: isCurrentHistory && hasMoreHistory,
     loading: isCurrentHistory ? loading : Boolean(sessionId),
     loadingMore: isCurrentHistory && loadingMore,
@@ -215,6 +253,7 @@ export function useExperimentHistory(
     hasLoadedHistory: isCurrentHistory && hasLoadedHistory,
     errorOnLoadMore,
     refresh,
+    readLatest: targetSessionId => requestPage(targetSessionId, 1),
     loadMore,
     adoptCanonicalMessages,
     clearLocalHistory,

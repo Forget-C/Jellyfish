@@ -3,9 +3,102 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TypeVar
 
 from app.core.contracts.image_generation import ImageGenerationInput
+from app.core.contracts.model_capabilities import ImageModeDeclaration, ImageOperationMode
 from app.core.contracts.provider import ProviderKey
+from app.core.contracts.model_provider import ModelProviderConfigurationError
+
+_ImageInput = TypeVar("_ImageInput", bound=ImageGenerationInput)
+
+_IMAGE_MODES: dict[ProviderKey, tuple[ImageOperationMode, ...]] = {
+    "openai": ("text_to_image", "edit"),
+    "volcengine": ("text_to_image", "reference_image"),
+    "vidu": ("text_to_image", "reference_image"),
+    "kling": ("text_to_image", "reference_image"),
+}
+
+
+def resolve_image_mode(provider: ProviderKey, reference_count: int) -> ImageOperationMode:
+    """选择适配器对当前参考图组合使用的操作。"""
+    if not reference_count:
+        return "text_to_image"
+    return "edit" if provider == "openai" else "reference_image"
+
+
+def describe_image_modes(
+    provider: ProviderKey, model: str, declared: dict[ImageOperationMode, ImageModeDeclaration],
+) -> dict[ImageOperationMode, ImageModeDeclaration]:
+    """按操作查询内置适配器范围与管理员声明的交集。"""
+    modes = _IMAGE_MODES.get(provider, ())
+    if not modes:
+        return {}
+    capability = resolve_image_capability(provider=provider, model=model)
+    result = {}
+    for mode in modes:
+        rule = declared.get(mode, ImageModeDeclaration())
+        result[mode] = ImageModeDeclaration(
+            supported=rule.supported is not False,
+            sizes=_intersect_options(rule.sizes, capability.allowed_sizes),
+            ratios=_intersect_options(rule.ratios, capability.supported_ratios),
+            resolution_profiles=_intersect_options(rule.resolution_profiles, {"standard", "high"}),
+            max_outputs=min(rule.max_outputs or 10, capability.max_n or 10),
+            max_reference_images=_minimum(rule.max_reference_images, capability.max_reference_images),
+            seed=capability.supports_seed and provider != "openai" and rule.seed is not False,
+            watermark=capability.supports_watermark and rule.watermark is not False,
+        )
+    return result
+
+
+def _minimum(first: int | None, second: int | None) -> int | None:
+    values = [item for item in (first, second) if item is not None]
+    return min(values) if values else None
+
+
+def _intersect_options(declared: list[str] | None, available: set[str] | None) -> list[str] | None:
+    if available is None:
+        return declared
+    return sorted(available if declared is None else available.intersection(declared))
+
+
+def validate_image_declaration(
+    provider: ProviderKey,
+    modes: dict[ImageOperationMode, ImageModeDeclaration],
+    *,
+    references: int,
+    ratio: str | None,
+    resolution_profile: str | None,
+    size: str | None,
+    outputs: int,
+    seed: int | None,
+    watermark: bool | None,
+) -> None:
+    """校验请求是否超出所选配置对当前操作的声明。"""
+    available = _IMAGE_MODES.get(provider)
+    if available is None:
+        raise ValueError(f"Unsupported image provider: {provider!r}")
+    mode = resolve_image_mode(provider, references)
+    limits = modes.get(mode)
+    if limits is None:
+        return
+    if limits.supported is False:
+        raise ValueError(f"image mode is unsupported: {mode}")
+    for name, value, allowed in (
+        ("target_ratio", ratio, limits.ratios),
+        ("resolution_profile", resolution_profile, limits.resolution_profiles),
+        ("size", size, limits.sizes),
+    ):
+        if value is not None and allowed is not None and value not in allowed:
+            raise ValueError(f"{name} is outside the declared image options")
+    if limits.max_outputs is not None and outputs > limits.max_outputs:
+        raise ValueError("count exceeds the declared image limit")
+    if limits.max_reference_images is not None and references > limits.max_reference_images:
+        raise ValueError("reference count exceeds the declared image limit")
+    if seed is not None and limits.seed is False:
+        raise ValueError("seed is unsupported for this image mode")
+    if watermark is not None and limits.watermark is False:
+        raise ValueError("watermark is unsupported for this image mode")
 
 DEFAULT_VIDEO_REFERENCE_RATIO_SIZE_MAP: dict[str, dict[str, str]] = {
     "16:9": {"standard": "1792x1024", "high": "2048x1152"},
@@ -57,6 +150,8 @@ def register_image_model_capability(
 
         register_kling_image_capability(model_prefix=model_prefix, capability=capability)
         return
+    if provider != "volcengine":
+        raise ModelProviderConfigurationError(f"Unsupported image provider: {provider!r}")
     from app.core.integrations.volcengine.image_capabilities import register_volcengine_image_capability
 
     register_volcengine_image_capability(model_prefix=model_prefix, capability=capability)
@@ -100,6 +195,8 @@ def resolve_image_capability(*, provider: ProviderKey, model: str | None) -> Ima
         from app.core.integrations.kling.image_capabilities import resolve_kling_image_capability
 
         return resolve_kling_image_capability(model)
+    if provider != "volcengine":
+        raise ModelProviderConfigurationError(f"Unsupported image provider: {provider!r}")
     from app.core.integrations.volcengine.image_capabilities import resolve_volcengine_image_capability
 
     return resolve_volcengine_image_capability(model)
@@ -164,3 +261,25 @@ def validate_image_options(
         raise ValueError(f"seed is not supported by provider={provider} model={model or '<default>'}")
     if input_.watermark is not None and not cap.supports_watermark:
         raise ValueError(f"watermark is not supported by provider={provider} model={model or '<default>'}")
+
+
+def prepare_image_options(
+    provider: ProviderKey,
+    input_: _ImageInput,
+    modes: dict[ImageOperationMode, ImageModeDeclaration] | None = None,
+) -> _ImageInput:
+    """准备实际发送的 size，并在供应商和模型声明的交集内校验请求。"""
+    size = resolve_image_size(
+        provider=provider, model=input_.model, purpose=input_.purpose, target_ratio=input_.target_ratio,
+        resolution_profile=input_.resolution_profile, requested_size=input_.size,
+    )
+    prepared = input_.model_copy(update={"size": size})
+    validate_image_options(provider=provider, model=prepared.model, input_=prepared)
+    validate_image_declaration(
+        provider, modes or {}, references=len(prepared.images), ratio=prepared.target_ratio,
+        resolution_profile=prepared.resolution_profile, size=size, outputs=prepared.n,
+        seed=prepared.seed, watermark=prepared.watermark,
+    )
+    if provider == "openai" and prepared.seed is not None:
+        raise ValueError("seed is not supported by the OpenAI image adapter")
+    return prepared

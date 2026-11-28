@@ -1,7 +1,8 @@
 import { useUiText } from '../../../../uiText'
 import { useRef, useState, type MouseEvent, type RefObject } from 'react'
-import { PlayCircleFilled } from '@ant-design/icons'
-import { Button, Modal, Spin } from 'antd'
+import { DownloadOutlined, PlayCircleFilled } from '@ant-design/icons'
+import { Button, Modal, Spin, Tooltip } from 'antd'
+import { OpenAPI } from '../../../../services/generated'
 import './experiment-result-media.css'
 
 type MediaKind = 'image' | 'video'
@@ -49,6 +50,19 @@ type ExperimentResultMediaProps = {
   urls: string[]
 }
 
+function previewDownloadUrl(src: string) {
+  if (/^data:(image|video)\/[a-z0-9.+-]+;base64,/i.test(src)) return src
+  try {
+    const url = new URL(src, window.location.href)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return
+    if (url.origin === window.location.origin) return url.href
+    const apiOrigin = new URL(OpenAPI.BASE, window.location.href).origin
+    if (url.origin === apiOrigin && /\/api\/v1\/studio\/files\/[^/]+\/download$/.test(url.pathname)) return url.href
+  } catch {
+    return undefined
+  }
+}
+
 /** 列表媒体共用加载和重试状态；查看层仅播放当前结果。 */
 export function ExperimentResultMedia({ kind, urls }: ExperimentResultMediaProps) {
   const uiText = useUiText()
@@ -57,6 +71,8 @@ export function ExperimentResultMedia({ kind, urls }: ExperimentResultMediaProps
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const activeUrl = index === undefined ? undefined : urls[index]
   const isImage = kind === 'image'
+  const downloadUrl = activeUrl ? previewDownloadUrl(activeUrl) : undefined
+  const downloadLabel = uiText(isImage ? '下载图片' : '下载视频')
   const move = (direction: number) => setIndex((current) => ((current ?? 0) + direction + urls.length) % urls.length)
   const close = () => {
     playerRef.current?.pause()
@@ -94,6 +110,10 @@ export function ExperimentResultMedia({ kind, urls }: ExperimentResultMediaProps
         <Button onClick={() => move(1)}>{uiText("下一张")}</Button>
       </div> : null}
     >
+      {downloadUrl && <Tooltip title={downloadLabel} trigger={['hover', 'focus']}>
+        <Button className="experiment-result-download" type="text" href={downloadUrl} download=""
+          aria-label={downloadLabel} icon={<DownloadOutlined aria-hidden="true" />} />
+      </Tooltip>}
       {activeUrl ? <ExperimentMediaFrame key={activeUrl} src={activeUrl} kind={kind} label={isImage ? uiText("图片 {{value1}}", { value1: index! + 1 }) : uiText("视频")} playerRef={playerRef} /> : null}
     </Modal>
   </>

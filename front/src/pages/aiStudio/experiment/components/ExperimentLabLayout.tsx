@@ -10,6 +10,9 @@ import './experiment-navigation.css'
 type ExperimentLabLayoutProps = {
   title: string
   sessionTitle?: string
+  draft: boolean
+  welcomeTitle?: ReactNode
+  hasMessages?: boolean
   clearContent?: () => Promise<void>
   sidebar: (close: () => void) => ReactNode
   sidebarTrigger: RefObject<HTMLButtonElement>
@@ -19,9 +22,14 @@ type ExperimentLabLayoutProps = {
 }
 
 /** 实验室类型与会话共用同一侧栏，输入区独立于会话和消息滚动。 */
-export function ExperimentLabLayout({ title, sessionTitle, clearContent, sidebar, sidebarTrigger, history, composer, overlays }: ExperimentLabLayoutProps) {
+export function ExperimentLabLayout({ title, sessionTitle, draft, welcomeTitle, hasMessages, clearContent, sidebar, sidebarTrigger, history, composer, overlays }: ExperimentLabLayoutProps) {
   const uiText = useUiText()
   const { key } = useLocation()
+  const [conversationStarted, setConversationStarted] = useState(!draft)
+  useEffect(() => {
+    if (hasMessages) setConversationStarted(true)
+  }, [hasMessages])
+  const showWelcome = welcomeTitle && !conversationStarted && !hasMessages
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [clearTarget, setClearTarget] = useState<{ title: string; run: () => Promise<void> }>()
   const [wide, setWide] = useState(() => window.matchMedia('(min-width: 1024px)').matches)
@@ -64,9 +72,12 @@ export function ExperimentLabLayout({ title, sessionTitle, clearContent, sidebar
               <Button type="text" className="experiment-icon-action" icon={<MoreOutlined />} aria-label={uiText("更多会话操作")} />
             </Dropdown>
           </PageToolbar>
-          <div className="app-lab-content">
-            {history}
-            {composer}
+          <div className={showWelcome ? "app-lab-content app-lab-welcome" : "app-lab-content"}>
+            <div className="experiment-conversation" hidden={Boolean(showWelcome)}>{history}</div>
+            <div className="experiment-composition">
+              {showWelcome && <h2>{welcomeTitle}</h2>}
+              {composer}
+            </div>
           </div>
         </section>
       </div>

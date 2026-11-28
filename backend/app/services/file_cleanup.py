@@ -1,24 +1,47 @@
 """删除文件字节并清理遗留上传，保留任务历史与文件元信息。"""
 
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
+import json
 import logging
+from pathlib import Path
+from urllib.parse import urlsplit
 
 from sqlalchemy import or_, select, update
+from sqlalchemy.engine import URL, make_url
 
+from app.config import settings
 from app.core import storage
 from app.models.studio_prompts_files_timeline import FileItem
 from app.models.task import Task
 from app.services.task_service import utcnow
 
 logger = logging.getLogger(__name__)
+ORPHAN_AUDIT_LOGGER = "app.services.file_cleanup.audit"
+
+
+def orphan_cleanup_scope(database: URL) -> str | None:
+    """Identify the database and storage namespace without using database credentials."""
+    endpoint = (settings.s3_endpoint_url or "").strip().rstrip("/")
+    # Driver options can override the database target, and boto can discover another endpoint.
+    if not endpoint or not settings.s3_bucket_name or database.query or not database.database or database.database == ":memory:":
+        return None
+    location = str(Path(database.database).resolve()) if database.get_backend_name() == "sqlite" else database.database
+    scope = (
+        database.get_backend_name(), database.host, database.port, location,
+        endpoint, settings.s3_region_name, settings.s3_addressing_style,
+        settings.s3_bucket_name, settings.s3_base_path.strip().strip("/"),
+    )
+    return sha256(json.dumps(scope).encode()).hexdigest()
 
 
 class FileCleaner:
     """每轮只处理一批删除和一页孤儿对象；游标仅用于公平扫描，不承担恢复执行。"""
 
-    def __init__(self, sessions, *, batch_size: int = 100):
+    def __init__(self, sessions, *, batch_size: int = 100, worker_id: str | None = None):
         """注入会话工厂，存储调用前关闭读事务。"""
         self.sessions = sessions
+        self.worker_id = worker_id
         self.batch_size = batch_size
         self.delete_cursor = ""
         self.prefix = "files/"
@@ -27,7 +50,11 @@ class FileCleaner:
     async def run_once(self) -> None:
         """失败删除保留标记供后续轮次重试，不阻塞其他文件。"""
         await self._delete_requested()
-        await self._scan_orphans()
+        configured_scope = settings.s3_orphan_cleanup_scope
+        bind = getattr(self.sessions, "kw", {}).get("bind")
+        database = getattr(bind, "url", None)
+        if configured_scope and database is not None and configured_scope == orphan_cleanup_scope(database):
+            await self._scan_orphans()
 
     async def _delete_requested(self) -> None:
         """先读取不可变 key，删除完成后另开事务记账；重复删除对象安全。"""
@@ -76,6 +103,25 @@ class FileCleaner:
                 await storage.delete_file(key=obj.key)
             except Exception as error:
                 logger.warning("orphan cleanup failed: error=%s", type(error).__name__)
+            else:
+                endpoint = urlsplit(settings.s3_endpoint_url or "")
+                logging.getLogger(ORPHAN_AUDIT_LOGGER).info("orphan_object_deleted %s", json.dumps({
+                    "at": datetime.now(UTC).isoformat(),
+                    "worker_id": self.worker_id,
+                    "endpoint_host": endpoint.hostname,
+                    "endpoint_port": endpoint.port or (443 if endpoint.scheme == "https" else 80),
+                    "bucket": settings.s3_bucket_name,
+                    "prefix": settings.s3_base_path.strip().strip("/"),
+                    "object_key": obj.key,
+                    "reason": "unregistered_object_past_grace_period",
+                }, ensure_ascii=False))
         self.object_cursor = cursor
         if cursor is None:
             self.prefix = "generated/" if self.prefix == "files/" else "files/"
+
+
+if __name__ == "__main__":
+    configured = orphan_cleanup_scope(make_url(settings.database_url))
+    if configured is None:
+        raise SystemExit("A persistent database without URL options, an explicit S3 endpoint and a bucket are required")
+    print(configured)

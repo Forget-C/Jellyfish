@@ -75,6 +75,9 @@ class ImageGenerationOperationInput(BaseModel):
     target_ratio: str | None = None
     resolution_profile: str | None = None
     count: int = Field(default=1, ge=1, le=10)
+    size: str | None = None
+    seed: int | None = None
+    watermark: bool | None = None
     save_as_candidate: bool = Field(False, description="资产图仅保存候选结果，不自动替换槽位")
 
 
@@ -86,6 +89,8 @@ class VideoGenerationOperationInput(BaseModel):
     kind: Literal["video_generation"] = "video_generation"
     ratio: str
     seconds: int | None = Field(default=None, ge=1)
+    resolution: str | None = Field(default=None, min_length=1, max_length=20)
+    audio: bool | None = None
     seed: int | None = None
 
 
@@ -140,6 +145,7 @@ class FrozenGenerationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     model_name: str = Field(min_length=1)
     model_params: dict = Field(default_factory=dict)
+    capability_profile: dict | None = Field(default=None, exclude_if=lambda value: value is None)
     provider_id: str = Field(min_length=1)
     provider_key: str = Field(min_length=1)
     api_key: str = Field(min_length=1, repr=False)

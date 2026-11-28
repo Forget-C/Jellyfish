@@ -81,7 +81,7 @@ try {
   const panel = page.getByRole('region', { name: '生成后检查', exact: true })
   assert.equal(await editor.getByRole('button', { name: '检查所选产物', exact: true }).isDisabled(), true)
   const choose = async label => {
-    await panel.locator('.ant-select-selector').click()
+    await panel.locator('.ant-select').click()
     await page.locator('.ant-select-dropdown:visible').getByText(label).click()
   }
   await choose(/修订 1.*完整交付/)

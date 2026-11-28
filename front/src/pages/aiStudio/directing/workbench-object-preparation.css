@@ -58,7 +58,7 @@
 .management-object-preparation .ant-btn { border-radius: 8px; font-size: 13px; }
 .management-object-preparation .management-object-filters { margin: 12px 0; }
 .management-object-dialog { top: 16px; padding-bottom: 16px; }
-.management-object-dialog .ant-modal-content { border-radius: 12px; padding: 16px; max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
+.management-object-dialog .ant-modal-container { border-radius: 12px; padding: 16px; max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
 .management-object-dialog .ant-modal-title { font-size: 16px; font-weight: 600; }
 .management-object-dialog .ant-modal-body { overflow-y: auto; min-height: 0; scrollbar-gutter: stable; }
 .management-object-review-dialog .ant-modal-body h3 { font-size: 14px; }

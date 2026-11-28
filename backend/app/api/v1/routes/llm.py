@@ -5,6 +5,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.contracts.model_capabilities import (
+    ModelCapabilityVerificationRead,
+    ModelCapabilityVerificationRequest,
+)
+
 from app.services.llm.provider_test_call import resolve_test_config, submit_test_call
 from app.dependencies import get_db
 from app.models.llm import ModelCategoryKey
@@ -28,6 +33,7 @@ from app.schemas.llm import (
     VideoGenerationOptionsRead,
     ProviderUpdate,
 )
+from app.services.llm.capability_verification import list_verifications, verify_capability
 from app.services.llm.manage import (
     create_model as create_model_service,
     create_provider as create_provider_service,
@@ -42,6 +48,7 @@ from app.services.llm.manage import (
     list_supported_providers as list_supported_providers_service,
     list_models_paginated,
     list_providers_paginated,
+    read_model,
     update_model as update_model_service,
     update_model_settings as update_model_settings_service,
     update_provider as update_provider_service,
@@ -272,7 +279,7 @@ async def create_model(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ModelRead]:
     model = await create_model_service(db, body=body)
-    return created_response(ModelRead.model_validate(model))
+    return created_response(await read_model(db, model))
 
 
 @router.get(
@@ -285,7 +292,30 @@ async def get_model(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ModelRead]:
     model = await get_model_service(db, model_id=model_id)
-    return success_response(ModelRead.model_validate(model))
+    return success_response(await read_model(db, model))
+
+
+@router.get(
+    "/models/{model_id}/capability-verifications",
+    response_model=ApiResponse[list[ModelCapabilityVerificationRead]],
+    summary="读取模型能力验证历史",
+)
+async def get_model_capability_verifications(
+    model_id: str, db: AsyncSession = Depends(get_db),
+) -> ApiResponse[list[ModelCapabilityVerificationRead]]:
+    return success_response(await list_verifications(db, await get_model_service(db, model_id=model_id)))
+
+
+@router.post(
+    "/models/{model_id}/capability-verifications",
+    response_model=ApiResponse[ModelCapabilityVerificationRead],
+    summary="验证已保存模型的单项能力",
+)
+async def verify_model_capability(
+    model_id: str, body: ModelCapabilityVerificationRequest, db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ModelCapabilityVerificationRead]:
+    model = await get_model_service(db, model_id=model_id)
+    return success_response(await verify_capability(db, model, body.capability))
 
 
 @router.patch(
@@ -299,7 +329,7 @@ async def update_model(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ModelRead]:
     model = await update_model_service(db, model_id=model_id, body=body)
-    return success_response(ModelRead.model_validate(model))
+    return success_response(await read_model(db, model))
 
 
 @router.delete(

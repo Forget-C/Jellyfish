@@ -9,8 +9,9 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.integrations.vidu.video_payload import build_create_video_request
-from app.core.integrations.media_provider import MediaProvider
+from app.core.integrations.media_provider import bind_media_provider
 from app.core.contracts.provider import ProviderConfig
+from app.core.contracts.provider_media import RemoteTaskReference
 from app.core.contracts.provider_media import ProviderVideoInput as VideoGenerationInput, ProviderVideoFrames, ProviderVideoSubject
 
 
@@ -223,10 +224,11 @@ def test_video_input_seed_bounds_validation() -> None:
 async def _submit(*, cfg, input_):
     """通过新供应商入口验证单次提交协议。"""
     async with httpx.AsyncClient() as client:
-        return await MediaProvider(client).submit(cfg, input_)
+        result = await bind_media_provider(cfg, client=client).invoke(input_)
+        return result.task_id if isinstance(result, RemoteTaskReference) else result
 
 
 async def _poll(*, cfg, task_id, kind="video_generation"):
     """通过新供应商入口验证一次状态观察及结果归一化。"""
     async with httpx.AsyncClient() as client:
-        return await MediaProvider(client).poll(cfg, task_id=task_id, kind=kind)
+        return await bind_media_provider(cfg, client=client).poll(RemoteTaskReference(kind, task_id))

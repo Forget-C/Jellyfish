@@ -1,3 +1,6 @@
+import type { AssistantHighlight } from './assistantHighlight'
+import type { MutableRefObject } from 'react'
+import type { AssistantLayoutEditor } from './assistantLayoutEditor'
 import { useUiText } from '../../../uiText'
 import { PromptEditingActiveContext } from './PromptEditingContext'
 import type { CanvasArrangementChange } from './useGenerationCanvasEditor'
@@ -50,7 +53,7 @@ import { editorPrompt } from './inputBindings'
 import type { referenceProtection } from './promptRules'
 import { CardList, cardDragType, cardDragEntry } from './CardList'
 import { CanvasOutputActions, downloadOutputs, type DownloadOutput } from './CanvasOutputActions'
-import { cloneCard, copyRestriction, readCardClipboard, resultClipboardCard, writeCardClipboard, type CardClipboard } from './cardClipboard'
+import { cloneCard, copyRestriction, readCardClipboard, resultClipboardCard, writeCardClipboard, writeCardReference, type CardClipboard } from './cardClipboard'
 import { CanvasContextMenu } from './CanvasContextMenu'
 import { CardShell } from './CardShell'
 import { CandidateOutputStatus } from './CandidateOutputStatus'
@@ -114,7 +117,7 @@ export interface CanvasModelCardActionContext {
 }
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument, layoutPolicy, renderModelCardAction, renderModelCardMenu, modelCardSources, onSelectVideoFrame }: { onSelectVideoFrame?: (source: VideoFrameSource) => void; renderModelCardMenu?: (context: CanvasModelCardMenuContext) => ReactNode; modelCardSources?: (card: GenerationCard, document: CanvasDocument) => CanvasSourceItem[]; layoutPolicy?: GenerationCanvasLayoutPolicy; history?: { canUndo?: boolean; canUndoArrangement?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument, arrangement?: CanvasArrangementChange) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; renderModelCardAction?: (context: CanvasModelCardActionContext) => ReactNode; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; outputsVerified?: boolean; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
+function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, diagnostics, editingStatus, savedRevision, savedDocument, layoutPolicy, renderModelCardAction, renderModelCardMenu, modelCardSources, onSelectVideoFrame, assistantLayout, onAssistantSelection, assistantHighlight, assistantLocate }: { assistantHighlight?: AssistantHighlight; assistantLocate?: { cardId: string; serial: number }; assistantLayout?: MutableRefObject<AssistantLayoutEditor | undefined>; onAssistantSelection?: (ids: string[]) => void; onSelectVideoFrame?: (source: VideoFrameSource) => void; renderModelCardMenu?: (context: CanvasModelCardMenuContext) => ReactNode; modelCardSources?: (card: GenerationCard, document: CanvasDocument) => CanvasSourceItem[]; layoutPolicy?: GenerationCanvasLayoutPolicy; history?: { canUndo?: boolean; canUndoArrangement?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; onCatalogReady?: (catalog: CanvasCatalog) => void; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument, arrangement?: CanvasArrangementChange) => void; readonly?: boolean; inspectTarget?: CanvasInspectTarget; diagnostics?: CanvasDiagnostic[]; editingStatus?: string; renderModelCardAction?: (context: CanvasModelCardActionContext) => ReactNode; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; outputsVerified?: boolean; runs: CanvasRunRead[]; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
   const uiText = useUiText()
   const promptEditing = useContext(PromptEditingActiveContext)
   const [outputAction,setOutputAction] = useState<{mode:'cover'|'download';outputs:DownloadOutput[]}>()
@@ -230,6 +233,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const [detaching, setDetaching] = useState(false)
   const [selectedResultSource, setSelectedResultSource] = useState<OutputIdentity>()
   const [selectedGroupId, setSelectedGroupId] = useState<string>()
+  useLayoutEffect(() => {
+    onAssistantSelection?.(groups.find(group => group.id === selectedGroupId)?.card_ids ?? selected)
+  }, [groups, onAssistantSelection, selected, selectedGroupId])
   const [groupPanel, setGroupPanel] = useState<'name' | 'members'>()
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string>()
   const [cardMenuId, setCardMenuId] = useState<string>()
@@ -399,6 +405,38 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       focus: sizes => explicitLayout.focus(sizes, viewportWidth, container.current?.clientHeight || window.innerHeight) },
     validIds: [...new Set([...nodes.map(node => node.id), ...groups.map(group => group.id), ...cachedResultIds])], arrange: arrangeCards,
     onStorageError: setStorageError }, nodes, sizesReady ? cardSizes : {}, viewportWidth)
+  if (assistantLayout) assistantLayout.current = {
+    positions: () => layout.ready ? Object.fromEntries(visibleCardIds.flatMap(id => {
+      const point = layout.view.positions[id]
+      return point ? [[id, point]] : []
+    })) : undefined,
+    plan: (sourceId, proposal) => {
+      if (layout.view.assistantReceipts?.includes(sourceId)) return { outcome: 'applied' }
+      if (!layout.ready || !sizesReady || readonly || movingIds.length) return { outcome: 'deferred' }
+      const before = layout.view
+      const ids = Object.keys(proposal.before)
+      if (ids.some(id => !visibleCardIds.includes(id) || !before.positions[id])) return { outcome: 'stale' }
+      if (proposal.placement && ids.some(id => before.positions[id].x !== proposal.before[id].x
+        || before.positions[id].y !== proposal.before[id].y)) return { outcome: 'stale' }
+      let positions = before.positions
+      if (proposal.placement && 'positions' in proposal.placement) positions = { ...positions, ...proposal.placement.positions }
+      if (proposal.placement?.kind === 'arrange') {
+        const arranged = layout.arrangedView(before)
+        if (!arranged) return { outcome: 'deferred' }
+        positions = { ...positions, ...Object.fromEntries(ids.map(id => [id, arranged.positions[id]])) }
+      }
+      const after = { ...before, positions, manuallyPlaced: proposal.placement
+        ? [...new Set([...(before.manuallyPlaced || []), ...ids])] : before.manuallyPlaced }
+      return {
+        outcome: 'ready',
+        apply: () => layout.applyAssistantView(sourceId, after),
+        arrangement: {
+          undo: () => layout.restoreAssistantView(before),
+          redo: () => layout.restoreAssistantView(after),
+        },
+      }
+    },
+  }
   const arrangeDisabled = arrangementBlocked || !!explicitLayout?.organize && readonly
   const arrangeLayout = () => {
     if (arrangeDisabled) return
@@ -426,16 +464,30 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     record: (undo, redo) => movementHost.current.history?.record(undo, redo),
     onMembersChange: setMovingIds,
   }))
-  const centerInspectionElement = (selector: string) => requestAnimationFrame(() => {
+  const centerInspectionElement = (selector: string, focus = true) => requestAnimationFrame(() => {
     const element = container.current?.querySelector<HTMLElement>(selector)
     const bounds = container.current?.getBoundingClientRect()
     if (!element || !bounds) return
     const box = element.getBoundingClientRect()
+    const panel = focus ? undefined : container.current?.parentElement?.querySelector<HTMLElement>('.canvas-assistant-panel')
+    const panelLeft = panel?.getBoundingClientRect().left ?? bounds.right
+    const availableWidth = Math.max(0, Math.min(bounds.right, panelLeft) - bounds.left)
     layout.setView(previous => ({ ...previous, transform: { ...previous.transform,
-      x: previous.transform.x + bounds.x + (bounds.width - box.width) / 2 - box.x,
+      x: previous.transform.x + bounds.x + (availableWidth - box.width) / 2 - box.x,
       y: previous.transform.y + bounds.y + (bounds.height - box.height) / 2 - box.y } }))
-    element.focus({ preventScroll: true })
+    if (focus) element.focus({ preventScroll: true })
   })
+  const locateAssistantCard = useRef<(id: string) => void>()
+  locateAssistantCard.current = cardId => {
+    const stack = stackFor(cardId)
+    const group = groups.find(item => item.collapsed && item.card_ids?.includes(cardId))
+    const selector = stack ? `[data-stack-id="${CSS.escape(stack.id)}"]` :
+      group ? `[data-group-id="${CSS.escape(group.id)}"]` : `[data-card-id="${CSS.escape(cardId)}"]`
+    centerInspectionElement(selector, false)
+  }
+  useEffect(() => {
+    if (assistantLocate) locateAssistantCard.current?.(assistantLocate.cardId)
+  }, [assistantLocate])
   const locateSource = (source: CanvasSourceIndex, trigger: HTMLElement) => {
     const { focus, issue } = sourceDestination(document, source)
     if (!focus) { setReason(issue); return }
@@ -904,14 +956,20 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     return { card, reason: stackFor(id) ? '请先解除堆叠' : copyRestriction(card) }
   }
   const copyReason = (ids: string[]) => ids.map(id => copyTarget(id).reason).find(Boolean)
-  const copyCards = (ids: string[], duplicate=false) => {
+  const copyCards = (ids: string[], duplicate=false, group?: { id: string; name: string }) => {
     const entries = ids.map(copyTarget)
     const targets = entries.flatMap(({ card }) => card ? [card] : [])
     const reason = entries.find(entry => entry.reason)?.reason
+    if (!duplicate && targets.length && targets.every(card => latest.current.cards?.some(item => item.id === card.id))) {
+      void writeCardReference({ canvasId: document.id, cardIds: targets.map(card => card.id), group })?.catch(() => undefined)
+    }
     if (!targets.length || reason) {setReason(reason || uiText("请选择卡片"));return}
     const value:CardClipboard={schema:1,projectId:(document.project_id || ''),cards:structuredClone(targets),positions:targets.map(card=>point(card.id))}
     if(duplicate) pasteCards(value,{x:Math.min(...value.positions.map(point=>point.x))+32,y:Math.min(...value.positions.map(point=>point.y))+32})
-    else try {writeCardClipboard(value);setReason(uiText("已复制，可在画布粘贴"))} catch {setReason(uiText("卡片剪贴板保存失败，请重试"))}
+    else try {
+      writeCardClipboard(value)
+      setReason(uiText("已复制，可在画布粘贴"))
+    } catch { setReason(uiText("卡片剪贴板保存失败，请重试")) }
   }
   const openCardContext = (id: string, trigger: HTMLElement) => {
     const box = trigger.getBoundingClientRect()
@@ -934,6 +992,15 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
 
     if(contextMenu || readonly && event.key.toLowerCase()!=='c' || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.isComposing || event.defaultPrevented || movement.pointerActive) return
     const target=event.target as Element
+    const group = groups.find(item => item.id === selectedGroupId && item.kind !== 'stack')
+    const groupFocus = target.closest('[data-group-id]')?.getAttribute('data-group-id') === group?.id
+      && target.matches('[data-group-id], .generation-group-title')
+    if (event.key.toLowerCase() === 'c' && group?.card_ids?.length && groupFocus && container.current?.contains(target)) {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      copyCards(group.card_ids, false, { id: group.id, name: group.name })
+      return
+    }
     if(!container.current?.contains(target) || !ownsCardShortcut(target) || target.closest('input,textarea,select,[contenteditable],[data-card-details],[role="dialog"],[role="menu"],.generation-card-menu') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
     const key=event.key.toLowerCase()
     if(!['c','v','d'].includes(key))return
@@ -1005,7 +1072,25 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       return
     }
     if (sourceSide) connectionLayout.setSides(previous => ({ ...previous, [edge.id]: { source: sourceSide, target: targetSide } }))
-    if (connectDocument(latest.current, edge, target && capability(target))) setReason(uiText(connectionPolicy(latest.current, option)?.message || "来源已连接"))
+    const before = latest.current
+    const added = operations.connect(before, edge, target && capability(target))
+    if (!added.document) { setReason(added.reason); return }
+    const source = before.cards?.find(card => card.id === edge.source_card)
+    const reference = target?.type?.startsWith('reference.') ? target as NamedImageReferenceCard : undefined
+    const savedSource = savedDocument?.cards?.find(card => card.id === edge.source_card)
+    // Only an explicit first image connection may adopt a picture. Keep the edge and binding in one edit.
+    if (edge.target_port === 'image_source' && reference && !reference.image_binding && !reference.scene_object_source
+      && source?.type === 'content.image' && 'file_id' in source && source.file_id && !source.uploading
+      && !runtime?.outputs[source.id]?.some(output => output.available === false && (output.file_id === source.file_id
+        || !output.file_id && savedSource && 'file_id' in savedSource && savedSource.file_id === source.file_id))
+      && !before.edges?.some(item => item.target_card === reference.id && item.target_port === 'image_source')) {
+      edit({ ...added.document, cards: added.document.cards?.map(card => card.id === reference.id
+        ? { ...reference, image_binding: storyboardImageBinding(before, source) } : card) })
+      setReason(uiText("已关联参考图"))
+      return
+    }
+    edit(added.document)
+    setReason(uiText(connectionPolicy(before, option)?.message || "来源已连接"))
   }
   const finishDrag = (event: PointerEvent) => {
     if (!drag) return
@@ -1400,7 +1485,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       {cards.some(card => card.type?.startsWith('model.') && pendingDeletion?.includes(card.id)) && <p>{uiText("关联结果卡会随生成卡一并移除，已独立的内容卡按本次选择处理。")}</p>}
       {cards.filter(card => 'input_bindings' in card && card.input_bindings?.some(binding => binding.input_port === 'acceptance_basis' && pendingDeletion?.includes(binding.source.card_id)) && !pendingDeletion?.includes(card.id)).map(card => <p key={card.id}>{uiText("将解除")} {cardLabel(card.id)} {uiText("的验收关联，后续生成不再自动带入该要求。")}</p>)}
     </WorkbenchModal>
-    <Modal title={uiText("堆叠内容（只读）")} open={!!stacks.find(group => group.id === viewStackId)} onCancel={() => setViewStackId(undefined)} footer={null} width={1100} maskClosable destroyOnClose>
+    <Modal title={uiText("堆叠内容（只读）")} open={!!stacks.find(group => group.id === viewStackId)} onCancel={() => setViewStackId(undefined)} footer={null} width={1100} maskClosable destroyOnHidden>
       <div className="generation-stack-reading" onClick={event => { if (event.target === event.currentTarget) setViewStackId(undefined) }}>
         {(stacks.find(group => group.id === viewStackId)?.card_ids || []).map(id => {
           const card = cards.find(item => item.id === id)!
@@ -1577,7 +1662,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             const parallel = cards.find(card => card.id === edge.source_card)?.type?.startsWith('direction.') ? [edge] : edges.filter(item => item.source_card === edge.source_card && item.target_card === edge.target_card)
             const lane = (parallel.findIndex(item => item.id === edge.id) - (parallel.length - 1) / 2) * 36
             const active = selectedEdgeId ? selectedEdgeId === edge.id : hoveredEdgeId === edge.id || selected.includes(edge.source_card) || selected.includes(edge.target_card)
-            return <g key={edge.id} data-generation-edge-id={edge.id} data-edge-active={active} onFocus={() => setHoveredEdgeId(edge.id)} onBlur={() => setHoveredEdgeId(undefined)} onClick={event => {
+            return <g key={edge.id} data-generation-edge-id={edge.id} data-assistant-highlight={assistantHighlight?.edges.includes(edge.id)} data-edge-active={active} onFocus={() => setHoveredEdgeId(edge.id)} onBlur={() => setHoveredEdgeId(undefined)} onClick={event => {
               const bounds = container.current?.getBoundingClientRect()
               if (bounds) selectEdge(edge.id, { x: event.clientX - bounds.left, y: event.clientY - bounds.top })
             }} onMouseEnter={() => setHoveredEdgeId(edge.id)} onMouseLeave={() => setHoveredEdgeId(undefined)}>
@@ -1623,7 +1708,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const members = (group.card_ids || []).filter(id => cards.some(card => card.id === id))
           const origin = groupFrames.get(group.id)!
           const { width, height } = origin
-          return <section key={group.id} data-group-id={group.id} tabIndex={-1} className="generation-group" data-selected={selectedGroupId === group.id} onPointerDown={event => {
+          return <section key={group.id} data-group-id={group.id} data-assistant-highlight={group.collapsed && group.card_ids?.some(id => assistantHighlight?.cards.includes(id))} tabIndex={-1} className="generation-group" data-selected={selectedGroupId === group.id} onPointerDown={event => {
             if (!event.currentTarget.contains(event.target as Node)) return
             if (event.button !== 0 || (event.target as Element).closest('button, input, select, [role="combobox"], [data-card-id]')) return
             const modifier = navigator.platform.includes('Mac') ? event.metaKey : event.ctrlKey
@@ -1649,7 +1734,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
                 <CanvasDragHandle onCancel={() => finishMove(true)} className="generation-group-move" contextKey={document.id} label={uiText("分组 {{name}}", { name: group.name })} offset={origin} scale={transform.scale} onMove={next => {
                   movement.moveHandle(members, next, origin)
                 }} />
-                <Dropdown trigger={['click']} placement="topLeft" dropdownRender={menu => <div onPointerDown={event => event.stopPropagation()} onPointerUp={event => event.stopPropagation()}>{menu}</div>} menu={{ items: [
+                <Dropdown trigger={['click']} placement="topLeft" popupRender={menu => <div onPointerDown={event => event.stopPropagation()} onPointerUp={event => event.stopPropagation()}>{menu}</div>} menu={{ items: [
                   { key: 'name', label: uiText("重命名"), disabled: readonly },
                   { key: 'members', label: uiText("管理成员"), disabled: readonly },
                   ...(group.collapsed ? [{ key: 'expand', label: uiText("展开组"), disabled: readonly }] : []),
@@ -1734,7 +1819,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
               })} onLocate={(issue, trigger, diagnostic = issue.target) => {
                 const cardId = typeof diagnostic.card_id === 'string' ? diagnostic.card_id : card.id
                 setDetailTrigger(trigger); navigateInspection.current(cardId, { cardId, serial: Date.now(), diagnostic })
-              }} />} viewportOffset={transform} scale={transform.scale} width={size.width} height={size.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={!!fixedCanvasSource(document, card.id) || runtime?.busyCards.has(card.id)}
+              }} />} viewportOffset={transform} scale={transform.scale} width={size.width} height={size.height} selected={selected.includes(card.id)} assistantHighlight={assistantHighlight?.cards.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={!!fixedCanvasSource(document, card.id) || runtime?.busyCards.has(card.id)}
             onExpand={trigger => { if (promptEditing) return; setSourceFocus(undefined); setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
             onOpen={trigger => { if (accessibleConnection) chooseAccessibleTarget(card.id); else openCardEditor(card.id, trigger) }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
             multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => { setCardMenuId(undefined); beginMove(card.id, true) }} onDragEnd={finishMove}

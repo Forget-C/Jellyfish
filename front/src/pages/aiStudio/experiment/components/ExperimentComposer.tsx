@@ -3,15 +3,16 @@ import { useUiText } from '../../../../uiText'
 import type { ReactNode } from 'react'
 import { Button } from 'antd'
 import { WorkbenchButton } from '../../../../components/workbench/WorkbenchButton'
-import { SendOutlined } from '@ant-design/icons'
+import { ArrowUpOutlined, SendOutlined } from '@ant-design/icons'
 
 type ExperimentComposerProps = {
+  inline?: boolean
   appearance?: 'default' | 'workbench'
   options: ReactNode
   addAction?: ReactNode
   feedback?: ReactNode
   contextActions?: ReactNode
-  secondaryAction?: ReactNode
+  stopAction?: { label: string; onClick: () => void; loading?: boolean; disabled?: boolean }
   children: ReactNode
   submitting?: boolean
   submitDisabled?: boolean
@@ -27,11 +28,12 @@ type ExperimentComposerProps = {
  */
 export function ExperimentComposer({
   options,
+  inline = false,
   appearance = 'default',
   contextActions,
   addAction,
   feedback,
-  secondaryAction,
+  stopAction,
   children,
   submitting = false,
   submitDisabled = false,
@@ -39,16 +41,22 @@ export function ExperimentComposer({
   submitLabel,
 }: ExperimentComposerProps) {
   const uiText = useUiText()
+  const actionLabel = stopAction?.label ?? submitLabel ?? uiText("发送")
   const workbench = appearance === 'workbench'
   if (!workbench) return (
-    <div className="experiment-composer">
+    <div className={inline ? "experiment-composer experiment-composer-inline" : "experiment-composer"}>
       <div className="experiment-composer-input">{children}</div>
       <div className="experiment-composer-toolbar">
-        <div className="experiment-composer-options">{options}</div>
-        <div className="experiment-composer-submit">
+        {addAction}
+        <div className="experiment-composer-actions">
           {contextActions}
-          {addAction}
-          {secondaryAction ?? <Button type="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>{submitLabel ?? uiText("发送")}</Button>}
+          <div className="experiment-composer-options">{options}</div>
+          <Button className="experiment-composer-action" shape="circle" type="primary"
+            aria-label={actionLabel} title={stopAction ? uiText("停止生成") : actionLabel}
+            icon={stopAction ? <span className="experiment-stop-icon" aria-hidden="true" /> : <ArrowUpOutlined aria-hidden="true" />}
+            loading={stopAction ? stopAction.loading : submitting}
+            disabled={stopAction ? stopAction.disabled : submitDisabled}
+            onClick={stopAction?.onClick ?? onSubmit} />
         </div>
       </div>
       {feedback && <div className="experiment-composer-feedback">{feedback}</div>}

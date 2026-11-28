@@ -95,7 +95,7 @@ async def test_consistency_requires_two_real_requirements_with_common_scope(runt
                 'right': {'index': 1, 'excerpt': '虚构要求' if difference == 'invented' else '机位持续绕人物移动'},
             }))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', Model)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', Model)
     checks = await save_requirements(runtime, [camera, movement])
     result = await check_category(runtime, checks, 'P02', recheck=difference is None)
     assert result['outcome'] == outcome
@@ -129,7 +129,7 @@ async def test_reviewability_is_anchored_to_adopted_criterion_and_actual_prompt(
                 'message': '核对当前实际依据', 'requirement_excerpt': standard, **reply,
             }))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', Model)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', Model)
     checks = await save_requirements(runtime, [criterion], prompt=prompt)
     result = await check_category(runtime, checks, 'P09', recheck=outcome == 'conforming')
     assert result['outcome'] == outcome

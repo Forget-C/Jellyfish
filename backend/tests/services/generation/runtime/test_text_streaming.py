@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime
 
 import pytest
@@ -60,29 +59,6 @@ async def test_runtime_assigns_monotonic_sse_ids_and_replays_after_cursor() -> N
     assert [accepted.sequence, delta.sequence, failed.sequence] == [1, 2, 3]
     assert [event.event.value for event in await runtime.replay("task-1", after_event_id=1)] == ["delta", "error"]
     assert await runtime.state_of("task-1") == TextStreamRunState.failed
-
-
-@pytest.mark.asyncio
-async def test_runtime_subscriber_replays_then_receives_terminal_event() -> None:
-    """晚连接订阅者先拿到事件日志，再在 completed 后自然结束。"""
-    runtime = TextStreamingRuntime()
-    await runtime.create_run(_accepted())
-    await runtime.emit_delta("task-1", StreamDeltaData(task_id="task-1", text_delta="第一段"))
-
-    received: list[str] = []
-
-    async def _consume() -> None:
-        """订阅运行并记录传输顺序。"""
-        async for event in runtime.subscribe("task-1"):
-            received.append(event.event.value)
-
-    consumer = asyncio.create_task(_consume())
-    await asyncio.sleep(0)
-    await runtime.cancel("task-1", "用户停止")
-    await asyncio.wait_for(consumer, timeout=1)
-
-    assert received == ["accepted", "delta", "cancelled"]
-    assert await runtime.state_of("task-1") == TextStreamRunState.cancelled
 
 
 @pytest.mark.asyncio

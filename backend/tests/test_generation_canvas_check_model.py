@@ -118,7 +118,7 @@ async def test_check_model_uses_frozen_item_inputs_and_preserves_partial_results
                 'outcome': 'risk', 'message': '灯光要求仅部分体现', 'submitted_excerpt': snippet,
             }))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', FakeModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', FakeModel)
     worker = TaskWorker(runtime.sessions)
     try:
         await worker.tick()

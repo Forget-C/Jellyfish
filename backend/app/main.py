@@ -1,15 +1,18 @@
 """FastAPI 应用入口。"""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.routing import Route
 
 from app.api.v1 import router as api_v1_router
 from app.bootstrap import bootstrap_all_registries
-from app.config import settings
+from app.canvas_mcp.server import MCP_PATH, CanvasMcpEndpoint, run_transport
+from app.config import Settings, settings
 from app.core.dev_runtime import process_identity
 from app.schemas.common import ApiResponse
 
@@ -58,43 +61,57 @@ async def validation_exception_handler(request: Request, exc: Exception) -> JSON
     return JSONResponse(status_code=422, content=body)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """应用生命周期：启动时初始化，关闭时清理。"""
-    # 启动时幂等注册供应商能力；任务由独立 Worker 执行。
-    with process_identity('api'):
-        bootstrap_all_registries()
-        yield
+def create_app(config: Settings = settings) -> FastAPI:
+    """Configure the API and register MCP only when it has a usable key."""
+    secret_key = config.mcp_secret_key.get_secret_value().strip()
+    mcp_active = config.mcp_enabled and bool(secret_key)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        with process_identity('api'):
+            bootstrap_all_registries()
+            if mcp_active:
+                async with run_transport() as transport:
+                    app.state.canvas_mcp_transport = transport
+                    yield
+            else:
+                if config.mcp_enabled:
+                    logging.getLogger(__name__).warning('Canvas MCP is inactive. Set MCP_SECRET_KEY to enable access.')
+                yield
+
+    app = FastAPI(
+        title=config.app_name,
+        version="0.1.0",
+        lifespan=lifespan,
+        docs_url="/docs",
+        redoc_url="/redoc",
+    )
+
+    # 统一错误响应格式：{ code, message, data: null }
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(Exception, http_exception_handler)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=config.cors_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["Content-Disposition"],
+    )
+
+    app.include_router(api_v1_router, prefix=config.api_v1_prefix)
+    if mcp_active:
+        app.router.routes.append(Route(MCP_PATH, CanvasMcpEndpoint(secret_key, config.cors_origins_list)))
+    app.get("/health")(health)
+    return app
 
 
-app = FastAPI(
-    title=settings.app_name,
-    version="0.1.0",
-    lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
-)
-
-# 统一错误响应格式：{ code, message, data: null }
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
-app.add_exception_handler(HTTPException, http_exception_handler)
-app.add_exception_handler(Exception, http_exception_handler)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["Content-Disposition"],
-)
-
-app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
-# 影视技能路由同时挂到主应用，保证 /api/v1/film 一定可访问
-
-
-@app.get("/health")
 async def health():
     """健康检查。"""
     from app.schemas.common import success_response
     return success_response({"status": "ok"})
+
+
+app = create_app()

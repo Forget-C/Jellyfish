@@ -16,6 +16,7 @@ from app.core.db import Base
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.task import Task
 from app.services.task_service import TaskService
+from app.services.chat.snapshots import session_snapshot
 from app.schemas.studio.experiment_sessions import ExperimentSessionCreate
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, experiment_user_message
 
@@ -26,13 +27,13 @@ def test_experiment_session_routes_are_registered(client: TestClient) -> None:
     paths = response.json()["paths"]
     assert "/api/v1/studio/experiment-sessions" in paths
     messages = paths["/api/v1/studio/experiment-sessions/{session_id}/messages"]
-    assert set(messages) == {"get", "delete"}
+    assert set(messages) == {"delete"}
     assert "/api/v1/studio/experiment-sessions/messages/{message_id}" not in paths
     base = "/api/v1/studio/experiment-sessions"
     message_id = "0123456789abcdef0123456789abcdef"
     assert client.post(f"{base}/fixture-session/messages", json={}).status_code == 405
     assert client.patch(f"{base}/messages/{message_id}", json={}).status_code == 404
-    message_parameters = messages["get"]["parameters"]
+    message_parameters = paths["/api/v1/studio/chat/sessions/{kind}/{session_id}/snapshot"]["get"]["parameters"]
     assert {parameter["name"] for parameter in message_parameters} >= {"session_id", "page", "page_size"}
     session_schema = response.json()["components"]["schemas"]["ExperimentSessionRead"]
     assert {"last_message_preview", "has_running_task"} <= set(session_schema["properties"])
@@ -47,6 +48,11 @@ async def _build_session() -> tuple[AsyncSession, object]:
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     return session_local(), engine
+
+
+async def _snapshot_messages(db, kind, session_id, page=1, page_size=50):
+    view = await session_snapshot(db, (kind, None), session_id, page, page_size)
+    return view.history.messages
 
 
 @pytest.mark.asyncio
@@ -74,13 +80,11 @@ async def test_experiment_message_pagination_returns_chronological_page_and_sess
                 task_id=task.id, status=None, payload={"modality": "image"}, sequence=5))
             await db.commit()
 
-            page = await route.list_experiment_messages(session_id, db, page=1, page_size=2)
-            assert page.data is not None
-            assert [item.content for item in page.data] == ["提示词 3", "图片生成中"]
+            page = await _snapshot_messages(db, "image", session_id, page=1, page_size=2)
+            assert [item.content for item in page] == ["提示词 3", "图片生成中"]
 
-            earlier = await route.list_experiment_messages(session_id, db, page=2, page_size=2)
-            assert earlier.data is not None
-            assert [item.content for item in earlier.data] == ["提示词 1", "提示词 2"]
+            earlier = await _snapshot_messages(db, "image", session_id, page=2, page_size=2)
+            assert [item.content for item in earlier] == ["提示词 1", "提示词 2"]
 
             sessions = await route.list_experiment_sessions("image", db)
             assert sessions.data is not None
@@ -104,9 +108,8 @@ async def test_experiment_message_same_timestamp_uses_stable_order() -> None:
                 ExperimentMessage(id="message-task", session_id=created.data.id, role="task", content="任务反馈", payload={}, sequence=2, created_at=timestamp),
             ])
             await db.commit()
-            messages = await route.list_experiment_messages(created.data.id, db, page=1, page_size=50)
-            assert messages.data is not None
-            assert [item.content for item in messages.data] == ["用户输入", "任务反馈"]
+            messages = await _snapshot_messages(db, "image", created.data.id, page=1, page_size=50)
+            assert [item.content for item in messages] == ["用户输入", "任务反馈"]
     finally:
         await engine.dispose()
 
@@ -139,9 +142,8 @@ async def test_append_experiment_messages_reserves_continuous_sequences() -> Non
             await db.commit()
 
             assert [item.sequence for item in [*first_batch, *second_batch]] == [1, 2, 3]
-            messages = await route.list_experiment_messages(session_id, db, page=1, page_size=50)
-            assert messages.data is not None
-            assert [item.sequence for item in messages.data] == [1, 2, 3]
+            messages = await _snapshot_messages(db, "video", session_id, page=1, page_size=50)
+            assert [item.sequence for item in messages] == [1, 2, 3]
             counter = await db.scalar(
                 select(ExperimentSession.message_sequence).where(ExperimentSession.id == session_id)
             )
@@ -178,9 +180,9 @@ async def test_concurrent_message_appends_receive_distinct_sequences(tmp_path, m
         try:
             await asyncio.gather(append("并发输入 A"), append("并发输入 B"))
             async with session_local() as db:
-                history = await route.list_experiment_messages(session_id, db, page=1, page_size=50)
-                assert [item.sequence for item in history.data] == [1, 2]
-                assert {item.content for item in history.data} == {"并发输入 A", "并发输入 B"}
+                history = await _snapshot_messages(db, "text", session_id, page=1, page_size=50)
+                assert [item.sequence for item in history] == [1, 2]
+                assert {item.content for item in history} == {"并发输入 A", "并发输入 B"}
         finally:
             async with session_local() as db:
                 await route.delete_experiment_session(session_id, db)
@@ -216,10 +218,10 @@ async def test_experiment_session_clear_and_delete_block_only_active_tasks() -> 
             await db.commit()
 
             await route.clear_experiment_messages(session_id, db)
-            assert (await route.list_experiment_messages(session_id, db, page=1, page_size=50)).data == []
+            assert await _snapshot_messages(db, "video", session_id) == []
             await route.delete_experiment_session(session_id, db)
-            with pytest.raises(HTTPException, match="not found"):
-                await route.list_experiment_messages(session_id, db)
+            with pytest.raises(HTTPException, match="target_not_found"):
+                await _snapshot_messages(db, "video", session_id)
     finally:
         await engine.dispose()
 

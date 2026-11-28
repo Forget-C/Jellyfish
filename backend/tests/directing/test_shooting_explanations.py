@@ -61,7 +61,7 @@ async def test_whole_chapter_check_keeps_original_report(tmp_path, monkeypatch):
                  'problem': '下车后是否已有预想路线？'},
             ]}))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = '甲在车旁。乙从另一侧下车。'

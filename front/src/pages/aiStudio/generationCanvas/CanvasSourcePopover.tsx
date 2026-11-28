@@ -21,7 +21,7 @@ export function CanvasSourcePopover({ items, onLocate }: {
     return () => cancelAnimationFrame(frame)
   }, [open])
   return <Popover open={open} onOpenChange={setOpen} trigger="click" placement="bottom"
-    getPopupContainer={node => node.ownerDocument.body} overlayClassName="canvas-workbench-dialog"
+    getPopupContainer={node => node.ownerDocument.body} classNames={{ root: "canvas-workbench-dialog" }}
     content={<section ref={panel} id={id} tabIndex={-1} role="dialog" aria-label={uiText("卡片引用")} className="generation-source-list"
       onPointerDown={event => event.stopPropagation()}
       onKeyDown={event => {

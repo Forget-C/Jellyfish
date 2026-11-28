@@ -61,7 +61,7 @@ async def test_video_candidate_has_generated_prompt_before_review(tmp_path, monk
                     result['shots'].append({'id': 'dark', 'excerpt': '灯熄灭。'})
             return SimpleNamespace(content=json.dumps(result, ensure_ascii=False))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = '人物停步。灯熄灭。' if failure in ('partial', 'mixed') else '人物停步。'

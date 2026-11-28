@@ -1,7 +1,8 @@
 """从已接入 DTO 和适配器能力派生画布选项，不依赖界面示例模型名。"""
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.contracts.video_generation import AudioCapability
-from app.core.integrations.image_capabilities import resolve_image_capability, DEFAULT_VIDEO_REFERENCE_RATIO_SIZE_MAP
+from app.services.llm.model_capabilities import model_operation_capabilities
+from app.core.integrations.image_capabilities import resolve_image_capability, resolve_image_mode, DEFAULT_VIDEO_REFERENCE_RATIO_SIZE_MAP
 from app.core.integrations.video_capabilities import resolve_video_capability
 from app.core.integrations.video_adapter_usage import resolve_video_adapter_usage
 from app.models.llm import Model, Provider
@@ -25,10 +26,17 @@ async def model_capability(db: AsyncSession, model_id: str) -> CanvasModelCapabi
         result.input_ports.append('image')
         result.ratios = sorted(cap.supported_ratios or profiles.keys())
         result.resolution_profiles = profiles
-        result.min_count, result.max_count = cap.min_n or 1, cap.max_n or 10
+        modes = model_operation_capabilities(model, provider, "image_generation").image_modes
+        result.min_count = cap.min_n or 1
+        if modes:
+            result.max_count = modes["text_to_image"].max_outputs
+            result.reference_max_count = modes[resolve_image_mode(key, 1)].max_outputs
+        else:
+            result.max_count = cap.max_n or 10
         result.max_reference_images = cap.max_reference_images
         result.supports_duplicate_reference_images = cap.supports_duplicate_reference_images
     if model.category == 'video':
+        result.video_modes = model_operation_capabilities(model, provider, "video_generation").video_modes
         cap = resolve_video_capability(provider=key, model=model.name)
         usage = resolve_video_adapter_usage(provider=key, model=model.name)
         result.native_audio_output = cap.native_audio_output
@@ -51,7 +59,7 @@ async def model_capability(db: AsyncSession, model_id: str) -> CanvasModelCapabi
     return result
 
 
-def parameter_diagnostics(card: ModelCard, capability: CanvasModelCapability) -> list[dict]:
+def parameter_diagnostics(card: ModelCard, capability: CanvasModelCapability, *, has_reference: bool = False) -> list[dict]:
     """保存允许不完整配置；编译/预检和界面共享有效参数诊断。"""
     issues = []
     def issue(field, message):
@@ -74,7 +82,8 @@ def parameter_diagnostics(card: ModelCard, capability: CanvasModelCapability) ->
     if card.type == 'model.video' and config.get('seed') is not None and not -1 <= config['seed'] <= 4294967295:
         issue('seed', '随机种子须为 -1 或 [0, 2^32-1]')
     count = config.get('count')
-    if count is not None and not capability.min_count <= count <= capability.max_count:
+    maximum = capability.reference_max_count if has_reference and capability.reference_max_count is not None else capability.max_count
+    if count is not None and not capability.min_count <= count <= maximum:
         issue('count', '图片数量超出模型允许范围')
     profile = config.get('resolution_profile')
     if profile and ratio and profile not in capability.resolution_profiles.get(ratio, {}):

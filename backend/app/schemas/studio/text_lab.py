@@ -28,4 +28,4 @@ class TextLabRunStatus(BaseModel):
     """返回隐藏文本运行的最小状态，不将其暴露到任务中心。"""
 
     task_id: str = Field(..., min_length=1)
-    status: Literal["streaming", "succeeded", "failed", "cancelled"]
+    status: Literal["streaming", "succeeded", "failed", "cancelled", "unknown"]

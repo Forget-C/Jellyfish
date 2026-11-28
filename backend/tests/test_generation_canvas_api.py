@@ -19,14 +19,14 @@ def canvas_file_store():
 
 
 @pytest_asyncio.fixture
-async def canvas_client(request, monkeypatch, canvas_file_store):
+async def canvas_client(request, monkeypatch, canvas_file_store, tmp_path):
     from app.api.v1.routes.studio.generation_canvases import router
     mysql = getattr(request, 'param', None) == 'mysql'
     if mysql:
         from tests.services.test_task_mysql import isolated_database_url
         url = isolated_database_url()
     else:
-        url = 'sqlite+aiosqlite:///:memory:'
+        url = f'sqlite+aiosqlite:///{tmp_path / "canvas.db"}'
     engine = create_async_engine(url, isolation_level='READ COMMITTED' if mysql else None)
     if not mysql:
         async with engine.begin() as connection:
@@ -40,7 +40,9 @@ async def canvas_client(request, monkeypatch, canvas_file_store):
         bootstrap_all_registries()
         db.add(Provider(id='canvas-provider', provider_key='openai', name='openai', base_url='https://example.test'))
         await db.flush()
-        db.add_all([Model(id=f'canvas-{kind}', name=f'canvas-{kind}', category=kind, provider_id='canvas-provider')
+        profiles = {'text': {'tool_calling': False}, 'image': {'image_modes': {'edit': {'supported': True}}}}
+        db.add_all([Model(id=f'canvas-{kind}', name=f'canvas-{kind}', category=kind, provider_id='canvas-provider',
+                          capability_profile=profiles.get(kind))
                     for kind in ('text', 'image', 'video')])
         await db.commit()
     async with sessions() as db:
@@ -54,14 +56,19 @@ async def canvas_client(request, monkeypatch, canvas_file_store):
             except Exception:
                 await db.rollback()
                 raise
-    real_app = getattr(request, 'param', None) == 'app-handler'
+    real_app = getattr(request, 'param', None) in ('app-handler', 'app-handler-file')
     if real_app:
         from app.main import app
     else:
         app = FastAPI()
         from app.api.v1.routes.studio.chapters import router as chapters_router
         from app.api.v1.routes.studio.directing import router as directing_router
+        from app.api.v1.routes.studio.chat_sessions import router as chat_sessions_router
+        from app.api.v1.routes.studio.session_transport import router as session_transport_router
+        from tests.chat_events import CHAT_SESSIONS
         app.include_router(router, prefix='/canvases')
+        app.include_router(chat_sessions_router, prefix=CHAT_SESSIONS)
+        app.include_router(session_transport_router, prefix=CHAT_SESSIONS)
         from app.api.v1.routes.studio.projects import router as projects_router
         app.include_router(projects_router, prefix='/projects')
         app.include_router(chapters_router, prefix='/chapters')
@@ -318,6 +325,37 @@ async def test_new_incompatible_connection_rejected_but_model_switch_keeps_exist
     response = await client.put(url, json={'request_id': 'switch', 'expected_revision': 1, 'document': doc})
     assert response.status_code == 200
     assert (await client.get(url)).json()['data']['document']['edges'] == doc['edges']
+
+
+@pytest.mark.asyncio
+async def test_canvas_uses_registered_image_output_limit(canvas_client):
+    from app.dependencies import get_db
+    from app.models.llm import Model, Provider
+    async for db in canvas_client._transport.app.dependency_overrides[get_db]():
+        model = await db.get(Model, 'canvas-image')
+        (await db.get(Provider, model.provider_id)).api_key = "fixture"
+        model.capability_profile = {'image_modes': {'text_to_image': {'max_outputs': 1}}}
+        await db.commit()
+    canvas = (await seed_scene_canvas(canvas_client, '/canvases/p', json={})).json()['data']
+    url = canvas_url(f"/canvases/p/{canvas['id']}") + '/models/canvas-image/capability'
+    assert (await canvas_client.get(url)).json()['data']['max_count'] == 1
+    from fastapi import HTTPException
+    from app.core.contracts.generation import GenerationCommand
+    from app.models.experiment_sessions import ExperimentSession
+    from app.services.generation.gate import GenerationEntityGate
+    from app.services.generation.submission import GenerationSubmitter
+    async for db in canvas_client._transport.app.dependency_overrides[get_db]():
+        db.add(ExperimentSession(id="count-check", lab_type="image"))
+        await db.flush()
+        command = GenerationCommand.model_validate({
+            "modality": "image", "operation": "image_generation", "delivery": "async_polling",
+            "target": {"kind": "experiment_session", "entity_id": "count-check"},
+            "request": {"model_id": "canvas-image", "execution_prompt": "test",
+                        "operation_input": {"kind": "image_generation", "count": 2}},
+        })
+        with pytest.raises(HTTPException, match="count exceeds"):
+            await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(db, command)
+
 
 
 @pytest.mark.asyncio
@@ -854,3 +892,47 @@ async def test_scene_source_change_warns_without_altering_saved_canvas(canvas_cl
     assert reopened['source_changed']
     assert reopened['document'] == canvas['document']
     assert reopened['revision'] == canvas['revision']
+
+
+@pytest.mark.asyncio
+async def test_canvas_event_connection_checks_scope_before_starting_stream(canvas_client):
+    free = (await canvas_client.post('/canvases', json={'name': '自由画布'})).json()['data']
+    scene = (await seed_scene_canvas(canvas_client, '/canvases/p', json={'name': '分镜画布'})).json()['data']
+    for canvas, project_id in ((free, ''), (scene, 'p')):
+        path = f'/canvases/{canvas["id"]}/events'
+        response = await canvas_client.get(path + '/connection', params={'project_id': project_id})
+        assert response.status_code == 200
+        expected_suffix = f'?project_id={project_id}' if project_id else ''
+        assert response.json()['data']['url'].endswith(f'/{canvas["id"]}/events{expected_suffix}')
+    for canvas_id, project_id in ((free['id'], 'p'), (scene['id'], ''), (scene['id'], 'other'), ('missing', 'p')):
+        path = f'/canvases/{canvas_id}/events'
+        for suffix in ('/connection', ''):
+            response = await asyncio.wait_for(
+                canvas_client.get(path + suffix, params={'project_id': project_id}), timeout=2,
+            )
+            assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('storage_code', ['NoSuchKey', 'AccessDenied'])
+async def test_canvas_media_download_distinguishes_missing_object_from_storage_error(canvas_client, monkeypatch, storage_code):
+    from botocore.exceptions import ClientError
+    from app.core import storage
+
+    uploaded = await canvas_client.post('/files/upload', files={'file': ('asset.png', b'image-bytes', 'image/png')})
+    assert uploaded.status_code == 201
+    file_id = uploaded.json()['data']['id']
+    path = f'/files/{file_id}/download'
+
+    async def fail_download(**kwargs):
+        raise ClientError({'Error': {'Code': storage_code}}, 'GetObject')
+
+    monkeypatch.setattr(storage, 'download_file', fail_download)
+    if storage_code == 'AccessDenied':
+        with pytest.raises(ClientError, match='AccessDenied'):
+            await canvas_client.get(path)
+    else:
+        denied = await canvas_client.get(path)
+        assert denied.status_code == 404
+        assert denied.json()['detail'] == 'File content not found'
+    assert (await canvas_client.get(f'/files/{file_id}')).status_code == 200

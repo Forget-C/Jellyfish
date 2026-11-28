@@ -1,3 +1,4 @@
+import { textTrialFrame, turnReceipt, mediaTurnReceipt, mediaAdmissionStream, boundTrialSnapshot, textTrialSnapshot } from './text-trial-events.mjs'
 import { openLabAddition } from './lab-composer-actions.mjs'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -16,11 +17,15 @@ const sessions = Object.entries(labels).map(([mode, label]) => ({
   id: mode + '-session', lab_type: mode, title: label + '恢复会话', created_at: timestamp, updated_at: timestamp,
 }))
 const writes = []
+const requestHeaders = []
 let submission
 const histories = new Map()
+const receiptReads = []
+const receipts = new Map()
 let historyReads = 0
 let failHistory = false
 let modelsState = 'ready'
+sessions.push({ id: 'text-other', lab_type: 'text', title: '另一条文本会话', created_at: timestamp, updated_at: timestamp })
 sessions.push({ id: 'image-other', lab_type: 'image', title: '另一张图片会话', created_at: timestamp, updated_at: timestamp })
 const historyMessage = (session_id, id, role, content, sequence, more = {}) => ({
   id, session_id, role, content, sequence, created_at: timestamp, updated_at: timestamp, ...more,
@@ -29,6 +34,17 @@ const server = await createServer({ root, cacheDir: join(output, 'vite'), server
 let browser
 let page
 const cleanup = browserCleanup(() => ({ browser, server }))
+
+let textEvents
+let textWritesBaseline = 0
+let textCursor = 0
+let holdTextSnapshot
+let textSendsAfterClear = false
+let textSnapshotUnavailable = false
+const newTextEventCursors = []
+const newTextSession = {
+  id: 'text-new', lab_type: 'text', title: '新文本会话', created_at: timestamp, updated_at: timestamp,
+}
 
 try {
   await server.listen()
@@ -39,8 +55,16 @@ try {
   await page.route('**/api/**', async route => {
     const request = route.request()
     const url = new URL(request.url())
+    const admission = mediaAdmissionStream(route, url)
+    if (admission) return admission
     const respond = data => route.fulfill({ json: { success: true, data } })
-    if (url.pathname.endsWith('/experiment-sessions')) return respond(sessions.filter(item => item.lab_type === url.searchParams.get('lab_type')))
+    if (url.pathname.endsWith('/experiment-sessions')) {
+      if (request.method() === 'POST') {
+        sessions.push(newTextSession)
+        return respond(newTextSession)
+      }
+      return respond(sessions.filter(item => item.lab_type === url.searchParams.get('lab_type')))
+    }
     if (url.pathname.endsWith('/models')) {
       const category = url.searchParams.get('category')
       if (modelsState === 'failed') return route.fulfill({ status: 503, json: { detail: '模型暂不可用' } })
@@ -57,14 +81,69 @@ try {
       variables: ['主体'], variable_defaults: { 主体: '雪松' }, category: 'video_prompt',
       created_at: timestamp, updated_at: timestamp,
     }] : [] })
-    if (/\/labs\/(text|image|video)\/sessions\/[^/]+\/(stream|tasks)$/.test(url.pathname)) {
+    if (url.pathname.endsWith('/chat/sessions/text/text-session/turns')) {
       writes.push(request.postDataJSON())
+      requestHeaders.push(request.headers())
+      const turnId = textSendsAfterClear ? 'after-clear' : writes.at(-1).content.includes('断开') ? 'disconnect-run' : 'text-run'
+      return respond(turnReceipt(route, turnId))
+    }
+    if (url.pathname.endsWith('/text-session/events')) {
+      if (writes.length > textWritesBaseline && textEvents) return textEvents(route)
+      return route.fulfill({contentType: 'text/event-stream', body: ''})
+    }
+    if (url.pathname.endsWith('/chat/sessions/text/text-other/snapshot')) return textTrialSnapshot(route, [])
+    if (url.pathname.endsWith('/experiment-sessions/text-session/messages') && request.method() === 'DELETE') {
+      histories.set('text-session', [])
+      textCursor = 0
+      textEvents = undefined
+      textWritesBaseline = writes.length
+      return respond(null)
+    }
+    if (url.pathname.endsWith('/chat/sessions/text/text-session/snapshot')) {
+      if (holdTextSnapshot) return holdTextSnapshot(route)
+      if (textSnapshotUnavailable) return route.fulfill({status: 503, json: {detail: '历史暂不可用'}})
+      historyReads += 1
+      return textTrialSnapshot(route, histories.get('text-session') ?? [], textCursor)
+    }
+    if (url.pathname.endsWith('/text/text-new/snapshot')) {
+      return route.fulfill({status: 503, json: {detail: '新文本会话历史暂不可用'}})
+    }
+    if (url.pathname.endsWith('/text/text-new/turns')) {
+      writes.push(request.postDataJSON())
+      return route.fulfill({status: 202, json: {data: {...turnReceipt(route, 'first-turn'), cursor: 8}}})
+    }
+    if (url.pathname.endsWith('/text/text-new/events')) {
+      newTextEventCursors.push(url.searchParams.get('after'))
+      if (newTextEventCursors.length > 1) {
+        return route.fulfill({contentType: 'text/event-stream', body: ''})
+      }
+      const user = historyMessage('text-new', 'first-user', 'user', '从回执续读', 1)
+      const answer = historyMessage('text-new', 'first-answer', 'assistant', '首次快照失败后仍收到回复', 2, {
+        status: 'succeeded', payload: {interaction_run_id: 'first-turn'},
+      })
+      return route.fulfill({contentType: 'text/event-stream', body:
+        textTrialFrame('text-new', 'first-turn', 9, 'turn.accepted', {user_message: user}) +
+        textTrialFrame('text-new', 'first-turn', 10, 'turn.completed', {assistant_message: answer}),
+      })
+    }
+    if (/\/chat\/sessions\/(image|video)\/[^/]+\/turns$/.test(url.pathname)) {
+      writes.push(request.postDataJSON())
+      requestHeaders.push(request.headers())
       return submission(route)
     }
-    if (url.pathname.endsWith('/messages')) {
+    const receiptPath = url.pathname.match(/\/chat\/sessions\/(image|video)\/([^/]+)\/requests\/([^/]+)$/)
+    if (receiptPath) {
+      const [, kind, sessionId, requestId] = receiptPath
+      receiptReads.push({ kind, sessionId, requestId })
+      const receipt = receipts.get(requestId)
+      if (typeof receipt === 'function') return receipt(route, respond)
+      if (receipt?.session_id === sessionId) return respond(receipt)
+      return route.fulfill({ status: 404, json: { detail: '未查到请求' } })
+    }
+    if (/\/chat\/sessions\/(image|video)\/[^/]+\/snapshot$/.test(url.pathname)) {
       historyReads += 1
       if (failHistory) return route.fulfill({ status: 503, json: { detail: '历史暂不可用' } })
-      return respond(histories.get(url.pathname.split('/').at(-2)) ?? [])
+      return respond(boundTrialSnapshot(url, histories.get(url.pathname.split('/').at(-2)) ?? []))
     }
     if (url.pathname.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
     return respond([])
@@ -73,7 +152,7 @@ try {
   async function openLab(mode) {
     await page.goto(origin + '/lab?session=' + mode + '-session')
     await page.getByRole('heading', { name: '实验室 · ' + labels[mode] + ' · ' + labels[mode] + '恢复会话' }).waitFor()
-    await page.getByRole('button', { name: '选择模型' }).click()
+    await page.locator('.experiment-model-trigger').click()
     await page.getByRole('button', { name: labels[mode] + '恢复模型' }).waitFor()
     await page.keyboard.press('Escape')
   }
@@ -129,7 +208,7 @@ try {
       historyMessage(imageSession, 'new-user', 'user', prompt, 3),
       historyMessage(imageSession, 'new-task', 'task', '本轮图片结果', 4, { task_id: 'known-image-task', status: 'succeeded' }),
     ])
-    return route.fulfill({ json: { success: true, data: { task_id: 'known-image-task' } } })
+    return route.fulfill({ json: { success: true, data: mediaTurnReceipt(route, { task_id: 'known-image-task' }) } })
   }
   await imageSubmit.click()
   await page.getByText('本轮图片结果', { exact: true }).waitFor()
@@ -150,16 +229,19 @@ try {
   const textInput = page.getByRole('textbox', { name: '文本提示词' })
   const textSubmit = page.getByRole('button', { name: /^发\s*送$/ })
   const textPrompt = '\n原样保留这轮文本\n'
-  const frame = (event, sequence, data) => `id: ${sequence}\nevent: ${event}\ndata: ${JSON.stringify({ version: 1, event, sequence, created_at: timestamp, data })}\n\n`
+  const frame = (event, cursor, data) => textTrialFrame('text-session', data.task_id, cursor,
+    { accepted: 'turn.accepted', delta: 'message.updated', error: 'turn.failed' }[event], data)
   let textEntered
   const textRequest = new Promise(resolve => { textEntered = resolve })
   let releaseText
   const textGate = new Promise(resolve => { releaseText = resolve })
-  submission = async route => {
+  textWritesBaseline = writes.length
+  textEvents = async route => {
     textEntered()
     await textGate
     const user = historyMessage('text-session', 'text-user', 'user', textPrompt.trim(), 1)
     histories.set('text-session', [user])
+    textCursor = 2
     return route.fulfill({ contentType: 'text/event-stream', body:
       frame('accepted', 1, { task_id: 'text-run', user_message: user }) +
       frame('error', 2, { task_id: 'text-run', error: { code: 'provider_failure', message: '生成过程失败', retryable: true } }),
@@ -180,7 +262,7 @@ try {
   await page.goto(origin + '/lab?session=image-session')
   await page.getByRole('heading', { name: '实验室 · 图片 · 图片恢复会话' }).waitFor()
   modelsState = 'failed'
-  await page.getByRole('button', { name: '选择模型' }).click()
+  await page.locator('.experiment-model-trigger').click()
   await page.getByText('加载模型失败', { exact: true }).waitFor()
   assert.equal(await page.getByText('暂无可选模型', { exact: true }).count(), 0)
   modelsState = 'empty'
@@ -229,25 +311,31 @@ try {
   const lateRequest = new Promise(resolve => { lateEntered = resolve })
   let releaseLate
   const lateGate = new Promise(resolve => { releaseLate = resolve })
-  submission = async route => {
-    lateEntered()
-    await lateGate
-    return route.fulfill({ json: { success: true, data: { task_id: 'late-task', messages: [
-      historyMessage(imageSession, 'late-msg', 'task', '迟到的旧会话结果', 5, { task_id: 'late-task', status: 'succeeded' }),
-    ] } } })
+  submission = route => {
+    const original = mediaTurnReceipt(route, { task_id: 'late-task', status: 'succeeded' })
+    receipts.set(original.turn_id, async (_query, respond) => {
+      lateEntered()
+      await lateGate
+      return respond(original)
+    })
+    return route.abort('failed')
   }
-  await imageSubmit.dblclick()
+  await Promise.all([
+    page.waitForRequest(request => request.url().includes('/image-session/requests/')),
+    imageSubmit.dblclick(),
+  ])
   await lateRequest
   assert.equal(writes.length, 7, '双击只提交一次')
   assert.deepEqual(writes.at(-1).media.references.map(item => item.file_id), ['reference-a'])
+  const cancelledReceipt = page.waitForEvent('requestfailed', {
+    predicate: request => request.url().includes('/image-session/requests/'),
+  })
   await page.getByRole('button', { name: '另一张图片会话', exact: true }).click()
   await page.getByRole('button', { name: '放弃未发送内容并离开', exact: true }).click()
   await page.waitForURL(url => url.searchParams.get('session') === 'image-other')
   await imageInput.fill('新会话继续写作')
-  await Promise.all([
-    page.waitForResponse(response => response.url().endsWith('/image-session/tasks')),
-    releaseLate(),
-  ])
+  assert.match((await cancelledReceipt).failure()?.errorText ?? '', /ABORTED/i)
+  releaseLate()
   assert.equal(await imageInput.inputValue(), '新会话继续写作')
   assert.equal(await page.getByText('迟到的旧会话结果', { exact: true }).count(), 0)
 
@@ -277,9 +365,9 @@ try {
   assert.equal(await template.getByRole('textbox', { name: '主体', exact: true }).inputValue(), '海鸥')
   await page.keyboard.press('Escape')
   await template.waitFor({ state: 'hidden' })
-  submission = route => route.fulfill({ json: { success: true, data: { task_id: 'video-ok', messages: [
+  submission = route => route.fulfill({ json: { success: true, data: mediaTurnReceipt(route, { task_id: 'video-ok', messages: [
     historyMessage('video-session', 'video-ok', 'task', '视频任务已接收', 1, { task_id: 'video-ok', status: 'succeeded' }),
-  ] } } })
+  ] }) } })
   await videoSubmit.click()
   await page.getByText('视频任务已接收', { exact: true }).waitFor()
   assert.equal(writes.at(-1).execution_prompt, '保留 海鸥')
@@ -287,16 +375,49 @@ try {
   assert.deepEqual(writes.at(-1), writes.at(-2))
   await page.screenshot({ path: join(output, 'configured-retry.png'), animations: 'disabled' })
 
+  for (const mode of ['image', 'video']) {
+    await openLab(mode)
+    const activeInput = mode === 'image' ? imageInput : videoInput
+    const activeSubmit = mode === 'image' ? imageSubmit : videoSubmit
+    const sessionId = mode + '-session'
+    const recovered = labels[mode] + '原任务已恢复'
+    const previousWrites = writes.length
+    const previousReads = receiptReads.length
+    await activeInput.fill(labels[mode] + '发送回执丢失')
+    submission = route => {
+      const task = historyMessage(sessionId, mode + '-recovered', 'task', recovered, 10, {
+        task_id: mode + '-recovered', status: 'succeeded',
+      })
+      const original = mediaTurnReceipt(route, { task_id: task.task_id, messages: [task] })
+      receipts.set(original.turn_id, original)
+      histories.set(sessionId, [task])
+      return route.abort('failed')
+    }
+    await activeSubmit.click()
+    await page.getByText(recovered, { exact: true }).waitFor()
+    await page.getByText(labels[mode] + '生成任务已创建', { exact: true }).waitFor()
+    assert.equal(await activeInput.inputValue(), '')
+    assert.equal(writes.length, previousWrites + 1)
+    assert.deepEqual(receiptReads.slice(previousReads), [{
+      kind: mode, sessionId, requestId: requestHeaders.at(-1)['idempotency-key'],
+    }])
+  }
+
   await openLab('text')
   await textInput.fill('已接收但流意外断开')
   const disconnectUser = historyMessage('text-session', 'disconnect-user', 'user', '已接收但流意外断开', 3)
   const writesBeforeDisconnect = writes.length
   const readsBeforeDisconnect = historyReads
-  submission = route => {
+  textWritesBaseline = writes.length
+  textEvents = route => {
+    if (Number(new URL(route.request().url()).searchParams.get('after')) >= 4) {
+      return route.fulfill({ contentType: 'text/event-stream', body: '' })
+    }
     histories.set('text-session', [...(histories.get('text-session') ?? []), disconnectUser])
+    textCursor = 4
     return route.fulfill({ contentType: 'text/event-stream', body:
-      frame('accepted', 1, { task_id: 'disconnect-run', user_message: disconnectUser }) +
-      frame('delta', 2, { task_id: 'disconnect-run', text_delta: '断流前收到的部分回复' }),
+      frame('accepted', 3, { task_id: 'disconnect-run', user_message: disconnectUser }) +
+      frame('delta', 4, { task_id: 'disconnect-run', text_delta: '断流前收到的部分回复' }),
     })
   }
   await textSubmit.click()
@@ -304,11 +425,138 @@ try {
   await page.getByText('断流前收到的部分回复', { exact: true }).waitFor()
   await page.getByText('已接收但流意外断开', { exact: true }).waitFor()
   assert.equal(await page.getByText('提交结果未知', { exact: true }).count(), 0)
-  assert.equal(await textSubmit.isDisabled(), true)
+  assert.equal(await textSubmit.count(), 0, '当前轮次终态待核实时不提供新的发送动作')
+  assert.equal(await page.getByRole('button', {name: /^停\s*止$/}).isEnabled(), true)
   await page.getByRole('button', { name: '重试读取历史', exact: true }).click()
   await page.getByText('状态暂不可用', { exact: true }).waitFor()
   assert.ok(historyReads >= readsBeforeDisconnect + 2)
   assert.equal(writes.length, writesBeforeDisconnect + 1)
+  assert.ok(requestHeaders.at(-1)['idempotency-key'])
+
+  // The event stream remains unavailable when the durable terminal snapshot arrives.
+  const terminal = historyMessage('text-session', 'disconnect-answer', 'assistant', '快照确认的终态', 4, {
+    status: 'succeeded', payload: { interaction_run_id: 'disconnect-run' },
+  })
+  histories.set('text-session', [...histories.get('text-session'), terminal])
+  textCursor = 5
+  await page.getByRole('button', { name: '重试读取历史', exact: true }).click()
+  await page.getByText('快照确认的终态', { exact: true }).waitFor()
+  await textSubmit.waitFor()
+  assert.equal(await textSubmit.isEnabled(), true, '快照已确认原轮次结束，应释放发送')
+
+  await page.getByRole('button', { name: '更多会话操作', exact: true }).click()
+  await page.getByRole('menuitem', { name: '清空会话内容', exact: true }).click()
+  const clear = page.getByRole('dialog', { name: '清空会话内容', exact: true })
+  const afterClearSnapshot = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/text-session/snapshot'))
+  await clear.getByRole('button', { name: '清空会话内容', exact: true }).click()
+  await afterClearSnapshot
+  await clear.waitFor({state: 'hidden'})
+  await page.getByText('快照确认的终态', { exact: true }).waitFor({state: 'hidden'})
+  await textInput.fill('清空后继续发送')
+  textSendsAfterClear = true
+  textWritesBaseline = writes.length
+  textEvents = route => {
+    const after = Number(new URL(route.request().url()).searchParams.get('after'))
+    if (after >= 2) return route.fulfill({contentType: 'text/event-stream', body: ''})
+    const user = historyMessage('text-session', 'clear-user', 'user', '清空后继续发送', 1)
+    const answer = historyMessage('text-session', 'clear-answer', 'assistant', '清空后的新轮次已完成', 2, {
+      status: 'succeeded', payload: { interaction_run_id: 'after-clear' },
+    })
+    histories.set('text-session', [user, answer])
+    textCursor = 2
+    return route.fulfill({contentType: 'text/event-stream', body:
+      textTrialFrame('text-session', 'after-clear', 1, 'turn.accepted', {user_message: user}) +
+      textTrialFrame('text-session', 'after-clear', 2, 'turn.completed', {assistant_message: answer}),
+    })
+  }
+  await textSubmit.click()
+  await page.getByText('清空后的新轮次已完成', {exact: true}).waitFor()
+  await textSubmit.waitFor()
+  assert.equal(writes.length, textWritesBaseline + 1)
+
+  // A still-open first-page fetch must abort when switching sessions.
+  let held
+  const requestedSnapshot = new Promise(resolve => { held = resolve })
+  let releaseSnapshot
+  const snapshotGate = new Promise(resolve => { releaseSnapshot = resolve })
+  holdTextSnapshot = async route => {
+    held()
+    await snapshotGate
+    return textTrialSnapshot(route, [terminal], 5)
+  }
+  await page.reload()
+  await requestedSnapshot
+  const aborted = page.waitForEvent('requestfailed', {predicate: request => new URL(request.url()).pathname.endsWith('/text-session/snapshot')})
+  await page.getByRole('button', { name: '另一条文本会话', exact: true }).click()
+  await aborted
+  releaseSnapshot()
+  await page.waitForURL(url => url.searchParams.get('session') === 'text-other')
+  assert.equal(await page.getByText('快照确认的终态', {exact: true}).count(), 0)
+
+  // An existing text session cannot submit until it has an initial checkpoint.
+  holdTextSnapshot = undefined
+  textSnapshotUnavailable = true
+  await openLab('text')
+  const retryHistory = page.getByRole('button', {name: '重试读取消息'})
+  await retryHistory.waitFor()
+  await textInput.fill('检查点未就绪')
+  const beforeCheckpoint = writes.length
+  assert.equal(await textSubmit.isDisabled(), true)
+  await textInput.press('Enter')
+  assert.equal(writes.length, beforeCheckpoint)
+  textSnapshotUnavailable = false
+  await retryHistory.click()
+  await page.waitForFunction(button => !button.disabled, await textSubmit.elementHandle())
+
+  // A first submission can already be committed when its new session snapshot fails.
+  await page.goto(origin + '/lab?mode=text')
+  await page.locator('.experiment-model-trigger').click()
+  await page.getByRole('button', {name: '文本恢复模型', exact: true}).click()
+  await textInput.fill('从回执续读')
+  const newSessionSnapshots = []
+  const trackSnapshot = response => {
+    if (new URL(response.url()).pathname.endsWith('/text/text-new/snapshot')) newSessionSnapshots.push(response.status())
+  }
+  page.on('response', trackSnapshot)
+  const newTextReply = page.getByText('首次快照失败后仍收到回复', {exact: true})
+  await Promise.all([
+    page.waitForResponse(response => {
+      const url = new URL(response.url())
+      return url.pathname.endsWith('/text/text-new/events') && url.searchParams.get('after') === '10'
+    }),
+    newTextReply.waitFor(),
+    textSubmit.click(),
+  ])
+  page.off('response', trackSnapshot)
+  assert.ok(newSessionSnapshots.includes(503))
+  assert.deepEqual(newTextEventCursors.slice(0, 2), ['8', '10'])
+  assert.equal(await newTextReply.count(), 1)
+  assert.equal(writes.length, beforeCheckpoint + 1)
+
+  await openLab('video')
+  await videoInput.fill('离开时取消受理查询')
+  let holdReceipt
+  const pendingReceipt = new Promise(resolve => { holdReceipt = resolve })
+  let finishReceipt
+  const receiptGate = new Promise(resolve => { finishReceipt = resolve })
+  submission = route => {
+    const original = mediaTurnReceipt(route, {task_id: 'departed-video-task', status: 'succeeded'})
+    receipts.set(original.turn_id, async (_query, respond) => {
+      holdReceipt()
+      await receiptGate
+      return respond(original)
+    })
+    return route.abort('failed')
+  }
+  await videoSubmit.click()
+  await pendingReceipt
+  const abortedOnLeave = page.waitForEvent('requestfailed', {
+    predicate: request => request.url().includes('/video-session/requests/'),
+  })
+  await page.getByRole('link', {name: '首页', exact: true}).click()
+  await page.getByRole('button', {name: '放弃未发送内容并离开', exact: true}).click()
+  assert.match((await abortedOnLeave).failure()?.errorText ?? '', /ABORTED/i)
+  finishReceipt()
 
   console.log('Lab submission recovery browser checks passed', output)
 } catch (error) {

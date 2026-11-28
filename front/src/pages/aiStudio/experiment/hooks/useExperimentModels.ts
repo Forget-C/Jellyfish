@@ -18,11 +18,15 @@ export function useExperimentModels(category: 'text' | 'image' | 'video', onOnly
     setModelsLoading(true)
     setModelsFailed(false)
     try {
-      const { data } = await LlmService.listModelsApiV1LlmModelsGet({
-        category, page: 1, pageSize: 100, order: 'updated_at', isDesc: true,
-      })
-      const items = data?.items
-      if (!Array.isArray(items)) throw new Error(uiText("未返回模型列表"))
+      const items: ModelRead[] = []
+      for (let page = 1; ; page++) {
+        const {data} = await LlmService.listModelsApiV1LlmModelsGet({
+          category, page, pageSize: 100, order: 'updated_at', isDesc: true,
+        })
+        if (!data || !Array.isArray(data.items)) throw new Error(uiText("未返回模型列表"))
+        items.push(...data.items)
+        if (page >= (data.pagination?.max_page ?? 1)) break
+      }
       setModels(items)
       if (items.length === 1) applyOnlyModel.current(items[0].id)
     } catch {

@@ -97,6 +97,21 @@ async def test_apply_review_rolls_back_failed_confirmation_and_rejects_wrong_sco
 
 
 @pytest.mark.asyncio
+async def test_declared_frame_limit_blocks_preparation_and_shoot(tmp_path):
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            service, seq, plan, prompt, review = await prepare(db)
+            (await db.get(Model, 'model1')).capability_profile = {'video_modes': {'first_frame': {'max_references': 0}}}
+            capability = await service.reference_capabilities('model1')
+            assert capability.frame_roles == [] and capability.max_frames == 0
+            with pytest.raises(ValueError, match="不支持所选帧位置"):
+                await service.validate_unit(seq, plan, "u1")
+            with pytest.raises(ValueError, match="不支持所选帧位置"):
+                await service.shoot(seq, prompt_id=prompt, review_id=review, request_id="blocked")
+            assert await db.scalar(select(func.count()).select_from(Task)) == 0
+
+
+@pytest.mark.asyncio
 async def test_frozen_submission_and_candidate_delivery(tmp_path):
     """提交完全固定的文本和媒体；重复请求/终态不重复 Take、不自动剪辑。"""
     async with database(tmp_path) as sessions:
@@ -316,6 +331,14 @@ async def test_grouped_references_reach_provider_and_keep_history(tmp_path, monk
             legacy_plan = await frozen(service, sequence, "plan", legacy)
             _, _, legacy_media = await service.validate_unit(sequence, legacy_plan.id, "u1")
             assert [subject.name for subject in legacy_media.subjects] == ["r1", "r2"]
+            model = await db.get(Model, 'model1')
+            model.capability_profile = {'video_modes': {'subject_reference': {'max_references': 1}}}
+            with pytest.raises(ValueError, match="reference count"):
+                await service.validate_unit(sequence, plan.id, "u1")
+            model.capability_profile = {'video_modes': {'subject_reference': {'reference_kinds': ['video']}}}
+            assert not (await service.reference_capabilities('model1')).subject_images
+            with pytest.raises(ValueError, match="主体图片"):
+                await service.validate_unit(sequence, plan.id, "u1")
             files = {key: await db.get(FileItem, key) for key in ("image1", "image2")}
             snapshot = ResolvedGenerationSnapshot.model_validate({
                 "canonical_target": {"kind": "directing_unit", "entity_id": prompt.id},

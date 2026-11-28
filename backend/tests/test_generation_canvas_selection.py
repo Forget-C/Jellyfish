@@ -101,7 +101,7 @@ async def test_mysql_single_scope_conflict_shared_reads_parallel_and_cancel_hold
                 started.set()
             await release.wait()
             yield SimpleNamespace(content=' final')
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     worker = TaskWorker(runtime.sessions)
     await worker.tick()
     try:

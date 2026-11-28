@@ -25,8 +25,8 @@ import { resultScopeIncludes } from './resultConnections'
 import { referenceLabels } from './referenceLabels'
 import { WorkbenchButton, WorkbenchIconButton } from '../../../components/workbench/WorkbenchButton'
 import { activeNode, canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
-import { PromptEditingContext } from './PromptEditingContext'
-import { useContext, useEffect, useId, useRef, useState } from 'react'
+import { PromptDraftContext, PromptEditingContext } from './PromptEditingContext'
+import { useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CardComposer } from './CardComposer'
 import { availableDefaultModel, defaultVideoRatio } from './modelCardDefaults'
@@ -51,6 +51,12 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const editingKey = card.id + ':' + promptSession
   const editingPrompt = !!promptDraft
   const reportEditing = useContext(PromptEditingContext)
+  const reportDraft = useContext(PromptDraftContext)
+  useLayoutEffect(() => {
+    if (!promptDraft) return
+    reportDraft(editingKey, () => withEditorPrompt(card, promptEditor.current?.readVisible() ?? promptDraft))
+    return () => reportDraft(editingKey)
+  }, [card, editingKey, promptDraft, reportDraft])
   useEffect(() => {
     reportEditing(editingKey, editingPrompt)
     return () => reportEditing(editingKey, false)
@@ -86,8 +92,15 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     if (card.type === 'model.video' && !(card as VideoModelCard).config?.ratio && ratio) onChange({ ...card, config: { ...card.config, ratio } })
   }, [capability, card, defaultModelId, disabled, models, onChange, suppressAutomaticDefaults])
   let parameters: ReactNode = null
-  if (card.type === 'model.image') parameters = <ImageModelParameters card={card as ImageModelCard} capability={capability} disabled={disabled} onChange={onChange} />
-  if (card.type === 'model.video') parameters = <VideoModelParameters card={card as VideoModelCard} capability={capability} disabled={disabled} onChange={onChange} />
+  if (card.type === 'model.image') parameters = <ImageModelParameters hasReference={!!resolved.compiled?.media?.length} card={card as ImageModelCard} capability={capability} disabled={disabled} onChange={onChange} />
+  if (card.type === 'model.video') {
+    const media = resolved.compiled?.video_media
+    const mode = media?.subjects?.length ? 'subject_reference' : media?.frames?.keys?.length ? 'key_frames'
+      : media?.frames?.first && media.frames.last ? 'first_last_frames'
+        : media?.frames?.first || media?.frames?.last ? 'first_frame' : 'text_to_video'
+    parameters = <VideoModelParameters card={card as VideoModelCard} capability={capability} mode={mode}
+      disabled={disabled} onChange={onChange} />
+  }
   const hasSavedSoundDesign = !resolved.loading && resolved.compiled?.used?.some(item =>
     item.available !== false && !!item.text && item.payload && 'design_type' in item.payload &&
     ['direction.dialogue', 'direction.sound'].includes(item.payload.design_type))

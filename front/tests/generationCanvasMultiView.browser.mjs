@@ -53,7 +53,7 @@ try {
   await page.screenshot({ path: join(output, 'multi-view-desktop.png'), fullPage: true })
   await page.reload()
   await open('side')
-  assert.equal(await card.locator('.generation-reference-name .ant-select-selection-item').innerText(), '小李侧面')
+  assert.equal(await card.locator('.generation-reference-name .ant-select-content-value').innerText(), '小李侧面')
   const outputs = (await (await fetch(`${base}/${canvas.id}/cards/side/outputs`)).json()).data.outputs
   assert.deepEqual(outputs.map(item => item.payload.object_id), ['bob-side'])
   await page.setViewportSize({ width: 390, height: 844 })

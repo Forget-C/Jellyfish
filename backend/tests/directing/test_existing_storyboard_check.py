@@ -51,7 +51,7 @@ async def test_saved_check_recovers_and_applies_an_exact_correction(tmp_path, mo
                 result = source
             return SimpleNamespace(content=json.dumps(result, ensure_ascii=False))
 
-    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    monkeypatch.setattr('app.task_worker.build_langchain_chat', ControlledModel)
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             (await db.get(Chapter, 'ch1')).raw_text = original

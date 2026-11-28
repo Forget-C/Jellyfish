@@ -1,9 +1,13 @@
 """任务通用查询契约；业务输入与调试信息不进入任务中心列表。"""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.core.contracts.task import TaskStatus
 from app.core.contracts.generation_delivery import GenerationDeliveryResult
+
+RemoteCancellationStatus = Literal["requested", "unsupported", "accepted", "confirmed", "rejected", "unconfirmed"]
 
 
 class TaskStatusRead(BaseModel):
@@ -14,6 +18,7 @@ class TaskStatusRead(BaseModel):
     stage: str
     progress: int | None = Field(None, ge=0, le=100)
     cancel_requested: bool = False
+    remote_cancellation: RemoteCancellationStatus | None = None
     cancel_requested_at_ts: float | None = None
     started_at_ts: float | None = None
     finished_at_ts: float | None = None
@@ -89,6 +94,7 @@ class TaskCancelRead(BaseModel):
     task_id: str
     status: TaskStatus
     cancel_requested: bool
+    remote_cancellation: RemoteCancellationStatus | None = None
     cancel_requested_at_ts: float | None = None
     effective_immediately: bool = False
 

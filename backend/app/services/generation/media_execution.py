@@ -18,9 +18,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import storage
 from app.core.contracts.generation import FrozenGenerationConfig, GenerationTargetKind, ResolvedGenerationSnapshot
 from app.core.contracts.media import ImageMediaInput, VideoMediaInput
+from app.core.contracts.model_capabilities import ModelCapabilityProfile
 from app.core.contracts.provider import ProviderConfig, ProviderKey
-from app.core.contracts.provider_media import ProviderImageInput, ProviderImageReference, ProviderVideoFrames, ProviderVideoInput, ProviderVideoSubject
-from app.core.integrations.media_provider import MediaResult, ProviderDataError
+from app.core.contracts.provider_media import MediaResult, ProviderImageInput, ProviderImageReference, ProviderVideoFrames, ProviderVideoInput, ProviderVideoSubject
+from app.core.integrations.media_provider import ProviderDataError
+from app.core.integrations.model_capabilities import require_media_operation
+from app.core.integrations.image_capabilities import prepare_image_options
+from app.core.integrations.video_capabilities import validate_video_declaration
 from app.models.task import Task, TaskInput, TaskOutput
 from app.models.studio_prompts_files_timeline import FileItem
 from app.services.generation.task_snapshot import restore_snapshot
@@ -76,12 +80,19 @@ async def build_media_input(task: Task, snapshot: ResolvedGenerationSnapshot, fi
         media = snapshot.media
         if media is not None and not isinstance(media, ImageMediaInput):
             raise ProviderDataError("image_references_invalid")
-        return ProviderImageInput(
+        image = ProviderImageInput(
             prompt=snapshot.execution_prompt, model=model_name, n=operation.count,
             target_ratio=operation.target_ratio, resolution_profile=operation.resolution_profile,
+            size=operation.size, seed=operation.seed, watermark=operation.watermark,
             purpose="asset_image" if snapshot.canonical_target.kind == GenerationTargetKind.asset_image_slot else "video_reference",
             images=[ProviderImageReference(image_url=urls[ref.file_id]) for ref in sorted(media.references, key=lambda ref: ref.ordinal)] if media else [],
         )
+        if snapshot.execution_config:
+            profile = ModelCapabilityProfile.model_validate(snapshot.execution_config.capability_profile or {})
+            key = snapshot.execution_config.provider_key
+            effective = require_media_operation(key, model_name, profile, "image_generation")
+            return prepare_image_options(key, image, effective.image_modes)
+        return image
     media = snapshot.media
     if media is not None and not isinstance(media, VideoMediaInput):
         raise ProviderDataError("video_references_invalid")
@@ -99,8 +110,15 @@ async def build_media_input(task: Task, snapshot: ResolvedGenerationSnapshot, fi
                 images=[urls[ref.file_id] for ref in refs if ref.media_kind == "image"],
                 videos=[urls[ref.file_id] for ref in refs if ref.media_kind == "video"],
             ))
-    return ProviderVideoInput(prompt=snapshot.execution_prompt, model=model_name, ratio=operation.ratio,
-                              seconds=operation.seconds, seed=operation.seed, frame_references=frames, subject_references=subjects)
+    video = ProviderVideoInput(prompt=snapshot.execution_prompt, model=model_name, ratio=operation.ratio,
+                               seconds=operation.seconds, seed=operation.seed, resolution=operation.resolution,
+                               audio=operation.audio, frame_references=frames, subject_references=subjects)
+    config = snapshot.execution_config
+    if config:
+        profile = ModelCapabilityProfile.model_validate(config.capability_profile or {})
+        effective = require_media_operation(config.provider_key, model_name, profile, "video_generation")
+        validate_video_declaration(config.provider_key, video, effective.video_modes)
+    return video
 
 
 async def store_media_output(sessions, client: httpx.AsyncClient, *, task_id: str, ordinal: int, kind: str, output: MediaResult) -> None:

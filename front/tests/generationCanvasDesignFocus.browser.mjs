@@ -60,7 +60,7 @@ try {
     await control.focus()
     await control.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     const paint = await control.evaluate(node => {
-      const target = node.closest('.ant-select')?.querySelector('.ant-select-selector') || node.closest('.ant-input-number') || node
+      const target = node.closest('.ant-select') || node.closest('.ant-input-number') || node
       const css = getComputedStyle(target), box = target.getBoundingClientRect()
       const outline = css.outlineStyle !== 'none' ? Math.max(0, parseFloat(css.outlineOffset) + parseFloat(css.outlineWidth)) : 0
       const shadow = css.boxShadow.replace(/rgba?\([^)]*\)/g, '').match(/-?[\d.]+px/g)?.map(parseFloat) || []

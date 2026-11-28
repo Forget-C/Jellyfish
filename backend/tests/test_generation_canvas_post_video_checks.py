@@ -10,9 +10,10 @@ from datetime import timedelta
 import httpx
 import pytest
 
-from app.models.llm import Model, Provider
+from app.models.llm import Model, ModelSettings, Provider
 from app.services.task_service import utcnow
 from app.task_worker import TaskWorker
+from tests.chat_events import observe_canvas_turn
 from tests.test_generation_canvas_checks import connect_check, save_canvas
 from tests.test_generation_canvas_images import image_storage  # noqa: F401
 from tests.test_generation_canvas_runs import runtime  # noqa: F401
@@ -116,6 +117,37 @@ async def test_r04_sends_audio_free_video_and_validates_evidence_ranges(runtime,
             await advance()
             products = url + '/checks/check/products'
             product, = (await client.get(products)).json()['data']
+            if check_model == 'qwen3-vl-plus':
+                # The generated output can also be selected as an assistant reference.
+                async with runtime.sessions.begin() as db:
+                    assistant_model = await db.get(Model, 'video-check')
+                    assistant_model.capability_profile = {'video_inputs': {'declaration': 'supported'}}
+                    db.add(ModelSettings(id=1, default_text_model_id='video-check'))
+                real_send = httpx.AsyncClient.send
+
+                async def review_send(http, request, **kwargs):
+                    if request.url.host != 'vision.test':
+                        return await real_send(http, request, **kwargs)
+                    content = json.loads(request.content)['messages'][-1]['content']
+                    assert any(block['type'] == 'video_url' for block in content)
+                    return httpx.Response(200, request=request, json={
+                        'id': 'assistant-review', 'object': 'chat.completion', 'created': 1, 'model': check_model,
+                        'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {
+                            'role': 'assistant', 'content': '观察到红蓝切换，可放慢转换以便看清主体。',
+                        }}],
+                    })
+
+                with monkeypatch.context() as review:
+                    review.setattr(httpx.AsyncClient, 'send', review_send)
+                    reply = await observe_canvas_turn(client, url, json={
+                        'request_id': 'review-generated', 'text': '请看这一版成片',
+                        'attachment_file_ids': [product['file_id']],
+                    })
+                assert reply.receipt.status_code == 202, reply.receipt.text
+                evidence, = reply.detail['attachments']
+                assert evidence['file_id'] == product['file_id'] and evidence['observation'] == 'video_sequence'
+                assert (evidence['start_ms'], evidence['end_ms']) == (200, 3200)
+                assert len((await client.get(url + '/runtime')).json()['data']['runs']) == 1
             inspection = append_canvas_path(products, f"/{product['run_id']}/{product['node_id']}/{product['position']}")
             document = (await client.get(url)).json()['data']['document']
             document['cards'][1]['activity']['text'] = '修改为先蓝后红'

@@ -16,13 +16,14 @@ from app.models.task import Task, TaskOutput
 from app.services.task_sources import resolve_task_sources
 from app.services.task_service import AUTO_CHECK_DISPATCH
 from app.models.studio_prompts_files_timeline import FileItem
-from app.schemas.task import TaskListItemRead, TaskOutputRead, TaskPageRead, TaskResultRead, TaskStatusRead, TaskOutputHistoryRead, TaskOutputPageRead, ActorImageParametersRead
+from app.schemas.task import RemoteCancellationStatus, TaskListItemRead, TaskOutputRead, TaskPageRead, TaskResultRead, TaskStatusRead, TaskOutputHistoryRead, TaskOutputPageRead, ActorImageParametersRead
 
 
 # 列表不加载大输入、文本结果、供应商响应或错误正文。
 _VIEW_COLUMNS = (
     Task.id, Task.kind, Task.title, Task.target_type, Task.target_id, Task.project_id,
     Task.status, Task.stage, Task.progress, Task.cancel_requested_at,
+    Task.provider_task_id, Task.remote_status,
     Task.started_at, Task.finished_at, Task.created_at, Task.updated_at,
 )
 
@@ -32,6 +33,21 @@ def timestamp(value: datetime | None) -> float | None:
     return value.replace(tzinfo=UTC).timestamp() if value is not None else None
 
 
+def remote_cancellation_view(row) -> RemoteCancellationStatus | None:
+    """区分本地取消和供应商回执，仅暴露公开状态。"""
+    if row.remote_status == "cancelled":
+        return "confirmed"
+    if row.remote_status == "cancel_accepted" and row.status == "running":
+        return "accepted"
+    if row.remote_status == "cancel_unsupported":
+        return "unsupported"
+    if row.remote_status == "cancel_rejected":
+        return "rejected"
+    if row.cancel_requested_at and row.provider_task_id:
+        return "requested" if row.status == "running" else "unconfirmed"
+    return None
+
+
 def status_view(row) -> TaskStatusRead:
     """从任务行或轻量投影生成状态，不维护独立缓存状态。"""
     start = timestamp(row.started_at)
@@ -39,6 +55,7 @@ def status_view(row) -> TaskStatusRead:
     return TaskStatusRead(
         task_id=row.id, status=row.status, stage=row.stage, progress=row.progress,
         cancel_requested=row.cancel_requested_at is not None,
+        remote_cancellation=remote_cancellation_view(row),
         cancel_requested_at_ts=timestamp(row.cancel_requested_at),
         started_at_ts=start, finished_at_ts=timestamp(row.finished_at),
         elapsed_ms=max(0, int((end - start) * 1000)) if start is not None else None,
@@ -215,7 +232,7 @@ class TaskQueries:
             return {}
         tasks = (await self.db.execute(select(
             Task.id, Task.status, Task.stage, Task.progress, Task.cancel_requested_at,
-            Task.started_at, Task.finished_at, Task.kind, Task.result, Task.provider_task_id,
+            Task.started_at, Task.finished_at, Task.kind, Task.result, Task.provider_task_id, Task.remote_status,
             Task.error_code, Task.error_message,
         ).where(Task.id.in_(task_ids)))).all()
         rows = (await self.db.execute(select(
