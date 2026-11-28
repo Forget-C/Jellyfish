@@ -218,7 +218,10 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
           tone={isUser ? 'user' : 'assistant'}
           result={!isUser}
         >
-            {isUser || item.content !== '图片生成任务已提交，正在等待生成结果。' && item.content !== '已完成' ? item.content : null}
+            {isUser ? item.content : (
+              item.content && item.content !== '图片生成任务已提交，正在等待生成结果。' && item.content !== '已完成'
+                ? <div>{item.content}</div> : null
+            )}
             {isUser ? <ExperimentHistoryReferences files={files} references={(item.referenceFileIds ?? []).map((id) => ({ id, label: uiText("参考图") }))} /> : null}
             {!isUser && item.taskId && <ExperimentMediaTask kind="image" receipt={item.receipt} submittedPrompt={item.submittedPrompt}
             status={item.status} progress={item.progress} unavailable={item.unavailable} error={item.error}

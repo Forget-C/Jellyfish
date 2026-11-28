@@ -171,6 +171,10 @@ try {
     if (url.pathname.endsWith('/chat/sessions/video/video-history/snapshot')) {
       return respond(boundTrialSnapshot(url, [item('video-result', 'video-history', 'task', '视频生成任务已提交，正在等待生成结果。', 2, {
         task_id: 'video-run', status: videoStatus === 'succeeded' ? 'succeeded' : 'queued', payload: { result: { url: '/canvas-presets/pan.mp4' } },
+        media_receipt: videoStatus === 'succeeded' ? {
+          task_id: 'video-run', status: 'succeeded', accepted_at_ms: 1000, finished_at_ms: 139000,
+          artifacts: [{ file_id: 'video-file', ordinal: 0, media_type: 'video', deleted: false }],
+        } : null,
       })]))
     }
     if (url.pathname.includes('/files/') && url.pathname.endsWith('/download')) {
@@ -339,6 +343,10 @@ try {
   await videoDialog.waitFor({ state: 'hidden' })
   assert.equal(await player.evaluate(video => video.paused), true)
   await videoPreview.and(page.locator(':focus')).waitFor()
+  await history.getByText('用时 2 分 18 秒', {exact:true}).waitFor()
+  await page.reload()
+  await videoPreview.waitFor()
+  await history.getByText('用时 2 分 18 秒', {exact:true}).waitFor()
 
   await page.goto(origin + '/lab?session=text-long')
   const firstVisible = history.getByText('第 51 条历史', { exact: true })
